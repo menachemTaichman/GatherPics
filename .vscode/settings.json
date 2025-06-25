@@ -1,0 +1,17 @@
+{
+    "files.exclude": {
+        "**/__pycache__": true
+      },
+    "terminal.integrated.profiles.windows": {
+        "PowerShell (venv)": {
+            "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "args": [
+                "-NoExit",
+                "-Command",
+                "& .\\dlib-env\\Scripts\\Activate.ps1"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "PowerShell (venv)"
+
+}
