@@ -37,7 +37,7 @@ class FaceVisualizer:
             for i, face in enumerate(faces, 1):
                 img_path = os.path.join(image_dir, face['image_file'])
                 with Image.open(img_path) as img:
-                    box = face['box']
+                    box = face['bounding_box']
                     img_w, img_h = img.size
                     left = int(box['Left'] * img_w)
                     top = int(box['Top'] * img_h)

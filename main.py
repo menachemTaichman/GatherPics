@@ -58,17 +58,32 @@ def main():
 
     # ממפה cluster_id -> רשימת פרטים
     clusters_mapped = {}
-    for idx, cluster in enumerate(clusters, 1):
-        clusters_mapped[idx] = []
+    for idx, cluster in enumerate(clusters):
+        image_files_in_cluster = []
+        representative_image = None
         for fid in cluster:
-            info = face_id_map[fid]
+            info = face_id_map.get(fid)
+            if not info:
+                continue
+            if not representative_image:
+                representative_image = info['image_file']
+            image_files_in_cluster.append(info['image_file'])
+        label = f"Person_{idx}"
+        clusters_mapped[idx] = []
+        cluster_id = clusterer.add_cluster(label, representative_image, list(set(image_files_in_cluster)))
+        for fid in cluster:
+            info = face_id_map.get(fid)
+            if not info:
+                continue
+            clusterer.add_face(fid, info['image_file'], cluster_id, info['box'])
             clusters_mapped[idx].append({
                 'image_file': info['image_file'],
-                'box': info['box']
+                'bounding_box': info['box']
             })
+    clusterer.save_json()
 
     # שלב 3: הצגה
-    visualizer.plot_face_clusters(clusters_mapped, image_dir)
+    #visualizer.plot_face_clusters(clusters_mapped, image_dir)
 
 if __name__ == '__main__':
     main()
