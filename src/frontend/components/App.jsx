@@ -1,32 +1,123 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import Header from './Header';
+import Gallery from './Gallery';
+import FaceDetail from './FaceDetail';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function App() {
   const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    axios.get('/api/groups')
-      .then(res => setGroups(res.data))
-      .catch(err => console.error(err));
+    fetchGroups();
   }, []);
 
-  return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-3xl mb-6 font-bold">גלריית זיהוי פנים</h1>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {groups.map(group => (
-          <div key={group.id} className="border rounded-lg p-2 shadow-sm">
-            <img 
-              src={`/images/${group.representative}`} 
-              alt={group.label || `קבוצה #${group.id}`} 
-              className="w-full h-48 object-cover rounded-md mb-2"
-            />
-            <h2 className="text-center font-semibold text-lg">
-              {group.label || `קבוצה #${group.id}`}
-            </h2>
-          </div>
-        ))}
+  const fetchGroups = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('/api/groups');
+      setGroups(response.data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching groups:', err);
+      setError('Failed to load face groups. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateGroup = async (groupId, updates) => {
+    try {
+      const response = await axios.put(`/api/groups/${groupId}`, updates);
+      setGroups(prev => prev.map(group => 
+        group.id === groupId ? { ...group, ...response.data } : group
+      ));
+      return response.data;
+    } catch (err) {
+      console.error('Error updating group:', err);
+      throw err;
+    }
+  };
+
+  const deleteGroup = async (groupId) => {
+    try {
+      await axios.delete(`/api/groups/${groupId}`);
+      setGroups(prev => prev.filter(group => group.id !== groupId));
+    } catch (err) {
+      console.error('Error deleting group:', err);
+      throw err;
+    }
+  };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={fetchGroups}
+            className="btn-primary"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <AnimatePresence mode="wait">
+          <Routes>
+            <Route 
+              path="/" 
+              element={
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Gallery 
+                    groups={groups}
+                    onUpdateGroup={updateGroup}
+                    onDeleteGroup={deleteGroup}
+                  />
+                </motion.div>
+              } 
+            />
+            <Route 
+              path="/face/:groupId" 
+              element={
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <FaceDetail 
+                    groups={groups}
+                    onUpdateGroup={updateGroup}
+                    onDeleteGroup={deleteGroup}
+                  />
+                </motion.div>
+              } 
+            />
+          </Routes>
+        </AnimatePresence>
+      </div>
+    </Router>
   );
 }

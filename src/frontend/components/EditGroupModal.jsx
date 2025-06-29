@@ -1,0 +1,155 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Save, User, Image } from 'lucide-react';
+
+export default function EditGroupModal({ group, onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    label: group.label || `Person_${group.id}`,
+    representative: group.representative
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      await onSave(formData);
+    } catch (error) {
+      console.error('Error saving group:', error);
+      alert('Failed to save changes. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <div className="modal-overlay" onClick={onClose}>
+        <motion.div
+          className="modal-content"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                <User className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Edit Face Group
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Update the name and representative photo
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <form onSubmit={handleSubmit} className="p-6">
+            <div className="space-y-6">
+              {/* Current Representative Photo */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Current Representative Photo
+                </label>
+                <div className="w-32 h-32 rounded-lg overflow-hidden border border-gray-200">
+                  <img
+                    src={`/images/${group.representative}`}
+                    alt="Representative"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* Name Input */}
+              <div>
+                <label htmlFor="label" className="block text-sm font-medium text-gray-700 mb-2">
+                  Group Name
+                </label>
+                <input
+                  type="text"
+                  id="label"
+                  value={formData.label}
+                  onChange={(e) => setFormData(prev => ({ ...prev, label: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Enter group name..."
+                  required
+                />
+              </div>
+
+              {/* Representative Photo Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Representative Photo
+                </label>
+                <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+                  {group.image_ids?.map((imageId, index) => (
+                    <button
+                      key={imageId}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, representative: imageId }))}
+                      className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
+                        formData.representative === imageId
+                          ? 'border-primary-500'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <img
+                        src={`/images/${imageId}`}
+                        alt={`Photo ${index + 1}`}
+                        className="w-full h-20 object-cover"
+                      />
+                      {formData.representative === imageId && (
+                        <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
+                          <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                            <Image className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn-secondary"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary flex items-center space-x-2"
+                disabled={loading}
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                <span>{loading ? 'Saving...' : 'Save Changes'}</span>
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+} 
