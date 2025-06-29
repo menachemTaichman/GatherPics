@@ -2,8 +2,8 @@
   "clusters": [
     {
       "id": 0,
-      "label": "Person_0",
-      "representative": "E-T 0186.jpg",
+      "label": "Menachem",
+      "representative": "E-T 0955.jpg",
       "image_ids": [
         "E-T 2341.jpg",
         "E-T 3498.jpg",
@@ -13,7 +13,9 @@
         "E-T 3739.jpg",
         "E-T 3018.jpg",
         "E-T 0010.jpg"
-      ]
+      ],
+      "updated_at": "2025-06-29T22:21:24.965029",
+      "representative_crop": "E-T 0955_crop.jpg"
     },
     {
       "id": 1,
@@ -25,7 +27,8 @@
         "E-T 2799.jpg",
         "E-T 0538.jpg",
         "E-T 3739.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3739_crop.jpg"
     },
     {
       "id": 2,
@@ -34,7 +37,8 @@
       "image_ids": [
         "E-T 0408.jpg",
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 3,
@@ -42,7 +46,8 @@
       "representative": "E-T 0538.jpg",
       "image_ids": [
         "E-T 0538.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 0538_crop.jpg"
     },
     {
       "id": 4,
@@ -50,7 +55,8 @@
       "representative": "E-T 0538.jpg",
       "image_ids": [
         "E-T 0538.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 0538_crop.jpg"
     },
     {
       "id": 5,
@@ -58,7 +64,8 @@
       "representative": "E-T 0955.jpg",
       "image_ids": [
         "E-T 0955.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 0955_crop.jpg"
     },
     {
       "id": 6,
@@ -68,7 +75,8 @@
         "E-T 0955.jpg",
         "E-T 2341.jpg",
         "E-T 0958.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 0955_crop.jpg"
     },
     {
       "id": 7,
@@ -77,7 +85,8 @@
       "image_ids": [
         "E-T 0955.jpg",
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 0955_crop.jpg"
     },
     {
       "id": 8,
@@ -87,7 +96,8 @@
         "E-T 0955.jpg",
         "E-T 2799.jpg",
         "E-T 0958.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 9,
@@ -95,7 +105,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 10,
@@ -103,7 +114,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 11,
@@ -111,7 +123,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 12,
@@ -119,7 +132,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 13,
@@ -127,7 +141,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 14,
@@ -135,7 +150,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 15,
@@ -143,7 +159,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 16,
@@ -151,7 +168,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 17,
@@ -159,7 +177,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 18,
@@ -167,7 +186,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 19,
@@ -175,7 +195,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 20,
@@ -183,7 +204,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 21,
@@ -191,7 +213,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 22,
@@ -199,7 +222,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 23,
@@ -207,7 +231,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 24,
@@ -215,7 +240,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 25,
@@ -223,7 +249,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 26,
@@ -231,7 +258,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 27,
@@ -239,7 +267,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 28,
@@ -247,7 +276,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 29,
@@ -255,7 +285,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 30,
@@ -263,7 +294,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 31,
@@ -271,7 +303,8 @@
       "representative": "E-T 2341.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2341_crop.jpg"
     },
     {
       "id": 32,
@@ -279,7 +312,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 33,
@@ -287,7 +321,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 34,
@@ -296,7 +331,8 @@
       "image_ids": [
         "E-T 2799.jpg",
         "E-T 3018.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3018_crop.jpg"
     },
     {
       "id": 35,
@@ -304,7 +340,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 36,
@@ -312,7 +349,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 37,
@@ -320,7 +358,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 38,
@@ -328,7 +367,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 39,
@@ -336,7 +376,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 40,
@@ -344,7 +385,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 41,
@@ -352,7 +394,8 @@
       "representative": "E-T 2799.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 2799_crop.jpg"
     },
     {
       "id": 42,
@@ -360,7 +403,8 @@
       "representative": "E-T 3018.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3018_crop.jpg"
     },
     {
       "id": 43,
@@ -368,7 +412,8 @@
       "representative": "E-T 3018.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3018_crop.jpg"
     },
     {
       "id": 44,
@@ -376,7 +421,8 @@
       "representative": "E-T 3018.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3018_crop.jpg"
     },
     {
       "id": 45,
@@ -384,7 +430,8 @@
       "representative": "E-T 3498.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3498_crop.jpg"
     },
     {
       "id": 46,
@@ -392,7 +439,8 @@
       "representative": "E-T 3498.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3498_crop.jpg"
     },
     {
       "id": 47,
@@ -400,7 +448,8 @@
       "representative": "E-T 3498.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ]
+      ],
+      "representative_crop": "E-T 3498_crop.jpg"
     },
     {
       "id": 48,
@@ -410,812 +459,8 @@
         "E-T 0408.jpg",
         "E-T 3739.jpg",
         "E-T 3819.jpg"
-      ]
-    }
-  ],
-  "faces": [
-    {
-      "face_id": "be8787ef-e6bf-4b8c-ad12-863d77da992d",
-      "image_file": "E-T 0186.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.09127721935510635,
-        "Height": 0.18837621808052063,
-        "Left": 0.40223637223243713,
-        "Top": 0.17702504992485046
-      }
-    },
-    {
-      "face_id": "69dd66be-ba93-4a35-b8f6-b925298daff3",
-      "image_file": "E-T 0010.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.07425317168235779,
-        "Height": 0.1669902205467224,
-        "Left": 0.5452936291694641,
-        "Top": 0.22318005561828613
-      }
-    },
-    {
-      "face_id": "d9872234-14e7-4d6b-8cd2-eb3fb86bbd86",
-      "image_file": "E-T 3739.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.11779326945543289,
-        "Height": 0.10865795612335205,
-        "Left": 0.45781606435775757,
-        "Top": 0.12898579239845276
-      }
-    },
-    {
-      "face_id": "8dd2d1b9-a6e4-4897-ac3a-af5b1daeec1c",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.03829748556017876,
-        "Height": 0.07242006808519363,
-        "Left": 0.5748017430305481,
-        "Top": 0.2561940848827362
-      }
-    },
-    {
-      "face_id": "362f3eeb-ba12-4895-8ad8-d19bd3d362e6",
-      "image_file": "E-T 3018.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.04590747132897377,
-        "Height": 0.11625306308269501,
-        "Left": 0.548625111579895,
-        "Top": 0.24797426164150238
-      }
-    },
-    {
-      "face_id": "2f70fb45-de97-4555-ac5a-6e6824963724",
-      "image_file": "E-T 3498.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.042042601853609085,
-        "Height": 0.0914371907711029,
-        "Left": 0.5966996550559998,
-        "Top": 0.15605200827121735
-      }
-    },
-    {
-      "face_id": "6444745f-e380-45ab-ab00-e1d7357f6df2",
-      "image_file": "E-T 3819.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.05480078235268593,
-        "Height": 0.05544840171933174,
-        "Left": 0.5472463369369507,
-        "Top": 0.31687167286872864
-      }
-    },
-    {
-      "face_id": "7a528255-cf97-477b-a690-efbeae26fd86",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 0,
-      "bounding_box": {
-        "Width": 0.04286840930581093,
-        "Height": 0.09165649116039276,
-        "Left": 0.565126895904541,
-        "Top": 0.28428441286087036
-      }
-    },
-    {
-      "face_id": "09862cc2-9a29-479e-9741-fdd506ff7f0b",
-      "image_file": "E-T 3739.jpg",
-      "cluster_id": 1,
-      "bounding_box": {
-        "Width": 0.09793894737958908,
-        "Height": 0.09669538587331772,
-        "Left": 0.35948407649993896,
-        "Top": 0.14886558055877686
-      }
-    },
-    {
-      "face_id": "4f156338-3f79-4c83-93f5-90ca5299be4c",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 1,
-      "bounding_box": {
-        "Width": 0.02932400442659855,
-        "Height": 0.06810561567544937,
-        "Left": 0.5043536424636841,
-        "Top": 0.26893797516822815
-      }
-    },
-    {
-      "face_id": "5ad7ba6b-b043-4f5a-b6a9-4ea2d67caf48",
-      "image_file": "E-T 0408.jpg",
-      "cluster_id": 1,
-      "bounding_box": {
-        "Width": 0.09061986953020096,
-        "Height": 0.21129615604877472,
-        "Left": 0.6176281571388245,
-        "Top": 0.3058682680130005
-      }
-    },
-    {
-      "face_id": "ff4715c3-2b04-48cb-8b4e-13a9fa1a7811",
-      "image_file": "E-T 0538.jpg",
-      "cluster_id": 1,
-      "bounding_box": {
-        "Width": 0.03414315730333328,
-        "Height": 0.07984204590320587,
-        "Left": 0.4287540912628174,
-        "Top": 0.2843264937400818
-      }
-    },
-    {
-      "face_id": "b4d2bf31-6795-48ca-9dfa-cd81fa790162",
-      "image_file": "E-T 0314.jpg",
-      "cluster_id": 1,
-      "bounding_box": {
-        "Width": 0.127727210521698,
-        "Height": 0.11751384288072586,
-        "Left": 0.4285764992237091,
-        "Top": 0.2556441128253937
-      }
-    },
-    {
-      "face_id": "dee2a984-5ff0-4931-8b10-93073a882c89",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 2,
-      "bounding_box": {
-        "Width": 0.03907618671655655,
-        "Height": 0.09347275644540787,
-        "Left": 0.19379256665706635,
-        "Top": 0.269723504781723
-      }
-    },
-    {
-      "face_id": "8d4a01ff-4201-461e-97c0-123e0f8c3f37",
-      "image_file": "E-T 0408.jpg",
-      "cluster_id": 2,
-      "bounding_box": {
-        "Width": 0.12352746725082397,
-        "Height": 0.2667500078678131,
-        "Left": 0.39733991026878357,
-        "Top": 0.18573534488677979
-      }
-    },
-    {
-      "face_id": "b6937bdb-21bb-4341-8952-c6441846ca8f",
-      "image_file": "E-T 0538.jpg",
-      "cluster_id": 3,
-      "bounding_box": {
-        "Width": 0.04318869113922119,
-        "Height": 0.08967792987823486,
-        "Left": 0.5112079381942749,
-        "Top": 0.23859409987926483
-      }
-    },
-    {
-      "face_id": "0dbbcc67-fbda-4cfd-a7ff-4cb3dcf5f157",
-      "image_file": "E-T 0538.jpg",
-      "cluster_id": 4,
-      "bounding_box": {
-        "Width": 0.048059601336717606,
-        "Height": 0.06841601431369781,
-        "Left": 0.3650333881378174,
-        "Top": 0.34365880489349365
-      }
-    },
-    {
-      "face_id": "88631ef8-3ea5-4615-a1e0-3e59a6184284",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 5,
-      "bounding_box": {
-        "Width": 0.04561624303460121,
-        "Height": 0.09004917740821838,
-        "Left": 0.42694592475891113,
-        "Top": 0.2269030511379242
-      }
-    },
-    {
-      "face_id": "ad06a80b-a073-4a8c-a5af-cc0ffbc61910",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.03943530097603798,
-        "Height": 0.07650654017925262,
-        "Left": 0.6212747693061829,
-        "Top": 0.3404861092567444
-      }
-    },
-    {
-      "face_id": "0f00ac0f-9142-4856-94d5-19a16d9040aa",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.0485539548099041,
-        "Height": 0.06078813225030899,
-        "Left": 0.4553910791873932,
-        "Top": 0.4935412108898163
-      }
-    },
-    {
-      "face_id": "a5225380-f9ae-4428-943d-ddcc90f76b24",
-      "image_file": "E-T 0958.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.09506658464670181,
-        "Height": 0.08156384527683258,
-        "Left": 0.2736610472202301,
-        "Top": 0.39539408683776855
-      }
-    },
-    {
-      "face_id": "d47d5fb5-7eea-42f0-9b50-53084d1499aa",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.0358930341899395,
-        "Height": 0.0742035061120987,
-        "Left": 0.3727303147315979,
-        "Top": 0.336354523897171
-      }
-    },
-    {
-      "face_id": "1d5b5cb9-1352-4734-8cf5-ef212a72f1c4",
-      "image_file": "E-T 0958.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.09541841596364975,
-        "Height": 0.08345181494951248,
-        "Left": 0.3856625258922577,
-        "Top": 0.2966728210449219
-      }
-    },
-    {
-      "face_id": "76cf6dc9-9689-4739-94b2-e5f774b417b7",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.03527819737792015,
-        "Height": 0.07053122669458389,
-        "Left": 0.5467758774757385,
-        "Top": 0.44055259227752686
-      }
-    },
-    {
-      "face_id": "42b7dc1d-5646-4f9b-b4aa-d461c7e84073",
-      "image_file": "E-T 0958.jpg",
-      "cluster_id": 6,
-      "bounding_box": {
-        "Width": 0.08904704451560974,
-        "Height": 0.08353842049837112,
-        "Left": 0.6354201436042786,
-        "Top": 0.28903689980506897
-      }
-    },
-    {
-      "face_id": "5833efb9-c847-459a-9cfe-4f448296d9df",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 7,
-      "bounding_box": {
-        "Width": 0.03885717689990997,
-        "Height": 0.07177860289812088,
-        "Left": 0.5087186098098755,
-        "Top": 0.2809813916683197
-      }
-    },
-    {
-      "face_id": "bb98874d-4127-42ed-86c7-2e439dc46290",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 7,
-      "bounding_box": {
-        "Width": 0.03181244060397148,
-        "Height": 0.062464743852615356,
-        "Left": 0.6325634717941284,
-        "Top": 0.2671506404876709
-      }
-    },
-    {
-      "face_id": "2b974b6c-04d4-4f44-88be-d98252e87939",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 8,
-      "bounding_box": {
-        "Width": 0.026487547904253006,
-        "Height": 0.058672185987234116,
-        "Left": 0.7595299482345581,
-        "Top": 0.2546800673007965
-      }
-    },
-    {
-      "face_id": "15bddd1e-48ff-44ae-ad3d-a390d2c57432",
-      "image_file": "E-T 0955.jpg",
-      "cluster_id": 8,
-      "bounding_box": {
-        "Width": 0.032345399260520935,
-        "Height": 0.06339021027088165,
-        "Left": 0.47705531120300293,
-        "Top": 0.420465886592865
-      }
-    },
-    {
-      "face_id": "8ac0a4d5-6d61-4c67-bf84-0e17dc76d9b7",
-      "image_file": "E-T 0958.jpg",
-      "cluster_id": 8,
-      "bounding_box": {
-        "Width": 0.08150908350944519,
-        "Height": 0.07610083371400833,
-        "Left": 0.4826907515525818,
-        "Top": 0.5403239727020264
-      }
-    },
-    {
-      "face_id": "101c09f4-3f6a-484e-badc-c0650d578da1",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 9,
-      "bounding_box": {
-        "Width": 0.06261975318193436,
-        "Height": 0.10333838313817978,
-        "Left": 0.9265455007553101,
-        "Top": 0.33862605690956116
-      }
-    },
-    {
-      "face_id": "2465137c-aaf5-4e61-9d87-2ef96d55410a",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 10,
-      "bounding_box": {
-        "Width": 0.04180071875452995,
-        "Height": 0.09351900219917297,
-        "Left": 0.9551151990890503,
-        "Top": 0.2596065104007721
-      }
-    },
-    {
-      "face_id": "2207c2ee-fa30-4dc9-9278-6ebe61f65005",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 11,
-      "bounding_box": {
-        "Width": 0.04375551640987396,
-        "Height": 0.08881881088018417,
-        "Left": 0.059332940727472305,
-        "Top": 0.15925586223602295
-      }
-    },
-    {
-      "face_id": "c55dcab7-3183-46ff-9c1a-82099da31913",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 12,
-      "bounding_box": {
-        "Width": 0.04392785578966141,
-        "Height": 0.08092203736305237,
-        "Left": 0.19578798115253448,
-        "Top": 0.21671876311302185
-      }
-    },
-    {
-      "face_id": "1f64f1d5-c528-4a83-9091-27efa82da17b",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 13,
-      "bounding_box": {
-        "Width": 0.03751721233129501,
-        "Height": 0.07631473243236542,
-        "Left": 0.6802195310592651,
-        "Top": 0.10684934258460999
-      }
-    },
-    {
-      "face_id": "4a5d312e-877c-4040-acaa-92382d368576",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 14,
-      "bounding_box": {
-        "Width": 0.039713285863399506,
-        "Height": 0.0700024962425232,
-        "Left": 0.31036436557769775,
-        "Top": 0.010165879502892494
-      }
-    },
-    {
-      "face_id": "eccaada3-5587-494d-954a-5a7375cba179",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 15,
-      "bounding_box": {
-        "Width": 0.03496554121375084,
-        "Height": 0.07757171988487244,
-        "Left": 0.05738576874136925,
-        "Top": 0.03812719136476517
-      }
-    },
-    {
-      "face_id": "671ad47b-5825-4e84-b34e-f4df7d99dd07",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 16,
-      "bounding_box": {
-        "Width": 0.035305481404066086,
-        "Height": 0.07570646703243256,
-        "Left": 0.8254888653755188,
-        "Top": 0.16138818860054016
-      }
-    },
-    {
-      "face_id": "66a6b978-d3f1-476a-a9c1-f125b0f03756",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 17,
-      "bounding_box": {
-        "Width": 0.036130525171756744,
-        "Height": 0.07245925813913345,
-        "Left": 0.1906488835811615,
-        "Top": 0.0954790860414505
-      }
-    },
-    {
-      "face_id": "34b0736d-85f5-4cba-b33d-5b0c0f54d4de",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 18,
-      "bounding_box": {
-        "Width": 0.03485885635018349,
-        "Height": 0.07195097208023071,
-        "Left": 0.2427249699831009,
-        "Top": 0.11811740696430206
-      }
-    },
-    {
-      "face_id": "52e38a2a-d5a4-480a-82e9-047f1634e221",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 19,
-      "bounding_box": {
-        "Width": 0.034237731248140335,
-        "Height": 0.07179691642522812,
-        "Left": 0.8061048984527588,
-        "Top": 0.005594584159553051
-      }
-    },
-    {
-      "face_id": "f2138b28-0af4-4e8f-9377-f0580a7f1cd4",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 20,
-      "bounding_box": {
-        "Width": 0.03336718678474426,
-        "Height": 0.06782537698745728,
-        "Left": 0.35283714532852173,
-        "Top": 0.10447311401367188
-      }
-    },
-    {
-      "face_id": "6421bbd3-40f1-47ca-baac-baab39c87496",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 21,
-      "bounding_box": {
-        "Width": 0.031107360497117043,
-        "Height": 0.06752997636795044,
-        "Left": 0.6111370921134949,
-        "Top": 0.08854971826076508
-      }
-    },
-    {
-      "face_id": "9c4cf3ba-ae6a-4432-96c5-749b4672ffb0",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 22,
-      "bounding_box": {
-        "Width": 0.03397448733448982,
-        "Height": 0.059985700994729996,
-        "Left": 0.45028233528137207,
-        "Top": 0.08960684388875961
-      }
-    },
-    {
-      "face_id": "28d53309-6e76-4ca2-aa66-7e82e5f9de86",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 23,
-      "bounding_box": {
-        "Width": 0.026600463315844536,
-        "Height": 0.07503807544708252,
-        "Left": 0.5439637899398804,
-        "Top": 0.5762700438499451
-      }
-    },
-    {
-      "face_id": "eecf9c49-b3f4-49f8-b24e-780bc9550894",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 24,
-      "bounding_box": {
-        "Width": 0.028489531949162483,
-        "Height": 0.06771507114171982,
-        "Left": 0.49685654044151306,
-        "Top": 0.03963242098689079
-      }
-    },
-    {
-      "face_id": "b6b1f5d9-e391-4e05-b5a5-946335c41805",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 25,
-      "bounding_box": {
-        "Width": 0.030035216361284256,
-        "Height": 0.061233486980199814,
-        "Left": 0.5594357848167419,
-        "Top": 0.06329025328159332
-      }
-    },
-    {
-      "face_id": "26be3f01-dea1-4655-8de2-605de6f09f2a",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 26,
-      "bounding_box": {
-        "Width": 0.025656890124082565,
-        "Height": 0.05677448585629463,
-        "Left": 0.4657630920410156,
-        "Top": 0.000912894553039223
-      }
-    },
-    {
-      "face_id": "09795b62-854f-4ab5-999e-02b5bb2f356a",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 27,
-      "bounding_box": {
-        "Width": 0.02699732966721058,
-        "Height": 0.05310633406043053,
-        "Left": 0.19499102234840393,
-        "Top": 0.04334709420800209
-      }
-    },
-    {
-      "face_id": "613cb0ec-3e72-41ef-8a45-fceefacae2f0",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 28,
-      "bounding_box": {
-        "Width": 0.023064270615577698,
-        "Height": 0.06115388497710228,
-        "Left": 0.9788711667060852,
-        "Top": 0.192804753780365
-      }
-    },
-    {
-      "face_id": "3cb397d9-21f0-4b11-a484-44e939bae76f",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 29,
-      "bounding_box": {
-        "Width": 0.02926306240260601,
-        "Height": 0.037185635417699814,
-        "Left": 0.5868867039680481,
-        "Top": -0.0004947831039316952
-      }
-    },
-    {
-      "face_id": "42e51b77-42ff-43c2-a923-d8cce51f3c88",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 30,
-      "bounding_box": {
-        "Width": 0.018252436071634293,
-        "Height": 0.052068665623664856,
-        "Left": 0.0007567035499960184,
-        "Top": 0.026162104681134224
-      }
-    },
-    {
-      "face_id": "0a087e69-7cfa-434f-ae08-4deae101ea69",
-      "image_file": "E-T 2341.jpg",
-      "cluster_id": 31,
-      "bounding_box": {
-        "Width": 0.011961303651332855,
-        "Height": 0.04210326820611954,
-        "Left": 0.3866092264652252,
-        "Top": 0.03481476381421089
-      }
-    },
-    {
-      "face_id": "0c3afefc-2c09-4417-a83b-7043b149f3c0",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 32,
-      "bounding_box": {
-        "Width": 0.04811679944396019,
-        "Height": 0.08992286771535873,
-        "Left": 0.12089093774557114,
-        "Top": 0.3051939904689789
-      }
-    },
-    {
-      "face_id": "92f2482d-0e49-4674-bbf2-2fd77be6a49f",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 33,
-      "bounding_box": {
-        "Width": 0.03756465017795563,
-        "Height": 0.07494013756513596,
-        "Left": 0.22959275543689728,
-        "Top": 0.31803739070892334
-      }
-    },
-    {
-      "face_id": "f302d01c-8ba5-4abd-97ac-4f7116f62d7a",
-      "image_file": "E-T 3018.jpg",
-      "cluster_id": 34,
-      "bounding_box": {
-        "Width": 0.04474768042564392,
-        "Height": 0.0712975338101387,
-        "Left": 0.8971042633056641,
-        "Top": 0.32755163311958313
-      }
-    },
-    {
-      "face_id": "24e0ec19-0814-437f-93b0-6701e03e74fd",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 34,
-      "bounding_box": {
-        "Width": 0.034733518958091736,
-        "Height": 0.07214199751615524,
-        "Left": 0.3137114644050598,
-        "Top": 0.2631765305995941
-      }
-    },
-    {
-      "face_id": "e5a52cfe-7435-4563-aaee-6cba0d3ae9ef",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 35,
-      "bounding_box": {
-        "Width": 0.03581921383738518,
-        "Height": 0.06647726893424988,
-        "Left": 0.5332072973251343,
-        "Top": 0.24882064759731293
-      }
-    },
-    {
-      "face_id": "66b976af-b8ec-4c02-9300-fdf0bcfd92fc",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 36,
-      "bounding_box": {
-        "Width": 0.03477667272090912,
-        "Height": 0.06519534438848495,
-        "Left": 0.719192385673523,
-        "Top": 0.2577180862426758
-      }
-    },
-    {
-      "face_id": "4f7c9632-9eec-4cdf-9038-48a9204d26e3",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 37,
-      "bounding_box": {
-        "Width": 0.03236975148320198,
-        "Height": 0.06527116894721985,
-        "Left": 0.3936905264854431,
-        "Top": 0.3607598841190338
-      }
-    },
-    {
-      "face_id": "9b8ce4d7-22db-455f-878b-fdbc28524051",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 38,
-      "bounding_box": {
-        "Width": 0.0309069212526083,
-        "Height": 0.06433476507663727,
-        "Left": 0.45091018080711365,
-        "Top": 0.2829757332801819
-      }
-    },
-    {
-      "face_id": "6ffa191a-b965-4b62-8486-a091391d933f",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 39,
-      "bounding_box": {
-        "Width": 0.026509903371334076,
-        "Height": 0.05107713118195534,
-        "Left": 0.17472800612449646,
-        "Top": 0.295204758644104
-      }
-    },
-    {
-      "face_id": "3c590a9d-9c72-48b4-9962-ff89de0dfebc",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 40,
-      "bounding_box": {
-        "Width": 0.02340155839920044,
-        "Height": 0.04720471799373627,
-        "Left": 0.10565522313117981,
-        "Top": 0.28829655051231384
-      }
-    },
-    {
-      "face_id": "9569772c-b3e2-4638-a347-2b146bedfeed",
-      "image_file": "E-T 2799.jpg",
-      "cluster_id": 41,
-      "bounding_box": {
-        "Width": 0.022483764216303825,
-        "Height": 0.04729963466525078,
-        "Left": 0.26217126846313477,
-        "Top": 0.25674474239349365
-      }
-    },
-    {
-      "face_id": "87923f72-70ec-491a-9712-67e77cdd3b7c",
-      "image_file": "E-T 3018.jpg",
-      "cluster_id": 42,
-      "bounding_box": {
-        "Width": 0.06563978642225266,
-        "Height": 0.12666387856006622,
-        "Left": 0.15544651448726654,
-        "Top": 0.42204010486602783
-      }
-    },
-    {
-      "face_id": "28bd25f5-f824-4b11-9867-312779cb9edc",
-      "image_file": "E-T 3018.jpg",
-      "cluster_id": 43,
-      "bounding_box": {
-        "Width": 0.029707031324505806,
-        "Height": 0.07020251452922821,
-        "Left": 0.3269231617450714,
-        "Top": 0.24527478218078613
-      }
-    },
-    {
-      "face_id": "cabca72a-cf92-4beb-8362-511b08f157e7",
-      "image_file": "E-T 3018.jpg",
-      "cluster_id": 44,
-      "bounding_box": {
-        "Width": 0.031813476234674454,
-        "Height": 0.06399643421173096,
-        "Left": 0.34761229157447815,
-        "Top": 0.29106831550598145
-      }
-    },
-    {
-      "face_id": "70f9c7ad-2bf9-4db7-bd3e-fa7979d7d2cd",
-      "image_file": "E-T 3498.jpg",
-      "cluster_id": 45,
-      "bounding_box": {
-        "Width": 0.05371266230940819,
-        "Height": 0.10927256941795349,
-        "Left": 0.18529824912548065,
-        "Top": 0.41720157861709595
-      }
-    },
-    {
-      "face_id": "8d254f0f-efc6-4053-8912-2d136df64f8d",
-      "image_file": "E-T 3498.jpg",
-      "cluster_id": 46,
-      "bounding_box": {
-        "Width": 0.052965544164180756,
-        "Height": 0.10481105744838715,
-        "Left": 0.38318920135498047,
-        "Top": 0.43179258704185486
-      }
-    },
-    {
-      "face_id": "6f55c575-3133-45f8-8c2d-e628e322a004",
-      "image_file": "E-T 3498.jpg",
-      "cluster_id": 47,
-      "bounding_box": {
-        "Width": 0.045904356986284256,
-        "Height": 0.10004220902919769,
-        "Left": 0.552662193775177,
-        "Top": 0.5078862905502319
-      }
-    },
-    {
-      "face_id": "5ad7ba6b-b043-4f5a-b6a9-4ea2d67caf48",
-      "image_file": "E-T 0408.jpg",
-      "cluster_id": 48,
-      "bounding_box": {
-        "Width": 0.09061986953020096,
-        "Height": 0.21129615604877472,
-        "Left": 0.6176281571388245,
-        "Top": 0.3058682680130005
-      }
-    },
-    {
-      "face_id": "09862cc2-9a29-479e-9741-fdd506ff7f0b",
-      "image_file": "E-T 3739.jpg",
-      "cluster_id": 48,
-      "bounding_box": {
-        "Width": 0.09793894737958908,
-        "Height": 0.09669538587331772,
-        "Left": 0.35948407649993896,
-        "Top": 0.14886558055877686
-      }
-    },
-    {
-      "face_id": "05e7b9cb-04c4-4fd2-bb03-958fd66d7400",
-      "image_file": "E-T 3819.jpg",
-      "cluster_id": 48,
-      "bounding_box": {
-        "Width": 0.04202880710363388,
-        "Height": 0.04180523753166199,
-        "Left": 0.5640148520469666,
-        "Top": 0.35547977685928345
-      }
+      ],
+      "representative_crop": "E-T 0408_crop.jpg"
     }
   ]
 }

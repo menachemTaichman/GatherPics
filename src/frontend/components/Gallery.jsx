@@ -47,8 +47,21 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
 
   const handleDownloadGroup = async (group) => {
     try {
+      console.log('Starting download for group:', group.id);
       const response = await fetch(`/api/groups/${group.id}/download`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      
       const blob = await response.blob();
+      console.log('Download blob received, size:', blob.size);
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -57,9 +70,10 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      console.log('Download completed successfully');
     } catch (error) {
       console.error('Error downloading group:', error);
-      alert('Failed to download photos. Please try again.');
+      alert(`Failed to download photos: ${error.message}. Please try again.`);
     }
   };
 

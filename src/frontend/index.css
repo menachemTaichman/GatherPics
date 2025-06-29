@@ -30,7 +30,7 @@
   }
   
   .face-card {
-    @apply card overflow-hidden cursor-pointer;
+    @apply card cursor-pointer;
   }
   
   .face-card:hover .face-image {
