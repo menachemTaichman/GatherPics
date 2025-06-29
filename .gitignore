@@ -1,5 +1,24 @@
-# Ignore Python cache files
+# Python
 __pycache__/
 *.py[cod]
-dlib-env/
 venv/
+env/
+.venv/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
