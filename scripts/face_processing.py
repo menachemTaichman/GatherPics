@@ -1,19 +1,19 @@
 import json
 import os
 import re
-from face_detector import FaceDetectorAWS
-from face_cluster import FaceClusterAWS
-from face_visualizer import FaceVisualizer
+from src.core.face_detector import FaceDetectorAWS
+from src.core.face_cluster import FaceClusterAWS
+from src.utils.face_visualizer import FaceVisualizer
 
 def sanitize_external_image_id(filename):
     return re.sub(r'[^a-zA-Z0-9_.\-:]', '_', filename)
 
 def main():
 
-    with open('aws_config.json') as f:
+    with open('config/aws_config.json') as f:
         config = json.load(f)
 
-    image_dir = 'data/images'
+    image_dir = 'src/data/images'
     image_files = [f for f in os.listdir(image_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
     detector = FaceDetectorAWS(config)
@@ -83,7 +83,7 @@ def main():
     clusterer.save_json()
 
     # שלב 3: הצגה
-    #visualizer.plot_face_clusters(clusters_mapped, image_dir)
+    visualizer.plot_face_clusters(clusters_mapped, image_dir)
 
 if __name__ == '__main__':
     main()

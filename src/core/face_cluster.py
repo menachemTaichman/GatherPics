@@ -2,7 +2,7 @@ import boto3
 import json
 
 class FaceClusterAWS:
-    def __init__(self, config, collection_id='my_face_collection', output_json_path='data/clusters_faces.json'):
+    def __init__(self, config, collection_id='my_face_collection', output_json_path='src/data/clusters_faces.json'):
         # רשימות לאגירת המידע
         self.clusters = []  # List of cluster dicts
         self.faces = []     # List of face dicts

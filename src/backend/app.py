@@ -8,6 +8,7 @@ CORS(app)
 
 # נתיב מלא לתמונות בתיקיית data/images - תיקייה אחת מעל backend
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
+IMAGES_DIR = os.path.abspath(IMAGES_DIR)
 
 @app.route("/api/ping")
 def ping():
@@ -15,7 +16,8 @@ def ping():
 
 @app.route("/api/groups")
 def get_groups():
-    groups_path = os.path.join(os.path.dirname(__file__), 'groups.json')
+    groups_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'groups.json')
+    groups_path = os.path.abspath(groups_path)
     with open(groups_path, 'r', encoding='utf-8') as f:
         groups = json.load(f)
     return jsonify(groups)
