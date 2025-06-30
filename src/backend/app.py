@@ -81,6 +81,12 @@ def test():
 def get_groups():
     """Get all face groups"""
     clusters = load_clusters()
+    # Ensure each group has a 'representative_crop' field with just the filename
+    for group in clusters:
+        rep = group.get('representative', '')
+        # Normalize slashes and extract the filename
+        rep_filename = os.path.basename(rep.replace('\\', '/').replace('\\', '/'))
+        group['representative_crop'] = rep_filename
     return jsonify(clusters)
 
 @app.route("/api/groups/<int:group_id>")

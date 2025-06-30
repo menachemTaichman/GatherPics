@@ -13,6 +13,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
     if (photo) {
@@ -333,11 +336,20 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
                       >
                         <img
-                          src={`/crops/${face.group_representative}`}
+                          src={
+                            face.group_representative
+                              ? `${API_BASE}/crops/${face.group_representative}`
+                              : PLACEHOLDER_DATA_URL
+                          }
                           alt={face.group_label}
                           className="w-12 h-12 object-cover rounded-lg"
                           onError={(e) => {
-                            e.target.src = `/images/${face.group_representative}`;
+                            if (face.group_representative && e.target.src.includes('/crops/')) {
+                              e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                              e.target.src = `${API_BASE}/images/${face.group_representative}`;
+                            } else {
+                              e.target.src = PLACEHOLDER_DATA_URL;
+                            }
                           }}
                         />
                         <div className="flex-1 min-w-0">

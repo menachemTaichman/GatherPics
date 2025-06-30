@@ -8,8 +8,14 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
 
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
+  // Inline SVG placeholder (gray background with a question mark)
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+
   const handleImageError = (e) => {
-    e.target.src = '/placeholder-face.jpg'; // Fallback image
+    e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
   };
 
   const updateMenuPosition = () => {
@@ -29,11 +35,10 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
     setShowActions(!showActions);
   };
 
-  // Use face crop if available, otherwise use original image
-  const representativeImage = group.representative_crop || group.representative;
-  const imageSrc = representativeImage.startsWith('http') 
-    ? representativeImage 
-    : `/crops/${representativeImage}`;
+  // Always use the crop as the main image if available, fallback to original image
+  const imageSrc = group.representative_crop
+    ? `${API_BASE}/crops/${group.representative_crop}`
+    : `${API_BASE}/images/${group.representative}`;
 
   return (
     <>
@@ -50,11 +55,12 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
               alt={group.label || `Person ${group.id}`}
               className="face-image"
               onError={(e) => {
-                // Fallback to original image if crop fails
-                if (group.representative_crop && group.representative !== group.representative_crop) {
+                // Fallback to original image if crop fails, but only once
+                if (e.target.src.includes('/crops/') && group.representative) {
+                  e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
                   e.target.src = `/images/${group.representative}`;
                 } else {
-                  e.target.src = '/placeholder-face.jpg';
+                  e.target.src = PLACEHOLDER_DATA_URL;
                 }
               }}
             />

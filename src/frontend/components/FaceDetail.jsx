@@ -28,6 +28,10 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0 });
 
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+
   useEffect(() => {
     const foundGroup = groups.find(g => g.id.toString() === groupId);
     if (foundGroup) {
@@ -163,7 +167,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full px-8 py-8">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
@@ -178,11 +182,18 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                 <img
-                  src={`/crops/${group.representative_crop || group.representative}`}
+                  src={group.representative_crop
+                    ? `${API_BASE}/crops/${group.representative_crop}`
+                    : `${API_BASE}/images/${group.representative}`}
                   alt={group.label || `Person ${group.id}`}
                   className="w-full h-full object-cover"
                   onError={(e) => {
-                    e.target.src = `/images/${group.representative}`;
+                    if (e.target.src.includes('/crops/') && group.representative) {
+                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                      e.target.src = `${API_BASE}/images/${group.representative}`;
+                    } else {
+                      e.target.src = PLACEHOLDER_DATA_URL;
+                    }
                   }}
                 />
               </div>
@@ -318,7 +329,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
         </motion.div>
       ) : (
         <motion.div
-          className={viewMode === 'grid' ? 'gallery-grid' : 'space-y-4'}
+        className={`w-full ${viewMode === 'grid' ? 'gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
@@ -329,7 +340,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
-              className={viewMode === 'grid' ? '' : 'flex items-center space-x-4 p-4 bg-white rounded-lg border border-gray-200'}
+              className={viewMode === 'grid' ? '' : 'flex items-center space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
             >
               {viewMode === 'grid' ? (
                 <div className="relative group cursor-pointer" onClick={() => openPhotoViewer(photoId, index)}>
@@ -343,9 +354,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                     className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
-                    src={`/images/${photoId}`}
+                    src={`${API_BASE}/images/${photoId}`}
                     alt={`Photo ${index + 1}`}
                     className="face-image"
+                    onError={(e) => {
+                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                      e.target.src = PLACEHOLDER_DATA_URL;
+                    }}
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
@@ -363,10 +378,14 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                     className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
-                    src={`/images/${photoId}`}
+                    src={`${API_BASE}/images/${photoId}`}
                     alt={`Photo ${index + 1}`}
                     className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => openPhotoViewer(photoId, index)}
+                    onError={(e) => {
+                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                      e.target.src = PLACEHOLDER_DATA_URL;
+                    }}
                   />
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{photoId}</p>

@@ -2,465 +2,417 @@
   "clusters": [
     {
       "id": 0,
-      "label": "Menachem",
-      "representative": "E-T 0955.jpg",
+      "label": "Person_0",
+      "representative": "E-T 0186.jpg",
       "image_ids": [
+        "E-T 0010.jpg",
+        "E-T 3819.jpg",
+        "E-T 3739.jpg",
         "E-T 2341.jpg",
         "E-T 3498.jpg",
-        "E-T 0955.jpg",
-        "E-T 3819.jpg",
         "E-T 0186.jpg",
-        "E-T 3739.jpg",
         "E-T 3018.jpg",
-        "E-T 0010.jpg"
+        "E-T 0955.jpg"
       ],
-      "updated_at": "2025-06-29T22:21:24.965029",
-      "representative_crop": "E-T 0955_crop.jpg"
+      "representative_crop": "E-T 0186_crop.jpg",
+      "updated_at": "2025-06-30T22:32:53.947404"
     },
     {
       "id": 1,
       "label": "Person_1",
-      "representative": "E-T 3739.jpg",
+      "representative": "src/data/crops\\f3e0d44e-816b-4a64-84ef-68f40a268550.jpg",
       "image_ids": [
-        "E-T 0314.jpg",
-        "E-T 0408.jpg",
+        "E-T 3739.jpg",
         "E-T 2799.jpg",
+        "E-T 0408.jpg",
         "E-T 0538.jpg",
-        "E-T 3739.jpg"
-      ],
-      "representative_crop": "E-T 3739_crop.jpg"
+        "E-T 0314.jpg"
+      ]
     },
     {
       "id": 2,
       "label": "Person_2",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\c489043e-a0f3-4672-b5ce-d44e0f54170c.jpg",
       "image_ids": [
         "E-T 0408.jpg",
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 3,
       "label": "Person_3",
-      "representative": "E-T 0538.jpg",
+      "representative": "src/data/crops\\2574acce-7b96-451a-a7bb-9b360d9f06ec.jpg",
       "image_ids": [
         "E-T 0538.jpg"
-      ],
-      "representative_crop": "E-T 0538_crop.jpg"
+      ]
     },
     {
       "id": 4,
       "label": "Person_4",
-      "representative": "E-T 0538.jpg",
+      "representative": "src/data/crops\\ffeac7d3-5650-4380-8688-b8f2bf5feb14.jpg",
       "image_ids": [
         "E-T 0538.jpg"
-      ],
-      "representative_crop": "E-T 0538_crop.jpg"
+      ]
     },
     {
       "id": 5,
       "label": "Person_5",
-      "representative": "E-T 0955.jpg",
+      "representative": "src/data/crops\\ade82fa0-b4ef-4e00-84c4-31bf59f5b4dc.jpg",
       "image_ids": [
         "E-T 0955.jpg"
-      ],
-      "representative_crop": "E-T 0955_crop.jpg"
+      ]
     },
     {
       "id": 6,
       "label": "Person_6",
-      "representative": "E-T 0955.jpg",
+      "representative": "src/data/crops\\f969b8ce-57de-4ab0-8215-41e666fc7c16.jpg",
       "image_ids": [
         "E-T 0955.jpg",
         "E-T 2341.jpg",
         "E-T 0958.jpg"
-      ],
-      "representative_crop": "E-T 0955_crop.jpg"
+      ]
     },
     {
       "id": 7,
       "label": "Person_7",
-      "representative": "E-T 0955.jpg",
+      "representative": "src/data/crops\\c9e1f22d-8bcd-41f5-a5d3-882ec72a1993.jpg",
       "image_ids": [
         "E-T 0955.jpg",
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 0955_crop.jpg"
+      ]
     },
     {
       "id": 8,
       "label": "Person_8",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\189b95f5-f39c-40ac-8e25-1fedf47c632b.jpg",
       "image_ids": [
         "E-T 0955.jpg",
         "E-T 2799.jpg",
         "E-T 0958.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 9,
       "label": "Person_9",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\d13057bb-a704-4be5-b8b9-0cc18c604086.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 10,
       "label": "Person_10",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\c623132a-44d0-44e9-820f-75b8aa34e0e6.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 11,
       "label": "Person_11",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\d6425935-9e42-4331-993f-7d044371c52e.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 12,
       "label": "Person_12",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\f279627b-bf5f-4a47-b131-66e8e8ceee48.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 13,
       "label": "Person_13",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\fdc81c2a-62bf-4d1d-af76-964e8c7e5631.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 14,
       "label": "Person_14",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\255a0301-784f-4afb-9214-3c9c44479ce9.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 15,
       "label": "Person_15",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\2c1daaec-75b6-4108-9ded-20faba3722c6.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 16,
       "label": "Person_16",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\ad68087a-55c4-493f-9128-d32c48b57129.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 17,
       "label": "Person_17",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\cd031be5-21b2-4b9a-9f9b-70c01c20f0f2.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 18,
       "label": "Person_18",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\d7a07132-b36d-4268-81fe-ab5af456ce91.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 19,
       "label": "Person_19",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\a42f59bf-b7aa-42c2-91b6-84d398c4fe79.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 20,
       "label": "Person_20",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\865839b1-2a96-4912-9291-e7dc5e29a1b6.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 21,
       "label": "Person_21",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\eff74b8f-2d43-44bf-b6a3-b7ce810a27fc.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 22,
       "label": "Person_22",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\20624de7-fc7f-4702-a248-37196dd8d9a6.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 23,
       "label": "Person_23",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\70a19764-9a43-4d6c-8efe-c3c4523afa78.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 24,
       "label": "Person_24",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\4fa0bcfb-b6f3-4fbc-b399-dc1cc9a91829.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 25,
       "label": "Person_25",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\d87eecb1-9fd1-441b-83e1-d9c89c1ae3a1.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 26,
       "label": "Person_26",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\e743092c-82d2-43d3-9e31-748db632396d.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 27,
       "label": "Person_27",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\ea97d749-b829-46f2-8a1e-57dc34648e6a.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 28,
       "label": "Person_28",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\85347188-159a-4239-a0dd-7e0aacfbea25.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 29,
       "label": "Person_29",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\f101b871-65b0-4d69-b90f-078652f4cee5.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 30,
       "label": "Person_30",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\e5fa2402-de31-4f2e-af02-f5383c41133b.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 31,
       "label": "Person_31",
-      "representative": "E-T 2341.jpg",
+      "representative": "src/data/crops\\7bc79542-cde9-4175-8fb9-981f7639e700.jpg",
       "image_ids": [
         "E-T 2341.jpg"
-      ],
-      "representative_crop": "E-T 2341_crop.jpg"
+      ]
     },
     {
       "id": 32,
       "label": "Person_32",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\17c28b47-d501-42b9-84d8-c15cfacd252e.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 33,
       "label": "Person_33",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\d5b8d77c-0b57-48ea-a497-69f98ff0cab5.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 34,
       "label": "Person_34",
-      "representative": "E-T 3018.jpg",
+      "representative": "src/data/crops\\714c74ef-e475-4141-b0d7-57f06bb22918.jpg",
       "image_ids": [
         "E-T 2799.jpg",
         "E-T 3018.jpg"
-      ],
-      "representative_crop": "E-T 3018_crop.jpg"
+      ]
     },
     {
       "id": 35,
       "label": "Person_35",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\b97640be-7c49-41e1-b568-c3f6b964e2e2.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 36,
       "label": "Person_36",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\43c58a19-8de8-4c9a-a7ed-eaa7c6b0b6f6.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 37,
       "label": "Person_37",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\ce9440fd-a3d2-443b-a33a-0aa664342461.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 38,
       "label": "Person_38",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\dbd3f0b0-0361-4f48-8d8f-c688b617cd29.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 39,
       "label": "Person_39",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\3fd345ba-fcbc-4cd0-914b-7b20cc2459b4.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 40,
       "label": "Person_40",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\9f96cf44-bd77-424b-9eb1-a8d29e962189.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 41,
       "label": "Person_41",
-      "representative": "E-T 2799.jpg",
+      "representative": "src/data/crops\\ebb0e917-953a-4fe5-9ecb-73d811096892.jpg",
       "image_ids": [
         "E-T 2799.jpg"
-      ],
-      "representative_crop": "E-T 2799_crop.jpg"
+      ]
     },
     {
       "id": 42,
       "label": "Person_42",
-      "representative": "E-T 3018.jpg",
+      "representative": "src/data/crops\\9fd5c8fb-6d8f-4bff-bac5-e12224ac627a.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ],
-      "representative_crop": "E-T 3018_crop.jpg"
+      ]
     },
     {
       "id": 43,
       "label": "Person_43",
-      "representative": "E-T 3018.jpg",
+      "representative": "src/data/crops\\e38df787-45dd-4991-baaa-b92c5844e7a9.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ],
-      "representative_crop": "E-T 3018_crop.jpg"
+      ]
     },
     {
       "id": 44,
       "label": "Person_44",
-      "representative": "E-T 3018.jpg",
+      "representative": "src/data/crops\\415a16e8-860d-46fb-97f9-60c3b709c728.jpg",
       "image_ids": [
         "E-T 3018.jpg"
-      ],
-      "representative_crop": "E-T 3018_crop.jpg"
+      ]
     },
     {
       "id": 45,
       "label": "Person_45",
-      "representative": "E-T 3498.jpg",
+      "representative": "src/data/crops\\e3346bb7-6019-4a21-ae2e-fe153db5f920.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ],
-      "representative_crop": "E-T 3498_crop.jpg"
+      ]
     },
     {
       "id": 46,
       "label": "Person_46",
-      "representative": "E-T 3498.jpg",
+      "representative": "src/data/crops\\846848e4-9392-4e7c-9371-cdeb2b791b27.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ],
-      "representative_crop": "E-T 3498_crop.jpg"
+      ]
     },
     {
       "id": 47,
       "label": "Person_47",
-      "representative": "E-T 3498.jpg",
+      "representative": "src/data/crops\\69c835b1-aa01-47c6-9f47-71598bf52ea1.jpg",
       "image_ids": [
         "E-T 3498.jpg"
-      ],
-      "representative_crop": "E-T 3498_crop.jpg"
+      ]
     },
     {
       "id": 48,
       "label": "Person_48",
-      "representative": "E-T 0408.jpg",
+      "representative": "src/data/crops\\f3e0d44e-816b-4a64-84ef-68f40a268550.jpg",
       "image_ids": [
+        "E-T 3819.jpg",
         "E-T 0408.jpg",
-        "E-T 3739.jpg",
-        "E-T 3819.jpg"
-      ],
-      "representative_crop": "E-T 0408_crop.jpg"
+        "E-T 3739.jpg"
+      ]
     }
   ]
 }
