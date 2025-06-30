@@ -1,0 +1,734 @@
+{
+  "faces": [
+    {
+      "faceID": "face_00066",
+      "imageID": "img_011",
+      "groupID": 0,
+      "crop_filename": "face_00066.jpg",
+      "width": 0.042042601853609085,
+      "height": 0.0914371907711029,
+      "left": 0.5966996550559998,
+      "top": 0.15605200827121735
+    },
+    {
+      "faceID": "face_00069",
+      "imageID": "img_013",
+      "groupID": 0,
+      "crop_filename": "face_00069.jpg",
+      "width": 0.05480078235268593,
+      "height": 0.05544840171933174,
+      "left": 0.5472463369369507,
+      "top": 0.31687167286872864
+    },
+    {
+      "faceID": "face_00011",
+      "imageID": "img_006",
+      "groupID": 0,
+      "crop_filename": "face_00011.jpg",
+      "width": 0.03829748556017876,
+      "height": 0.07242006808519363,
+      "left": 0.5748017430305481,
+      "top": 0.2561940848827362
+    },
+    {
+      "faceID": "face_00067",
+      "imageID": "img_012",
+      "groupID": 0,
+      "crop_filename": "face_00067.jpg",
+      "width": 0.11779326945543289,
+      "height": 0.10865795612335205,
+      "left": 0.45781606435775757,
+      "top": 0.12898579239845276
+    },
+    {
+      "faceID": "face_00000",
+      "imageID": "img_001",
+      "groupID": 0,
+      "crop_filename": "face_00000.jpg",
+      "width": 0.07425317168235779,
+      "height": 0.1669902205467224,
+      "left": 0.5452936291694641,
+      "top": 0.22318005561828613
+    },
+    {
+      "faceID": "face_00001",
+      "imageID": "img_002",
+      "groupID": 0,
+      "crop_filename": "face_00001.jpg",
+      "width": 0.09127721935510635,
+      "height": 0.18837621808052063,
+      "left": 0.40223637223243713,
+      "top": 0.17702504992485046
+    },
+    {
+      "faceID": "face_00020",
+      "imageID": "img_008",
+      "groupID": 0,
+      "crop_filename": "face_00020.jpg",
+      "width": 0.04286840930581093,
+      "height": 0.09165649116039276,
+      "left": 0.565126895904541,
+      "top": 0.28428441286087036
+    },
+    {
+      "faceID": "face_00059",
+      "imageID": "img_010",
+      "groupID": 0,
+      "crop_filename": "face_00059.jpg",
+      "width": 0.04590747132897377,
+      "height": 0.11625306308269501,
+      "left": 0.548625111579895,
+      "top": 0.24797426164150238
+    },
+    {
+      "faceID": "face_00004",
+      "imageID": "img_004",
+      "groupID": 1,
+      "crop_filename": "face_00004.jpg",
+      "width": 0.09061986953020096,
+      "height": 0.21129615604877472,
+      "left": 0.6176281571388245,
+      "top": 0.3058682680130005
+    },
+    {
+      "faceID": "face_00051",
+      "imageID": "img_009",
+      "groupID": 1,
+      "crop_filename": "face_00051.jpg",
+      "width": 0.02932400442659855,
+      "height": 0.06810561567544937,
+      "left": 0.5043536424636841,
+      "top": 0.26893797516822815
+    },
+    {
+      "faceID": "face_00007",
+      "imageID": "img_005",
+      "groupID": 1,
+      "crop_filename": "face_00007.jpg",
+      "width": 0.03414315730333328,
+      "height": 0.07984204590320587,
+      "left": 0.4287540912628174,
+      "top": 0.2843264937400818
+    },
+    {
+      "faceID": "face_00068",
+      "imageID": "img_012",
+      "groupID": 1,
+      "crop_filename": "face_00068.jpg",
+      "width": 0.09793894737958908,
+      "height": 0.09669538587331772,
+      "left": 0.35948407649993896,
+      "top": 0.14886558055877686
+    },
+    {
+      "faceID": "face_00002",
+      "imageID": "img_003",
+      "groupID": 1,
+      "crop_filename": "face_00002.jpg",
+      "width": 0.127727210521698,
+      "height": 0.11751384288072586,
+      "left": 0.4285764992237091,
+      "top": 0.2556441128253937
+    },
+    {
+      "faceID": "face_00023",
+      "imageID": "img_008",
+      "groupID": 2,
+      "crop_filename": "face_00023.jpg",
+      "width": 0.03907618671655655,
+      "height": 0.09347275644540787,
+      "left": 0.19379256665706635,
+      "top": 0.269723504781723
+    },
+    {
+      "faceID": "face_00003",
+      "imageID": "img_004",
+      "groupID": 2,
+      "crop_filename": "face_00003.jpg",
+      "width": 0.12352746725082397,
+      "height": 0.2667500078678131,
+      "left": 0.39733991026878357,
+      "top": 0.18573534488677979
+    },
+    {
+      "faceID": "face_00005",
+      "imageID": "img_005",
+      "groupID": 3,
+      "crop_filename": "face_00005.jpg",
+      "width": 0.04318869113922119,
+      "height": 0.08967792987823486,
+      "left": 0.5112079381942749,
+      "top": 0.23859409987926483
+    },
+    {
+      "faceID": "face_00006",
+      "imageID": "img_005",
+      "groupID": 4,
+      "crop_filename": "face_00006.jpg",
+      "width": 0.048059601336717606,
+      "height": 0.06841601431369781,
+      "left": 0.3650333881378174,
+      "top": 0.34365880489349365
+    },
+    {
+      "faceID": "face_00008",
+      "imageID": "img_006",
+      "groupID": 5,
+      "crop_filename": "face_00008.jpg",
+      "width": 0.04561624303460121,
+      "height": 0.09004917740821838,
+      "left": 0.42694592475891113,
+      "top": 0.2269030511379242
+    },
+    {
+      "faceID": "face_00015",
+      "imageID": "img_007",
+      "groupID": 6,
+      "crop_filename": "face_00015.jpg",
+      "width": 0.09541841596364975,
+      "height": 0.08345181494951248,
+      "left": 0.3856625258922577,
+      "top": 0.2966728210449219
+    },
+    {
+      "faceID": "face_00009",
+      "imageID": "img_006",
+      "groupID": 6,
+      "crop_filename": "face_00009.jpg",
+      "width": 0.03943530097603798,
+      "height": 0.07650654017925262,
+      "left": 0.6212747693061829,
+      "top": 0.3404861092567444
+    },
+    {
+      "faceID": "face_00013",
+      "imageID": "img_006",
+      "groupID": 6,
+      "crop_filename": "face_00013.jpg",
+      "width": 0.03527819737792015,
+      "height": 0.07053122669458389,
+      "left": 0.5467758774757385,
+      "top": 0.44055259227752686
+    },
+    {
+      "faceID": "face_00016",
+      "imageID": "img_007",
+      "groupID": 6,
+      "crop_filename": "face_00016.jpg",
+      "width": 0.09506658464670181,
+      "height": 0.08156384527683258,
+      "left": 0.2736610472202301,
+      "top": 0.39539408683776855
+    },
+    {
+      "faceID": "face_00017",
+      "imageID": "img_007",
+      "groupID": 6,
+      "crop_filename": "face_00017.jpg",
+      "width": 0.08904704451560974,
+      "height": 0.08353842049837112,
+      "left": 0.6354201436042786,
+      "top": 0.28903689980506897
+    },
+    {
+      "faceID": "face_00012",
+      "imageID": "img_006",
+      "groupID": 6,
+      "crop_filename": "face_00012.jpg",
+      "width": 0.0358930341899395,
+      "height": 0.0742035061120987,
+      "left": 0.3727303147315979,
+      "top": 0.336354523897171
+    },
+    {
+      "faceID": "face_00025",
+      "imageID": "img_008",
+      "groupID": 6,
+      "crop_filename": "face_00025.jpg",
+      "width": 0.0485539548099041,
+      "height": 0.06078813225030899,
+      "left": 0.4553910791873932,
+      "top": 0.4935412108898163
+    },
+    {
+      "faceID": "face_00010",
+      "imageID": "img_006",
+      "groupID": 7,
+      "crop_filename": "face_00010.jpg",
+      "width": 0.03885717689990997,
+      "height": 0.07177860289812088,
+      "left": 0.5087186098098755,
+      "top": 0.2809813916683197
+    },
+    {
+      "faceID": "face_00053",
+      "imageID": "img_009",
+      "groupID": 7,
+      "crop_filename": "face_00053.jpg",
+      "width": 0.03181244060397148,
+      "height": 0.062464743852615356,
+      "left": 0.6325634717941284,
+      "top": 0.2671506404876709
+    },
+    {
+      "faceID": "face_00018",
+      "imageID": "img_007",
+      "groupID": 8,
+      "crop_filename": "face_00018.jpg",
+      "width": 0.08150908350944519,
+      "height": 0.07610083371400833,
+      "left": 0.4826907515525818,
+      "top": 0.5403239727020264
+    },
+    {
+      "faceID": "face_00014",
+      "imageID": "img_006",
+      "groupID": 8,
+      "crop_filename": "face_00014.jpg",
+      "width": 0.032345399260520935,
+      "height": 0.06339021027088165,
+      "left": 0.47705531120300293,
+      "top": 0.420465886592865
+    },
+    {
+      "faceID": "face_00054",
+      "imageID": "img_009",
+      "groupID": 8,
+      "crop_filename": "face_00054.jpg",
+      "width": 0.026487547904253006,
+      "height": 0.058672185987234116,
+      "left": 0.7595299482345581,
+      "top": 0.2546800673007965
+    },
+    {
+      "faceID": "face_00019",
+      "imageID": "img_008",
+      "groupID": 9,
+      "crop_filename": "face_00019.jpg",
+      "width": 0.06261975318193436,
+      "height": 0.10333838313817978,
+      "left": 0.9265455007553101,
+      "top": 0.33862605690956116
+    },
+    {
+      "faceID": "face_00021",
+      "imageID": "img_008",
+      "groupID": 10,
+      "crop_filename": "face_00021.jpg",
+      "width": 0.04180071875452995,
+      "height": 0.09351900219917297,
+      "left": 0.9551151990890503,
+      "top": 0.2596065104007721
+    },
+    {
+      "faceID": "face_00022",
+      "imageID": "img_008",
+      "groupID": 11,
+      "crop_filename": "face_00022.jpg",
+      "width": 0.04375551640987396,
+      "height": 0.08881881088018417,
+      "left": 0.059332940727472305,
+      "top": 0.15925586223602295
+    },
+    {
+      "faceID": "face_00024",
+      "imageID": "img_008",
+      "groupID": 12,
+      "crop_filename": "face_00024.jpg",
+      "width": 0.04392785578966141,
+      "height": 0.08092203736305237,
+      "left": 0.19578798115253448,
+      "top": 0.21671876311302185
+    },
+    {
+      "faceID": "face_00026",
+      "imageID": "img_008",
+      "groupID": 13,
+      "crop_filename": "face_00026.jpg",
+      "width": 0.03751721233129501,
+      "height": 0.07631473243236542,
+      "left": 0.6802195310592651,
+      "top": 0.10684934258460999
+    },
+    {
+      "faceID": "face_00027",
+      "imageID": "img_008",
+      "groupID": 14,
+      "crop_filename": "face_00027.jpg",
+      "width": 0.039713285863399506,
+      "height": 0.0700024962425232,
+      "left": 0.31036436557769775,
+      "top": 0.010165879502892494
+    },
+    {
+      "faceID": "face_00028",
+      "imageID": "img_008",
+      "groupID": 15,
+      "crop_filename": "face_00028.jpg",
+      "width": 0.03496554121375084,
+      "height": 0.07757171988487244,
+      "left": 0.05738576874136925,
+      "top": 0.03812719136476517
+    },
+    {
+      "faceID": "face_00029",
+      "imageID": "img_008",
+      "groupID": 16,
+      "crop_filename": "face_00029.jpg",
+      "width": 0.035305481404066086,
+      "height": 0.07570646703243256,
+      "left": 0.8254888653755188,
+      "top": 0.16138818860054016
+    },
+    {
+      "faceID": "face_00030",
+      "imageID": "img_008",
+      "groupID": 17,
+      "crop_filename": "face_00030.jpg",
+      "width": 0.036130525171756744,
+      "height": 0.07245925813913345,
+      "left": 0.1906488835811615,
+      "top": 0.0954790860414505
+    },
+    {
+      "faceID": "face_00031",
+      "imageID": "img_008",
+      "groupID": 18,
+      "crop_filename": "face_00031.jpg",
+      "width": 0.03485885635018349,
+      "height": 0.07195097208023071,
+      "left": 0.2427249699831009,
+      "top": 0.11811740696430206
+    },
+    {
+      "faceID": "face_00032",
+      "imageID": "img_008",
+      "groupID": 19,
+      "crop_filename": "face_00032.jpg",
+      "width": 0.034237731248140335,
+      "height": 0.07179691642522812,
+      "left": 0.8061048984527588,
+      "top": 0.005594584159553051
+    },
+    {
+      "faceID": "face_00033",
+      "imageID": "img_008",
+      "groupID": 20,
+      "crop_filename": "face_00033.jpg",
+      "width": 0.03336718678474426,
+      "height": 0.06782537698745728,
+      "left": 0.35283714532852173,
+      "top": 0.10447311401367188
+    },
+    {
+      "faceID": "face_00034",
+      "imageID": "img_008",
+      "groupID": 21,
+      "crop_filename": "face_00034.jpg",
+      "width": 0.031107360497117043,
+      "height": 0.06752997636795044,
+      "left": 0.6111370921134949,
+      "top": 0.08854971826076508
+    },
+    {
+      "faceID": "face_00035",
+      "imageID": "img_008",
+      "groupID": 22,
+      "crop_filename": "face_00035.jpg",
+      "width": 0.03397448733448982,
+      "height": 0.059985700994729996,
+      "left": 0.45028233528137207,
+      "top": 0.08960684388875961
+    },
+    {
+      "faceID": "face_00036",
+      "imageID": "img_008",
+      "groupID": 23,
+      "crop_filename": "face_00036.jpg",
+      "width": 0.026600463315844536,
+      "height": 0.07503807544708252,
+      "left": 0.5439637899398804,
+      "top": 0.5762700438499451
+    },
+    {
+      "faceID": "face_00037",
+      "imageID": "img_008",
+      "groupID": 24,
+      "crop_filename": "face_00037.jpg",
+      "width": 0.028489531949162483,
+      "height": 0.06771507114171982,
+      "left": 0.49685654044151306,
+      "top": 0.03963242098689079
+    },
+    {
+      "faceID": "face_00038",
+      "imageID": "img_008",
+      "groupID": 25,
+      "crop_filename": "face_00038.jpg",
+      "width": 0.030035216361284256,
+      "height": 0.061233486980199814,
+      "left": 0.5594357848167419,
+      "top": 0.06329025328159332
+    },
+    {
+      "faceID": "face_00039",
+      "imageID": "img_008",
+      "groupID": 26,
+      "crop_filename": "face_00039.jpg",
+      "width": 0.025656890124082565,
+      "height": 0.05677448585629463,
+      "left": 0.4657630920410156,
+      "top": 0.000912894553039223
+    },
+    {
+      "faceID": "face_00040",
+      "imageID": "img_008",
+      "groupID": 27,
+      "crop_filename": "face_00040.jpg",
+      "width": 0.02699732966721058,
+      "height": 0.05310633406043053,
+      "left": 0.19499102234840393,
+      "top": 0.04334709420800209
+    },
+    {
+      "faceID": "face_00041",
+      "imageID": "img_008",
+      "groupID": 28,
+      "crop_filename": "face_00041.jpg",
+      "width": 0.023064270615577698,
+      "height": 0.06115388497710228,
+      "left": 0.9788711667060852,
+      "top": 0.192804753780365
+    },
+    {
+      "faceID": "face_00042",
+      "imageID": "img_008",
+      "groupID": 29,
+      "crop_filename": "face_00042.jpg",
+      "width": 0.02926306240260601,
+      "height": 0.037185635417699814,
+      "left": 0.5868867039680481,
+      "top": -0.0004947831039316952
+    },
+    {
+      "faceID": "face_00043",
+      "imageID": "img_008",
+      "groupID": 30,
+      "crop_filename": "face_00043.jpg",
+      "width": 0.018252436071634293,
+      "height": 0.052068665623664856,
+      "left": 0.0007567035499960184,
+      "top": 0.026162104681134224
+    },
+    {
+      "faceID": "face_00044",
+      "imageID": "img_008",
+      "groupID": 31,
+      "crop_filename": "face_00044.jpg",
+      "width": 0.021791869774460793,
+      "height": 0.030420806258916855,
+      "left": 0.9622325301170349,
+      "top": 0.006307477597147226
+    },
+    {
+      "faceID": "face_00045",
+      "imageID": "img_009",
+      "groupID": 32,
+      "crop_filename": "face_00045.jpg",
+      "width": 0.04811679944396019,
+      "height": 0.08992286771535873,
+      "left": 0.12089093774557114,
+      "top": 0.3051939904689789
+    },
+    {
+      "faceID": "face_00046",
+      "imageID": "img_009",
+      "groupID": 33,
+      "crop_filename": "face_00046.jpg",
+      "width": 0.03756465017795563,
+      "height": 0.07494013756513596,
+      "left": 0.22959275543689728,
+      "top": 0.31803739070892334
+    },
+    {
+      "faceID": "face_00060",
+      "imageID": "img_010",
+      "groupID": 34,
+      "crop_filename": "face_00060.jpg",
+      "width": 0.04474768042564392,
+      "height": 0.0712975338101387,
+      "left": 0.8971042633056641,
+      "top": 0.32755163311958313
+    },
+    {
+      "faceID": "face_00047",
+      "imageID": "img_009",
+      "groupID": 34,
+      "crop_filename": "face_00047.jpg",
+      "width": 0.034733518958091736,
+      "height": 0.07214199751615524,
+      "left": 0.3137114644050598,
+      "top": 0.2631765305995941
+    },
+    {
+      "faceID": "face_00048",
+      "imageID": "img_009",
+      "groupID": 35,
+      "crop_filename": "face_00048.jpg",
+      "width": 0.03581921383738518,
+      "height": 0.06647726893424988,
+      "left": 0.5332072973251343,
+      "top": 0.24882064759731293
+    },
+    {
+      "faceID": "face_00049",
+      "imageID": "img_009",
+      "groupID": 36,
+      "crop_filename": "face_00049.jpg",
+      "width": 0.03477667272090912,
+      "height": 0.06519534438848495,
+      "left": 0.719192385673523,
+      "top": 0.2577180862426758
+    },
+    {
+      "faceID": "face_00050",
+      "imageID": "img_009",
+      "groupID": 37,
+      "crop_filename": "face_00050.jpg",
+      "width": 0.03236975148320198,
+      "height": 0.06527116894721985,
+      "left": 0.3936905264854431,
+      "top": 0.3607598841190338
+    },
+    {
+      "faceID": "face_00052",
+      "imageID": "img_009",
+      "groupID": 38,
+      "crop_filename": "face_00052.jpg",
+      "width": 0.0309069212526083,
+      "height": 0.06433476507663727,
+      "left": 0.45091018080711365,
+      "top": 0.2829757332801819
+    },
+    {
+      "faceID": "face_00055",
+      "imageID": "img_009",
+      "groupID": 39,
+      "crop_filename": "face_00055.jpg",
+      "width": 0.026509903371334076,
+      "height": 0.05107713118195534,
+      "left": 0.17472800612449646,
+      "top": 0.295204758644104
+    },
+    {
+      "faceID": "face_00056",
+      "imageID": "img_009",
+      "groupID": 40,
+      "crop_filename": "face_00056.jpg",
+      "width": 0.02340155839920044,
+      "height": 0.04720471799373627,
+      "left": 0.10565522313117981,
+      "top": 0.28829655051231384
+    },
+    {
+      "faceID": "face_00057",
+      "imageID": "img_009",
+      "groupID": 41,
+      "crop_filename": "face_00057.jpg",
+      "width": 0.022483764216303825,
+      "height": 0.04729963466525078,
+      "left": 0.26217126846313477,
+      "top": 0.25674474239349365
+    },
+    {
+      "faceID": "face_00058",
+      "imageID": "img_010",
+      "groupID": 42,
+      "crop_filename": "face_00058.jpg",
+      "width": 0.06563978642225266,
+      "height": 0.12666387856006622,
+      "left": 0.15544651448726654,
+      "top": 0.42204010486602783
+    },
+    {
+      "faceID": "face_00061",
+      "imageID": "img_010",
+      "groupID": 43,
+      "crop_filename": "face_00061.jpg",
+      "width": 0.029707031324505806,
+      "height": 0.07020251452922821,
+      "left": 0.3269231617450714,
+      "top": 0.24527478218078613
+    },
+    {
+      "faceID": "face_00062",
+      "imageID": "img_010",
+      "groupID": 44,
+      "crop_filename": "face_00062.jpg",
+      "width": 0.031813476234674454,
+      "height": 0.06399643421173096,
+      "left": 0.34761229157447815,
+      "top": 0.29106831550598145
+    },
+    {
+      "faceID": "face_00063",
+      "imageID": "img_011",
+      "groupID": 45,
+      "crop_filename": "face_00063.jpg",
+      "width": 0.05371266230940819,
+      "height": 0.10927256941795349,
+      "left": 0.18529824912548065,
+      "top": 0.41720157861709595
+    },
+    {
+      "faceID": "face_00064",
+      "imageID": "img_011",
+      "groupID": 46,
+      "crop_filename": "face_00064.jpg",
+      "width": 0.052965544164180756,
+      "height": 0.10481105744838715,
+      "left": 0.38318920135498047,
+      "top": 0.43179258704185486
+    },
+    {
+      "faceID": "face_00065",
+      "imageID": "img_011",
+      "groupID": 47,
+      "crop_filename": "face_00065.jpg",
+      "width": 0.045904356986284256,
+      "height": 0.10004220902919769,
+      "left": 0.552662193775177,
+      "top": 0.5078862905502319
+    },
+    {
+      "faceID": "face_00068",
+      "imageID": "img_012",
+      "groupID": 48,
+      "crop_filename": "face_00068.jpg",
+      "width": 0.09793894737958908,
+      "height": 0.09669538587331772,
+      "left": 0.35948407649993896,
+      "top": 0.14886558055877686
+    },
+    {
+      "faceID": "face_00070",
+      "imageID": "img_013",
+      "groupID": 48,
+      "crop_filename": "face_00070.jpg",
+      "width": 0.04202880710363388,
+      "height": 0.04180523753166199,
+      "left": 0.5640148520469666,
+      "top": 0.35547977685928345
+    },
+    {
+      "faceID": "face_00004",
+      "imageID": "img_004",
+      "groupID": 48,
+      "crop_filename": "face_00004.jpg",
+      "width": 0.09061986953020096,
+      "height": 0.21129615604877472,
+      "left": 0.6176281571388245,
+      "top": 0.3058682680130005
+    }
+  ]
+}

@@ -5,7 +5,6 @@ import shutil
 from src.core.face_detector import FaceDetectorAWS
 from src.core.face_cluster import FaceClusterAWS
 from src.core.face_cropper import FaceCropper
-from src.utils.face_visualizer import FaceVisualizer
 
 def sanitize_external_image_id(filename):
     return re.sub(r'[^a-zA-Z0-9_.\-:]', '_', filename)
@@ -24,13 +23,12 @@ def main():
     detector = FaceDetectorAWS(config)
     clusterer = FaceClusterAWS(config)
     cropper = FaceCropper(image_dir, crop_dir)
-    visualizer = FaceVisualizer()
 
     clusterer.clear_collection()
-    face_id_map = {}
-    crop_path_map = {}
     print("Indexing faces into collection...")
 
+    # Step 1: Detect faces and index them, create crops, and build face info
+    face_info_list = []
     for filename in image_files:
         image_path = os.path.join(image_dir, filename)
         face_details, image_bytes = detector.detect_faces(image_path)
@@ -38,59 +36,83 @@ def main():
         face_records = clusterer.index_faces(image_bytes, external_image_id=clean_id)
 
         for face_detail, face_record in zip(face_details, face_records):
-            face_id = face_record['Face']['FaceId']
             bounding_box = face_detail['BoundingBox']
-            face_id_map[face_id] = {'image_file': filename, 'box': bounding_box}
-            crop_path = cropper.create_crop_for_face(image_path, bounding_box, face_id)
-            crop_path_map[face_id] = crop_path
+            # Generate a new faceID for our system
+            image_id = clusterer.add_image(filename)
+            # Generate face ID first (this increments the counter)
+            face_id = f"face_{clusterer.face_id_counter:05d}"
+            clusterer.face_id_counter += 1
+            # Create crop with this face ID
+            crop_filename = cropper.create_crop_for_face(image_path, bounding_box, face_id)
+            face_info_list.append({
+                'rek_face_id': face_record['Face']['FaceId'],
+                'image_id': image_id,
+                'filename': filename,
+                'bounding_box': bounding_box,
+                'crop_filename': crop_filename,
+                'width': bounding_box['Width'],
+                'height': bounding_box['Height'],
+                'left': bounding_box['Left'],
+                'top': bounding_box['Top'],
+                'face_id': face_id  # Store the face ID we generated
+            })
 
-    print(f"Indexed {len(face_id_map)} faces.")
+    print(f"Indexed {len(face_info_list)} faces.")
 
+    # Step 2: Cluster faces using Rekognition
     clusters = []
     visited = set()
+    rek_face_id_to_face_info = {f['rek_face_id']: f for f in face_info_list}
 
-    for face_id in face_id_map:
-        if face_id in visited:
+    for face_info in face_info_list:
+        rek_face_id = face_info['rek_face_id']
+        if rek_face_id in visited:
             continue
-        matches = clusterer.search_similar_faces(face_id)
-        group = {face_id}
+        matches = clusterer.search_similar_faces(rek_face_id)
+        group = {rek_face_id}
         for match in matches:
             fid = match['Face']['FaceId']
-            if fid != face_id:
+            if fid != rek_face_id:
                 group.add(fid)
         visited.update(group)
         clusters.append(group)
 
     print(f"Found {len(clusters)} clusters.")
 
-    clusters_mapped = {}
+    # Step 3: Create groups, faces, and images in the new structure
     for idx, cluster in enumerate(clusters):
-        image_files_in_cluster = []
-        representative_crop = None
-        for fid in cluster:
-            info = face_id_map.get(fid)
-            if not info:
-                continue
-            if not representative_crop:
-                representative_crop = crop_path_map.get(fid)
-            image_files_in_cluster.append(info['image_file'])
-
         label = f"Person_{idx}"
-        clusters_mapped[idx] = []
-        cluster_id = clusterer.add_cluster(label, representative_crop, list(set(image_files_in_cluster)))
-
-        for fid in cluster:
-            info = face_id_map.get(fid)
-            if not info:
+        group_face_ids = []
+        representative_face_id = None
+        representative_image_id = None
+        for i, rek_face_id in enumerate(cluster):
+            face_info = rek_face_id_to_face_info.get(rek_face_id)
+            if not face_info:
                 continue
-            clusterer.add_face(fid, info['image_file'], cluster_id, info['box'], crop_path_map.get(fid))
-            clusters_mapped[idx].append({
-                'image_file': info['image_file'],
-                'bounding_box': info['box']
-            })
+            # Add face to clusterer (returns our system's faceID)
+            face_id = clusterer.add_face(
+                image_id=face_info['image_id'],
+                group_id=idx,
+                crop_filename=face_info['crop_filename'],
+                width=face_info['width'],
+                height=face_info['height'],
+                left=face_info['left'],
+                top=face_info['top'],
+                face_id=face_info['face_id']  # Use the pre-generated face ID
+            )
+            group_face_ids.append(face_id)
+            if i == 0:
+                representative_face_id = face_id
+                representative_image_id = face_info['image_id']
+        clusterer.add_group(
+            label=label,
+            representative_image_id=representative_image_id,
+            representative_face_id=representative_face_id,
+            face_ids=group_face_ids
+        )
 
     clusterer.save_json()
-    # visualizer.plot_face_clusters(clusters_mapped, image_dir)
+    print("✅ Saved new images, groups, and faces JSON files.")
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,470 @@
+{
+  "groups": [
+    {
+      "groupID": 0,
+      "name": "Person_0",
+      "representative_imageID": "img_002",
+      "representative_faceID": "face_00001",
+      "faceIDs": [
+        "face_00066",
+        "face_00069",
+        "face_00011",
+        "face_00067",
+        "face_00000",
+        "face_00001",
+        "face_00020",
+        "face_00059"
+      ],
+      "updated_at": "2025-06-30T23:33:10.797533"
+    },
+    {
+      "groupID": 1,
+      "name": "Person_1",
+      "representative_imageID": "img_004",
+      "representative_faceID": "face_00004",
+      "faceIDs": [
+        "face_00004",
+        "face_00051",
+        "face_00007",
+        "face_00068",
+        "face_00002"
+      ]
+    },
+    {
+      "groupID": 2,
+      "name": "Person_2",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00023",
+      "faceIDs": [
+        "face_00023",
+        "face_00003"
+      ]
+    },
+    {
+      "groupID": 3,
+      "name": "Person_3",
+      "representative_imageID": "img_005",
+      "representative_faceID": "face_00005",
+      "faceIDs": [
+        "face_00005"
+      ]
+    },
+    {
+      "groupID": 4,
+      "name": "Person_4",
+      "representative_imageID": "img_005",
+      "representative_faceID": "face_00006",
+      "faceIDs": [
+        "face_00006"
+      ]
+    },
+    {
+      "groupID": 5,
+      "name": "Person_5",
+      "representative_imageID": "img_006",
+      "representative_faceID": "face_00008",
+      "faceIDs": [
+        "face_00008"
+      ]
+    },
+    {
+      "groupID": 6,
+      "name": "Person_6",
+      "representative_imageID": "img_007",
+      "representative_faceID": "face_00015",
+      "faceIDs": [
+        "face_00015",
+        "face_00009",
+        "face_00013",
+        "face_00016",
+        "face_00017",
+        "face_00012",
+        "face_00025"
+      ]
+    },
+    {
+      "groupID": 7,
+      "name": "Person_7",
+      "representative_imageID": "img_006",
+      "representative_faceID": "face_00010",
+      "faceIDs": [
+        "face_00010",
+        "face_00053"
+      ]
+    },
+    {
+      "groupID": 8,
+      "name": "Person_8",
+      "representative_imageID": "img_007",
+      "representative_faceID": "face_00018",
+      "faceIDs": [
+        "face_00018",
+        "face_00014",
+        "face_00054"
+      ]
+    },
+    {
+      "groupID": 9,
+      "name": "Person_9",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00019",
+      "faceIDs": [
+        "face_00019"
+      ]
+    },
+    {
+      "groupID": 10,
+      "name": "Person_10",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00021",
+      "faceIDs": [
+        "face_00021"
+      ]
+    },
+    {
+      "groupID": 11,
+      "name": "Person_11",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00022",
+      "faceIDs": [
+        "face_00022"
+      ]
+    },
+    {
+      "groupID": 12,
+      "name": "Person_12",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00024",
+      "faceIDs": [
+        "face_00024"
+      ]
+    },
+    {
+      "groupID": 13,
+      "name": "Person_13",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00026",
+      "faceIDs": [
+        "face_00026"
+      ]
+    },
+    {
+      "groupID": 14,
+      "name": "Person_14",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00027",
+      "faceIDs": [
+        "face_00027"
+      ]
+    },
+    {
+      "groupID": 15,
+      "name": "Person_15",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00028",
+      "faceIDs": [
+        "face_00028"
+      ]
+    },
+    {
+      "groupID": 16,
+      "name": "Person_16",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00029",
+      "faceIDs": [
+        "face_00029"
+      ]
+    },
+    {
+      "groupID": 17,
+      "name": "Person_17",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00030",
+      "faceIDs": [
+        "face_00030"
+      ]
+    },
+    {
+      "groupID": 18,
+      "name": "Person_18",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00031",
+      "faceIDs": [
+        "face_00031"
+      ]
+    },
+    {
+      "groupID": 19,
+      "name": "Person_19",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00032",
+      "faceIDs": [
+        "face_00032"
+      ]
+    },
+    {
+      "groupID": 20,
+      "name": "Person_20",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00033",
+      "faceIDs": [
+        "face_00033"
+      ]
+    },
+    {
+      "groupID": 21,
+      "name": "Person_21",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00034",
+      "faceIDs": [
+        "face_00034"
+      ]
+    },
+    {
+      "groupID": 22,
+      "name": "Person_22",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00035",
+      "faceIDs": [
+        "face_00035"
+      ]
+    },
+    {
+      "groupID": 23,
+      "name": "Person_23",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00036",
+      "faceIDs": [
+        "face_00036"
+      ]
+    },
+    {
+      "groupID": 24,
+      "name": "Person_24",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00037",
+      "faceIDs": [
+        "face_00037"
+      ]
+    },
+    {
+      "groupID": 25,
+      "name": "Person_25",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00038",
+      "faceIDs": [
+        "face_00038"
+      ]
+    },
+    {
+      "groupID": 26,
+      "name": "Person_26",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00039",
+      "faceIDs": [
+        "face_00039"
+      ]
+    },
+    {
+      "groupID": 27,
+      "name": "Person_27",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00040",
+      "faceIDs": [
+        "face_00040"
+      ]
+    },
+    {
+      "groupID": 28,
+      "name": "Person_28",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00041",
+      "faceIDs": [
+        "face_00041"
+      ]
+    },
+    {
+      "groupID": 29,
+      "name": "Person_29",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00042",
+      "faceIDs": [
+        "face_00042"
+      ]
+    },
+    {
+      "groupID": 30,
+      "name": "Person_30",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00043",
+      "faceIDs": [
+        "face_00043"
+      ]
+    },
+    {
+      "groupID": 31,
+      "name": "Person_31",
+      "representative_imageID": "img_008",
+      "representative_faceID": "face_00044",
+      "faceIDs": [
+        "face_00044"
+      ]
+    },
+    {
+      "groupID": 32,
+      "name": "Person_32",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00045",
+      "faceIDs": [
+        "face_00045"
+      ]
+    },
+    {
+      "groupID": 33,
+      "name": "Person_33",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00046",
+      "faceIDs": [
+        "face_00046"
+      ]
+    },
+    {
+      "groupID": 34,
+      "name": "Person_34",
+      "representative_imageID": "img_010",
+      "representative_faceID": "face_00060",
+      "faceIDs": [
+        "face_00060",
+        "face_00047"
+      ]
+    },
+    {
+      "groupID": 35,
+      "name": "Person_35",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00048",
+      "faceIDs": [
+        "face_00048"
+      ]
+    },
+    {
+      "groupID": 36,
+      "name": "Person_36",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00049",
+      "faceIDs": [
+        "face_00049"
+      ]
+    },
+    {
+      "groupID": 37,
+      "name": "Person_37",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00050",
+      "faceIDs": [
+        "face_00050"
+      ]
+    },
+    {
+      "groupID": 38,
+      "name": "Person_38",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00052",
+      "faceIDs": [
+        "face_00052"
+      ]
+    },
+    {
+      "groupID": 39,
+      "name": "Person_39",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00055",
+      "faceIDs": [
+        "face_00055"
+      ]
+    },
+    {
+      "groupID": 40,
+      "name": "Person_40",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00056",
+      "faceIDs": [
+        "face_00056"
+      ]
+    },
+    {
+      "groupID": 41,
+      "name": "Person_41",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00057",
+      "faceIDs": [
+        "face_00057"
+      ]
+    },
+    {
+      "groupID": 42,
+      "name": "Person_42",
+      "representative_imageID": "img_010",
+      "representative_faceID": "face_00058",
+      "faceIDs": [
+        "face_00058"
+      ]
+    },
+    {
+      "groupID": 43,
+      "name": "Person_43",
+      "representative_imageID": "img_010",
+      "representative_faceID": "face_00061",
+      "faceIDs": [
+        "face_00061"
+      ]
+    },
+    {
+      "groupID": 44,
+      "name": "Person_44",
+      "representative_imageID": "img_010",
+      "representative_faceID": "face_00062",
+      "faceIDs": [
+        "face_00062"
+      ]
+    },
+    {
+      "groupID": 45,
+      "name": "Person_45",
+      "representative_imageID": "img_011",
+      "representative_faceID": "face_00063",
+      "faceIDs": [
+        "face_00063"
+      ]
+    },
+    {
+      "groupID": 46,
+      "name": "Person_46",
+      "representative_imageID": "img_011",
+      "representative_faceID": "face_00064",
+      "faceIDs": [
+        "face_00064"
+      ]
+    },
+    {
+      "groupID": 47,
+      "name": "Person_47",
+      "representative_imageID": "img_011",
+      "representative_faceID": "face_00065",
+      "faceIDs": [
+        "face_00065"
+      ]
+    },
+    {
+      "groupID": 48,
+      "name": "Person_48",
+      "representative_imageID": "img_012",
+      "representative_faceID": "face_00068",
+      "faceIDs": [
+        "face_00068",
+        "face_00070",
+        "face_00004"
+      ]
+    }
+  ]
+}

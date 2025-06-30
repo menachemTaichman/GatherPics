@@ -36,24 +36,23 @@ class FaceCropper:
             print(f"Error cropping face from {image_path}: {e}")
             return None
 
-    def save_face_crop(self, face_crop, filename):
+    def save_face_crop(self, face_crop, face_id):
         if face_crop is None:
             return None
         try:
-            crop_path = os.path.join(self.crops_dir, filename)
+            crop_filename = f"{face_id}.jpg"
+            crop_path = os.path.join(self.crops_dir, crop_filename)
             cv2.imwrite(crop_path, face_crop)
-            return filename
+            return crop_filename
         except Exception as e:
-            print(f"Error saving face crop {filename}: {e}")
+            print(f"Error saving face crop {face_id}: {e}")
             return None
 
     def create_crop_for_face(self, image_path, face_coords, face_id):
         face_crop = self.crop_face_from_image(image_path, face_coords)
         if face_crop is None:
             return None
-        crop_filename = f"{face_id}.jpg"
-        saved_name = self.save_face_crop(face_crop, crop_filename)
-        return os.path.join(self.crops_dir, saved_name) if saved_name else None
+        return self.save_face_crop(face_crop, face_id)
 
     def cleanup_unused_crops(self, used_crops):
         try:

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image } from 'lucide-react';
 
@@ -8,6 +8,40 @@ export default function EditGroupModal({ group, onClose, onSave }) {
     representative: group.representative
   });
   const [loading, setLoading] = useState(false);
+  const [cropMappings, setCropMappings] = useState({});
+  const [cropsLoading, setCropsLoading] = useState(true);
+
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
+  // Inline SVG placeholder (gray background with a question mark)
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+
+  const handleImageError = (e) => {
+    e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
+  };
+
+  // Fetch crop mappings for all images in the group
+  useEffect(() => {
+    const fetchCropMappings = async () => {
+      try {
+        setCropsLoading(true);
+        const response = await fetch(`${API_BASE}/api/groups/${group.id}/crops`);
+        if (response.ok) {
+          const data = await response.json();
+          setCropMappings(data.image_crops || {});
+        } else {
+          console.error('Failed to fetch crop mappings');
+        }
+      } catch (error) {
+        console.error('Error fetching crop mappings:', error);
+      } finally {
+        setCropsLoading(false);
+      }
+    };
+
+    fetchCropMappings();
+  }, [group.id, API_BASE]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -66,9 +100,20 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 </label>
                 <div className="w-32 h-32 rounded-lg overflow-hidden border border-gray-200">
                   <img
-                    src={`/images/${group.representative}`}
+                    src={group.representative_crop
+                      ? `${API_BASE}/crops/${group.representative_crop}`
+                      : `${API_BASE}/images/${group.representative}`}
                     alt="Representative"
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to original image if crop fails, but only once
+                      if (e.target.src.includes('/crops/') && group.representative) {
+                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                        e.target.src = `/images/${group.representative}`;
+                      } else {
+                        e.target.src = PLACEHOLDER_DATA_URL;
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -94,33 +139,57 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Select Representative Photo
                 </label>
-                <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
-                  {group.image_ids?.map((imageId, index) => (
-                    <button
-                      key={imageId}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, representative: imageId }))}
-                      className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
-                        formData.representative === imageId
-                          ? 'border-primary-500'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <img
-                        src={`/images/${imageId}`}
-                        alt={`Photo ${index + 1}`}
-                        className="w-full h-20 object-cover"
-                      />
-                      {formData.representative === imageId && (
-                        <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
-                          <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
-                            <Image className="w-3 h-3 text-white" />
-                          </div>
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                {cropsLoading ? (
+                  <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+                    {group.image_ids?.map((imageId, index) => (
+                      <div key={imageId} className="w-full h-20 bg-gray-200 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+                    {group.image_ids?.map((imageId, index) => {
+                      const cropFilename = cropMappings[imageId];
+                      const imageSrc = cropFilename 
+                        ? `${API_BASE}/crops/${cropFilename}`
+                        : `${API_BASE}/images/${imageId}`;
+                      
+                      return (
+                        <button
+                          key={imageId}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, representative: imageId }))}
+                          className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
+                            formData.representative === imageId
+                              ? 'border-primary-500'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <img
+                            src={imageSrc}
+                            alt={`Photo ${index + 1}`}
+                            className="w-full h-20 object-cover"
+                            onError={(e) => {
+                              // Fallback to original image if crop fails, but only once
+                              if (e.target.src.includes('/crops/') && imageId) {
+                                e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                                e.target.src = `/images/${imageId}`;
+                              } else {
+                                e.target.src = PLACEHOLDER_DATA_URL;
+                              }
+                            }}
+                          />
+                          {formData.representative === imageId && (
+                            <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
+                              <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                                <Image className="w-3 h-3 text-white" />
+                              </div>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
