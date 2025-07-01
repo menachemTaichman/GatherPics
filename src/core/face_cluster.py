@@ -103,6 +103,46 @@ class FaceClusterAWS:
         self.faces.append(face_record)
         return face_id
 
+    def merge_groups(self, group_id_1, group_id_2):
+        """
+        Merge two groups into one. The first group will be kept, the second will be removed.
+        All faces from the second group will be moved to the first group.
+        """
+        # Find the groups
+        group1 = None
+        group2 = None
+        group1_index = None
+        group2_index = None
+        
+        for i, group in enumerate(self.groups):
+            if group['groupID'] == group_id_1:
+                group1 = group
+                group1_index = i
+            elif group['groupID'] == group_id_2:
+                group2 = group
+                group2_index = i
+        
+        if not group1 or not group2:
+            print(f"Error: One or both groups not found. Group1: {group_id_1}, Group2: {group_id_2}")
+            return False
+        
+        # Merge face IDs from group2 into group1
+        merged_face_ids = list(set(group1['faceIDs'] + group2['faceIDs']))
+        group1['faceIDs'] = merged_face_ids
+        
+        # Update all faces that belonged to group2 to now belong to group1
+        for face in self.faces:
+            if face['groupID'] == group_id_2:
+                face['groupID'] = group_id_1
+        
+        # Remove group2
+        if group2_index is not None:
+            removed_group = self.groups.pop(group2_index)
+            print(f"Merged group {group_id_2} ({removed_group['name']}) into group {group_id_1} ({group1['name']})")
+            print(f"Group {group_id_1} now contains {len(merged_face_ids)} faces")
+        
+        return True
+
     def save_json(self):
         os.makedirs(os.path.dirname(self.images_json_path), exist_ok=True)
         with open(self.images_json_path, 'w', encoding='utf-8') as f:
