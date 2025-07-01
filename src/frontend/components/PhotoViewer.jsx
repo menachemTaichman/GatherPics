@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex }) {
+export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId }) {
+  const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [faces, setFaces] = useState([]);
@@ -16,10 +18,14 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+  const [showRectangles, setShowRectangles] = useState(false);
+  const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
 
   useEffect(() => {
     if (photo) {
       loadPhotoInfo();
+      // Reset selected face when photo changes
+      setSelectedFaceIndex(null);
     }
   }, [photo]);
 
@@ -77,6 +83,21 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     if (onNavigate) {
       onNavigate(direction);
     }
+  };
+
+  const handleFaceClick = (index) => {
+    // If clicking on already selected face, deselect it
+    if (selectedFaceIndex === index) {
+      setSelectedFaceIndex(null);
+    } else {
+      setSelectedFaceIndex(index);
+    }
+  };
+
+  const handleFaceNavigation = (face) => {
+    // Navigate to the face group page
+    navigate(`/face/${face.group_id}`);
+    onClose(); // Close the photo viewer
   };
 
   // Mouse wheel handler for zoom
@@ -236,24 +257,46 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   />
                   
                   {/* Face Overlays */}
-                  {faces.map((face, index) => (
-                    <div
-                      key={index}
-                      className="absolute border-2 border-primary-500 bg-primary-500 bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors"
-                      style={{
-                        left: `${face.face_coords.Left * 100}%`,
-                        top: `${face.face_coords.Top * 100}%`,
-                        width: `${face.face_coords.Width * 100}%`,
-                        height: `${face.face_coords.Height * 100}%`,
-                        transform: `scale(${1/zoom})`
-                      }}
-                      title={`${face.group_label} (Group ${face.group_id})`}
-                    >
-                      <div className="absolute -top-6 left-0 bg-primary-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                        {face.group_label}
+                  {showRectangles && faces.map((face, index) => {
+                    let borderColor, bgColor, labelBgColor;
+                    
+                    if (selectedFaceIndex === index) {
+                      // Selected face: red
+                      borderColor = 'border-red-500';
+                      bgColor = 'bg-red-500';
+                      labelBgColor = 'bg-red-500';
+                    } else if (currentGroupId && face.group_id === currentGroupId) {
+                      // Current face (belongs to current group): green
+                      borderColor = 'border-green-500';
+                      bgColor = 'bg-green-500';
+                      labelBgColor = 'bg-green-500';
+                    } else {
+                      // Other faces: blue
+                      borderColor = 'border-blue-500';
+                      bgColor = 'bg-blue-500';
+                      labelBgColor = 'bg-blue-500';
+                    }
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
+                        style={{
+                          left: `${face.face_coords.Left * 100}%`,
+                          top: `${face.face_coords.Top * 100}%`,
+                          width: `${face.face_coords.Width * 100}%`,
+                          height: `${face.face_coords.Height * 100}%`,
+                          transform: `scale(${1/zoom})`
+                        }}
+                        title={`${face.group_label} (Group ${face.group_id})`}
+                        onClick={() => handleFaceClick(index)}
+                      >
+                        <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
+                          {face.group_label}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </motion.div>
               )}
             </div>
@@ -271,7 +314,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     Reset
                   </button>
                 </div>
-                
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
                     <button
@@ -290,7 +332,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       <ZoomIn className="w-4 h-4" />
                     </button>
                   </div>
-                  
                   <button
                     onClick={handleRotate}
                     className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -298,7 +339,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <RotateCw className="w-4 h-4" />
                     <span className="text-sm">Rotate</span>
                   </button>
-                  
                   <button
                     onClick={handleDownload}
                     className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -306,18 +346,28 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <Download className="w-4 h-4" />
                     <span className="text-sm">Download</span>
                   </button>
+                  <button
+                    onClick={() => setShowRectangles(v => !v)}
+                    className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <span className="text-sm">{showRectangles ? 'Hide' : 'Show'} Face Rectangles</span>
+                  </button>
                 </div>
-
-                {/* Keyboard shortcuts help */}
+                {/* Details Section */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-2">Keyboard Shortcuts</h4>
+                  <h4 className="text-xs font-medium text-gray-700 mb-2">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-1">
-                    <div>← → Navigate photos</div>
-                    <div>+ - Zoom in/out</div>
-                    <div>0 Reset view</div>
-                    <div>Esc Close</div>
-                    <div>Mouse wheel: Pan</div>
-                    <div>Ctrl+wheel: Zoom</div>
+                    <div><span className="font-semibold">Name:</span> {photoInfo?.filename || photo}</div>
+                    <div><span className="font-semibold">Date taken:</span> {photoInfo?.date_taken || 'Unknown'}</div>
+                    <div><span className="font-semibold">Size:</span> {(() => {
+                      const size = photoInfo?.file_size;
+                      if (!size) return 'Unknown';
+                      if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+                      if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+                      return (size / 1024).toFixed(1) + ' KB';
+                    })()}</div>
+                    <div><span className="font-semibold">Resolution:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
                   </div>
                 </div>
               </div>
@@ -333,20 +383,23 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     {faces.map((face, index) => (
                       <div
                         key={index}
-                        className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                        className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                        onClick={() => handleFaceNavigation(face)}
                       >
                         <img
                           src={
-                            face.group_representative
-                              ? `${API_BASE}/crops/${face.group_representative}`
-                              : PLACEHOLDER_DATA_URL
+                            face.face_crop
+                              ? `${API_BASE}/crops/${face.face_crop}`
+                              : face.group_representative
+                                ? `${API_BASE}/crops/${face.group_representative}`
+                                : PLACEHOLDER_DATA_URL
                           }
                           alt={face.group_label}
                           className="w-12 h-12 object-cover rounded-lg"
                           onError={(e) => {
-                            if (face.group_representative && e.target.src.includes('/crops/')) {
+                            if ((face.face_crop || face.group_representative) && e.target.src.includes('/crops/')) {
                               e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                              e.target.src = `${API_BASE}/images/${face.group_representative}`;
+                              e.target.src = `${API_BASE}/images/${face.face_crop || face.group_representative}`;
                             } else {
                               e.target.src = PLACEHOLDER_DATA_URL;
                             }
@@ -360,12 +413,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                             Group {face.group_id}
                           </p>
                         </div>
-                        <button
-                          className="p-1 hover:bg-gray-200 rounded transition-colors"
-                          title="View group"
-                        >
-                          <User className="w-4 h-4 text-gray-500" />
-                        </button>
+                        <User className="w-4 h-4 text-gray-400" />
                       </div>
                     ))}
                   </div>

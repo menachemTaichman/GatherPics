@@ -7,6 +7,8 @@ import io
 from datetime import datetime
 import tempfile
 import shutil
+from PIL import Image
+import piexif
 
 app = Flask(__name__)
 CORS(app)
@@ -394,22 +396,46 @@ def download_all_photos():
 def get_faces_in_photo(filename):
     """Get faces detected in a specific photo"""
     try:
-        faces = get_faces_in_image(filename)
-        groups = get_all_groups_legacy()
+        faces_data = load_faces()
+        groups = load_groups()
+        images = load_images()
         
-        # Match faces to groups
+        # Create mapping from image name to image ID
+        image_name_to_id = {img['name']: img['imageID'] for img in images}
+        image_id = image_name_to_id.get(filename)
+        
+        if not image_id:
+            return jsonify({"error": "Image not found"}), 404
+        
+        # Get all faces for this image
+        image_faces = [f for f in faces_data if f['imageID'] == image_id]
+        
+        # Create face groups with proper data
         face_groups = []
-        for face in faces:
-            # Find which group this face belongs to
-            for group in groups:
-                if filename in group.get('image_ids', []):
-                    face_groups.append({
-                        'face_coords': face,
-                        'group_id': group['id'],
-                        'group_label': group.get('label', f'Person_{group["id"]}'),
-                        'group_representative': group.get('representative_crop', group.get('representative'))
-                    })
-                    break
+        for face in image_faces:
+            # Find the group this face belongs to
+            group = next((g for g in groups if g['groupID'] == face['groupID']), None)
+            
+            if group:
+                # Get group label
+                group_label = group.get('name', f'Person_{group["groupID"]}')
+                
+                # Get representative crop
+                representative_face = next((f for f in faces_data if f['faceID'] == group.get('representative_faceID')), None)
+                representative_crop = representative_face['crop_filename'] if representative_face else None
+                
+                face_groups.append({
+                    'face_coords': {
+                        'Left': face['left'],
+                        'Top': face['top'],
+                        'Width': face['width'],
+                        'Height': face['height']
+                    },
+                    'group_id': face['groupID'],
+                    'group_label': group_label,
+                    'group_representative': representative_crop,
+                    'face_crop': face['crop_filename']
+                })
         
         return jsonify({
             'filename': filename,
@@ -423,23 +449,63 @@ def get_faces_in_photo(filename):
 def get_photo_info(filename):
     """Get information about a specific photo"""
     try:
-        groups = get_all_groups_legacy()
-        faces = get_faces_in_image(filename)
+        faces_data = load_faces()
+        groups = load_groups()
+        images = load_images()
+        
+        # Create mapping from image name to image ID
+        image_name_to_id = {img['name']: img['imageID'] for img in images}
+        image_id = image_name_to_id.get(filename)
+        
+        if not image_id:
+            return jsonify({"error": "Image not found"}), 404
+        
+        # Get all faces for this image
+        image_faces = [f for f in faces_data if f['imageID'] == image_id]
         
         # Find which groups this photo belongs to
         photo_groups = []
-        for group in groups:
-            if filename in group.get('image_ids', []):
-                photo_groups.append({
-                    'id': group['id'],
-                    'label': group.get('label', f'Person_{group["id"]}'),
-                    'representative': group.get('representative_crop', group.get('representative'))
-                })
-        
+        for face in image_faces:
+            group = next((g for g in groups if g['groupID'] == face['groupID']), None)
+            if group:
+                # Check if this group is already in photo_groups
+                existing_group = next((g for g in photo_groups if g['id'] == group['groupID']), None)
+                if not existing_group:
+                    photo_groups.append({
+                        'id': group['groupID'],
+                        'label': group.get('name', f'Person_{group["groupID"]}'),
+                        'representative': group.get('representative_faceID')
+                    })
+
+        # Get file path
+        image_path = os.path.join(IMAGES_DIR, filename)
+        file_size = None
+        width = None
+        height = None
+        date_taken = None
+        if os.path.exists(image_path):
+            file_size = os.path.getsize(image_path)
+            try:
+                with Image.open(image_path) as img:
+                    width, height = img.size
+                    # Try to get date taken from EXIF
+                    exif_data = img.info.get('exif')
+                    if exif_data:
+                        exif_dict = piexif.load(exif_data)
+                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                        if date_bytes:
+                            date_taken = date_bytes.decode('utf-8')
+            except Exception as e:
+                print(f"Error reading image metadata for {filename}: {e}")
+
         return jsonify({
             'filename': filename,
-            'faces_count': len(faces),
-            'groups': photo_groups
+            'faces_count': len(image_faces),
+            'groups': photo_groups,
+            'file_size': file_size,
+            'width': width,
+            'height': height,
+            'date_taken': date_taken
         })
     except Exception as e:
         print(f"Error getting photo info for {filename}: {e}")

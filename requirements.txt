@@ -16,8 +16,4 @@ pytest>=7.4.0
 black>=23.0.0
 flake8>=6.0.0
 
-# Optional: For the personal_recognition folder (if you decide to use it)
-# numpy>=1.24.0
-# scikit-learn>=1.3.0
-# face-recognition>=1.3.0
-# opencv-python>=4.8.0 
+piexif

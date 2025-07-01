@@ -170,7 +170,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     <div className="w-full px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center">
           <div className="flex items-center space-x-4">
             <Link
               to="/"
@@ -178,7 +178,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                 <img
@@ -208,7 +207,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-max ml-auto">
             <button
               onClick={() => setShowEditModal(true)}
               className="btn-secondary flex items-center space-x-2"
@@ -216,7 +215,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <Edit className="w-4 h-4" />
               <span>Edit</span>
             </button>
-            
             <button
               onClick={handleDownloadGroup}
               className="btn-primary flex items-center space-x-2"
@@ -224,7 +222,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <Download className="w-4 h-4" />
               <span>Download All</span>
             </button>
-            
             <button
               onClick={() => setShowDeleteModal(true)}
               className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 flex items-center space-x-2"
@@ -340,7 +337,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
-              className={viewMode === 'grid' ? '' : 'flex items-center space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
+              className={viewMode === 'grid' ? '' : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
             >
               {viewMode === 'grid' ? (
                 <div className="relative group cursor-pointer" onClick={() => openPhotoViewer(photoId, index)}>
@@ -351,6 +348,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                       e.stopPropagation();
                       togglePhotoSelection(photoId);
                     }}
+                    onClick={e => e.stopPropagation()}
                     className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
@@ -374,7 +372,10 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <input
                     type="checkbox"
                     checked={selectedPhotos.has(photoId)}
-                    onChange={() => togglePhotoSelection(photoId)}
+                    onChange={(e) => {
+                      togglePhotoSelection(photoId);
+                    }}
+                    onClick={e => e.stopPropagation()}
                     className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
@@ -387,7 +388,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                       e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900">{photoId}</p>
                     <p className="text-sm text-gray-500">Photo {index + 1}</p>
                   </div>
@@ -430,6 +431,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           onNavigate={navigatePhoto}
           totalPhotos={filteredPhotos.length}
           currentIndex={photoViewer.index}
+          currentGroupId={group.id}
         />
       )}
     </div>
