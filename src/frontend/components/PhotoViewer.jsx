@@ -20,6 +20,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
+  const [facesListHeight, setFacesListHeight] = useState(0);
 
   useEffect(() => {
     if (photo) {
@@ -28,6 +29,63 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       setSelectedFaceIndex(null);
     }
   }, [photo]);
+
+
+
+  // Calculate faces list height
+  useEffect(() => {
+    const calculateFacesListHeight = () => {
+      const modal = document.querySelector('.photo-viewer-modal');
+      const controls = document.querySelector('.photo-viewer-controls');
+      const header = document.querySelector('.photo-viewer-header');
+      
+      if (modal && controls) {
+        const modalHeight = modal.offsetHeight;
+        const controlsHeight = controls.offsetHeight;
+        const headerHeight = header ? header.offsetHeight : 0;
+        const titleHeight = 40; // "Faces in Photo" title
+        const padding = 16; // Padding around faces list
+        const bottomPadding = 16; // Extra padding at bottom to prevent cutoff
+        
+        console.log('Height calculation debug:', {
+          modalHeight,
+          controlsHeight,
+          headerHeight,
+          titleHeight,
+          padding,
+          bottomPadding,
+          viewportHeight: window.innerHeight,
+          availableHeight: modalHeight - controlsHeight - headerHeight - titleHeight - padding - bottomPadding
+        });
+        
+        const availableHeight = modalHeight - controlsHeight - headerHeight - titleHeight - padding - bottomPadding;
+        const calculatedHeight = Math.max(250, availableHeight);
+        
+        // More conservative approach: use 30% of viewport height max
+        const viewportHeight = window.innerHeight;
+        const conservativeHeight = Math.min(calculatedHeight, viewportHeight * 0.3);
+        const finalHeight = Math.max(200, Math.min(conservativeHeight, 400));
+        
+        // Additional safety: ensure we don't exceed the modal's available space
+        const modalAvailableHeight = modalHeight - headerHeight - 32; // 32px for padding
+        const safeHeight = Math.min(finalHeight, modalAvailableHeight * 0.5);
+        
+        console.log('Available height:', availableHeight, 'Final height:', calculatedHeight, 'Conservative height:', conservativeHeight, 'Safe height:', safeHeight);
+        setFacesListHeight(safeHeight);
+      }
+    };
+
+    // Calculate on mount and when faces change
+    // Add a small delay to ensure DOM is rendered
+    const timer = setTimeout(calculateFacesListHeight, 100);
+    
+    // Recalculate on window resize
+    window.addEventListener('resize', calculateFacesListHeight);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', calculateFacesListHeight);
+    };
+  }, [faces, loading, photoInfo]);
 
   const loadPhotoInfo = async () => {
     try {
@@ -175,14 +233,18 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     <AnimatePresence>
       <div className="modal-overlay" onClick={onClose}>
         <motion.div
-          className="modal-content max-w-7xl w-full h-full max-h-[95vh]"
+          className="modal-content max-w-7xl w-full photo-viewer-modal"
+          style={{ 
+            maxHeight: '85vh',
+            height: '85vh'
+          }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white photo-viewer-header">
             <div className="flex items-center space-x-4">
               <button
                 onClick={onClose}
@@ -228,7 +290,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           </div>
 
           {/* Content */}
-          <div className="flex h-full">
+          <div className="flex h-full overflow-hidden">
             {/* Photo Viewer */}
             <div 
               ref={containerRef}
@@ -302,9 +364,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
             </div>
 
             {/* Sidebar */}
-            <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+            <div className="w-80 bg-white border-l border-gray-200 photo-viewer-sidebar">
               {/* Controls */}
-              <div className="p-4 border-b border-gray-200">
+              <div className="p-4 border-b border-gray-200 photo-viewer-controls">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
                   <button
@@ -373,51 +435,59 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </div>
 
               {/* Faces Info */}
-              <div className="flex-1 p-4 overflow-y-auto">
-                <h3 className="font-semibold text-gray-900 mb-4">Faces in Photo</h3>
+              <div className="photo-viewer-faces p-4 flex flex-col overflow-hidden">
+                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Photo</h3>
                 
-                {faces.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {faces.map((face, index) => (
-                      <div
-                        key={index}
-                        className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                        onClick={() => handleFaceNavigation(face)}
-                      >
-                        <img
-                          src={
-                            face.face_crop
-                              ? `${API_BASE}/crops/${face.face_crop}`
-                              : face.group_representative
-                                ? `${API_BASE}/crops/${face.group_representative}`
-                                : PLACEHOLDER_DATA_URL
-                          }
-                          alt={face.group_label}
-                          className="w-12 h-12 object-cover rounded-lg"
-                          onError={(e) => {
-                            if ((face.face_crop || face.group_representative) && e.target.src.includes('/crops/')) {
-                              e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                              e.target.src = `${API_BASE}/images/${face.face_crop || face.group_representative}`;
-                            } else {
-                              e.target.src = PLACEHOLDER_DATA_URL;
+                <div 
+                  className="faces-list-container overflow-y-auto flex-1"
+                  style={{ 
+                    height: `${facesListHeight}px`,
+                    maxHeight: `${facesListHeight}px`
+                  }}
+                >
+                  {faces.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
+                  ) : (
+                    <div className="space-y-3 pb-2">
+                      {faces.map((face, index) => (
+                        <div
+                          key={index}
+                          className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                          onClick={() => handleFaceNavigation(face)}
+                        >
+                          <img
+                            src={
+                              face.face_crop
+                                ? `${API_BASE}/crops/${face.face_crop}`
+                                : face.group_representative
+                                  ? `${API_BASE}/crops/${face.group_representative}`
+                                  : PLACEHOLDER_DATA_URL
                             }
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">
-                            {face.group_label}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Group {face.group_id}
-                          </p>
+                            alt={face.group_label}
+                            className="w-12 h-12 object-cover rounded-lg"
+                            onError={(e) => {
+                              if ((face.face_crop || face.group_representative) && e.target.src.includes('/crops/')) {
+                                e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                                e.target.src = `${API_BASE}/images/${face.face_crop || face.group_representative}`;
+                              } else {
+                                e.target.src = PLACEHOLDER_DATA_URL;
+                              }
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 truncate">
+                              {face.group_label}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Group {face.group_id}
+                            </p>
+                          </div>
+                          <User className="w-4 h-4 text-gray-400" />
                         </div>
-                        <User className="w-4 h-4 text-gray-400" />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

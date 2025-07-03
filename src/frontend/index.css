@@ -42,11 +42,53 @@
   }
   
   .modal-overlay {
-    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4;
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto;
   }
   
   .modal-content {
-    @apply bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden;
+    @apply bg-white rounded-xl shadow-xl max-w-4xl w-full overflow-hidden;
+  }
+  
+  .faces-scroll-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    height: 0; /* Forces flex item to respect flex constraints */
+  }
+  
+  .photo-viewer-modal {
+    max-height: 85vh !important;
+    height: 85vh !important;
+    overflow: hidden;
+  }
+  
+  .photo-viewer-sidebar {
+    height: 100%;
+    max-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .photo-viewer-controls {
+    flex-shrink: 0;
+  }
+  
+  .photo-viewer-faces {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+  
+  .faces-list-container {
+    overflow-y: auto;
+    min-height: 200px;
+    flex-shrink: 0;
+    padding-bottom: 16px; /* Extra padding at bottom to prevent cutoff */
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db #f3f4f6;
   }
 }
 

@@ -3,31 +3,31 @@
     {
       "groupID": 0,
       "name": "Person_0",
-      "representative_imageID": "img_010",
-      "representative_faceID": "face_00059",
+      "representative_imageID": "img_011",
+      "representative_faceID": "face_00066",
       "faceIDs": [
-        "face_00059",
-        "face_00001",
-        "face_00000",
-        "face_00067",
-        "face_00020",
+        "face_00066",
         "face_00011",
-        "face_00069",
-        "face_00066"
+        "face_00067",
+        "face_00001",
+        "face_00020",
+        "face_00000",
+        "face_00059",
+        "face_00069"
       ]
     },
     {
       "groupID": 1,
       "name": "Person_1",
-      "representative_imageID": "img_012",
-      "representative_faceID": "face_00068",
+      "representative_imageID": "img_004",
+      "representative_faceID": "face_00004",
       "faceIDs": [
         "face_00004",
         "face_00068",
+        "face_00002",
         "face_00007",
-        "face_00070",
         "face_00051",
-        "face_00002"
+        "face_00070"
       ]
     },
     {
@@ -75,21 +75,21 @@
       "faceIDs": [
         "face_00012",
         "face_00017",
-        "face_00009",
         "face_00016",
-        "face_00013",
         "face_00025",
-        "face_00015"
+        "face_00013",
+        "face_00015",
+        "face_00009"
       ]
     },
     {
       "groupID": 7,
       "name": "Person_7",
-      "representative_imageID": "img_006",
-      "representative_faceID": "face_00010",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00053",
       "faceIDs": [
-        "face_00010",
-        "face_00053"
+        "face_00053",
+        "face_00010"
       ]
     },
     {
@@ -331,11 +331,11 @@
     {
       "groupID": 34,
       "name": "Person_34",
-      "representative_imageID": "img_010",
-      "representative_faceID": "face_00060",
+      "representative_imageID": "img_009",
+      "representative_faceID": "face_00047",
       "faceIDs": [
-        "face_00060",
-        "face_00047"
+        "face_00047",
+        "face_00060"
       ]
     },
     {

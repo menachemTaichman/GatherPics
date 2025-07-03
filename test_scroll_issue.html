@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scroll Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        .modal-content {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .photo-viewer {
+            flex: 1;
+            background: #111;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-left: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .controls {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background: white;
+        }
+        
+        .faces-info {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            background: #f9fafb;
+        }
+        
+        .face-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .face-avatar {
+            width: 48px;
+            height: 48px;
+            background: #e5e7eb;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .face-details {
+            flex: 1;
+        }
+        
+        .face-name {
+            font-weight: 500;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+        
+        .face-group {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        .debug-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="modal-content">
+        <div class="photo-viewer">
+            <div>Photo Viewer Area</div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="controls">
+                <h3 style="margin: 0 0 16px 0; font-weight: 600;">Controls</h3>
+                <div style="margin-bottom: 12px;">
+                    <button style="padding: 8px 16px; margin-right: 8px;">Zoom Out</button>
+                    <span>100%</span>
+                    <button style="padding: 8px 16px; margin-left: 8px;">Zoom In</button>
+                </div>
+                <button style="width: 100%; padding: 8px; margin-bottom: 8px;">Rotate</button>
+                <button style="width: 100%; padding: 8px; margin-bottom: 8px;">Download</button>
+                <button style="width: 100%; padding: 8px; margin-bottom: 8px;">Show Face Rectangles</button>
+                
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Photo Details</h4>
+                    <div style="font-size: 12px; color: #6b7280;">
+                        <div><strong>Name:</strong> E-T 0408.jpg</div>
+                        <div><strong>Date taken:</strong> Unknown</div>
+                        <div><strong>Size:</strong> 2.1 MB</div>
+                        <div><strong>Resolution:</strong> 8192 x 5464</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faces-info" id="facesInfo">
+                <h3 style="margin: 0 0 16px 0; font-weight: 600;">Faces in Photo</h3>
+                <div id="facesList">
+                    <!-- Faces will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="debug-info" id="debugInfo">
+        <div>Scroll Height: <span id="scrollHeight">-</span></div>
+        <div>Client Height: <span id="clientHeight">-</span></div>
+        <div>Scroll Top: <span id="scrollTop">-</span></div>
+        <div>Overflow: <span id="overflow">-</span></div>
+    </div>
+    
+    <script>
+        const facesInfo = document.getElementById('facesInfo');
+        const facesList = document.getElementById('facesList');
+        
+        function createFaceItem(name, groupId) {
+            return `
+                <div class="face-item">
+                    <div class="face-avatar">Face</div>
+                    <div class="face-details">
+                        <div class="face-name">${name}</div>
+                        <div class="face-group">Group ${groupId}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function updateDebugInfo() {
+            const scrollHeight = facesInfo.scrollHeight;
+            const clientHeight = facesInfo.clientHeight;
+            const scrollTop = facesInfo.scrollTop;
+            const overflow = scrollHeight > clientHeight ? 'Yes' : 'No';
+            
+            document.getElementById('scrollHeight').textContent = scrollHeight;
+            document.getElementById('clientHeight').textContent = clientHeight;
+            document.getElementById('scrollTop').textContent = scrollTop;
+            document.getElementById('overflow').textContent = overflow;
+        }
+        
+        function testWithFaces(count) {
+            facesList.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                facesList.innerHTML += createFaceItem(`Person_${i}`, i);
+            }
+            
+            // Wait for DOM update
+            setTimeout(updateDebugInfo, 100);
+        }
+        
+        // Test with different numbers of faces
+        let currentCount = 0;
+        function cycleTest() {
+            const counts = [1, 2, 3, 4, 5];
+            testWithFaces(counts[currentCount]);
+            currentCount = (currentCount + 1) % counts.length;
+        }
+        
+        // Initial test with 3 faces
+        testWithFaces(3);
+        
+        // Add click handler to cycle through tests
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'BUTTON') {
+                setTimeout(cycleTest, 500);
+            }
+        });
+        
+        // Update debug info on scroll
+        facesInfo.addEventListener('scroll', updateDebugInfo);
+        
+        // Update debug info on resize
+        window.addEventListener('resize', updateDebugInfo);
+    </script>
+</body>
+</html> 
