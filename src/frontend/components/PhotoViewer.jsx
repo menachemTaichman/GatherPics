@@ -359,7 +359,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    <span className="text-sm">{showRectangles ? 'Hide' : 'Show'} Face Rectangles</span>
+                    <span className="text-sm">{showRectangles ? 'Hide' : 'Show'} Face Tags</span>
                   </button>
                 </div>
                 {/* Details Section */}
