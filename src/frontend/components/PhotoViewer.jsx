@@ -36,15 +36,11 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const loadPhotoInfo = async () => {
     try {
       setLoading(true);
-      console.log('Loading photo info for:', photo);
       
       const [facesResponse, infoResponse] = await Promise.all([
         axios.get(`/api/photos/${encodeURIComponent(photo)}/faces`),
         axios.get(`/api/photos/${encodeURIComponent(photo)}/info`)
       ]);
-      
-      console.log('Faces response:', facesResponse.data);
-      console.log('Info response:', infoResponse.data);
       
       setFaces(facesResponse.data.faces || []);
       setPhotoInfo(infoResponse.data);

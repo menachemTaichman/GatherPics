@@ -7,7 +7,6 @@ export default function Header() {
 
   const handleDownloadAll = async () => {
     try {
-      console.log('Starting download for all photos');
       const response = await fetch('/api/download-all');
       
       if (!response.ok) {
@@ -16,7 +15,6 @@ export default function Header() {
       }
       
       const blob = await response.blob();
-      console.log('Download blob received, size:', blob.size);
       
       if (blob.size === 0) {
         throw new Error('Downloaded file is empty');
@@ -30,7 +28,6 @@ export default function Header() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      console.log('Download completed successfully');
     } catch (error) {
       console.error('Error downloading all photos:', error);
       alert(`Failed to download photos: ${error.message}. Please try again.`);

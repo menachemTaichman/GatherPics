@@ -122,7 +122,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
 
   const handleDownloadGroup = async () => {
     try {
-      console.log('Starting download for group:', group.id);
       const response = await fetch(`/api/groups/${group.id}/download`);
       
       if (!response.ok) {
@@ -131,7 +130,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       }
       
       const blob = await response.blob();
-      console.log('Download blob received, size:', blob.size);
       
       if (blob.size === 0) {
         throw new Error('Downloaded file is empty');
@@ -145,7 +143,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      console.log('Download completed successfully');
     } catch (error) {
       console.error('Error downloading group:', error);
       alert(`Failed to download photos: ${error.message}. Please try again.`);
@@ -156,7 +153,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     if (selectedPhotos.size === 0) return;
     
     try {
-      console.log('Starting download for selected photos:', Array.from(selectedPhotos));
       const response = await fetch(`/api/groups/${group.id}/download-selected`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,7 +165,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       }
       
       const blob = await response.blob();
-      console.log('Download blob received, size:', blob.size);
       
       if (blob.size === 0) {
         throw new Error('Downloaded file is empty');
@@ -183,7 +178,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      console.log('Download completed successfully');
     } catch (error) {
       console.error('Error downloading selected photos:', error);
       alert(`Failed to download photos: ${error.message}. Please try again.`);

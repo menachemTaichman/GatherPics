@@ -100,15 +100,6 @@ def get_group_with_faces(group_id):
     # Create image_ids list (unique image names)
     image_ids = list(set([image_id_to_name.get(f['imageID'], '') for f in group_faces]))
     
-    # Debug logging for group 0
-    if group_id == 0:
-        print(f"DEBUG Group 0:")
-        print(f"  Group faces: {[f['imageID'] for f in group_faces]}")
-        print(f"  Image ID to name mapping: {image_id_to_name}")
-        print(f"  Image IDs: {image_ids}")
-        print(f"  Representative image ID: {group.get('representative_imageID', '')}")
-        print(f"  Representative image name: {image_id_to_name.get(group.get('representative_imageID', ''), '')}")
-    
     # Get representative image name
     representative_image_name = image_id_to_name.get(group.get('representative_imageID', ''), '')
     
