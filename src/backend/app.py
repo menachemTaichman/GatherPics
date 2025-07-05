@@ -100,6 +100,15 @@ def get_group_with_faces(group_id):
     # Create image_ids list (unique image names)
     image_ids = list(set([image_id_to_name.get(f['imageID'], '') for f in group_faces]))
     
+    # Debug logging for group 0
+    if group_id == 0:
+        print(f"DEBUG Group 0:")
+        print(f"  Group faces: {[f['imageID'] for f in group_faces]}")
+        print(f"  Image ID to name mapping: {image_id_to_name}")
+        print(f"  Image IDs: {image_ids}")
+        print(f"  Representative image ID: {group.get('representative_imageID', '')}")
+        print(f"  Representative image name: {image_id_to_name.get(group.get('representative_imageID', ''), '')}")
+    
     # Get representative image name
     representative_image_name = image_id_to_name.get(group.get('representative_imageID', ''), '')
     
@@ -556,6 +565,95 @@ def get_group_crops(group_id):
     except Exception as e:
         print(f"Error getting crops for group {group_id}: {e}")
         return jsonify({"error": "Failed to get group crops"}), 500
+
+@app.route("/api/groups/<int:group_id>/photos")
+def get_group_photos(group_id):
+    """Get photos for a group with optional sorting by date"""
+    try:
+        group = get_group_with_faces(group_id)
+        
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
+        
+        # Get sort parameters from query string
+        sort_by = request.args.get('sort_by', 'date')  # 'date' or 'name'
+        sort_order = request.args.get('sort_order', 'asc')  # 'asc' or 'desc'
+        
+        photos = group.get('image_ids', [])
+        
+        if sort_by == 'date':
+            # Get photo info for all photos in the group
+            photos_with_dates = []
+            for photo_id in photos:
+                try:
+                    # Get photo info
+                    image_path = os.path.join(IMAGES_DIR, photo_id)
+                    date_taken = None
+                    
+                    if os.path.exists(image_path):
+                        with Image.open(image_path) as img:
+                            exif_data = img.info.get('exif')
+                            if exif_data:
+                                exif_dict = piexif.load(exif_data)
+                                date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                                if date_bytes:
+                                    date_taken = date_bytes.decode('utf-8')
+                    
+                    photos_with_dates.append({
+                        'photo_id': photo_id,
+                        'date_taken': date_taken
+                    })
+                except Exception as e:
+                    print(f"Error getting date for {photo_id}: {e}")
+                    photos_with_dates.append({
+                        'photo_id': photo_id,
+                        'date_taken': None
+                    })
+            
+            # Sort by date
+            def parse_exif_date(date_string):
+                if not date_string:
+                    return datetime.min
+                try:
+                    # Convert EXIF format "YYYY:MM:DD HH:MM:SS" to datetime
+                    return datetime.strptime(date_string, "%Y:%m:%d %H:%M:%S")
+                except:
+                    return datetime.min
+            
+            photos_with_dates.sort(
+                key=lambda x: parse_exif_date(x['date_taken']),
+                reverse=(sort_order == 'desc')
+            )
+            
+            # Return sorted photo IDs and their dates
+            return jsonify({
+                'photos': [
+                    {
+                        'photo_id': p['photo_id'],
+                        'date_taken': p['date_taken'],
+                        'formatted_date': parse_exif_date(p['date_taken']).strftime("%Y-%m-%d %H:%M:%S") if p['date_taken'] else None
+                    }
+                    for p in photos_with_dates
+                ]
+            })
+        
+        else:
+            # Sort by name
+            photos.sort(reverse=(sort_order == 'desc'))
+            return jsonify({
+                'photos': [
+                    {
+                        'photo_id': photo_id,
+                        'date_taken': None,
+                        'formatted_date': None
+                    }
+                    for photo_id in photos
+                ]
+            })
+            
+    except Exception as e:
+        print(f"Error getting group photos for {group_id}: {e}")
+        return jsonify({"error": "Failed to get group photos"}), 500
 
 # Error handlers
 @app.errorhandler(404)

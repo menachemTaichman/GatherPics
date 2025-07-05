@@ -278,7 +278,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       borderColor = 'border-red-500';
                       bgColor = 'bg-red-500';
                       labelBgColor = 'bg-red-500';
-                    } else if (currentGroupId && face.group_id === currentGroupId) {
+                    } else if (face.group_id === currentGroupId) {
                       // Current face (belongs to current group): green
                       borderColor = 'border-green-500';
                       bgColor = 'bg-green-500';

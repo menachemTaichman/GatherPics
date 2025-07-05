@@ -11,7 +11,10 @@ import {
   Grid, 
   List,
   Search,
-  Filter
+  Filter,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -27,6 +30,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0 });
+  const [photoClasses, setPhotoClasses] = useState({});
+  const [sortedPhotos, setSortedPhotos] = useState([]);
+  const [sortBy, setSortBy] = useState('date'); // 'date' or 'name'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  const [loading, setLoading] = useState(false);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const PLACEHOLDER_DATA_URL =
@@ -41,9 +49,76 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     }
   }, [groupId, groups, navigate]);
 
-  const filteredPhotos = group?.image_ids?.filter(photoId =>
-    photoId.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  // Fetch sorted photos from backend
+  useEffect(() => {
+    if (group && group.id !== undefined && group.id !== null) {
+      fetchSortedPhotos();
+    }
+  }, [group, sortBy, sortOrder]);
+
+  const fetchSortedPhotos = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_BASE}/api/groups/${group.id}/photos?sort_by=${sortBy}&sort_order=${sortOrder}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSortedPhotos(data.photos || []);
+      } else {
+        console.error('Failed to fetch sorted photos');
+        setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
+      }
+    } catch (error) {
+      console.error('Error fetching sorted photos:', error);
+      setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredPhotos = sortedPhotos.filter(photo =>
+    photo.photo_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleImageLoad = (photoId, e) => {
+    const img = e.target;
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+    
+    // Determine image class based on aspect ratio
+    let imageClass = 'square';
+    if (aspectRatio > 1.2) {
+      imageClass = 'landscape';
+    } else if (aspectRatio < 0.8) {
+      imageClass = 'portrait';
+    }
+    
+    setPhotoClasses(prev => ({
+      ...prev,
+      [photoId]: imageClass
+    }));
+  };
+
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Unknown';
+      
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      return 'Unknown';
+    }
+  };
 
   const handleDownloadGroup = async () => {
     try {
@@ -126,7 +201,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   };
 
   const selectAllPhotos = () => {
-    setSelectedPhotos(new Set(filteredPhotos));
+    setSelectedPhotos(new Set(filteredPhotos.map(p => p.photo_id)));
   };
 
   const clearSelection = () => {
@@ -157,7 +232,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     
     setPhotoViewer({
       show: true,
-      photo: filteredPhotos[newIndex],
+      photo: filteredPhotos[newIndex].photo_id,
       index: newIndex
     });
   };
@@ -202,6 +277,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                 </h1>
                 <p className="text-gray-600">
                   {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                  {sortedPhotos.length > 0 && sortedPhotos[0].formatted_date && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      • {sortOrder === 'asc' ? 'Oldest' : 'Latest'}: {formatDate(sortedPhotos[0].formatted_date)}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -245,6 +325,30 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
             />
+          </div>
+          
+          {/* Sort Controls */}
+          <div className="flex items-center space-x-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+            >
+              <option value="date">Sort by Date</option>
+              <option value="name">Sort by Name</option>
+            </select>
+            
+            <button
+              onClick={toggleSortOrder}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
+              title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+            >
+              {sortOrder === 'asc' ? (
+                <ArrowUp className="w-4 h-4" />
+              ) : (
+                <ArrowDown className="w-4 h-4" />
+              )}
+            </button>
           </div>
           
           <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
@@ -310,7 +414,12 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       )}
 
       {/* Photos Grid/List */}
-      {filteredPhotos.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="text-gray-500 mt-2">Loading photos...</p>
+        </div>
+      ) : filteredPhotos.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -326,71 +435,80 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
         </motion.div>
       ) : (
         <motion.div
-        className={`w-full ${viewMode === 'grid' ? 'gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
+        className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
-          {filteredPhotos.map((photoId, index) => (
+          {filteredPhotos.map((photo, index) => (
             <motion.div
-              key={photoId}
+              key={photo.photo_id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
-              className={viewMode === 'grid' ? '' : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
+              className={viewMode === 'grid' ? `photo-card ${photoClasses[photo.photo_id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
             >
               {viewMode === 'grid' ? (
-                <div className="relative group cursor-pointer" onClick={() => openPhotoViewer(photoId, index)}>
+                <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.photo_id, index)}>
                   <input
                     type="checkbox"
-                    checked={selectedPhotos.has(photoId)}
+                    checked={selectedPhotos.has(photo.photo_id)}
                     onChange={(e) => {
                       e.stopPropagation();
-                      togglePhotoSelection(photoId);
+                      togglePhotoSelection(photo.photo_id);
                     }}
                     onClick={e => e.stopPropagation()}
                     className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
-                    src={`${API_BASE}/images/${photoId}`}
+                    src={`${API_BASE}/images/${photo.photo_id}`}
                     alt={`Photo ${index + 1}`}
-                    className="face-image"
+                    className="w-full h-full object-cover rounded-lg"
+                    onLoad={(e) => handleImageLoad(photo.photo_id, e)}
                     onError={(e) => {
                       e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
                       e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
                       <Image className="w-8 h-8 mx-auto mb-1" />
                       <span className="text-sm">Click to view</span>
                     </div>
                   </div>
+                  {/* Date overlay */}
+                  {photo.formatted_date && (
+                    <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                      {formatDate(photo.formatted_date)}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
                   <input
                     type="checkbox"
-                    checked={selectedPhotos.has(photoId)}
+                    checked={selectedPhotos.has(photo.photo_id)}
                     onChange={(e) => {
-                      togglePhotoSelection(photoId);
+                      togglePhotoSelection(photo.photo_id);
                     }}
                     onClick={e => e.stopPropagation()}
                     className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
-                    src={`${API_BASE}/images/${photoId}`}
+                    src={`${API_BASE}/images/${photo.photo_id}`}
                     alt={`Photo ${index + 1}`}
                     className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => openPhotoViewer(photoId, index)}
+                    onClick={() => openPhotoViewer(photo.photo_id, index)}
                     onError={(e) => {
                       e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
                       e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">{photoId}</p>
-                    <p className="text-sm text-gray-500">Photo {index + 1}</p>
+                    <p className="font-medium text-gray-900">{photo.photo_id}</p>
+                    <p className="text-sm text-gray-500">
+                      {photo.formatted_date ? formatDate(photo.formatted_date) : 'Unknown date'}
+                    </p>
                   </div>
                 </>
               )}
