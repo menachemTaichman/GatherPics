@@ -274,11 +274,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                 </h1>
                 <p className="text-gray-600">
                   {filteredPhotos.length} of {group.image_ids?.length || 0} photos
-                  {sortedPhotos.length > 0 && sortedPhotos[0].formatted_date && (
-                    <span className="ml-2 text-sm text-gray-500">
-                      • {sortOrder === 'asc' ? 'Oldest' : 'Latest'}: {formatDate(sortedPhotos[0].formatted_date)}
-                    </span>
-                  )}
                 </p>
               </div>
             </div>
