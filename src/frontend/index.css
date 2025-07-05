@@ -57,8 +57,8 @@
   }
   
   .photo-viewer-modal {
-    max-height: 85vh !important;
-    height: 85vh !important;
+    max-height: 95vh !important;
+    height: 95vh !important;
     overflow: hidden;
   }
   
@@ -80,13 +80,14 @@
     overflow: hidden;
     flex: 1;
     min-height: 0;
+    padding-bottom: 8px; /* Add bottom padding to prevent cutoff */
   }
   
   .faces-list-container {
     overflow-y: auto;
     min-height: 200px;
-    flex-shrink: 0;
-    padding-bottom: 16px; /* Extra padding at bottom to prevent cutoff */
+    flex: 1;
+    padding-bottom: 24px; /* Increased padding at bottom to prevent cutoff */
     scrollbar-width: thin;
     scrollbar-color: #d1d5db #f3f4f6;
   }

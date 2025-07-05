@@ -44,39 +44,29 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
         const controlsHeight = controls.offsetHeight;
         const headerHeight = header ? header.offsetHeight : 0;
         const titleHeight = 40; // "Faces in Photo" title
-        const padding = 16; // Padding around faces list
-        const bottomPadding = 16; // Extra padding at bottom to prevent cutoff
+        const padding = 48; // Total padding (32px + 16px)
         
-        console.log('Height calculation debug:', {
+        const availableHeight = modalHeight - controlsHeight - headerHeight - titleHeight - padding;
+        const calculatedHeight = Math.max(300, availableHeight);
+        
+        // Use 40% of viewport height as maximum
+        const viewportHeight = window.innerHeight;
+        const maxHeight = Math.min(calculatedHeight, viewportHeight * 0.4);
+        const finalHeight = Math.max(250, maxHeight);
+        
+        console.log('Height calculation:', {
           modalHeight,
           controlsHeight,
           headerHeight,
-          titleHeight,
-          padding,
-          bottomPadding,
-          viewportHeight: window.innerHeight,
-          availableHeight: modalHeight - controlsHeight - headerHeight - titleHeight - padding - bottomPadding
+          availableHeight,
+          finalHeight
         });
         
-        const availableHeight = modalHeight - controlsHeight - headerHeight - titleHeight - padding - bottomPadding;
-        const calculatedHeight = Math.max(250, availableHeight);
-        
-        // More conservative approach: use 30% of viewport height max
-        const viewportHeight = window.innerHeight;
-        const conservativeHeight = Math.min(calculatedHeight, viewportHeight * 0.3);
-        const finalHeight = Math.max(200, Math.min(conservativeHeight, 400));
-        
-        // Additional safety: ensure we don't exceed the modal's available space
-        const modalAvailableHeight = modalHeight - headerHeight - 32; // 32px for padding
-        const safeHeight = Math.min(finalHeight, modalAvailableHeight * 0.5);
-        
-        console.log('Available height:', availableHeight, 'Final height:', calculatedHeight, 'Conservative height:', conservativeHeight, 'Safe height:', safeHeight);
-        setFacesListHeight(safeHeight);
+        setFacesListHeight(finalHeight);
       }
     };
 
     // Calculate on mount and when faces change
-    // Add a small delay to ensure DOM is rendered
     const timer = setTimeout(calculateFacesListHeight, 100);
     
     // Recalculate on window resize
@@ -235,8 +225,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
         <motion.div
           className="modal-content max-w-7xl w-full photo-viewer-modal"
           style={{ 
-            maxHeight: '85vh',
-            height: '85vh'
+            maxHeight: '95vh',
+            height: '95vh'
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -435,20 +425,16 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </div>
 
               {/* Faces Info */}
-              <div className="photo-viewer-faces p-4 flex flex-col overflow-hidden">
+              <div className="photo-viewer-faces p-4 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
                 <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Photo</h3>
                 
                 <div 
                   className="faces-list-container overflow-y-auto flex-1"
-                  style={{ 
-                    height: `${facesListHeight}px`,
-                    maxHeight: `${facesListHeight}px`
-                  }}
                 >
                   {faces.length === 0 ? (
                     <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
                   ) : (
-                    <div className="space-y-3 pb-2">
+                    <div className="space-y-3 pb-4">
                       {faces.map((face, index) => (
                         <div
                           key={index}
