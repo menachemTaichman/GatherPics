@@ -90,6 +90,11 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleFaceClick = (index) => {
+    // Turn on face tags if not already on
+    if (!showRectangles) {
+      setShowRectangles(true);
+    }
+    
     // If clicking on already selected face, deselect it
     if (selectedFaceIndex === index) {
       setSelectedFaceIndex(null);
@@ -355,7 +360,13 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <span className="text-sm">Download</span>
                   </button>
                   <button
-                    onClick={() => setShowRectangles(v => !v)}
+                    onClick={() => {
+                      if (showRectangles) {
+                        // When hiding tags, also deselect the face
+                        setSelectedFaceIndex(null);
+                      }
+                      setShowRectangles(v => !v);
+                    }}
                     className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -395,22 +406,20 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         <div
                           key={index}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                          onClick={() => handleFaceNavigation(face)}
+                          onClick={() => handleFaceClick(index)}
                         >
                           <img
                             src={
-                              face.face_crop
-                                ? `${API_BASE}/crops/${face.face_crop}`
-                                : face.group_representative
-                                  ? `${API_BASE}/crops/${face.group_representative}`
-                                  : PLACEHOLDER_DATA_URL
+                              face.group_representative
+                                ? `${API_BASE}/crops/${face.group_representative}`
+                                : PLACEHOLDER_DATA_URL
                             }
                             alt={face.group_label}
-                            className="w-12 h-12 object-cover rounded-lg"
+                            className="w-12 h-12 object-cover rounded-full"
                             onError={(e) => {
-                              if ((face.face_crop || face.group_representative) && e.target.src.includes('/crops/')) {
+                              if (face.group_representative && e.target.src.includes('/crops/')) {
                                 e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                                e.target.src = `${API_BASE}/images/${face.face_crop || face.group_representative}`;
+                                e.target.src = `${API_BASE}/images/${face.group_representative}`;
                               } else {
                                 e.target.src = PLACEHOLDER_DATA_URL;
                               }
@@ -424,7 +433,16 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                               Group {face.group_id}
                             </p>
                           </div>
-                          <User className="w-4 h-4 text-gray-400" />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleFaceNavigation(face);
+                            }}
+                            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                            title="Go to group page"
+                          >
+                            <User className="w-4 h-4 text-gray-600" />
+                          </button>
                         </div>
                       ))}
                     </div>
