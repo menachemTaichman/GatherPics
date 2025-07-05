@@ -26,7 +26,45 @@
   }
   
   .gallery-grid {
-    @apply w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4;
+    @apply w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3;
+  }
+
+  /* Dynamic gaps and row heights based on card size */
+  .gallery-grid.size-075 { 
+    gap: 0.75rem; 
+  }
+  .gallery-grid.size-100 { 
+    gap: 1rem; 
+  }
+  .gallery-grid.size-125 { 
+    gap: 1.25rem; 
+  }
+  .gallery-grid.size-150 { 
+    gap: 1.5rem; 
+  }
+  .gallery-grid.size-175 { 
+    gap: 1.75rem; 
+  }
+  
+  /* Dynamic grid sizes based on card size */
+  .gallery-grid.size-075 {
+    @apply grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12;
+  }
+
+  .gallery-grid.size-100 {
+    @apply grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10;
+  }
+
+  .gallery-grid.size-125 {
+    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8;
+  }
+
+  .gallery-grid.size-150 {
+    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7;
+  }
+
+  .gallery-grid.size-175 {
+    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7;
   }
   
   /* Photo grid for FaceDetail - masonry layout */
@@ -35,6 +73,62 @@
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     grid-auto-rows: 300px;
     grid-auto-flow: dense;
+  }
+  
+  /* Dynamic photo grid sizes based on photo size */
+  .photo-gallery-grid.size-050 {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-auto-rows: 150px;
+  }
+
+  .photo-gallery-grid.size-075 {
+    grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+    grid-auto-rows: 225px;
+  }
+
+  .photo-gallery-grid.size-100 {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-auto-rows: 300px;
+  }
+
+  .photo-gallery-grid.size-125 {
+    grid-template-columns: repeat(auto-fill, minmax(375px, 1fr));
+    grid-auto-rows: 375px;
+  }
+
+  .photo-gallery-grid.size-150 {
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    grid-auto-rows: 450px;
+  }
+
+  .photo-gallery-grid.size-175 {
+    grid-template-columns: repeat(auto-fill, minmax(525px, 1fr));
+    grid-auto-rows: 525px;
+  }
+
+  .photo-gallery-grid.size-200 {
+    grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+    grid-auto-rows: 600px;
+  }
+
+  .photo-gallery-grid.size-225 {
+    grid-template-columns: repeat(auto-fill, minmax(675px, 1fr));
+    grid-auto-rows: 675px;
+  }
+
+  .photo-gallery-grid.size-250 {
+    grid-template-columns: repeat(auto-fill, minmax(750px, 1fr));
+    grid-auto-rows: 750px;
+  }
+
+  .photo-gallery-grid.size-275 {
+    grid-template-columns: repeat(auto-fill, minmax(825px, 1fr));
+    grid-auto-rows: 825px;
+  }
+
+  .photo-gallery-grid.size-300 {
+    grid-template-columns: repeat(auto-fill, minmax(900px, 1fr));
+    grid-auto-rows: 900px;
   }
   
   /* Responsive photo grid columns */
@@ -92,7 +186,7 @@
     @apply cursor-pointer;
   }
   
-  .face-card:hover .w-32 {
+  .face-card:hover .w-24 {
     @apply scale-105;
   }
   

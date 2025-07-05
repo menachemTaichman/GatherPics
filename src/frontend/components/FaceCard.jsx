@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Edit, Trash2, MoreVertical, User } from 'lucide-react';
 
-export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
+export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDownload }) {
   const [showActions, setShowActions] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
@@ -44,12 +44,25 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
     <>
       <motion.div
         className="face-card group relative flex flex-col items-center"
-        whileHover={{ y: -4 }}
-        transition={{ duration: 0.2 }}
+        style={{ 
+          transition: 'transform 0.2s ease-out'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-4px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}
       >
         {/* Circular Image Container */}
         <Link to={`/face/${group.id}`} className="block mb-3">
-          <div className="relative w-32 h-32 rounded-full overflow-hidden shadow-lg">
+          <div 
+            className="relative rounded-full overflow-hidden shadow-lg"
+            style={{ 
+              width: `${144 * cardSize}px`, 
+              height: `${144 * cardSize}px` 
+            }}
+          >
             <img
               src={imageSrc}
               alt={group.label || `Person ${group.id}`}

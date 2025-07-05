@@ -14,7 +14,9 @@ import {
   Filter,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Minus,
+  Plus
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -35,6 +37,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [sortBy, setSortBy] = useState('date'); // 'date' or 'name'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
   const [loading, setLoading] = useState(false);
+  const [photoSize, setPhotoSize] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const PLACEHOLDER_DATA_URL =
@@ -363,6 +366,29 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <List className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Size Control - Only show in grid mode */}
+          {viewMode === 'grid' && (
+            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+              <button
+                onClick={() => setPhotoSize(prev => Math.max(0.5, prev - 0.25))}
+                disabled={photoSize <= 0.5}
+                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-medium text-gray-700 min-w-[3rem] text-center">
+                {Math.round(photoSize * 100)}%
+              </span>
+              <button
+                onClick={() => setPhotoSize(prev => Math.min(3, prev + 0.25))}
+                disabled={photoSize >= 3}
+                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {selectedPhotos.size > 0 && (
@@ -429,7 +455,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
         </motion.div>
       ) : (
         <motion.div
-        className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
+        className={`w-full ${viewMode === 'grid' ? `photo-gallery-grid size-${Math.round(photoSize * 100).toString().padStart(3, '0')}` : 'space-y-4 max-w-3xl mx-auto block'}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}

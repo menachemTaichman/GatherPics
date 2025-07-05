@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Download, Edit, Trash2, User } from 'lucide-react';
+import { Search, Filter, Download, Edit, Trash2, User, Minus, Plus } from 'lucide-react';
 import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -11,6 +11,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [sortBy, setSortBy] = useState('name'); // 'name', 'count', 'date'
+  const [cardSize, setCardSize] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3
 
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = groups.filter(group => 
@@ -112,6 +113,27 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
               </select>
               <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
             </div>
+
+            {/* Size Control */}
+            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+              <button
+                onClick={() => setCardSize(prev => Math.max(0.75, prev - 0.25))}
+                disabled={cardSize <= 0.75}
+                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-medium text-gray-700 min-w-[3rem] text-center">
+                {Math.round(cardSize * 100)}%
+              </span>
+              <button
+                onClick={() => setCardSize(prev => Math.min(1.75, prev + 0.25))}
+                disabled={cardSize >= 1.75}
+                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -136,7 +158,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
         </motion.div>
       ) : (
         <motion.div 
-          className="gallery-grid"
+          className={`gallery-grid size-${Math.round(cardSize * 100).toString().padStart(3, '0')}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
@@ -150,6 +172,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
             >
               <FaceCard
                 group={group}
+                cardSize={cardSize}
                 onEdit={() => handleEditGroup(group)}
                 onDelete={() => handleDeleteGroup(group)}
                 onDownload={() => handleDownloadGroup(group)}

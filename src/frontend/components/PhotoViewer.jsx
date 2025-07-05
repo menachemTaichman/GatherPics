@@ -53,8 +53,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   };
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.5, 3));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.5, 0.5));
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3));
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.5));
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
   const handleReset = () => {
     setZoom(1);
