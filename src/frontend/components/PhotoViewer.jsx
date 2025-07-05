@@ -20,7 +20,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
-  const [facesListHeight, setFacesListHeight] = useState(0);
 
   useEffect(() => {
     if (photo) {
@@ -32,50 +31,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
 
 
-  // Calculate faces list height
-  useEffect(() => {
-    const calculateFacesListHeight = () => {
-      const modal = document.querySelector('.photo-viewer-modal');
-      const controls = document.querySelector('.photo-viewer-controls');
-      const header = document.querySelector('.photo-viewer-header');
-      
-      if (modal && controls) {
-        const modalHeight = modal.offsetHeight;
-        const controlsHeight = controls.offsetHeight;
-        const headerHeight = header ? header.offsetHeight : 0;
-        const titleHeight = 40; // "Faces in Photo" title
-        const padding = 48; // Total padding (32px + 16px)
-        
-        const availableHeight = modalHeight - controlsHeight - headerHeight - titleHeight - padding;
-        const calculatedHeight = Math.max(300, availableHeight);
-        
-        // Use 40% of viewport height as maximum
-        const viewportHeight = window.innerHeight;
-        const maxHeight = Math.min(calculatedHeight, viewportHeight * 0.4);
-        const finalHeight = Math.max(250, maxHeight);
-        
-        console.log('Height calculation:', {
-          modalHeight,
-          controlsHeight,
-          headerHeight,
-          availableHeight,
-          finalHeight
-        });
-        
-        setFacesListHeight(finalHeight);
-      }
-    };
 
-    // Calculate on mount and when faces change
-    const timer = setTimeout(calculateFacesListHeight, 100);
-    
-    // Recalculate on window resize
-    window.addEventListener('resize', calculateFacesListHeight);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', calculateFacesListHeight);
-    };
-  }, [faces, loading, photoInfo]);
 
   const loadPhotoInfo = async () => {
     try {
@@ -225,8 +181,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
         <motion.div
           className="modal-content max-w-7xl w-full photo-viewer-modal"
           style={{ 
-            maxHeight: '95vh',
-            height: '95vh'
+            maxHeight: '92vh',
+            height: '92vh'
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -425,7 +381,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </div>
 
               {/* Faces Info */}
-              <div className="photo-viewer-faces p-4 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+              <div className="photo-viewer-faces p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
                 <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Photo</h3>
                 
                 <div 
@@ -434,7 +390,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   {faces.length === 0 ? (
                     <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
                   ) : (
-                    <div className="space-y-3 pb-4">
+                    <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
                           key={index}

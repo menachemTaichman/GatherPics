@@ -57,9 +57,12 @@
   }
   
   .photo-viewer-modal {
-    max-height: 95vh !important;
-    height: 95vh !important;
+    max-height: 92vh !important;
+    height: 92vh !important;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 8px; /* Add padding to ensure scrollbar is visible */
   }
   
   .photo-viewer-sidebar {
@@ -67,7 +70,8 @@
     max-height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
+    padding-bottom: 8px; /* Add padding to ensure scrollbar is visible */
   }
   
   .photo-viewer-controls {
@@ -80,17 +84,18 @@
     overflow: hidden;
     flex: 1;
     min-height: 0;
-    padding-bottom: 8px; /* Add bottom padding to prevent cutoff */
-  }
+  }  
   
   .faces-list-container {
-    overflow-y: auto;
-    min-height: 200px;
     flex: 1;
-    padding-bottom: 24px; /* Increased padding at bottom to prevent cutoff */
+    min-height: 0;
+    overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #d1d5db #f3f4f6;
+    padding-right: 0.5rem;
   }
+  
+
 }
 
 /* Custom scrollbar */
