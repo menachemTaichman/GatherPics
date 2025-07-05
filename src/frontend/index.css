@@ -30,15 +30,11 @@
   }
   
   .face-card {
-    @apply card cursor-pointer;
+    @apply cursor-pointer;
   }
   
-  .face-card:hover .face-image {
+  .face-card:hover .w-32 {
     @apply scale-105;
-  }
-  
-  .face-image {
-    @apply w-full h-48 object-cover transition-transform duration-300;
   }
   
   .modal-overlay {

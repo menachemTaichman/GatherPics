@@ -43,17 +43,17 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
   return (
     <>
       <motion.div
-        className="face-card group relative"
+        className="face-card group relative flex flex-col items-center"
         whileHover={{ y: -4 }}
         transition={{ duration: 0.2 }}
       >
-        {/* Main Image */}
-        <Link to={`/face/${group.id}`} className="block">
-          <div className="relative overflow-hidden">
+        {/* Circular Image Container */}
+        <Link to={`/face/${group.id}`} className="block mb-3">
+          <div className="relative w-32 h-32 rounded-full overflow-hidden shadow-lg">
             <img
               src={imageSrc}
               alt={group.label || `Person ${group.id}`}
-              className="face-image"
+              className="w-full h-full object-cover"
               onError={(e) => {
                 // Fallback to original image if crop fails, but only once
                 if (e.target.src.includes('/crops/') && group.representative) {
@@ -66,12 +66,12 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
             />
             
             {/* Overlay with photo count */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              <div className="absolute bottom-3 left-3 text-white">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full">
+              <div className="absolute bottom-2 left-2 text-white">
                 <div className="flex items-center space-x-1">
-                  <User className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    {group.image_ids?.length || 0} photos
+                  <User className="w-3 h-3" />
+                  <span className="text-xs font-medium">
+                    {group.image_ids?.length || 0}
                   </span>
                 </div>
               </div>
@@ -79,14 +79,14 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
           </div>
         </Link>
 
-        {/* Card Content */}
-        <div className="p-4">
-          <div className="flex items-center justify-between">
+        {/* Card Content - Below the circle */}
+        <div className="text-center w-full">
+          <div className="flex items-center justify-center space-x-2">
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate">
+              <h3 className="font-semibold text-gray-900 truncate text-sm">
                 {group.label || `Person ${group.id}`}
               </h3>
-              <p className="text-sm text-gray-500">
+              <p className="text-xs text-gray-500">
                 {group.image_ids?.length || 0} photos
               </p>
             </div>
@@ -98,7 +98,7 @@ export default function FaceCard({ group, onEdit, onDelete, onDownload }) {
                 onClick={handleToggleActions}
                 className="p-1 rounded-full hover:bg-gray-100 transition-colors"
               >
-                <MoreVertical className="w-4 h-4 text-gray-500" />
+                <MoreVertical className="w-3 h-3 text-gray-500" />
               </button>
             </div>
           </div>
