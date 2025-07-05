@@ -3,8 +3,8 @@
     {
       "groupID": 0,
       "name": "Person_0",
-      "representative_imageID": "img_011",
-      "representative_faceID": "face_00066",
+      "representative_imageID": "img_012",
+      "representative_faceID": "face_00067",
       "faceIDs": [
         "face_00066",
         "face_00011",
@@ -14,7 +14,8 @@
         "face_00000",
         "face_00059",
         "face_00069"
-      ]
+      ],
+      "updated_at": "2025-07-05T22:49:22.018852"
     },
     {
       "groupID": 1,

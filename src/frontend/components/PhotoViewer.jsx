@@ -313,8 +313,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
             {/* Sidebar */}
             <div className="w-80 bg-white border-l border-gray-200 photo-viewer-sidebar">
               {/* Controls */}
-              <div className="p-4 border-b border-gray-200 photo-viewer-controls">
-                <div className="flex items-center justify-between mb-4">
+              <div className="p-3 border-b border-gray-200 photo-viewer-controls">
+                <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
                   <button
                     onClick={handleReset}
@@ -323,7 +323,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     Reset
                   </button>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={handleZoomOut}
@@ -341,40 +341,42 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       <ZoomIn className="w-4 h-4" />
                     </button>
                   </div>
-                  <button
-                    onClick={handleRotate}
-                    className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <RotateCw className="w-4 h-4" />
-                    <span className="text-sm">Rotate</span>
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span className="text-sm">Download</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (showRectangles) {
-                        // When hiding tags, also deselect the face
-                        setSelectedFaceIndex(null);
-                      }
-                      setShowRectangles(v => !v);
-                    }}
-                    className="w-full flex items-center justify-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    <span className="text-sm">{showRectangles ? 'Hide' : 'Show'} Face Tags</span>
-                  </button>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={handleRotate}
+                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      <span className="text-xs">Rotate</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (showRectangles) {
+                          // When hiding tags, also deselect the face
+                          setSelectedFaceIndex(null);
+                        }
+                        setShowRectangles(v => !v);
+                      }}
+                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      <span className="text-xs">{showRectangles ? 'Hide' : 'Show'} Tags</span>
+                    </button>
+                    <button
+                      onClick={handleDownload}
+                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="text-xs">Download</span>
+                    </button>
+                  </div>
                 </div>
                 {/* Details Section */}
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-2">Photo Details</h4>
-                  <div className="text-xs text-gray-500 space-y-1">
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
+                  <div className="text-xs text-gray-500 space-y-0.5">
                     <div><span className="font-semibold">Name:</span> {photoInfo?.filename || photo}</div>
-                    <div><span className="font-semibold">Date taken:</span> {photoInfo?.date_taken || 'Unknown'}</div>
+                    <div><span className="font-semibold">Date:</span> {photoInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Size:</span> {(() => {
                       const size = photoInfo?.file_size;
                       if (!size) return 'Unknown';
@@ -382,7 +384,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
                       return (size / 1024).toFixed(1) + ' KB';
                     })()}</div>
-                    <div><span className="font-semibold">Resolution:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
+                    <div><span className="font-semibold">Res:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
                   </div>
                 </div>
               </div>
