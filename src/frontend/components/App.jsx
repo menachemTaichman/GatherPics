@@ -6,6 +6,7 @@ import Header from './Header';
 import Gallery from './Gallery';
 import FaceDetail from './FaceDetail';
 import LoadingSpinner from './LoadingSpinner';
+import Moments from './Moments';
 
 export default function App() {
   const [groups, setGroups] = useState([]);
@@ -114,6 +115,19 @@ export default function App() {
                   />
                 </motion.div>
               } 
+            />
+            <Route
+              path="/moments"
+              element={
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Moments />
+                </motion.div>
+              }
             />
           </Routes>
         </AnimatePresence>

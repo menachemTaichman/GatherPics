@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request, send_file, Response
+from flask import Flask, jsonify, send_from_directory, request, send_file, Response, make_response
 from flask_cors import CORS
 import json
 import os
@@ -9,6 +9,7 @@ import tempfile
 import shutil
 from PIL import Image
 import piexif
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -35,6 +36,9 @@ FACES_OUTPUT_FILE = os.path.abspath(FACES_OUTPUT_FILE)
 
 # Create crops directory if it doesn't exist
 os.makedirs(CROPS_DIR, exist_ok=True)
+
+# New moments file
+MOMENTS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'moments.json')
 
 def load_images():
     """Load images data"""
@@ -156,6 +160,14 @@ def get_faces_in_image(image_filename):
     """Get faces detected in a specific image (legacy)"""
     faces_data = load_faces_output()
     return faces_data.get(image_filename, [])
+
+def load_moments():
+    with open(MOMENTS_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f).get('moments', [])
+
+def save_moments(moments):
+    with open(MOMENTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'moments': moments}, f, ensure_ascii=False, indent=2)
 
 @app.route("/api/ping")
 def ping():
@@ -645,6 +657,145 @@ def get_group_photos(group_id):
     except Exception as e:
         print(f"Error getting group photos for {group_id}: {e}")
         return jsonify({"error": "Failed to get group photos"}), 500
+
+@app.route('/api/moments', methods=['GET'])
+def get_moments():
+    moments = load_moments()
+    return jsonify({'moments': moments})
+
+@app.route('/api/moments', methods=['POST'])
+def create_moment():
+    data = request.json
+    moments = load_moments()
+    new_moment = {
+        'id': str(uuid.uuid4()),
+        'title': data.get('title', ''),
+        'start_datetime': data.get('start_datetime', ''),
+        'end_datetime': data.get('end_datetime', ''),
+        'representative_photo': data.get('representative_photo', ''),
+        'description': data.get('description', '')
+    }
+    moments.append(new_moment)
+    save_moments(moments)
+    return jsonify({'moment': new_moment}), 201
+
+@app.route('/api/moments/<moment_id>', methods=['PUT'])
+def update_moment(moment_id):
+    data = request.json
+    moments = load_moments()
+    for moment in moments:
+        if moment['id'] == moment_id:
+            moment['title'] = data.get('title', moment['title'])
+            moment['start_datetime'] = data.get('start_datetime', moment['start_datetime'])
+            moment['end_datetime'] = data.get('end_datetime', moment['end_datetime'])
+            moment['representative_photo'] = data.get('representative_photo', moment['representative_photo'])
+            moment['description'] = data.get('description', moment.get('description', ''))
+            save_moments(moments)
+            return jsonify({'moment': moment})
+    return jsonify({'error': 'Moment not found'}), 404
+
+@app.route('/api/moments/<moment_id>', methods=['DELETE'])
+def delete_moment(moment_id):
+    moments = load_moments()
+    new_moments = [m for m in moments if m['id'] != moment_id]
+    if len(new_moments) == len(moments):
+        return jsonify({'error': 'Moment not found'}), 404
+    save_moments(new_moments)
+    return jsonify({'status': 'deleted'})
+
+@app.route('/api/moments/<moment_id>/photos', methods=['GET'])
+def get_moment_photos(moment_id):
+    moments = load_moments()
+    moment = next((m for m in moments if m['id'] == moment_id), None)
+    if not moment:
+        return jsonify({'error': 'Moment not found'}), 404
+    images = load_images()
+    photos_in_range = []
+    start_dt = moment.get('start_datetime')
+    end_dt = moment.get('end_datetime')
+    if not start_dt or not end_dt:
+        return jsonify({'photos': []})
+    from datetime import datetime
+    def parse_iso(dt):
+        try:
+            return datetime.fromisoformat(dt)
+        except:
+            return None
+    start = parse_iso(start_dt)
+    end = parse_iso(end_dt)
+    if not start or not end:
+        return jsonify({'photos': []})
+    for img in images:
+        filename = img['name']
+        image_path = os.path.join(IMAGES_DIR, filename)
+        date_taken = None
+        if os.path.exists(image_path):
+            try:
+                with Image.open(image_path) as im:
+                    exif_data = im.info.get('exif')
+                    if exif_data:
+                        exif_dict = piexif.load(exif_data)
+                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                        if date_bytes:
+                            date_str = date_bytes.decode('utf-8')
+                            # EXIF format: YYYY:MM:DD HH:MM:SS
+                            date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+            except Exception as e:
+                print(f"Error reading EXIF for {filename}: {e}")
+        if date_taken and start <= date_taken <= end:
+            photos_in_range.append({
+                'name': filename,
+                'date_taken': date_taken.isoformat()
+            })
+    return jsonify({'photos': photos_in_range})
+
+@app.route('/api/download-selected-moment', methods=['POST'])
+def download_selected_moment_photos():
+    """Download selected photos from a moment as a ZIP file"""
+    try:
+        data = request.json
+        moment_id = data.get('momentId')
+        photo_names = data.get('photoNames', [])
+        
+        if not moment_id or not photo_names:
+            return jsonify({"error": "Missing moment ID or photo names"}), 400
+        
+        # Verify the moment exists
+        moments = load_moments()
+        moment = next((m for m in moments if m['id'] == moment_id), None)
+        if not moment:
+            return jsonify({"error": "Moment not found"}), 404
+        
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for photo_name in photo_names:
+                photo_path = os.path.join(IMAGES_DIR, photo_name)
+                if os.path.exists(photo_path):
+                    zip_file.write(photo_path, photo_name)
+        
+        zip_buffer.seek(0)
+        
+        response = make_response(zip_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/zip'
+        response.headers['Content-Disposition'] = f'attachment; filename=moment_{moment.get("title", "photos")}.zip'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error downloading moment photos: {e}")
+        return jsonify({"error": "Failed to download photos"}), 500
+
+@app.route('/api/images.json')
+def get_images_json():
+    """Get the images.json file for frontend use"""
+    try:
+        with open(IMAGES_FILE, 'r', encoding='utf-8') as f:
+            return jsonify(json.load(f))
+    except FileNotFoundError:
+        return jsonify({"images": []})
+    except json.JSONDecodeError:
+        return jsonify({"images": []})
 
 # Error handlers
 @app.errorhandler(404)

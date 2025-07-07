@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Download, Home, Users, Settings } from 'lucide-react';
+import { Download, Home, Users, Settings, Clock, Smile } from 'lucide-react';
 
 export default function Header() {
   const location = useLocation();
@@ -70,8 +70,20 @@ export default function Header() {
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
-              <Home className="w-4 h-4" />
-              <span className="hidden sm:inline">Gallery</span>
+              <Smile className="w-4 h-4" />
+              <span className="hidden sm:inline">Faces</span>
+            </Link>
+
+            <Link
+              to="/moments"
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                location.pathname.startsWith('/moments')
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">Moments</span>
             </Link>
 
             <button
