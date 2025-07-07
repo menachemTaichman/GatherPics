@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Trash2, Download, CheckSquare, Square, Image, Grid, List, Minus, Plus, X, Settings, Edit3, Move, Plus as PlusIcon, Clock, Calendar, MapPin, ArrowUp, ArrowDown } from 'lucide-react';
+import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar } from 'lucide-react';
 import PhotoViewer from './PhotoViewer';
+import EditMomentsModal from './EditMomentsModal';
+import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation } from 'react-router-dom';
 
 function formatTimeOnly(dateString) {
@@ -32,320 +34,6 @@ function formatDate(dateString) {
   } catch {
     return dateString;
   }
-}
-
-function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, momentPhotosMap }) {
-  const [editingMoments, setEditingMoments] = useState([]);
-  const [selectedMoment, setSelectedMoment] = useState(null);
-  const [showPhotoSelector, setShowPhotoSelector] = useState(false);
-  const [showEditPhotos, setShowEditPhotos] = useState(false);
-  const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
-  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
-
-  useEffect(() => {
-    if (open) {
-      setEditingMoments([...moments]);
-    }
-  }, [open, moments]);
-
-  const handleSave = () => {
-    onSave(editingMoments);
-    onClose();
-  };
-
-  const handleDelete = (id) => {
-    if (confirm('Are you sure you want to delete this moment?')) {
-      onDelete(id);
-    }
-  };
-
-  const updateMoment = (id, updates) => {
-    setEditingMoments(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-  };
-
-  const addMoment = () => {
-    const newMoment = {
-      id: `temp-${Date.now()}`,
-      title: '',
-      start_datetime: '',
-      end_datetime: '',
-      representative_photo: '',
-      description: ''
-    };
-    setEditingMoments(prev => [...prev, newMoment]);
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  const handleEditPhotos = (moment) => {
-    setEditingPhotosForMoment(moment);
-    setSelectedPhotos(new Set((momentPhotosMap[moment.id] || []).map(p => p.name)));
-    setShowEditPhotos(true);
-  };
-
-  const handleSavePhotos = () => {
-    // Handle saving the new photo selection
-    console.log('Saving photo selection for moment:', editingPhotosForMoment.id, Array.from(selectedPhotos));
-    setShowEditPhotos(false);
-    setEditingPhotosForMoment(null);
-  };
-
-  const togglePhoto = (photoName) => {
-    setSelectedPhotos(prev => {
-      const next = new Set(prev);
-      if (next.has(photoName)) {
-        next.delete(photoName);
-      } else {
-        next.add(photoName);
-      }
-      return next;
-    });
-  };
-
-  if (!open) return null;
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4"
-    >
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
-      >
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">Edit Moments</h3>
-            <div className="flex space-x-2">
-              <button onClick={addMoment} className="btn-secondary">Add Moment</button>
-              <button onClick={handleSave} className="btn-primary">Save All</button>
-              <button onClick={onClose} className="btn-secondary">Cancel</button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-4">
-            {editingMoments.map((moment, index) => (
-              <div key={moment.id} className="border rounded-lg p-4">
-                <div className="flex justify-between items-start mb-4">
-                  <h4 className="font-semibold">Moment {index + 1}</h4>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => handleEditPhotos(moment)}
-                      className="btn-secondary flex items-center space-x-2"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      <span>Edit Photos</span>
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(moment.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Title</label>
-                    <input
-                      type="text"
-                      value={moment.title}
-                      onChange={(e) => updateMoment(moment.id, { title: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Description</label>
-                    <textarea
-                      value={moment.description}
-                      onChange={(e) => updateMoment(moment.id, { description: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                      rows="2"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Start Time</label>
-                    <input
-                      type="datetime-local"
-                      value={moment.start_datetime}
-                      onChange={(e) => updateMoment(moment.id, { start_datetime: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                    {moment.start_datetime && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {formatDateTime(moment.start_datetime)}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1">End Time</label>
-                    <input
-                      type="datetime-local"
-                      value={moment.end_datetime}
-                      onChange={(e) => updateMoment(moment.id, { end_datetime: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                    {moment.end_datetime && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {formatDateTime(moment.end_datetime)}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Representative Photo</label>
-                    <div className="flex items-center space-x-3">
-                      {moment.representative_photo && (
-                        <div className="w-16 h-16 rounded overflow-hidden border">
-                          <img 
-                            src={`/images/${moment.representative_photo}`} 
-                            alt="" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => {
-                          setSelectedMoment(moment);
-                          setShowPhotoSelector(true);
-                        }}
-                        className="btn-secondary"
-                      >
-                        {moment.representative_photo ? 'Change Photo' : 'Select Photo'}
-                      </button>
-                      {moment.representative_photo && (
-                        <button
-                          onClick={() => updateMoment(moment.id, { representative_photo: '' })}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Photo Selector Modal */}
-      {showPhotoSelector && selectedMoment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-center">
-                <h4 className="font-semibold">Select Representative Photo</h4>
-                <button onClick={() => setShowPhotoSelector(false)} className="text-gray-500 hover:text-gray-700">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {(momentPhotosMap[selectedMoment.id] || []).map((img) => (
-                  <div
-                    key={img.name}
-                    onClick={() => {
-                      updateMoment(selectedMoment.id, { representative_photo: img.name });
-                      setShowPhotoSelector(false);
-                    }}
-                    className="cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors"
-                  >
-                    <img
-                      src={`/images/${img.name}`}
-                      alt={img.name}
-                      className="w-full h-24 object-cover"
-                    />
-                    <div className="p-2 text-xs text-gray-600 truncate">
-                      {img.name}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Photos Modal */}
-      {showEditPhotos && editingPhotosForMoment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold">Edit Photos: {editingPhotosForMoment.title}</h3>
-                <div className="flex space-x-2">
-                  <button onClick={handleSavePhotos} className="btn-primary">Save Changes</button>
-                  <button onClick={() => setShowEditPhotos(false)} className="btn-secondary">Cancel</button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {images.map((photo) => (
-                  <div
-                    key={photo.name}
-                    onClick={() => togglePhoto(photo.name)}
-                    className={`relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors ${
-                      selectedPhotos.has(photo.name) ? 'border-primary-500 ring-2 ring-primary-200' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPhotos.has(photo.name)}
-                      readOnly
-                      className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                    />
-                    <img
-                      src={`/images/${photo.name}`}
-                      alt={photo.name}
-                      className="w-full h-24 object-cover"
-                    />
-                    <div className="p-2 text-xs text-gray-600 truncate">
-                      {photo.name}
-                    </div>
-                    {(momentPhotosMap[editingPhotosForMoment.id] || []).some(p => p.name === photo.name) && (
-                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-1 py-0.5 rounded">
-                        In Moment
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
 }
 
 function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhotos, globalSelection, onOpenPhotoViewer }) {
@@ -498,6 +186,8 @@ export default function Moments() {
   const [carouselVisible, setCarouselVisible] = useState(true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
+  const [showEditPhotosModal, setShowEditPhotosModal] = useState(false);
+  const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
 
   const momentsRef = useRef({});
 
@@ -547,19 +237,20 @@ export default function Moments() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [moments]);
 
-  useEffect(() => {
-    const fetchAllMomentPhotos = async () => {
-      const map = {};
-      for (const moment of moments) {
-        try {
-          const res = await axios.get(`/api/moments/${moment.id}/photos`);
-          map[moment.id] = res.data.photos || [];
-        } catch {
-          map[moment.id] = [];
-        }
+  const fetchAllMomentPhotos = async () => {
+    const map = {};
+    for (const moment of moments) {
+      try {
+        const res = await axios.get(`/api/moments/${moment.id}/photos`);
+        map[moment.id] = res.data.photos || [];
+      } catch {
+        map[moment.id] = [];
       }
-      setMomentPhotosMap(map);
-    };
+    }
+    setMomentPhotosMap(map);
+  };
+
+  useEffect(() => {
     if (moments.length > 0) fetchAllMomentPhotos();
   }, [moments]);
 
@@ -585,20 +276,8 @@ export default function Moments() {
     }
   };
 
-  const handleSaveMoments = async (updatedMoments) => {
-    try {
-      for (const moment of updatedMoments) {
-        if (moment.id.startsWith('temp-')) {
-          const { id, ...momentData } = moment;
-          await axios.post('/api/moments', momentData);
-        } else {
-          await axios.put(`/api/moments/${moment.id}`, moment);
-        }
-      }
-      fetchMoments();
-    } catch (error) {
-      alert('Failed to save moments.');
-    }
+  const handleSaveMoments = async (updatedMoment) => {
+    setMoments(prev => prev.map(m => m.id === updatedMoment.id ? updatedMoment : m));
   };
 
   const handleDeleteMoment = async (id) => {
@@ -764,6 +443,11 @@ export default function Moments() {
     if (moment) {
       scrollToMoment(moment.id);
     }
+  };
+
+  const handleOpenEditPhotos = (moment) => {
+    setEditingPhotosForMoment(moment);
+    setShowEditPhotosModal(true);
   };
 
   if (loading) return <div className="p-8 text-center">Loading moments...</div>;
@@ -1044,6 +728,18 @@ export default function Moments() {
         moments={moments}
         images={images}
         momentPhotosMap={momentPhotosMap}
+        onRefreshPhotos={fetchAllMomentPhotos}
+        onOpenEditPhotos={handleOpenEditPhotos}
+      />
+
+      <EditMomentPhotosModal
+        open={showEditPhotosModal}
+        onClose={() => setShowEditPhotosModal(false)}
+        moment={editingPhotosForMoment}
+        momentPhotosMap={momentPhotosMap}
+        onRefreshPhotos={fetchAllMomentPhotos}
+        onSave={handleSaveMoments}
+        moments={moments}
       />
 
       {/* Move Modal */}

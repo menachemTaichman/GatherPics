@@ -17,6 +17,13 @@ CORS(app)
 # Paths
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
 IMAGES_DIR = os.path.abspath(IMAGES_DIR)
+
+# Debug: Print image directory and check if a sample image exists
+print(f"[DEBUG] IMAGES_DIR: {IMAGES_DIR}")
+sample_image = os.path.join(IMAGES_DIR, 'E-T 0010.jpg')
+print(f"[DEBUG] Sample image path: {sample_image}")
+print(f"[DEBUG] Sample image exists: {os.path.exists(sample_image)}")
+
 CROPS_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'crops')
 CROPS_DIR = os.path.abspath(CROPS_DIR)
 
@@ -550,7 +557,19 @@ def get_photo_moment(filename):
         if not photo_date:
             return jsonify({"error": "Could not determine photo date"}), 404
         
-        # Find which moment this photo belongs to
+        # First check if photo is manually assigned to any moment
+        for moment in moments:
+            if 'photos' in moment and moment['photos'] and filename in moment['photos']:
+                return jsonify({
+                    'id': moment['id'],
+                    'title': moment['title'],
+                    'description': moment.get('description', ''),
+                    'start_datetime': moment['start_datetime'],
+                    'end_datetime': moment['end_datetime'],
+                    'representative_photo': moment.get('representative_photo', '')
+                })
+        
+        # Fallback to time-based assignment
         for moment in moments:
             start_dt = moment.get('start_datetime')
             end_dt = moment.get('end_datetime')
@@ -746,6 +765,8 @@ def update_moment(moment_id):
             moment['end_datetime'] = data.get('end_datetime', moment['end_datetime'])
             moment['representative_photo'] = data.get('representative_photo', moment['representative_photo'])
             moment['description'] = data.get('description', moment.get('description', ''))
+            # Always update the photos field, even if empty
+            moment['photos'] = data.get('photos', [])
             save_moments(moments)
             return jsonify({'moment': moment})
     return jsonify({'error': 'Moment not found'}), 404
@@ -765,45 +786,100 @@ def get_moment_photos(moment_id):
     moment = next((m for m in moments if m['id'] == moment_id), None)
     if not moment:
         return jsonify({'error': 'Moment not found'}), 404
-    images = load_images()
-    photos_in_range = []
-    start_dt = moment.get('start_datetime')
-    end_dt = moment.get('end_datetime')
-    if not start_dt or not end_dt:
-        return jsonify({'photos': []})
-    from datetime import datetime
-    def parse_iso(dt):
-        try:
-            return datetime.fromisoformat(dt)
-        except:
-            return None
-    start = parse_iso(start_dt)
-    end = parse_iso(end_dt)
-    if not start or not end:
-        return jsonify({'photos': []})
-    for img in images:
-        filename = img['name']
-        image_path = os.path.join(IMAGES_DIR, filename)
-        date_taken = None
-        if os.path.exists(image_path):
-            try:
-                with Image.open(image_path) as im:
-                    exif_data = im.info.get('exif')
-                    if exif_data:
-                        exif_dict = piexif.load(exif_data)
-                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                        if date_bytes:
-                            date_str = date_bytes.decode('utf-8')
-                            # EXIF format: YYYY:MM:DD HH:MM:SS
-                            date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-            except Exception as e:
-                print(f"Error reading EXIF for {filename}: {e}")
-        if date_taken and start <= date_taken <= end:
+    
+    # Only use manually assigned photos from the moments.json
+    if 'photos' in moment and moment['photos']:
+        images = load_images()
+        photos_in_range = []
+        
+        for photo_name in moment['photos']:
+            # Get timestamp for the photo
+            image_path = os.path.join(IMAGES_DIR, photo_name)
+            date_taken = None
+            if os.path.exists(image_path):
+                try:
+                    with Image.open(image_path) as im:
+                        exif_data = im.info.get('exif')
+                        if exif_data:
+                            exif_dict = piexif.load(exif_data)
+                            date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                            if date_bytes:
+                                date_str = date_bytes.decode('utf-8')
+                                # EXIF format: YYYY:MM:DD HH:MM:SS
+                                date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+                except Exception as e:
+                    print(f"Error reading EXIF for {photo_name}: {e}")
+            
             photos_in_range.append({
-                'name': filename,
-                'date_taken': date_taken.isoformat()
+                'name': photo_name,
+                'date_taken': date_taken.isoformat() if date_taken else None
             })
-    return jsonify({'photos': photos_in_range})
+        
+        return jsonify({'photos': photos_in_range})
+    
+    # If no photos field, return empty array
+    return jsonify({'photos': []})
+
+@app.route('/api/moments/<moment_id>/photos-in-period', methods=['GET'])
+def get_photos_in_moment_period(moment_id):
+    """Get all photos that fall within a moment's time period"""
+    try:
+        moments = load_moments()
+        moment = next((m for m in moments if m['id'] == moment_id), None)
+        if not moment:
+            return jsonify({'error': 'Moment not found'}), 404
+        
+        start_dt = moment.get('start_datetime')
+        end_dt = moment.get('end_datetime')
+        if not start_dt or not end_dt:
+            return jsonify({'photos': []})
+        
+        def parse_iso(dt):
+            try:
+                return datetime.fromisoformat(dt)
+            except:
+                return None
+        
+        start = parse_iso(start_dt)
+        end = parse_iso(end_dt)
+        if not start or not end:
+            return jsonify({'photos': []})
+        
+        # Get all images and check which ones fall in the time period
+        images = load_images()
+        photos_in_period = []
+        
+        for img in images:
+            filename = img['name']
+            image_path = os.path.join(IMAGES_DIR, filename)
+            date_taken = None
+            if os.path.exists(image_path):
+                try:
+                    with Image.open(image_path) as im:
+                        exif_data = im.info.get('exif')
+                        if exif_data:
+                            exif_dict = piexif.load(exif_data)
+                            date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                            if date_bytes:
+                                date_str = date_bytes.decode('utf-8')
+                                # EXIF format: YYYY:MM:DD HH:MM:SS
+                                date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+                except Exception as e:
+                    print(f"Error reading EXIF for {filename}: {e}")
+                    # Continue with next image instead of failing completely
+            else:
+                print(f"File does not exist: {image_path}")
+                
+            if date_taken and start <= date_taken <= end:
+                photos_in_period.append({
+                    'name': filename,
+                    'date_taken': date_taken.isoformat()
+                })
+        
+        return jsonify({'photos': photos_in_period})
+    except Exception as e:
+        print(f"Error in get_photos_in_moment_period: {e}")
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 @app.route('/api/download-selected-moment', methods=['POST'])
 def download_selected_moment_photos():

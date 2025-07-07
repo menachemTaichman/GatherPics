@@ -6,7 +6,11 @@
       "start_datetime": "2025-06-08T15:01",
       "end_datetime": "2025-06-08T16:09",
       "representative_photo": "E-T 0186.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 0010.jpg",
+        "E-T 0186.jpg"
+      ]
     },
     {
       "id": "c8cce706-c312-4864-998c-2642fb20694e",
@@ -14,7 +18,11 @@
       "start_datetime": "2025-06-08T16:22",
       "end_datetime": "2025-06-08T17:27",
       "representative_photo": "E-T 0314.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 0314.jpg",
+        "E-T 0408.jpg"
+      ]
     },
     {
       "id": "e4dea391-22b7-4852-97ac-09ef9d6944e6",
@@ -22,7 +30,8 @@
       "start_datetime": "2025-06-08T17:56",
       "end_datetime": "2025-06-08T17:34",
       "representative_photo": "",
-      "description": ""
+      "description": "",
+      "photos": []
     },
     {
       "id": "ba87dfbb-dea2-452e-aa55-e0400abd19d8",
@@ -30,7 +39,12 @@
       "start_datetime": "2025-06-08T17:34",
       "end_datetime": "2025-06-08T20:09",
       "representative_photo": "E-T 0958.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 0538.jpg",
+        "E-T 0955.jpg",
+        "E-T 0958.jpg"
+      ]
     },
     {
       "id": "4cae27e6-9bbc-4ef6-8e8a-13bafd6d49b1",
@@ -62,7 +76,11 @@
       "start_datetime": "2025-06-08T21:54",
       "end_datetime": "2025-06-08T22:37",
       "representative_photo": "E-T 2341.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 2341.jpg",
+        "E-T 2799.jpg"
+      ]
     },
     {
       "id": "e1527db2-890f-43b5-9776-fbf776e30c62",
@@ -78,7 +96,11 @@
       "start_datetime": "2025-06-08T23:48",
       "end_datetime": "2025-06-09T00:58",
       "representative_photo": "E-T 3018.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 3018.jpg",
+        "E-T 3498.jpg"
+      ]
     },
     {
       "id": "edbe594e-b9f0-466f-b761-5855e39de27f",
@@ -86,7 +108,11 @@
       "start_datetime": "2025-06-09T01:07",
       "end_datetime": "2025-06-09T01:29",
       "representative_photo": "E-T 3819.jpg",
-      "description": ""
+      "description": "",
+      "photos": [
+        "E-T 3739.jpg",
+        "E-T 3819.jpg"
+      ]
     }
   ]
 }
