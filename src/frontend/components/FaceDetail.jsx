@@ -16,7 +16,8 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
-  Plus
+  Plus,
+  Crop
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -38,6 +39,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
   const [loading, setLoading] = useState(false);
   const [photoSize, setPhotoSize] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3
+  const [showCrops, setShowCrops] = useState(false); // New state for crop toggle
+  const [imageCrops, setImageCrops] = useState({}); // New state for crop data
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const PLACEHOLDER_DATA_URL =
@@ -58,6 +61,29 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       fetchSortedPhotos();
     }
   }, [group, sortBy, sortOrder]);
+
+  // Fetch crop data when group changes
+  useEffect(() => {
+    if (group && group.id !== undefined && group.id !== null) {
+      fetchGroupCrops();
+    }
+  }, [group]);
+
+  const fetchGroupCrops = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/groups/${group.id}/crops`);
+      if (response.ok) {
+        const data = await response.json();
+        setImageCrops(data.image_crops || {});
+      } else {
+        console.error('Failed to fetch group crops');
+        setImageCrops({});
+      }
+    } catch (error) {
+      console.error('Error fetching group crops:', error);
+      setImageCrops({});
+    }
+  };
 
   const fetchSortedPhotos = async () => {
     try {
@@ -274,6 +300,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                 </h1>
                 <p className="text-gray-600">
                   {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                  {showCrops && (
+                    <span className="ml-2 text-primary-600 font-medium">
+                      • Showing face crops
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -384,6 +415,29 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               </button>
             </div>
           )}
+
+          {/* Crop Toggle */}
+          <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+            <button
+              onClick={() => setShowCrops(!showCrops)}
+              className={`flex items-center space-x-2 px-3 py-1 rounded-md transition-colors ${
+                showCrops 
+                  ? 'bg-primary-100 text-primary-700 border border-primary-200' 
+                  : 'hover:bg-gray-200 text-gray-700'
+              }`}
+              title={showCrops ? 'Show full images' : 'Show face crops'}
+            >
+              <Crop className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                {showCrops ? 'Crops' : 'Full'}
+              </span>
+            </button>
+            {showCrops && (
+              <span className="text-xs text-gray-500 ml-1">
+                (face only)
+              </span>
+            )}
+          </div>
         </div>
 
         {selectedPhotos.size > 0 && (
@@ -476,13 +530,22 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                     className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
                   <img
-                    src={`${API_BASE}/images/${photo.photo_id}`}
+                    src={showCrops && imageCrops[photo.photo_id] 
+                      ? `${API_BASE}/crops/${imageCrops[photo.photo_id]}`
+                      : `${API_BASE}/images/${photo.photo_id}`
+                    }
                     alt={`Photo ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
                     onLoad={(e) => handleImageLoad(photo.photo_id, e)}
                     onError={(e) => {
-                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                      e.target.src = PLACEHOLDER_DATA_URL;
+                      if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/crops/')) {
+                        // Fallback to full image if crop fails
+                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                        e.target.src = `${API_BASE}/images/${photo.photo_id}`;
+                      } else {
+                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                        e.target.src = PLACEHOLDER_DATA_URL;
+                      }
                     }}
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
@@ -497,6 +560,12 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                       {formatDate(photo.formatted_date)}
                     </div>
                   )}
+                  {/* Crop indicator */}
+                  {showCrops && imageCrops[photo.photo_id] && (
+                    <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
+                      Crop
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -509,16 +578,33 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                     onClick={e => e.stopPropagation()}
                     className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                   />
-                  <img
-                    src={`${API_BASE}/images/${photo.photo_id}`}
-                    alt={`Photo ${index + 1}`}
-                    className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => openPhotoViewer(photo.photo_id, index)}
-                    onError={(e) => {
-                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
+                  <div className="relative">
+                    <img
+                      src={showCrops && imageCrops[photo.photo_id] 
+                        ? `${API_BASE}/crops/${imageCrops[photo.photo_id]}`
+                        : `${API_BASE}/images/${photo.photo_id}`
+                      }
+                      alt={`Photo ${index + 1}`}
+                      className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => openPhotoViewer(photo.photo_id, index)}
+                      onError={(e) => {
+                        if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/crops/')) {
+                          // Fallback to full image if crop fails
+                          e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                          e.target.src = `${API_BASE}/images/${photo.photo_id}`;
+                        } else {
+                          e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
+                          e.target.src = PLACEHOLDER_DATA_URL;
+                        }
+                      }}
+                    />
+                    {/* Crop indicator for list view */}
+                    {showCrops && imageCrops[photo.photo_id] && (
+                      <div className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">
+                        C
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900">{photo.photo_id}</p>
                     <p className="text-sm text-gray-500">
