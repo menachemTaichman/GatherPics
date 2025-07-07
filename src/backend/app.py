@@ -523,6 +523,62 @@ def get_photo_info(filename):
         print(f"Error getting photo info for {filename}: {e}")
         return jsonify({"error": "Failed to get photo info"}), 500
 
+@app.route("/api/photos/<path:filename>/moment")
+def get_photo_moment(filename):
+    """Get the moment that contains this photo"""
+    try:
+        moments = load_moments()
+        
+        # Get the photo's date taken
+        image_path = os.path.join(IMAGES_DIR, filename)
+        photo_date = None
+        
+        if os.path.exists(image_path):
+            try:
+                with Image.open(image_path) as img:
+                    exif_data = img.info.get('exif')
+                    if exif_data:
+                        exif_dict = piexif.load(exif_data)
+                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
+                        if date_bytes:
+                            date_str = date_bytes.decode('utf-8')
+                            # EXIF format: YYYY:MM:DD HH:MM:SS
+                            photo_date = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+            except Exception as e:
+                print(f"Error reading EXIF for {filename}: {e}")
+        
+        if not photo_date:
+            return jsonify({"error": "Could not determine photo date"}), 404
+        
+        # Find which moment this photo belongs to
+        for moment in moments:
+            start_dt = moment.get('start_datetime')
+            end_dt = moment.get('end_datetime')
+            
+            if start_dt and end_dt:
+                try:
+                    start = datetime.fromisoformat(start_dt)
+                    end = datetime.fromisoformat(end_dt)
+                    
+                    if start <= photo_date <= end:
+                        return jsonify({
+                            'id': moment['id'],
+                            'title': moment['title'],
+                            'description': moment.get('description', ''),
+                            'start_datetime': moment['start_datetime'],
+                            'end_datetime': moment['end_datetime'],
+                            'representative_photo': moment.get('representative_photo', '')
+                        })
+                except Exception as e:
+                    print(f"Error parsing moment dates for {moment['id']}: {e}")
+                    continue
+        
+        return jsonify({"error": "Photo not found in any moment"}), 404
+        
+    except Exception as e:
+        print(f"Error getting moment for photo {filename}: {e}")
+        return jsonify({"error": "Failed to get photo moment"}), 500
+
 # Serve images
 @app.route('/images/<path:filename>')
 def get_image(filename):

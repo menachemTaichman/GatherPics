@@ -260,6 +260,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     });
   };
 
+  const handleJumpToMoment = (momentInfo) => {
+    // Navigate to the moments page and scroll to the specific moment
+    navigate('/moments', { state: { scrollToMoment: momentInfo.id } });
+  };
+
   if (!group) {
     return <div>Loading...</div>;
   }
@@ -651,6 +656,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           totalPhotos={filteredPhotos.length}
           currentIndex={photoViewer.index}
           currentGroupId={group.id}
+          onJumpToMoment={handleJumpToMoment}
         />
       )}
     </div>

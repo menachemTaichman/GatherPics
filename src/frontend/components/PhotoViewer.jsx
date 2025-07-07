@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId }) {
+export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment }) {
   const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [faces, setFaces] = useState([]);
   const [photoInfo, setPhotoInfo] = useState(null);
+  const [momentInfo, setMomentInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -37,17 +38,20 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     try {
       setLoading(true);
       
-      const [facesResponse, infoResponse] = await Promise.all([
+      const [facesResponse, infoResponse, momentResponse] = await Promise.all([
         axios.get(`/api/photos/${encodeURIComponent(photo)}/faces`),
-        axios.get(`/api/photos/${encodeURIComponent(photo)}/info`)
+        axios.get(`/api/photos/${encodeURIComponent(photo)}/info`),
+        axios.get(`/api/photos/${encodeURIComponent(photo)}/moment`).catch(() => ({ data: null }))
       ]);
       
       setFaces(facesResponse.data.faces || []);
       setPhotoInfo(infoResponse.data);
+      setMomentInfo(momentResponse.data);
     } catch (error) {
       console.error('Error loading photo info:', error);
       setFaces([]);
       setPhotoInfo({ filename: photo, faces_count: 0, groups: [] });
+      setMomentInfo(null);
     } finally {
       setLoading(false);
     }
@@ -103,6 +107,13 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     // Navigate to the face group page
     navigate(`/face/${face.group_id}`);
     onClose(); // Close the photo viewer
+  };
+
+  const handleJumpToMoment = () => {
+    if (momentInfo && onJumpToMoment) {
+      onJumpToMoment(momentInfo);
+      onClose(); // Close the photo viewer
+    }
   };
 
   // Mouse wheel handler for zoom
@@ -386,6 +397,30 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     })()}</div>
                     <div><span className="font-semibold">Res:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
                   </div>
+                  
+                  {/* Moment Information */}
+                  {momentInfo && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <h4 className="text-xs font-medium text-gray-700 mb-1">Moment</h4>
+                      <div className="text-xs text-gray-500 space-y-0.5">
+                        <div><span className="font-semibold">Title:</span> {momentInfo.title}</div>
+                        {momentInfo.description && (
+                          <div><span className="font-semibold">Description:</span> {momentInfo.description}</div>
+                        )}
+                        <div><span className="font-semibold">Time:</span> {momentInfo.start_datetime && momentInfo.end_datetime ? 
+                          `${new Date(momentInfo.start_datetime).toLocaleTimeString()} - ${new Date(momentInfo.end_datetime).toLocaleTimeString()}` : 
+                          'Unknown'
+                        }</div>
+                      </div>
+                      <button
+                        onClick={handleJumpToMoment}
+                        className="mt-2 w-full text-xs bg-primary-600 text-white px-3 py-1.5 rounded hover:bg-primary-700 transition-colors flex items-center justify-center space-x-1"
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>Jump to Moment</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { Pencil, Trash2, Download, CheckSquare, Square, Image, Grid, List, Minus, Plus, X, ChevronLeft, ChevronRight, Settings, Edit3, Move, Plus as PlusIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Pencil, Trash2, Download, CheckSquare, Square, Image, Grid, List, Minus, Plus, X, Settings, Edit3, Move, Plus as PlusIcon, Clock, Calendar, MapPin, ArrowUp, ArrowDown } from 'lucide-react';
+import PhotoViewer from './PhotoViewer';
+import { useLocation } from 'react-router-dom';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -10,6 +13,21 @@ function formatTimeOnly(dateString) {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
+    });
+  } catch {
+    return dateString;
+  }
+}
+
+function formatDate(dateString) {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
     });
   } catch {
     return dateString;
@@ -102,8 +120,18 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+      >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold">Edit Moments</h3>
@@ -225,7 +253,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Photo Selector Modal */}
       {showPhotoSelector && selectedMoment && (
@@ -316,14 +344,13 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
-function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhotos, globalSelection }) {
+function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhotos, globalSelection, onOpenPhotoViewer }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0 });
   const [photoClasses, setPhotoClasses] = useState({});
 
   useEffect(() => {
@@ -364,32 +391,7 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
   };
 
   const openPhotoViewer = (photoName, index) => {
-    setPhotoViewer({
-      show: true,
-      photo: photoName,
-      index: index
-    });
-  };
-
-  const closePhotoViewer = () => {
-    setPhotoViewer({ show: false, photo: null, index: 0 });
-  };
-
-  const navigatePhoto = (direction) => {
-    const currentIndex = photoViewer.index;
-    let newIndex;
-    
-    if (direction === 'next') {
-      newIndex = Math.min(currentIndex + 1, photos.length - 1);
-    } else {
-      newIndex = Math.max(currentIndex - 1, 0);
-    }
-    
-    setPhotoViewer({
-      show: true,
-      photo: photos[newIndex].name,
-      index: newIndex
-    });
+    onOpenPhotoViewer(photos, photoName, index);
   };
 
   if (loading) return <div className="py-4 text-gray-400">Loading photos...</div>;
@@ -476,48 +478,12 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
         </div>
       )}
 
-      {/* Photo Viewer Modal */}
-      {photoViewer.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-          <div className="relative max-w-4xl max-h-full">
-            <button
-              onClick={closePhotoViewer}
-              className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
-            >
-              <X className="w-8 h-8" />
-            </button>
-            <img
-              src={`/images/${photoViewer.photo}`}
-              alt="Full size"
-              className="max-w-full max-h-full object-contain"
-            />
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-4">
-              <button
-                onClick={() => navigatePhoto('prev')}
-                disabled={photoViewer.index === 0}
-                className="text-white hover:text-gray-300 disabled:opacity-50"
-              >
-                <ChevronLeft className="w-8 h-8" />
-              </button>
-              <span className="text-white text-lg">
-                {photoViewer.index + 1} / {photos.length}
-              </span>
-              <button
-                onClick={() => navigatePhoto('next')}
-                disabled={photoViewer.index === photos.length - 1}
-                className="text-white hover:text-gray-300 disabled:opacity-50"
-              >
-                <ChevronRight className="w-8 h-8" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 export default function Moments() {
+  const location = useLocation();
   const [moments, setMoments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -529,6 +495,9 @@ export default function Moments() {
   const [globalSelection, setGlobalSelection] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
+  const [carouselVisible, setCarouselVisible] = useState(true);
+  const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
+  const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
 
   const momentsRef = useRef({});
 
@@ -536,6 +505,47 @@ export default function Moments() {
     fetchMoments();
     fetchImages();
   }, []);
+
+  // Handle navigation from Face Detail to scroll to specific moment
+  useEffect(() => {
+    if (location.state?.scrollToMoment && moments.length > 0) {
+      const momentId = location.state.scrollToMoment;
+      // Clear the state to prevent re-scrolling
+      window.history.replaceState({}, document.title);
+      
+      // Wait a bit for the page to load, then scroll to the moment
+      setTimeout(() => {
+        scrollToMoment(momentId);
+      }, 500);
+    }
+  }, [location.state, moments]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      let currentMoment = null;
+      
+      // Find which moment is currently most visible
+      Object.entries(momentsRef.current).forEach(([momentId, element]) => {
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          const headerHeight = 250; // Account for the main header with controls and carousel
+          
+          // If the moment is in the viewport
+          if (rect.top <= headerHeight + 50 && rect.bottom >= headerHeight) {
+            currentMoment = moments.find(m => m.id === momentId);
+          }
+        }
+      });
+      
+      setCurrentVisibleMoment(currentMoment);
+    };
+
+    // Call once on mount to set initial state
+    handleScroll();
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [moments]);
 
   useEffect(() => {
     const fetchAllMomentPhotos = async () => {
@@ -693,7 +703,66 @@ export default function Moments() {
   const scrollToMoment = (momentId) => {
     const element = momentsRef.current[momentId];
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Calculate the exact position we want to scroll to
+      const stickyHeader = document.querySelector('.sticky.top-16');
+      const carouselContainer = document.querySelector('.carousel-container');
+      
+      const headerHeight = stickyHeader ? stickyHeader.offsetHeight : 0;
+      const carouselHeight = carouselContainer ? carouselContainer.offsetHeight : 0;
+      const fixedAdjustment = -100; // Adjust this value: positive = scroll down more, negative = scroll up more
+      const totalOffset = headerHeight + carouselHeight + 20 + fixedAdjustment; // Add 20px padding + manual adjustment
+      
+      // Get the element's position relative to the document
+      const elementRect = element.getBoundingClientRect();
+      const elementTop = elementRect.top + window.pageYOffset;
+      
+      // Calculate the target scroll position
+      const targetScroll = elementTop - totalOffset;
+      
+      // Scroll to the calculated position
+      window.scrollTo({
+        top: Math.max(0, targetScroll),
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const openPhotoViewer = (photos, photoName, index) => {
+    setPhotoViewer({
+      show: true,
+      photo: photoName,
+      index: index,
+      photos: photos
+    });
+  };
+
+  const closePhotoViewer = () => {
+    setPhotoViewer({ show: false, photo: null, index: 0, photos: [] });
+  };
+
+  const navigatePhoto = (direction) => {
+    const currentIndex = photoViewer.index;
+    let newIndex;
+    
+    if (direction === 'next') {
+      newIndex = Math.min(currentIndex + 1, photoViewer.photos.length - 1);
+    } else {
+      newIndex = Math.max(currentIndex - 1, 0);
+    }
+    
+    setPhotoViewer({
+      show: true,
+      photo: photoViewer.photos[newIndex].name,
+      index: newIndex,
+      photos: photoViewer.photos
+    });
+  };
+
+  const handleJumpToMoment = (momentInfo) => {
+    // Find the moment in our moments list and scroll to it
+    const moment = moments.find(m => m.id === momentInfo.id);
+    if (moment) {
+      scrollToMoment(moment.id);
     }
   };
 
@@ -701,19 +770,27 @@ export default function Moments() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
   return (
-    <div className="w-full">
-      {/* Sticky Carousel */}
-      <div className="sticky top-16 bg-gray-50 border-b border-gray-200 z-30">
-        <div className="py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">Moments</h2>
-            <div className="flex items-center space-x-2">
+    <div className="w-full bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-30">
+        <div className="px-4 py-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
+              <p className="text-gray-600 mt-1">Your captured moments in time</p>
+            </div>
+            <div className="flex items-center space-x-3">
               {globalSelection.size > 0 && (
                 <>
-                  <button onClick={handleGlobalDownload} className="btn-primary flex items-center space-x-2">
+                  <motion.button 
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: 1 }}
+                    onClick={handleGlobalDownload} 
+                    className="btn-primary flex items-center space-x-2"
+                  >
                     <Download className="w-4 h-4" />
                     <span>Download ({globalSelection.size})</span>
-                  </button>
+                  </motion.button>
                   <button onClick={handleRemoveFromMoment} className="btn-secondary">
                     Remove from Moment
                   </button>
@@ -725,14 +802,19 @@ export default function Moments() {
                   </button>
                 </>
               )}
-              <button onClick={() => setShowEditModal(true)} className="btn-primary flex items-center space-x-2">
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowEditModal(true)} 
+                className="btn-primary flex items-center space-x-2"
+              >
                 <Settings className="w-4 h-4" />
                 <span>Edit Moments</span>
-              </button>
+              </motion.button>
             </div>
           </div>
           
-          {/* Universal Controls */}
+          {/* Controls */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
@@ -778,78 +860,180 @@ export default function Moments() {
                 Select All Photos
               </button>
             </div>
+            
+            {/* Carousel Toggle Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCarouselVisible(!carouselVisible)}
+              className="flex items-center justify-center w-8 h-8 bg-white rounded-full shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200 hover:bg-gray-50"
+              title={carouselVisible ? "Hide carousel" : "Show carousel"}
+            >
+              {carouselVisible ? (
+                <span className="text-gray-600 font-bold text-lg leading-none">↑</span>
+              ) : (
+                <span className="text-gray-600 font-bold text-lg leading-none">↓</span>
+              )}
+            </motion.button>
           </div>
 
           {/* Carousel */}
-          <div className="flex space-x-4 overflow-x-auto pb-2">
-            {moments.length === 0 && (
-              <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
-                No moments yet
-              </div>
-            )}
-            {moments.map(moment => (
-              <div 
-                key={moment.id} 
-                className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => scrollToMoment(moment.id)}
+          <AnimatePresence>
+            {carouselVisible && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden"
               >
-                <div className="w-20 h-20 bg-gray-200 rounded overflow-hidden flex items-center justify-center mb-2">
-                  {moment.representative_photo ? (
-                    <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" />
-                  ) : (
-                    <span className="text-gray-400">No photo</span>
+                <div className="carousel-container flex space-x-4 overflow-x-auto pb-2">
+                  {moments.length === 0 && (
+                    <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
+                      No moments yet
+                    </div>
                   )}
+                  {moments.map(moment => (
+                    <motion.div 
+                      key={moment.id} 
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => scrollToMoment(moment.id)}
+                    >
+                      <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
+                        {moment.representative_photo ? (
+                          <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" />
+                        ) : (
+                          <Image className="w-8 h-8 text-white" />
+                        )}
+                      </div>
+                      <div className="text-center">
+                        <div className="text-base font-semibold truncate max-w-[7rem]">{moment.title}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-[7rem]">
+                          {formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-                <div className="text-center">
-                  <div className="text-base font-semibold truncate max-w-[7rem]">{moment.title}</div>
-                  <div className="text-xs text-gray-500 truncate max-w-[7rem]">
-                    {formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* Moments Content */}
-      <div className="py-8">
-        <div className="space-y-8">
-          {moments.length === 0 && <div className="text-gray-500">No moments yet.</div>}
-          {moments.map(moment => (
-            <div 
-              key={moment.id} 
-              className="bg-white rounded-lg shadow p-6"
-              ref={el => momentsRef.current[moment.id] = el}
-            >
-              <div className="flex items-center space-x-4 mb-2">
-                <div className="w-16 h-16 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                  {moment.representative_photo ? (
-                    <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" />
-                  ) : (
-                    <span className="text-gray-400">No photo</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="text-lg font-semibold">{moment.title}</div>
-                  <div className="text-sm text-gray-500">
-                    {formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}
-                  </div>
-                </div>
-              </div>
-              <div className="text-gray-600 mt-2">{moment.description}</div>
-              {/* Photos for this moment */}
-              <PhotoGrid 
-                momentId={moment.id} 
-                viewMode={viewMode} 
-                photoSize={photoSize}
-                onPhotoSelect={handlePhotoSelect}
-                selectedPhotos={new Set()}
-                globalSelection={globalSelection}
-              />
+      {/* Timeline */}
+      <div className="px-4 py-8">
+        {moments.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
+              <Calendar className="w-12 h-12 text-gray-400" />
             </div>
-          ))}
-        </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No moments yet</h3>
+            <p className="text-gray-500">Create your first moment to start building your timeline.</p>
+          </div>
+        ) : (
+          <div className="relative">
+            {/* Fixed left sidebar for sticky info */}
+            <div className="fixed left-4 top-100 w-64 z-50 bg-white p-4 rounded-lg shadow-lg border border-gray-200">
+              {currentVisibleMoment ? (
+                <>
+                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.title}</div>
+                  <div className="text-xs text-gray-700 mb-1 font-medium">
+                    {formatTimeOnly(currentVisibleMoment.start_datetime)} - {formatTimeOnly(currentVisibleMoment.end_datetime)}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {formatDate(currentVisibleMoment.start_datetime)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">Timeline</div>
+                  <div className="text-xs text-gray-500">Scroll to see moments</div>
+                </>
+              )}
+            </div>
+            
+            {/* Timeline line */}
+            <div className="absolute left-64 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500"></div>
+            
+            {/* Timeline items */}
+            <div className="space-y-12 ml-64">
+              {moments.map((moment, index) => (
+                <motion.div
+                  key={moment.id}
+                  initial={{ opacity: 0, x: -50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="relative flex"
+                  ref={el => momentsRef.current[moment.id] = el}
+                >
+                  {/* Timeline dot */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10 mt-6"></div>
+                  </div>
+                  
+                  {/* Moment card */}
+                  <div className="flex-1 pl-6">
+                    <motion.div 
+                      className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow duration-300"
+                      whileHover={{ y: -2 }}
+                    >
+                      {/* Header */}
+                      <div className="p-6 border-b border-gray-100">
+                        <div className="flex items-start space-x-4">
+                          <div className="flex-shrink-0">
+                            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg overflow-hidden flex items-center justify-center">
+                              {moment.representative_photo ? (
+                                <img 
+                                  src={`/images/${moment.representative_photo}`} 
+                                  alt="" 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Image className="w-8 h-8 text-white" />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-xl font-bold text-gray-900 mb-1">{moment.title}</h3>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <div className="flex items-center space-x-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}</span>
+                            </div>
+                              <div className="flex items-center space-x-1">
+                                <Calendar className="w-4 h-4" />
+                                <span>{formatDate(moment.start_datetime)}</span>
+                              </div>
+                            </div>
+                            {moment.description && (
+                              <p className="text-gray-600 mt-2">{moment.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Photos */}
+                      <div className="p-6">
+                        <PhotoGrid 
+                          momentId={moment.id} 
+                          viewMode={viewMode} 
+                          photoSize={photoSize}
+                          onPhotoSelect={handlePhotoSelect}
+                          selectedPhotos={new Set()}
+                          globalSelection={globalSelection}
+                          onOpenPhotoViewer={openPhotoViewer}
+                        />
+                      </div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <EditMomentsModal 
@@ -864,8 +1048,18 @@ export default function Moments() {
 
       {/* Move Modal */}
       {showMoveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+        >
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-lg shadow-lg w-full max-w-md p-6"
+          >
             <h4 className="font-semibold mb-4">Move to Moment</h4>
             <select
               value={targetMoment?.id || ''}
@@ -881,8 +1075,21 @@ export default function Moments() {
               <button onClick={() => setShowMoveModal(false)} className="btn-secondary">Cancel</button>
               <button onClick={handleMoveToMoment} className="btn-primary">Move</button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Photo Viewer */}
+      {photoViewer.show && (
+        <PhotoViewer
+          photo={photoViewer.photo}
+          onClose={closePhotoViewer}
+          onNavigate={navigatePhoto}
+          totalPhotos={photoViewer.photos.length}
+          currentIndex={photoViewer.index}
+          currentGroupId={null}
+          onJumpToMoment={handleJumpToMoment}
+        />
       )}
     </div>
   );
