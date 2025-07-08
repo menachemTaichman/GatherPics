@@ -143,6 +143,144 @@ class FaceClusterAWS:
         
         return True
 
+    def find_duplicate_faces(self):
+        """
+        Find faces that appear in multiple groups.
+        Returns a dictionary mapping face_id to list of group_ids.
+        """
+        face_to_groups = {}
+        for face in self.faces:
+            face_id = face['faceID']
+            group_id = face['groupID']
+            if face_id not in face_to_groups:
+                face_to_groups[face_id] = []
+            face_to_groups[face_id].append(group_id)
+        
+        # Return only faces that appear in multiple groups
+        return {face_id: groups for face_id, groups in face_to_groups.items() if len(groups) > 1}
+
+    def auto_merge_duplicate_groups(self, merge_strategy='smallest_id'):
+        """
+        Automatically merge groups that contain duplicate faces.
+        
+        Args:
+            merge_strategy (str): How to choose which group to keep
+                - 'smallest_id': Keep the group with the smallest ID
+                - 'largest_count': Keep the group with the most faces
+                - 'first_created': Keep the first group created (smallest ID)
+        
+        Returns:
+            list: List of tuples (target_group_id, merged_group_id) for each merge performed
+        """
+        duplicates = self.find_duplicate_faces()
+        if not duplicates:
+            return []
+        
+        # Group duplicates by their group sets
+        group_sets = {}
+        for face_id, group_ids in duplicates.items():
+            group_set = tuple(sorted(group_ids))
+            if group_set not in group_sets:
+                group_sets[group_set] = []
+            group_sets[group_set].append(face_id)
+        
+        merges_performed = []
+        
+        for group_set, face_ids in group_sets.items():
+            if len(group_set) <= 1:
+                continue
+            
+            # Determine which group to keep based on strategy
+            if merge_strategy == 'smallest_id':
+                target_group = min(group_set)
+                groups_to_merge = [g for g in group_set if g != target_group]
+            elif merge_strategy == 'largest_count':
+                group_counts = {}
+                for group_id in group_set:
+                    group = next((g for g in self.groups if g['groupID'] == group_id), None)
+                    group_counts[group_id] = len(group['faceIDs']) if group else 0
+                target_group = max(group_counts.items(), key=lambda x: x[1])[0]
+                groups_to_merge = [g for g in group_set if g != target_group]
+            else:  # first_created (smallest_id)
+                target_group = min(group_set)
+                groups_to_merge = [g for g in group_set if g != target_group]
+            
+            # Perform merges
+            for group_to_merge in groups_to_merge:
+                if self.merge_groups(target_group, group_to_merge):
+                    merges_performed.append((target_group, group_to_merge))
+        
+        return merges_performed
+
+    def merge_multiple_groups(self, target_group_id, group_ids_to_merge):
+        """
+        Merge multiple groups into a single target group.
+        
+        Args:
+            target_group_id (int): The group to keep
+            group_ids_to_merge (list): List of group IDs to merge into the target
+        
+        Returns:
+            bool: True if all merges were successful, False otherwise
+        """
+        success = True
+        for group_id in group_ids_to_merge:
+            if not self.merge_groups(target_group_id, group_id):
+                success = False
+        return success
+
+    def get_group_info(self, group_id):
+        """Get detailed information about a group"""
+        group = next((g for g in self.groups if g['groupID'] == group_id), None)
+        if not group:
+            return None
+        
+        group_faces = [f for f in self.faces if f['groupID'] == group_id]
+        image_ids = list(set(f['imageID'] for f in group_faces))
+        
+        return {
+            'group': group,
+            'face_count': len(group_faces),
+            'image_count': len(image_ids),
+            'faces': group_faces,
+            'image_ids': image_ids
+        }
+
+    def list_groups_summary(self):
+        """Get a summary of all groups with their face counts"""
+        summary = []
+        for group in self.groups:
+            face_count = len([f for f in self.faces if f['groupID'] == group['groupID']])
+            summary.append({
+                'groupID': group['groupID'],
+                'name': group['name'],
+                'face_count': face_count,
+                'representative_faceID': group['representative_faceID'],
+                'representative_imageID': group['representative_imageID']
+            })
+        return summary
+
+    def load_data(self):
+        """Load existing data from JSON files"""
+        if os.path.exists(self.groups_json_path):
+            with open(self.groups_json_path, 'r', encoding='utf-8') as f:
+                self.groups = json.load(f)['groups']
+        
+        if os.path.exists(self.faces_json_path):
+            with open(self.faces_json_path, 'r', encoding='utf-8') as f:
+                self.faces = json.load(f)['faces']
+        
+        if os.path.exists(self.images_json_path):
+            with open(self.images_json_path, 'r', encoding='utf-8') as f:
+                self.images = json.load(f)['images']
+        
+        # Update counters
+        if self.groups:
+            self.group_id_counter = max(group['groupID'] for group in self.groups) + 1
+        
+        if self.faces:
+            self.face_id_counter = max(int(face['faceID'].split('_')[1]) for face in self.faces) + 1
+
     def save_json(self):
         os.makedirs(os.path.dirname(self.images_json_path), exist_ok=True)
         with open(self.images_json_path, 'w', encoding='utf-8') as f:
