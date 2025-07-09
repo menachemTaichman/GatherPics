@@ -46,107 +46,30 @@ def calculate_iou(box1, box2):
 
 def remove_duplicate_faces(face_details, iou_threshold=0.5):
     """
-    Remove duplicate face detections within the same image.
+    Remove duplicate face detections within the same image using IoU threshold.
     
     Args:
-        face_details (list): List of face detection dictionaries
-        iou_threshold (float): IoU threshold above which faces are considered duplicates
+        face_details (list): List of face detection details
+        iou_threshold (float): IoU threshold for considering faces as duplicates
         
     Returns:
-        list: Filtered list of face detections with duplicates removed
+        list: Filtered list of face details with duplicates removed
     """
-    if len(face_details) <= 1:
-        return face_details
+    if not face_details:
+        return []
     
     filtered_faces = []
+    
     for i, face1 in enumerate(face_details):
         is_duplicate = False
+        
         for j, face2 in enumerate(filtered_faces):
             iou = calculate_iou(face1['BoundingBox'], face2['BoundingBox'])
             if iou > iou_threshold:
-                # Keep the face with larger area (more confident detection)
-                area1 = face1['BoundingBox']['Width'] * face1['BoundingBox']['Height']
-                area2 = face2['BoundingBox']['Width'] * face2['BoundingBox']['Height']
-                if area1 > area2:
-                    # Replace the existing face with this one
-                    filtered_faces[j] = face1
                 is_duplicate = True
                 break
         
         if not is_duplicate:
             filtered_faces.append(face1)
     
-    return filtered_faces
-
-def build_face_to_groups_mapping(faces):
-    """
-    Build a mapping from face_id to list of group_ids.
-    
-    Args:
-        faces (list): List of face dictionaries
-        
-    Returns:
-        dict: Mapping from face_id to list of group_ids
-    """
-    face_to_groups = {}
-    for face in faces:
-        face_id = face['faceID']
-        group_id = face['groupID']
-        if face_id not in face_to_groups:
-            face_to_groups[face_id] = []
-        face_to_groups[face_id].append(group_id)
-    
-    return face_to_groups
-
-def find_duplicate_faces_in_groups(faces):
-    """
-    Find faces that appear in multiple groups.
-    
-    Args:
-        faces (list): List of face dictionaries
-        
-    Returns:
-        dict: Mapping from face_id to list of group_ids for faces in multiple groups
-    """
-    face_to_groups = build_face_to_groups_mapping(faces)
-    return {face_id: groups for face_id, groups in face_to_groups.items() if len(groups) > 1}
-
-def prepare_groups_for_merging(duplicates, merge_strategy='smallest_id'):
-    """
-    Prepare groups for merging based on duplicate faces.
-    
-    Args:
-        duplicates (dict): Mapping from face_id to list of group_ids
-        merge_strategy (str): Strategy for choosing which group to keep
-        
-    Returns:
-        list: List of tuples (target_group_id, groups_to_merge) for each merge operation
-    """
-    if not duplicates:
-        return []
-    
-    # Group duplicates by their group sets
-    group_sets = {}
-    for face_id, group_ids in duplicates.items():
-        group_set = tuple(sorted(group_ids))
-        if group_set not in group_sets:
-            group_sets[group_set] = []
-        group_sets[group_set].append(face_id)
-    
-    merges_to_perform = []
-    
-    for group_set, face_ids in group_sets.items():
-        if len(group_set) <= 1:
-            continue
-        
-        # Determine which group to keep based on strategy
-        if merge_strategy == 'smallest_id':
-            target_group = min(group_set)
-            groups_to_merge = [g for g in group_set if g != target_group]
-        else:  # Default to smallest_id
-            target_group = min(group_set)
-            groups_to_merge = [g for g in group_set if g != target_group]
-        
-        merges_to_perform.append((target_group, groups_to_merge))
-    
-    return merges_to_perform 
+    return filtered_faces 

@@ -56,65 +56,19 @@ def list_groups():
     else:
         print("No groups found.")
 
-def find_duplicate_faces():
-    """Find faces that appear in multiple groups"""
-    config = load_config()
-    clusterer = FaceClusterAWS(config)
-    clusterer.load_data()
-    
-    duplicates = clusterer.find_duplicate_faces()
-    
-    if duplicates:
-        print("Faces that appear in multiple groups:")
-        print("=" * 50)
-        for face_id, groups in duplicates.items():
-            print(f"Face {face_id} appears in groups: {groups}")
-            
-            # Show details for each occurrence
-            for group_id in groups:
-                face_info = next(f for f in clusterer.faces if f['faceID'] == face_id and f['groupID'] == group_id)
-                print(f"  - Group {group_id}: {face_info['imageID']} (crop: {face_info['crop_filename']})")
-            print()
-    else:
-        print("✅ No duplicate faces found.")
-
-def auto_merge_duplicates(merge_strategy='smallest_id'):
-    """Automatically merge groups with duplicate faces"""
-    config = load_config()
-    clusterer = FaceClusterAWS(config)
-    clusterer.load_data()
-    
-    print("Auto-merging groups with duplicate faces...")
-    merges_performed = clusterer.auto_merge_duplicate_groups(merge_strategy=merge_strategy)
-    
-    if merges_performed:
-        print(f"✅ Successfully performed {len(merges_performed)} merges:")
-        for target_group, merged_group in merges_performed:
-            print(f"  - Merged group {merged_group} into {target_group}")
-        
-        # Save the changes
-        clusterer.save_json()
-        print("✅ Changes saved successfully")
-    else:
-        print("✅ No groups needed merging")
-
 def main():
     import sys
     
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python scripts/merge_groups.py list                    # List all groups")
-        print("  python scripts/merge_groups.py duplicates              # Find duplicate faces")
         print("  python scripts/merge_groups.py merge <group1> <group2> # Merge two groups")
-        print("  python scripts/merge_groups.py auto-merge              # Auto-merge duplicate groups")
         return
     
     command = sys.argv[1]
     
     if command == "list":
         list_groups()
-    elif command == "duplicates":
-        find_duplicate_faces()
     elif command == "merge":
         if len(sys.argv) != 4:
             print("Usage: python scripts/merge_groups.py merge <group1> <group2>")
@@ -126,9 +80,6 @@ def main():
             merge_groups_manually(group1, group2)
         except ValueError:
             print("Group IDs must be integers")
-    elif command == "auto-merge":
-        merge_strategy = sys.argv[2] if len(sys.argv) > 2 else 'smallest_id'
-        auto_merge_duplicates(merge_strategy)
     else:
         print(f"Unknown command: {command}")
 

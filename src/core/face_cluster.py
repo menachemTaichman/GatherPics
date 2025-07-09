@@ -126,91 +126,44 @@ class FaceClusterAWS:
             print(f"Error: One or both groups not found. Group1: {group_id_1}, Group2: {group_id_2}")
             return False
         
-        # Merge face IDs from group2 into group1
-        merged_face_ids = list(set(group1['faceIDs'] + group2['faceIDs']))
+        # Get all face IDs from both groups
+        group1_face_ids = set(group1['faceIDs'])
+        group2_face_ids = set(group2['faceIDs'])
+        
+        # Merge face IDs from group2 into group1 (remove duplicates)
+        merged_face_ids = list(group1_face_ids.union(group2_face_ids))
         group1['faceIDs'] = merged_face_ids
         
         # Update all faces that belonged to group2 to now belong to group1
+        # Also remove any duplicate face records
+        faces_to_keep = []
+        seen_face_ids = set()
+        
         for face in self.faces:
+            face_id = face['faceID']
+            
+            # If this face belongs to group2, update its groupID to group1
             if face['groupID'] == group_id_2:
                 face['groupID'] = group_id_1
+            
+            # Only keep the first occurrence of each faceID
+            if face_id not in seen_face_ids:
+                seen_face_ids.add(face_id)
+                faces_to_keep.append(face)
+            else:
+                print(f"Removing duplicate face record: {face_id}")
+        
+        # Update the faces list to remove duplicates
+        self.faces = faces_to_keep
         
         # Remove group2
         if group2_index is not None:
             removed_group = self.groups.pop(group2_index)
             print(f"Merged group {group_id_2} ({removed_group['name']}) into group {group_id_1} ({group1['name']})")
             print(f"Group {group_id_1} now contains {len(merged_face_ids)} faces")
+            print(f"Removed {len(self.faces) - len(faces_to_keep)} duplicate face records")
         
         return True
-
-    def find_duplicate_faces(self):
-        """
-        Find faces that appear in multiple groups.
-        Returns a dictionary mapping face_id to list of group_ids.
-        """
-        face_to_groups = {}
-        for face in self.faces:
-            face_id = face['faceID']
-            group_id = face['groupID']
-            if face_id not in face_to_groups:
-                face_to_groups[face_id] = []
-            face_to_groups[face_id].append(group_id)
-        
-        # Return only faces that appear in multiple groups
-        return {face_id: groups for face_id, groups in face_to_groups.items() if len(groups) > 1}
-
-    def auto_merge_duplicate_groups(self, merge_strategy='smallest_id'):
-        """
-        Automatically merge groups that contain duplicate faces.
-        
-        Args:
-            merge_strategy (str): How to choose which group to keep
-                - 'smallest_id': Keep the group with the smallest ID
-                - 'largest_count': Keep the group with the most faces
-                - 'first_created': Keep the first group created (smallest ID)
-        
-        Returns:
-            list: List of tuples (target_group_id, merged_group_id) for each merge performed
-        """
-        duplicates = self.find_duplicate_faces()
-        if not duplicates:
-            return []
-        
-        # Group duplicates by their group sets
-        group_sets = {}
-        for face_id, group_ids in duplicates.items():
-            group_set = tuple(sorted(group_ids))
-            if group_set not in group_sets:
-                group_sets[group_set] = []
-            group_sets[group_set].append(face_id)
-        
-        merges_performed = []
-        
-        for group_set, face_ids in group_sets.items():
-            if len(group_set) <= 1:
-                continue
-            
-            # Determine which group to keep based on strategy
-            if merge_strategy == 'smallest_id':
-                target_group = min(group_set)
-                groups_to_merge = [g for g in group_set if g != target_group]
-            elif merge_strategy == 'largest_count':
-                group_counts = {}
-                for group_id in group_set:
-                    group = next((g for g in self.groups if g['groupID'] == group_id), None)
-                    group_counts[group_id] = len(group['faceIDs']) if group else 0
-                target_group = max(group_counts.items(), key=lambda x: x[1])[0]
-                groups_to_merge = [g for g in group_set if g != target_group]
-            else:  # first_created (smallest_id)
-                target_group = min(group_set)
-                groups_to_merge = [g for g in group_set if g != target_group]
-            
-            # Perform merges
-            for group_to_merge in groups_to_merge:
-                if self.merge_groups(target_group, group_to_merge):
-                    merges_performed.append((target_group, group_to_merge))
-        
-        return merges_performed
 
     def merge_multiple_groups(self, target_group_id, group_ids_to_merge):
         """

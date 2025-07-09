@@ -1,6 +1,11 @@
 import json
 import os
 import shutil
+import sys
+
+# Add the current directory to Python path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.core.face_detector import FaceDetectorAWS
 from src.core.face_cluster import FaceClusterAWS
 from src.core.face_cropper import FaceCropper
@@ -117,21 +122,49 @@ def main():
             face_ids=group_face_ids
         )
 
-    # Step 4: Post-process to merge groups with duplicate faces
-    print("Post-processing: Checking for groups that should be merged...")
-    
-    # Use the new auto-merge functionality
-    merges_performed = clusterer.auto_merge_duplicate_groups(merge_strategy='smallest_id')
-    
-    if merges_performed:
-        print(f"Post-processing complete: Merged {len(merges_performed)} groups")
-        for target_group, merged_group in merges_performed:
-            print(f"  - Merged group {merged_group} into {target_group}")
-    else:
-        print("Post-processing complete: No groups needed merging")
-
     clusterer.save_json()
     print("✅ Saved new images, groups, and faces JSON files.")
+
+    # Step 4: Post-clustering merge - merge groups that share faces
+    print("🔍 Detecting and merging groups with shared faces...")
+    merge_groups_with_shared_faces(clusterer)
+    
+    # Save the final merged data
+    clusterer.save_json()
+    print("✅ Final merged data saved.")
+
+def merge_groups_with_shared_faces(clusterer):
+    """
+    Detect groups that share faces and merge them using the existing merge logic.
+    This handles cases where the same face was assigned to multiple groups during clustering.
+    """
+    faces = clusterer.faces
+    groups = clusterer.groups
+    
+    # Create a mapping of faceID to groupID
+    face_to_group = {}
+    for face in faces:
+        face_id = face['faceID']
+        group_id = face['groupID']
+        if face_id in face_to_group:
+            # This face appears in multiple groups - we need to merge them
+            existing_group = face_to_group[face_id]
+            if existing_group != group_id:
+                print(f"Found shared face {face_id} in groups {existing_group} and {group_id}")
+                # Merge the groups (keep the smaller group ID)
+                target_group = min(existing_group, group_id)
+                source_group = max(existing_group, group_id)
+                
+                print(f"Merging group {source_group} into {target_group}")
+                success = clusterer.merge_groups(target_group, source_group)
+                if success:
+                    print(f"✅ Successfully merged groups {source_group} → {target_group}")
+                else:
+                    print(f"❌ Failed to merge groups {source_group} → {target_group}")
+        else:
+            face_to_group[face_id] = group_id
+    
+    print(f"Post-merge: {len(clusterer.groups)} groups remaining")
 
 if __name__ == '__main__':
     main()

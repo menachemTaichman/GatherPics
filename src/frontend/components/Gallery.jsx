@@ -6,7 +6,7 @@ import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import MergeGroupsModal from './MergeGroupsModal';
 
-export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
+export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeComplete }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -50,11 +50,6 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
 
   const handleMergeGroups = () => {
     setShowMergeModal(true);
-  };
-
-  const handleMergeComplete = () => {
-    // Refresh the groups list
-    window.location.reload();
   };
 
   const handleDownloadGroup = async (group) => {
@@ -236,7 +231,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup }) {
         <MergeGroupsModal
           groups={groups}
           onClose={() => setShowMergeModal(false)}
-          onMergeComplete={handleMergeComplete}
+          onMergeComplete={onMergeComplete}
         />
       )}
     </div>
