@@ -126,22 +126,113 @@ class FaceClusterAWS:
             print(f"Error: One or both groups not found. Group1: {group_id_1}, Group2: {group_id_2}")
             return False
         
-        # Merge face IDs from group2 into group1
-        merged_face_ids = list(set(group1['faceIDs'] + group2['faceIDs']))
+        # Get all face IDs from both groups
+        group1_face_ids = set(group1['faceIDs'])
+        group2_face_ids = set(group2['faceIDs'])
+        
+        # Merge face IDs from group2 into group1 (remove duplicates)
+        merged_face_ids = list(group1_face_ids.union(group2_face_ids))
         group1['faceIDs'] = merged_face_ids
         
         # Update all faces that belonged to group2 to now belong to group1
+        # Also remove any duplicate face records
+        faces_to_keep = []
+        seen_face_ids = set()
+        
         for face in self.faces:
+            face_id = face['faceID']
+            
+            # If this face belongs to group2, update its groupID to group1
             if face['groupID'] == group_id_2:
                 face['groupID'] = group_id_1
+            
+            # Only keep the first occurrence of each faceID
+            if face_id not in seen_face_ids:
+                seen_face_ids.add(face_id)
+                faces_to_keep.append(face)
+            else:
+                print(f"Removing duplicate face record: {face_id}")
+        
+        # Update the faces list to remove duplicates
+        self.faces = faces_to_keep
         
         # Remove group2
         if group2_index is not None:
             removed_group = self.groups.pop(group2_index)
             print(f"Merged group {group_id_2} ({removed_group['name']}) into group {group_id_1} ({group1['name']})")
             print(f"Group {group_id_1} now contains {len(merged_face_ids)} faces")
+            print(f"Removed {len(self.faces) - len(faces_to_keep)} duplicate face records")
         
         return True
+
+    def merge_multiple_groups(self, target_group_id, group_ids_to_merge):
+        """
+        Merge multiple groups into a single target group.
+        
+        Args:
+            target_group_id (int): The group to keep
+            group_ids_to_merge (list): List of group IDs to merge into the target
+        
+        Returns:
+            bool: True if all merges were successful, False otherwise
+        """
+        success = True
+        for group_id in group_ids_to_merge:
+            if not self.merge_groups(target_group_id, group_id):
+                success = False
+        return success
+
+    def get_group_info(self, group_id):
+        """Get detailed information about a group"""
+        group = next((g for g in self.groups if g['groupID'] == group_id), None)
+        if not group:
+            return None
+        
+        group_faces = [f for f in self.faces if f['groupID'] == group_id]
+        image_ids = list(set(f['imageID'] for f in group_faces))
+        
+        return {
+            'group': group,
+            'face_count': len(group_faces),
+            'image_count': len(image_ids),
+            'faces': group_faces,
+            'image_ids': image_ids
+        }
+
+    def list_groups_summary(self):
+        """Get a summary of all groups with their face counts"""
+        summary = []
+        for group in self.groups:
+            face_count = len([f for f in self.faces if f['groupID'] == group['groupID']])
+            summary.append({
+                'groupID': group['groupID'],
+                'name': group['name'],
+                'face_count': face_count,
+                'representative_faceID': group['representative_faceID'],
+                'representative_imageID': group['representative_imageID']
+            })
+        return summary
+
+    def load_data(self):
+        """Load existing data from JSON files"""
+        if os.path.exists(self.groups_json_path):
+            with open(self.groups_json_path, 'r', encoding='utf-8') as f:
+                self.groups = json.load(f)['groups']
+        
+        if os.path.exists(self.faces_json_path):
+            with open(self.faces_json_path, 'r', encoding='utf-8') as f:
+                self.faces = json.load(f)['faces']
+        
+        if os.path.exists(self.images_json_path):
+            with open(self.images_json_path, 'r', encoding='utf-8') as f:
+                self.images = json.load(f)['images']
+        
+        # Update counters
+        if self.groups:
+            self.group_id_counter = max(group['groupID'] for group in self.groups) + 1
+        
+        if self.faces:
+            self.face_id_counter = max(int(face['faceID'].split('_')[1]) for face in self.faces) + 1
 
     def save_json(self):
         os.makedirs(os.path.dirname(self.images_json_path), exist_ok=True)

@@ -12,6 +12,7 @@ export default function App() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   useEffect(() => {
     fetchGroups();
@@ -52,6 +53,19 @@ export default function App() {
       console.error('Error deleting group:', err);
       throw err;
     }
+  };
+
+  const handleMergeComplete = async () => {
+    // Refresh groups data after merge
+    await fetchGroups();
+    showToast('Groups merged successfully!', 'success');
+  };
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
   };
 
   if (loading) {
@@ -95,6 +109,7 @@ export default function App() {
                     groups={groups}
                     onUpdateGroup={updateGroup}
                     onDeleteGroup={deleteGroup}
+                    onMergeComplete={handleMergeComplete}
                   />
                 </motion.div>
               } 
@@ -130,6 +145,22 @@ export default function App() {
               }
             />
           </Routes>
+        </AnimatePresence>
+
+        {/* Toast Notification */}
+        <AnimatePresence>
+          {toast.show && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -50, scale: 0.9 }}
+              className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium ${
+                toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+              }`}
+            >
+              {toast.message}
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </Router>

@@ -368,6 +368,73 @@ def download_selected_photos(group_id):
             except:
                 pass
 
+@app.route("/api/groups/merge", methods=["POST"])
+def merge_groups():
+    """Merge multiple groups into a target group"""
+    try:
+        data = request.get_json()
+        target_group_id = data.get('targetGroupId')
+        group_ids_to_merge = data.get('groupIdsToMerge', [])
+        
+        if not target_group_id or not group_ids_to_merge:
+            return jsonify({"error": "targetGroupId and groupIdsToMerge are required"}), 400
+        
+        # Load data using existing functions
+        groups = load_groups()
+        faces = load_faces()
+        
+        # Verify all groups exist
+        all_group_ids = [g['groupID'] for g in groups]
+        if target_group_id not in all_group_ids:
+            return jsonify({"error": "Target group not found"}), 404
+        
+        for group_id in group_ids_to_merge:
+            if group_id not in all_group_ids:
+                return jsonify({"error": f"Group {group_id} not found"}), 404
+        
+        # Perform the merges manually
+        target_group = next((g for g in groups if g['groupID'] == target_group_id), None)
+        if not target_group:
+            return jsonify({"error": "Target group not found"}), 404
+        
+        # Merge face IDs from all groups into target group
+        merged_face_ids = list(set(target_group['faceIDs']))
+        for group_id in group_ids_to_merge:
+            group_to_merge = next((g for g in groups if g['groupID'] == group_id), None)
+            if group_to_merge:
+                merged_face_ids.extend(group_to_merge['faceIDs'])
+        
+        # Remove duplicates
+        target_group['faceIDs'] = list(set(merged_face_ids))
+        
+        # Update all faces that belonged to merged groups to now belong to target group
+        for face in faces:
+            if face['groupID'] in group_ids_to_merge:
+                face['groupID'] = target_group_id
+        
+        # Remove merged groups
+        groups = [g for g in groups if g['groupID'] not in group_ids_to_merge]
+        
+        # Save the updated data
+        if save_groups(groups):
+            # Save faces
+            with open(FACES_FILE, 'w', encoding='utf-8') as f:
+                json.dump({"faces": faces}, f, ensure_ascii=False, indent=2)
+            
+            # Return updated group info
+            updated_group = get_group_with_faces(target_group_id)
+            return jsonify({
+                "success": True,
+                "message": f"Successfully merged {len(group_ids_to_merge)} groups into group {target_group_id}",
+                "updatedGroup": updated_group
+            })
+        else:
+            return jsonify({"error": "Failed to merge groups"}), 500
+            
+    except Exception as e:
+        print(f"Error merging groups: {e}")
+        return jsonify({"error": "Failed to merge groups"}), 500
+
 @app.route("/api/download-all")
 def download_all_photos():
     """Download all photos from all groups"""

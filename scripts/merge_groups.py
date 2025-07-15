@@ -23,22 +23,8 @@ def merge_groups_manually(group_id_1, group_id_2):
     config = load_config()
     clusterer = FaceClusterAWS(config)
     
-    # Load existing data
-    if os.path.exists(clusterer.groups_json_path):
-        with open(clusterer.groups_json_path, 'r', encoding='utf-8') as f:
-            clusterer.groups = json.load(f)['groups']
-    
-    if os.path.exists(clusterer.faces_json_path):
-        with open(clusterer.faces_json_path, 'r', encoding='utf-8') as f:
-            clusterer.faces = json.load(f)['faces']
-    
-    if os.path.exists(clusterer.images_json_path):
-        with open(clusterer.images_json_path, 'r', encoding='utf-8') as f:
-            clusterer.images = json.load(f)['images']
-    
-    # Find the maximum group ID to set the counter correctly
-    if clusterer.groups:
-        clusterer.group_id_counter = max(group['groupID'] for group in clusterer.groups) + 1
+    # Load existing data using the new method
+    clusterer.load_data()
     
     # Perform the merge
     success = clusterer.merge_groups(group_id_1, group_id_2)
@@ -56,57 +42,19 @@ def list_groups():
     """List all groups with their face counts"""
     config = load_config()
     clusterer = FaceClusterAWS(config)
+    clusterer.load_data()
     
-    if os.path.exists(clusterer.groups_json_path):
-        with open(clusterer.groups_json_path, 'r', encoding='utf-8') as f:
-            groups = json.load(f)['groups']
-        
+    groups_summary = clusterer.list_groups_summary()
+    
+    if groups_summary:
         print("Current groups:")
         print("=" * 50)
-        for group in groups:
-            print(f"Group {group['groupID']}: {group['name']} - {len(group['faceIDs'])} faces")
+        for group in groups_summary:
+            print(f"Group {group['groupID']}: {group['name']} - {group['face_count']} faces")
             print(f"  Representative: {group['representative_faceID']} from {group['representative_imageID']}")
             print()
     else:
-        print("No groups file found.")
-
-def find_duplicate_faces():
-    """Find faces that appear in multiple groups"""
-    config = load_config()
-    clusterer = FaceClusterAWS(config)
-    
-    if not os.path.exists(clusterer.faces_json_path):
-        print("No faces file found.")
-        return
-    
-    with open(clusterer.faces_json_path, 'r', encoding='utf-8') as f:
-        faces = json.load(f)['faces']
-    
-    # Build mapping of face_id to group_ids
-    face_to_groups = {}
-    for face in faces:
-        face_id = face['faceID']
-        group_id = face['groupID']
-        if face_id not in face_to_groups:
-            face_to_groups[face_id] = []
-        face_to_groups[face_id].append(group_id)
-    
-    # Find duplicates
-    duplicates = {face_id: groups for face_id, groups in face_to_groups.items() if len(groups) > 1}
-    
-    if duplicates:
-        print("Faces that appear in multiple groups:")
-        print("=" * 50)
-        for face_id, groups in duplicates.items():
-            print(f"Face {face_id} appears in groups: {groups}")
-            
-            # Show details for each occurrence
-            for group_id in groups:
-                face_info = next(f for f in faces if f['faceID'] == face_id and f['groupID'] == group_id)
-                print(f"  - Group {group_id}: {face_info['imageID']} (crop: {face_info['crop_filename']})")
-            print()
-    else:
-        print("✅ No duplicate faces found.")
+        print("No groups found.")
 
 def main():
     import sys
@@ -114,7 +62,6 @@ def main():
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python scripts/merge_groups.py list                    # List all groups")
-        print("  python scripts/merge_groups.py duplicates              # Find duplicate faces")
         print("  python scripts/merge_groups.py merge <group1> <group2> # Merge two groups")
         return
     
@@ -122,8 +69,6 @@ def main():
     
     if command == "list":
         list_groups()
-    elif command == "duplicates":
-        find_duplicate_faces()
     elif command == "merge":
         if len(sys.argv) != 4:
             print("Usage: python scripts/merge_groups.py merge <group1> <group2>")

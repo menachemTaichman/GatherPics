@@ -1,7 +1,11 @@
 import json
 import os
-import re
 import shutil
+import sys
+
+# Add the current directory to Python path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.core.face_detector import FaceDetectorAWS
 from src.core.face_cluster import FaceClusterAWS
 from src.core.face_cropper import FaceCropper
