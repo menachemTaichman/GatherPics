@@ -15,12 +15,12 @@ app = Flask(__name__)
 CORS(app)
 
 # Paths
-IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
-IMAGES_DIR = os.path.abspath(IMAGES_DIR)
+ORIGINAL_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'original')
+ORIGINAL_DIR = os.path.abspath(ORIGINAL_DIR)
 
 # Debug: Print image directory and check if a sample image exists
-print(f"[DEBUG] IMAGES_DIR: {IMAGES_DIR}")
-sample_image = os.path.join(IMAGES_DIR, 'E-T 0010.jpg')
+print(f"[DEBUG] ORIGINAL_DIR: {ORIGINAL_DIR}")
+sample_image = os.path.join(ORIGINAL_DIR, 'E-T 0010.jpg')
 print(f"[DEBUG] Sample image path: {sample_image}")
 print(f"[DEBUG] Sample image exists: {os.path.exists(sample_image)}")
 
@@ -187,8 +187,8 @@ def test():
     print("Test endpoint called")
     return jsonify({
         "status": "ok", 
-        "images_dir": IMAGES_DIR,
-        "images_dir_exists": os.path.exists(IMAGES_DIR),
+        "images_dir": ORIGINAL_DIR,
+        "images_dir_exists": os.path.exists(ORIGINAL_DIR),
         "groups_file_exists": os.path.exists(GROUPS_FILE),
         "faces_file_exists": os.path.exists(FACES_FILE)
     })
@@ -290,7 +290,7 @@ def download_group(group_id):
         added_files = 0
         with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for image_id in group.get('image_ids', []):
-                image_path = os.path.join(IMAGES_DIR, image_id)
+                image_path = os.path.join(ORIGINAL_DIR, image_id)
                 if os.path.exists(image_path):
                     zip_file.write(image_path, image_id)
                     added_files += 1
@@ -344,7 +344,7 @@ def download_selected_photos(group_id):
         # Create zip file on disk
         with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for image_id in photo_ids:
-                image_path = os.path.join(IMAGES_DIR, image_id)
+                image_path = os.path.join(ORIGINAL_DIR, image_id)
                 if os.path.exists(image_path):
                     zip_file.write(image_path, image_id)
                 else:
@@ -388,7 +388,7 @@ def download_all_photos():
                 all_photos.update(group.get('image_ids', []))
             
             for image_id in all_photos:
-                image_path = os.path.join(IMAGES_DIR, image_id)
+                image_path = os.path.join(ORIGINAL_DIR, image_id)
                 if os.path.exists(image_path):
                     zip_file.write(image_path, image_id)
                 else:
@@ -468,64 +468,13 @@ def get_faces_in_photo(filename):
 def get_photo_info(filename):
     """Get information about a specific photo"""
     try:
-        faces_data = load_faces()
-        groups = load_groups()
         images = load_images()
-        
-        # Create mapping from image name to image ID
-        image_name_to_id = {img['name']: img['imageID'] for img in images}
-        image_id = image_name_to_id.get(filename)
-        
-        if not image_id:
+        # Find the image entry by name or any path
+        photo = next((img for img in images if img['name'] == filename or img.get('original_path') == filename or img.get('display_path') == filename or img.get('thumb_path') == filename), None)
+        if not photo:
             return jsonify({"error": "Image not found"}), 404
-        
-        # Get all faces for this image
-        image_faces = [f for f in faces_data if f['imageID'] == image_id]
-        
-        # Find which groups this photo belongs to
-        photo_groups = []
-        for face in image_faces:
-            group = next((g for g in groups if g['groupID'] == face['groupID']), None)
-            if group:
-                # Check if this group is already in photo_groups
-                existing_group = next((g for g in photo_groups if g['id'] == group['groupID']), None)
-                if not existing_group:
-                    photo_groups.append({
-                        'id': group['groupID'],
-                        'label': group.get('name', f'Person_{group["groupID"]}'),
-                        'representative': group.get('representative_faceID')
-                    })
-
-        # Get file path
-        image_path = os.path.join(IMAGES_DIR, filename)
-        file_size = None
-        width = None
-        height = None
-        date_taken = None
-        if os.path.exists(image_path):
-            file_size = os.path.getsize(image_path)
-            try:
-                with Image.open(image_path) as img:
-                    width, height = img.size
-                    # Try to get date taken from EXIF
-                    exif_data = img.info.get('exif')
-                    if exif_data:
-                        exif_dict = piexif.load(exif_data)
-                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                        if date_bytes:
-                            date_taken = date_bytes.decode('utf-8')
-            except Exception as e:
-                print(f"Error reading image metadata for {filename}: {e}")
-
-        return jsonify({
-            'filename': filename,
-            'faces_count': len(image_faces),
-            'groups': photo_groups,
-            'file_size': file_size,
-            'width': width,
-            'height': height,
-            'date_taken': date_taken
-        })
+        # Return all fields as-is
+        return jsonify(photo)
     except Exception as e:
         print(f"Error getting photo info for {filename}: {e}")
         return jsonify({"error": "Failed to get photo info"}), 500
@@ -537,7 +486,7 @@ def get_photo_moment(filename):
         moments = load_moments()
         
         # Get the photo's date taken
-        image_path = os.path.join(IMAGES_DIR, filename)
+        image_path = os.path.join(ORIGINAL_DIR, filename)
         photo_date = None
         
         if os.path.exists(image_path):
@@ -599,14 +548,21 @@ def get_photo_moment(filename):
         return jsonify({"error": "Failed to get photo moment"}), 500
 
 # Serve images
-@app.route('/images/<path:filename>')
-def get_image(filename):
-    return send_from_directory(IMAGES_DIR, filename)
+@app.route('/original/<path:filename>')
+def get_original(filename):
+    return send_from_directory(ORIGINAL_DIR, filename)
 
-# Serve face crops
-@app.route('/crops/<path:filename>')
-def get_crop(filename):
-    return send_from_directory(CROPS_DIR, filename)
+# Serve display images
+@app.route('/display/<path:filename>')
+def get_display(filename):
+    display_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'display'))
+    return send_from_directory(display_dir, filename)
+
+# Serve thumb images
+@app.route('/thumb/<path:filename>')
+def get_thumb(filename):
+    thumb_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'thumb'))
+    return send_from_directory(thumb_dir, filename)
 
 @app.route("/api/groups/<int:group_id>/crops")
 def get_group_crops(group_id):
@@ -665,7 +621,7 @@ def get_group_photos(group_id):
             for photo_id in photos:
                 try:
                     # Get photo info
-                    image_path = os.path.join(IMAGES_DIR, photo_id)
+                    image_path = os.path.join(ORIGINAL_DIR, photo_id)
                     date_taken = None
                     
                     if os.path.exists(image_path):
@@ -740,7 +696,7 @@ def get_moments():
 
 @app.route('/api/moments', methods=['POST'])
 def create_moment():
-    data = request.json
+    data = request.json or {}
     moments = load_moments()
     new_moment = {
         'id': str(uuid.uuid4()),
@@ -756,7 +712,7 @@ def create_moment():
 
 @app.route('/api/moments/<moment_id>', methods=['PUT'])
 def update_moment(moment_id):
-    data = request.json
+    data = request.json or {}
     moments = load_moments()
     for moment in moments:
         if moment['id'] == moment_id:
@@ -794,7 +750,7 @@ def get_moment_photos(moment_id):
         
         for photo_name in moment['photos']:
             # Get timestamp for the photo
-            image_path = os.path.join(IMAGES_DIR, photo_name)
+            image_path = os.path.join(ORIGINAL_DIR, photo_name)
             date_taken = None
             if os.path.exists(image_path):
                 try:
@@ -851,7 +807,7 @@ def get_photos_in_moment_period(moment_id):
         
         for img in images:
             filename = img['name']
-            image_path = os.path.join(IMAGES_DIR, filename)
+            image_path = os.path.join(ORIGINAL_DIR, filename)
             date_taken = None
             if os.path.exists(image_path):
                 try:
@@ -883,9 +839,8 @@ def get_photos_in_moment_period(moment_id):
 
 @app.route('/api/download-selected-moment', methods=['POST'])
 def download_selected_moment_photos():
-    """Download selected photos from a moment as a ZIP file"""
     try:
-        data = request.json
+        data = request.json or {}
         moment_id = data.get('momentId')
         photo_names = data.get('photoNames', [])
         
@@ -902,7 +857,7 @@ def download_selected_moment_photos():
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for photo_name in photo_names:
-                photo_path = os.path.join(IMAGES_DIR, photo_name)
+                photo_path = os.path.join(ORIGINAL_DIR, photo_name)
                 if os.path.exists(photo_path):
                     zip_file.write(photo_path, photo_name)
         

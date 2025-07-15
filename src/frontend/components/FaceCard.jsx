@@ -35,10 +35,12 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
     setShowActions(!showActions);
   };
 
-  // Always use the crop as the main image if available, fallback to original image
-  const imageSrc = group.representative_crop
-    ? `${API_BASE}/crops/${group.representative_crop}`
-    : `${API_BASE}/images/${group.representative}`;
+  // Prefer thumb_path for the group representative image
+  const imageSrc = group.thumb_path
+    ? `/thumb/${group.thumb_path}`
+    : (group.representative_crop
+      ? `${API_BASE}/crops/${group.representative_crop}`
+      : `${API_BASE}/images/${group.representative}`);
 
   return (
     <>

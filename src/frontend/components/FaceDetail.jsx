@@ -22,6 +22,7 @@ import {
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import PhotoViewer from './PhotoViewer';
+import imagesData from '../../data/images.json';
 
 export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const { groupId } = useParams();
@@ -232,9 +233,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   };
 
   const openPhotoViewer = (photoId, index) => {
+    // Find the metadata for the photoId
+    const photoMeta = imagesData.images.find(img => img.name === photoId || img.original_path === photoId || img.display_path === photoId || img.thumb_path === photoId) || { name: photoId };
     setPhotoViewer({
       show: true,
-      photo: photoId,
+      photo: photoMeta,
       index: index
     });
   };

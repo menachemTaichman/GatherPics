@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import imagesData from '../../data/images.json';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment }) {
   const navigate = useNavigate();
@@ -22,6 +23,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
 
+  // If 'photo' is a string (filename), look up the metadata from images.json
+  let photoMeta = photo;
+  if (typeof photo === 'string') {
+    // Try to find the metadata by name
+    photoMeta = imagesData.images.find(img => img.name === photo || img.original_path === photo || img.display_path === photo || img.thumb_path === photo) || { name: photo };
+  }
+  // Use the *_path fields directly
+  const displayFilename = photoMeta.display_path || photoMeta.thumb_path || photoMeta.original_path || photoMeta.name;
+
   useEffect(() => {
     if (photo) {
       loadPhotoInfo();
@@ -39,9 +49,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       setLoading(true);
       
       const [facesResponse, infoResponse, momentResponse] = await Promise.all([
-        axios.get(`/api/photos/${encodeURIComponent(photo)}/faces`),
-        axios.get(`/api/photos/${encodeURIComponent(photo)}/info`),
-        axios.get(`/api/photos/${encodeURIComponent(photo)}/moment`).catch(() => ({ data: null }))
+        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/faces`),
+        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/info`),
+        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/moment`).catch(() => ({ data: null }))
       ]);
       
       setFaces(facesResponse.data.faces || []);
@@ -50,7 +60,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     } catch (error) {
       console.error('Error loading photo info:', error);
       setFaces([]);
-      setPhotoInfo({ filename: photo, faces_count: 0, groups: [] });
+      setPhotoInfo({ filename: photoMeta.name, faces_count: 0, groups: [] });
       setMomentInfo(null);
     } finally {
       setLoading(false);
@@ -68,12 +78,12 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(`/images/${photo}`);
+      const response = await fetch(`/images/${photoMeta.name}`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = photo;
+      a.download = photoMeta.name;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -212,7 +222,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </button>
               
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{photo}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{photoMeta.name}</h2>
                 {photoInfo && (
                   <p className="text-sm text-gray-500">
                     {photoInfo.faces_count} faces • {photoInfo.groups.length} groups
@@ -270,8 +280,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   }}
                 >
                   <img
-                    src={`/images/${photo}`}
-                    alt={photo}
+                    src={`${API_BASE}/${displayFilename}`}
+                    alt={photoMeta.name}
                     className="max-w-full max-h-full object-contain select-none"
                     draggable={false}
                   />
@@ -386,7 +396,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {photoInfo?.filename || photo}</div>
+                    <div><span className="font-semibold">Name:</span> {photoInfo?.filename || photoMeta.name}</div>
                     <div><span className="font-semibold">Date:</span> {photoInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Size:</span> {(() => {
                       const size = photoInfo?.file_size;

@@ -6,6 +6,7 @@ import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation } from 'react-router-dom';
+import imagesData from '../../data/images.json';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -82,6 +83,13 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
     onOpenPhotoViewer(photos, photoName, index);
   };
 
+  // Helper to get thumb filename
+  const getThumbFilename = (photo) => {
+    // Try to find the image metadata
+    const meta = imagesData.images.find(img => img.name === photo.name || img.original_path === photo.name || img.display_path === photo.name || img.thumb_path === photo.name);
+    return meta?.thumb_path || meta?.display_path || meta?.original_path || photo.thumb_path || photo.name;
+  };
+
   if (loading) return <div className="py-4 text-gray-400">Loading photos...</div>;
   if (photos.length === 0) return <div className="py-4 text-gray-400">No photos in this moment.</div>;
 
@@ -107,7 +115,7 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
                   className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                 />
                 <img
-                  src={`/images/${photo.name}`}
+                  src={`/${getThumbFilename(photo)}`}
                   alt={`Photo ${index + 1}`}
                   className="w-full h-full object-cover rounded-lg"
                   onLoad={(e) => handleImageLoad(photo.name, e)}
@@ -146,7 +154,7 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
               />
               <div className="relative">
                 <img
-                  src={`/images/${photo.name}`}
+                  src={`/${getThumbFilename(photo)}`}
                   alt={`Photo ${index + 1}`}
                   className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={() => openPhotoViewer(photo.name, index)}
@@ -407,11 +415,13 @@ export default function Moments() {
   };
 
   const openPhotoViewer = (photos, photoName, index) => {
+    // Find the metadata for the photoName
+    const photoMeta = imagesData.images.find(img => img.name === photoName || img.original_path === photoName || img.display_path === photoName || img.thumb_path === photoName) || { name: photoName };
     setPhotoViewer({
       show: true,
-      photo: photoName,
+      photo: photoMeta,
       index: index,
-      photos: photos
+      photos: photos.map(p => imagesData.images.find(img => img.name === p.name || img.original_path === p.name || img.display_path === p.name || img.thumb_path === p.name) || { name: p.name })
     });
   };
 
