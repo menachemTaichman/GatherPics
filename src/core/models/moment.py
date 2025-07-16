@@ -24,11 +24,11 @@ class Moment:
 
     def get_images(self) -> list[str]:
         """Returns all image IDs in the moment."""
-        pass
+        return []
 
     def get_info(self) -> dict:
         """Returns moment metadata."""
-        pass
+        return {}
 
 
 class Moments:
@@ -47,10 +47,10 @@ class Moments:
         """Deletes a moment and related data."""
         pass
 
-    def get_moment(self, moment_id: str) -> Moment:
+    def get_moment(self, moment_id: str) -> 'Moment':
         """Returns a Moment object."""
-        pass
+        return Moment(moment_id)
 
-    def list_moments(self) -> list[Moment]:
+    def list_moments(self) -> list['Moment']:
         """Returns all moments."""
-        pass
+        return []

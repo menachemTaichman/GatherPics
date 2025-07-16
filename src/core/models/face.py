@@ -16,7 +16,7 @@ class Face:
 
     def get_info(self) -> dict:
         """Returns face metadata (bounding box, group, etc.)."""
-        pass
+        return {}
 
     def delete(self) -> None:
         """Removes face and related data/files."""
@@ -24,7 +24,7 @@ class Face:
 
     def is_broken(self) -> bool:
         """Checks if the face crop file is missing or corrupted."""
-        pass
+        return False
 
 
 class Faces:
@@ -37,7 +37,7 @@ class Faces:
 
     def get_next_id(self) -> str:
         """Returns the next available face ID."""
-        pass
+        return "face_00000"
 
     def add_face(self, face: Face) -> None:
         """Adds a face to the collection and saves."""
@@ -49,12 +49,12 @@ class Faces:
 
     def find_broken_faces(self) -> list[str]:
         """Returns a list of broken face IDs."""
-        pass
+        return []
 
-    def get_face(self, face_id: str) -> Face:
+    def get_face(self, face_id: str) -> 'Face':
         """Returns a Face object."""
-        pass
+        return Face(face_id)
 
-    def list_faces(self) -> list[Face]:
+    def list_faces(self) -> list['Face']:
         """Returns all faces."""
-        pass
+        return []

@@ -16,23 +16,23 @@ class AccessGroup:
 
     def can_access_image(self, image_id: str) -> bool:
         """Checks if the group can access the image."""
-        pass
+        return False
 
     def can_access_face(self, face_id: str) -> bool:
         """Checks if the group can access the face."""
-        pass
+        return False
 
     def get_accessible_images(self) -> list[str]:
         """Returns accessible image IDs."""
-        pass
+        return []
 
     def get_accessible_faces(self) -> list[str]:
         """Returns accessible face IDs."""
-        pass
+        return []
 
     def get_info(self) -> dict:
         """Returns access group metadata."""
-        pass
+        return {}
 
 
 class AccessGroups:
@@ -51,10 +51,10 @@ class AccessGroups:
         """Deletes an access group."""
         pass
 
-    def get_access_group(self, group_id: str) -> AccessGroup:
+    def get_access_group(self, group_id: str) -> 'AccessGroup':
         """Returns an AccessGroup object."""
-        pass
+        return AccessGroup(group_id)
 
-    def list_access_groups(self) -> list[AccessGroup]:
+    def list_access_groups(self) -> list['AccessGroup']:
         """Returns all access groups."""
-        pass
+        return []

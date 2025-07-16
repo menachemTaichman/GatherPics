@@ -16,7 +16,7 @@ class Image:
 
     def get_info(self) -> dict:
         """Returns metadata (date, size, resolution, etc.)."""
-        pass
+        return {}
 
     def delete(self) -> None:
         """Removes image and related data/files."""
@@ -24,7 +24,7 @@ class Image:
 
     def is_broken(self) -> bool:
         """Checks if the image file is missing or corrupted."""
-        pass
+        return False
 
 
 class Images:
@@ -37,7 +37,7 @@ class Images:
 
     def get_next_id(self) -> str:
         """Returns the next available image ID."""
-        pass
+        return "img_00000"
 
     def add_image(self, image: Image) -> None:
         """Adds an image to the collection and saves."""
@@ -49,12 +49,12 @@ class Images:
 
     def find_broken_images(self) -> list[str]:
         """Returns a list of broken image IDs."""
-        pass
+        return []
 
-    def get_image(self, image_id: str) -> Image:
+    def get_image(self, image_id: str) -> 'Image':
         """Returns an Image object."""
-        pass
+        return Image(image_id)
 
-    def list_images(self) -> list[Image]:
+    def list_images(self) -> list['Image']:
         """Returns all images."""
-        pass
+        return []

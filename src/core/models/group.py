@@ -24,11 +24,11 @@ class Group:
 
     def get_faces(self) -> list[str]:
         """Returns all face IDs in the group."""
-        pass
+        return []
 
     def get_info(self) -> dict:
         """Returns group metadata."""
-        pass
+        return {}
 
 
 class Groups:
@@ -49,16 +49,16 @@ class Groups:
 
     def merge_groups(self, group_ids: list[int]) -> int:
         """Merges a list of groups into one (returns new group ID)."""
-        pass
+        return 0
 
     def find_overlaps(self) -> list[tuple[int, int]]:
         """Returns pairs of group IDs with overlapping faces."""
-        pass
+        return []
 
-    def get_group(self, group_id: int) -> Group:
+    def get_group(self, group_id: int) -> 'Group':
         """Returns a Group object."""
-        pass
+        return Group(group_id)
 
-    def list_groups(self) -> list[Group]:
+    def list_groups(self) -> list['Group']:
         """Returns all groups."""
-        pass
+        return []
