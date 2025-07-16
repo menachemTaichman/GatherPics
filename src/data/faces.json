@@ -1,14 +1,3 @@
 {
-  "faces": [
-    {
-      "faceID": "face_00067",
-      "imageID": "img_012",
-      "groupID": 0,
-      "crop_filename": "face_00000.jpg",
-      "width": 0.09122886508703232,
-      "height": 0.18920733034610748,
-      "left": 0.4022665321826935,
-      "top": 0.1766682267189026
-    }
-  ]
+  "faces": []
 }

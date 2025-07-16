@@ -13,7 +13,7 @@ from src.core.image_compressor import ImageCompressor
 from PIL import Image
 import piexif
 import glob
-from src.core.face_utils import (
+from src.core.face_utils_old import (
     sanitize_external_image_id,
     calculate_iou,
     remove_duplicate_faces,

@@ -1,13 +1,3 @@
 {
-  "groups": [
-    {
-      "groupID": 0,
-      "name": "Person_0",
-      "representative_imageID": "img_001",
-      "representative_faceID": "face_00000",
-      "faceIDs": [
-        "face_00000"
-      ]
-    }
-  ]
+  "groups": []
 }
