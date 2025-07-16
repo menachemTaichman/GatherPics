@@ -34,8 +34,9 @@ class Faces:
     def __init__(self):
         """Loads all faces from JSON."""
         pass
-
-    def get_next_id(self) -> str:
+    
+    @staticmethod
+    def get_next_id() -> str:
         """Returns the next available face ID."""
         return "face_00000"
 

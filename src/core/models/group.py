@@ -2,7 +2,7 @@ class Group:
     """
     Represents a group (cluster) of faces.
     """
-    def __init__(self, group_id: int):
+    def __init__(self, group_id: str):
         """Initialize with group ID."""
         pass
 
@@ -43,22 +43,27 @@ class Groups:
         """Adds a group to the collection and saves."""
         pass
 
-    def delete_group(self, group_id: int) -> None:
+    def delete_group(self, group_id: str) -> None:
         """Deletes a group and related data."""
         pass
 
-    def merge_groups(self, group_ids: list[int]) -> int:
+    def merge_groups(self, group_ids: list[str]) -> str:
         """Merges a list of groups into one (returns new group ID)."""
-        return 0
+        return ""
 
-    def find_overlaps(self) -> list[tuple[int, int]]:
-        """Returns pairs of group IDs with overlapping faces."""
+    def find_overlaps(self) -> list[list[str]]:
+        """Returns lists of group IDs with overlapping faces."""
         return []
 
-    def get_group(self, group_id: int) -> 'Group':
+    def get_group(self, group_id: str) -> 'Group':
         """Returns a Group object."""
         return Group(group_id)
 
     def list_groups(self) -> list['Group']:
         """Returns all groups."""
         return []
+
+    @staticmethod
+    def get_next_ID() -> str:
+        """Returns the next available group ID."""
+        return ""

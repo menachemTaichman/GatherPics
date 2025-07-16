@@ -35,7 +35,8 @@ class Images:
         """Loads all images from JSON."""
         pass
 
-    def get_next_id(self) -> str:
+    @staticmethod
+    def get_next_id() -> str:
         """Returns the next available image ID."""
         return "img_00000"
 

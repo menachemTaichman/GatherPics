@@ -1,6 +1,6 @@
 class Moment:
     """
-    Represents a moment (event/album).
+    Represents a moment.
     """
     def __init__(self, moment_id: str):
         """Initialize with moment ID."""
@@ -24,6 +24,10 @@ class Moment:
 
     def get_images(self) -> list[str]:
         """Returns all image IDs in the moment."""
+        return []
+
+    def get_images_in_period(self) -> list[str]:
+        """Returns all image IDs that fall within this moment's time period."""
         return []
 
     def get_info(self) -> dict:
@@ -54,3 +58,8 @@ class Moments:
     def list_moments(self) -> list['Moment']:
         """Returns all moments."""
         return []
+
+    @staticmethod
+    def get_next_ID() -> str:
+        """Returns the next available moment ID."""
+        return ""
