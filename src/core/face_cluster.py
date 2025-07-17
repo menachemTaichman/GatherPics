@@ -30,7 +30,7 @@ class FaceClusterAWS:
             print(f"Creating collection {self.collection_id}")
             self.rekognition.create_collection(CollectionId=self.collection_id)
 
-    def index_faces(self, image_bytes, external_image_id):
+    def index_faces(self, image_bytes, external_image_id = ''):
         try:
             response = self.rekognition.index_faces(
                 CollectionId=self.collection_id,

@@ -1,91 +1,55 @@
-import copy
+from typing import Optional, List, Dict
+from .base_model import BaseModel
+from .event import Event
 
-class Group:
-    """
-    Represents a group (cluster) of faces.
-    """
-    def __init__(self, group_ID: str, load: bool = True):
-        self.group_ID = group_ID
-        if load:
-            self.load()
-        else:
-            self.label = ''
-            self.face_representive = ''
-            self.face_IDs = []
+class Groups(BaseModel):
+    def __init__(self, event: Event):
+        super().__init__(event, table_name='groups', id_field='groupID')
 
-    def edit_fields(self, fields: dict):
-        """Edit fields of the Group object using a dict of key-value pairs."""
-        for key, value in fields.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def load(self) -> None:
-        """Loads group data from JSON into self."""
-        pass
-
-    def save(self) -> None:
-        """Saves current state to JSON."""
-        pass
-
-    def add_face(self, face_id: str) -> None:
-        """Adds a face to the group."""
-        if face_id not in self.face_IDs:
-            self.face_IDs.append(face_id)
-
-    def remove_face(self, face_id: str) -> None:
-        """Removes a face from the group."""
-        if face_id in self.face_IDs:
-            self.face_IDs.remove(face_id)
-
-    def get_faces(self) -> list:
-        """Returns all face IDs in the group."""
-        return self.face_IDs
-
-    def get_info(self) -> dict:
-        """Returns group metadata."""
+    def get_add_data(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
         return {
-            'group_ID': self.group_ID,
-            'label': self.label,
-            'face_representive': self.face_representive,
-            'face_IDs': self.face_IDs
+            'label': label,
+            'face_representive': face_representive
         }
 
-class Groups:
-    """
-    Manages a collection of Group objects.
-    """
-    def __init__(self):
-        """Loads all groups from JSON."""
-        pass
+    def add(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
+        group_data = super().add(label, face_representive, face_IDs)
+        group_id = group_data['groupID']
+        self.add_faces(group_id, face_IDs)
+        return group_data
 
-    def add_group(self, label: str = '', face_representive: str = '', face_IDs: list = []) -> Group:
-        """Creates and adds a new Group object with optional fields, assigns a new group_ID, and saves it."""
-        group = Group(group_ID=self.get_next_ID(), load=False)
-        group.edit_fields({'label': label, 'face_representive': face_representive, 'face_IDs': face_IDs})
-        group.save()
+    def add_faces(self, group_id: str, face_ids: List[str]) -> None:
+        if not face_ids:
+            return
+        placeholders = ','.join(['?'] * len(face_ids))
+        query = f"UPDATE faces SET groupID=? WHERE faceID IN ({placeholders})"
+        self.db.execute_query(query, (group_id, *face_ids))
+
+    def get_faces(self, group_id: str) -> List[str]:
+        results = self.db.execute_query('SELECT faceID FROM faces WHERE groupID=?', (group_id,))
+        return [row[0] for row in results]
+
+    def get(self, group_id: str) -> Optional[Dict]:
+        group = super().get(group_id)
+        if group:
+            group['face_IDs'] = self.get_faces(group_id)
         return group
 
-    def delete_group(self, group_id: str) -> None:
-        """Deletes a group and related data."""
-        pass
+    def list(self) -> List[Dict]:
+        groups = super().list()
+        for group in groups:
+            group['face_IDs'] = self.get_faces(group['groupID'])
+        return groups
 
-    def merge_groups(self, group_ids: list) -> str:
-        """Merges a list of groups into one (returns new group ID)."""
-        return ''
+    def merge_groups(self, group_ids: List[str], main_group_id: str = '') -> str:
+        if not group_ids:
+            return ''
+        if not main_group_id:
+            main_group_id = group_ids[0]
+        placeholders = ','.join(['?'] * len(group_ids))
+        query = f"UPDATE faces SET groupID=? WHERE groupID IN ({placeholders})"
+        self.db.execute_query(query, (main_group_id, *group_ids))
+        return main_group_id
 
-    def find_overlaps(self) -> list:
-        """Returns lists of group IDs with overlapping faces."""
+    def find_overlaps(self) -> List[List[str]]:
         return []
-
-    def get_group(self, group_id: str) -> 'Group':
-        """Returns a Group object."""
-        return Group(group_id)
-
-    def list_groups(self) -> list:
-        """Returns all groups."""
-        return []
-
-    @staticmethod
-    def get_next_ID() -> str:
-        """Returns the next available group ID."""
-        return ''
