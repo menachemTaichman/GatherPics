@@ -29,6 +29,15 @@ class Groups(BaseModel):
         results = self.db.execute_query('SELECT faceID FROM faces WHERE groupID=?', (group_id,))
         return [row[0] for row in results]
 
+    def get_images(self, group_id: str) -> List[str]:
+        face_ids = self.get_faces(group_id)
+        image_ids = []
+        for face_id in face_ids:
+            face = self.event.faces_model.get(face_id)
+            if face:
+                image_ids.append(face['imageID'])
+        return image_ids
+
     def get(self, group_id: str) -> Optional[Dict]:
         group = super().get(group_id)
         if group:

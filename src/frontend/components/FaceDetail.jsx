@@ -44,11 +44,12 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [imageCrops, setImageCrops] = useState({}); // New state for crop data
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const FIXED_EVENT_ID = "demo-event-id";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
-    const foundGroup = groups.find(g => g.id.toString() === groupId);
+    const foundGroup = groups.find(g => g.groupID.toString() === groupId);
     if (foundGroup) {
       setGroup(foundGroup);
     } else {
@@ -72,10 +73,17 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
 
   const fetchGroupCrops = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/groups/${group.id}/crops`);
+      const response = await fetch(`${API_BASE}/api/groups/${group.groupID}/crops`);
       if (response.ok) {
         const data = await response.json();
-        setImageCrops(data.image_crops || {});
+        // Create mapping from photo_id to face_id for crops
+        const cropMapping = {};
+        data.face_ids.forEach(faceId => {
+          // For now, we'll need to get the image_id for each face
+          // This is a simplified approach - in practice you might want to optimize this
+          cropMapping[faceId] = faceId; // face_id is the filename
+        });
+        setImageCrops(cropMapping);
       } else {
         console.error('Failed to fetch group crops');
         setImageCrops({});
@@ -90,7 +98,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     try {
       setLoading(true);
       const response = await fetch(
-        `${API_BASE}/api/groups/${group.id}/photos?sort_by=${sortBy}&sort_order=${sortOrder}`
+        `${API_BASE}/api/groups/${group.groupID}/photos?sort_by=${sortBy}&sort_order=${sortOrder}`
       );
       
       if (response.ok) {
@@ -98,11 +106,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
         setSortedPhotos(data.photos || []);
       } else {
         console.error('Failed to fetch sorted photos');
-        setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
+        setSortedPhotos(group.face_IDs?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
       }
     } catch (error) {
       console.error('Error fetching sorted photos:', error);
-      setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
+      setSortedPhotos(group.face_IDs?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
     } finally {
       setLoading(false);
     }
@@ -150,68 +158,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     }
   };
 
-  const handleDownloadGroup = async () => {
-    try {
-      const response = await fetch(`/api/groups/${group.id}/download`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      if (blob.size === 0) {
-        throw new Error('Downloaded file is empty');
-      }
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${group.label || `Person_${group.id}`}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error downloading group:', error);
-      alert(`Failed to download photos: ${error.message}. Please try again.`);
-    }
+  const handleAddGroupToBucket = async () => {
+    // TODO: Implement add to bucket functionality
+    alert('Add to bucket functionality will be implemented later');
   };
 
-  const handleDownloadSelected = async () => {
+  const handleAddSelectedToBucket = async () => {
     if (selectedPhotos.size === 0) return;
     
-    try {
-      const response = await fetch(`/api/groups/${group.id}/download-selected`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photoIds: Array.from(selectedPhotos) })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      if (blob.size === 0) {
-        throw new Error('Downloaded file is empty');
-      }
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${group.label || `Person_${group.id}`}_selected.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error downloading selected photos:', error);
-      alert(`Failed to download photos: ${error.message}. Please try again.`);
-    }
+    // TODO: Implement add selected to bucket functionality
+    alert(`Add ${selectedPhotos.size} selected photos to bucket functionality will be implemented later`);
   };
 
   const togglePhotoSelection = (photoId) => {
@@ -287,27 +243,22 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                 <img
-                  src={group.representative_crop
-                    ? `${API_BASE}/crops/${group.representative_crop}`
-                    : `${API_BASE}/images/${group.representative}`}
-                  alt={group.label || `Person ${group.id}`}
+                  src={group.face_representive
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                    : PLACEHOLDER_DATA_URL}
+                  alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"
                   onError={(e) => {
-                    if (e.target.src.includes('/crops/') && group.representative) {
-                      e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                      e.target.src = `${API_BASE}/images/${group.representative}`;
-                    } else {
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }
+                    e.target.src = PLACEHOLDER_DATA_URL;
                   }}
                 />
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">
-                  {group.label || `Person ${group.id}`}
+                  {group.label || `Person ${group.groupID}`}
                 </h1>
                 <p className="text-gray-600">
-                  {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                  {filteredPhotos.length} of {group.face_IDs?.length || 0} photos
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops
@@ -327,11 +278,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <span>Edit</span>
             </button>
             <button
-              onClick={handleDownloadGroup}
+              onClick={handleAddGroupToBucket}
               className="btn-primary flex items-center space-x-2"
             >
               <Download className="w-4 h-4" />
-              <span>Download All</span>
+              <span>Add All to Bucket</span>
             </button>
             <button
               onClick={() => setShowDeleteModal(true)}
@@ -454,11 +405,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               {selectedPhotos.size} selected
             </span>
             <button
-              onClick={handleDownloadSelected}
+              onClick={handleAddSelectedToBucket}
               className="btn-primary flex items-center space-x-2"
             >
               <Download className="w-4 h-4" />
-              <span>Download Selected</span>
+              <span>Add Selected to Bucket</span>
             </button>
             <button
               onClick={clearSelection}
@@ -539,8 +490,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   />
                   <img
                     src={showCrops && imageCrops[photo.photo_id] 
-                      ? `${API_BASE}/crops/${imageCrops[photo.photo_id]}`
-                      : `${API_BASE}/images/${photo.photo_id}`
+                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
+                      : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
                     }
                     alt={`Photo ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
@@ -589,8 +540,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <div className="relative">
                     <img
                       src={showCrops && imageCrops[photo.photo_id] 
-                        ? `${API_BASE}/crops/${imageCrops[photo.photo_id]}`
-                        : `${API_BASE}/images/${photo.photo_id}`
+                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
+                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"

@@ -5,33 +5,9 @@ import { Download, Home, Users, Settings, Clock, Smile } from 'lucide-react';
 export default function Header() {
   const location = useLocation();
 
-  const handleDownloadAll = async () => {
-    try {
-      const response = await fetch('/api/download-all');
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      if (blob.size === 0) {
-        throw new Error('Downloaded file is empty');
-      }
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'face-gallery.zip';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error downloading all photos:', error);
-      alert(`Failed to download photos: ${error.message}. Please try again.`);
-    }
+  const handleAddAllToBucket = async () => {
+    // TODO: Implement add all to bucket functionality
+    alert('Add all photos to bucket functionality will be implemented later');
   };
 
   return (
@@ -87,12 +63,12 @@ export default function Header() {
             </Link>
 
             <button
-              onClick={handleDownloadAll}
+              onClick={handleAddAllToBucket}
               className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Download all photos"
+              title="Add all photos to bucket"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Download All</span>
+              <span className="hidden sm:inline">Add All to Bucket</span>
             </button>
 
             <button

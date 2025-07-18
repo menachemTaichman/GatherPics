@@ -324,49 +324,11 @@ export default function Moments() {
     setGlobalSelection(new Set());
   };
 
-  const handleGlobalDownload = async () => {
+  const handleGlobalAddToBucket = async () => {
     if (globalSelection.size === 0) return;
     
-    try {
-      const photoGroups = {};
-      globalSelection.forEach(key => {
-        const [momentId, photoName] = key.split(':');
-        if (!photoGroups[momentId]) photoGroups[momentId] = [];
-        photoGroups[momentId].push(photoName);
-      });
-
-      // Download each group separately
-      for (const [momentId, photoNames] of Object.entries(photoGroups)) {
-        const response = await fetch('/api/download-selected-moment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ momentId, photoNames })
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-        
-        const blob = await response.blob();
-        
-        if (blob.size === 0) {
-          throw new Error('Downloaded file is empty');
-        }
-        
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `moment_${momentId}_photos.zip`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }
-    } catch (error) {
-      console.error('Error downloading photos:', error);
-      alert(`Failed to download photos: ${error.message}. Please try again.`);
-    }
+    // TODO: Implement add selected photos to bucket functionality
+    alert(`Add ${globalSelection.size} selected photos to bucket functionality will be implemented later`);
   };
 
   const handleRemoveFromMoment = async () => {
@@ -479,11 +441,11 @@ export default function Moments() {
                   <motion.button 
                     initial={{ scale: 0.9 }}
                     animate={{ scale: 1 }}
-                    onClick={handleGlobalDownload} 
+                    onClick={handleGlobalAddToBucket} 
                     className="btn-primary flex items-center space-x-2"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Download ({globalSelection.size})</span>
+                    <span>Add to Bucket ({globalSelection.size})</span>
                   </motion.button>
                   <button onClick={handleRemoveFromMoment} className="btn-secondary">
                     Remove from Moment

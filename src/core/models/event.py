@@ -6,6 +6,8 @@ from .db import AppDB
 from .image import Images
 from .group import Groups
 from .face import Faces
+from .moment import Moments
+from .profile import Profiles
 from ..face_utils import FaceUtils
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
@@ -20,6 +22,8 @@ class Event:
         self.images_model = Images(self)
         self.groups_model = Groups(self)
         self.faces_model = Faces(self)
+        self.moments_model = Moments(self)
+        self.profile_model = Profiles(self)
         self.face_utils = FaceUtils(self.id)
         self.display_dir = os.path.join(self.event_dir, 'display')
         self.original_dir = os.path.join(self.event_dir, 'original')

@@ -1,964 +1,280 @@
-from flask import Flask, jsonify, send_from_directory, request, send_file, Response, make_response
+from flask import Flask, jsonify, request, g, send_file, abort
 from flask_cors import CORS
-import json
+from functools import wraps
+import traceback
 import os
-import zipfile
 import io
-from datetime import datetime
-import tempfile
-import shutil
-from PIL import Image
-import piexif
-import uuid
+import zipfile
+
+from src.core.models.event import Event
+# from src.core.models.profile import Profiles  # If needed for permissions
 
 app = Flask(__name__)
 CORS(app)
 
-# Paths
-ORIGINAL_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'original')
-ORIGINAL_DIR = os.path.abspath(ORIGINAL_DIR)
+# --- Placeholder values for now ---
+FIXED_EVENT_ID = "demo-event-id"
+FIXED_PROFILE_ID = "demo-profile-id"
 
-# Debug: Print image directory and check if a sample image exists
-print(f"[DEBUG] ORIGINAL_DIR: {ORIGINAL_DIR}")
-sample_image = os.path.join(ORIGINAL_DIR, 'E-T 0010.jpg')
-print(f"[DEBUG] Sample image path: {sample_image}")
-print(f"[DEBUG] Sample image exists: {os.path.exists(sample_image)}")
+# --- Auth Decorator (no-op for now) ---
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # In future: check request headers/cookies for auth, validate profile_id, etc.
+        g.profile_id = FIXED_PROFILE_ID
+        return f(*args, **kwargs)
+    return decorated
 
-CROPS_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'crops')
-CROPS_DIR = os.path.abspath(CROPS_DIR)
+# --- Error Handlers ---
+@app.errorhandler(400)
+def bad_request(error):
+    return jsonify({"error": "Bad Request", "message": str(error)}), 400
 
-# New data structure files
-IMAGES_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'images.json')
-IMAGES_FILE = os.path.abspath(IMAGES_FILE)
-GROUPS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'groups.json')
-GROUPS_FILE = os.path.abspath(GROUPS_FILE)
-FACES_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'faces.json')
-FACES_FILE = os.path.abspath(FACES_FILE)
-
-# Legacy files (for backward compatibility)
-CLUSTERS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'clusters_faces.json')
-CLUSTERS_FILE = os.path.abspath(CLUSTERS_FILE)
-FACES_OUTPUT_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'faces_output.json')
-FACES_OUTPUT_FILE = os.path.abspath(FACES_OUTPUT_FILE)
-
-# Create crops directory if it doesn't exist
-os.makedirs(CROPS_DIR, exist_ok=True)
-
-# New moments file
-MOMENTS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'moments.json')
-
-def load_images():
-    """Load images data"""
-    try:
-        with open(IMAGES_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get('images', [])
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError:
-        return []
-
-def load_groups():
-    """Load groups data"""
-    try:
-        with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get('groups', [])
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError:
-        return []
-
-def load_faces():
-    """Load faces data"""
-    try:
-        with open(FACES_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get('faces', [])
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError:
-        return []
-
-def save_groups(groups):
-    """Save groups data"""
-    try:
-        data = {'groups': groups}
-        with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        print(f"Error saving groups: {e}")
-        return False
-
-def get_group_with_faces(group_id):
-    """Get a group with all its faces and images"""
-    groups = load_groups()
-    faces = load_faces()
-    images = load_images()
-    
-    # Find the group
-    group = next((g for g in groups if g['groupID'] == group_id), None)
-    if not group:
-        return None
-    
-    # Get all faces for this group
-    group_faces = [f for f in faces if f['groupID'] == group_id]
-    
-    # Get image names for all faces
-    image_id_to_name = {img['imageID']: img['name'] for img in images}
-    
-    # Create image_ids list (unique image names)
-    image_ids = list(set([image_id_to_name.get(f['imageID'], '') for f in group_faces]))
-    
-    # Get representative image name
-    representative_image_name = image_id_to_name.get(group.get('representative_imageID', ''), '')
-    
-    # Get representative crop filename
-    representative_face = next((f for f in group_faces if f['faceID'] == group.get('representative_faceID')), None)
-    representative_crop = representative_face['crop_filename'] if representative_face else None
-    
-    # Create legacy-compatible group structure
-    legacy_group = {
-        'id': group['groupID'],
-        'label': group['name'],
-        'representative': representative_image_name,
-        'representative_crop': representative_crop,
-        'image_ids': image_ids,
-        'updated_at': group.get('updated_at', '')
-    }
-    
-    return legacy_group
-
-def get_all_groups_legacy():
-    """Get all groups in legacy format for frontend compatibility"""
-    groups = load_groups()
-    result = []
-    
-    for group in groups:
-        legacy_group = get_group_with_faces(group['groupID'])
-        if legacy_group:
-            result.append(legacy_group)
-    
-    return result
-
-# Legacy functions for backward compatibility
-def load_clusters():
-    """Load face clusters data (legacy)"""
-    return get_all_groups_legacy()
-
-def save_clusters(clusters):
-    """Save face clusters data (legacy)"""
-    # This would need to be updated to work with new structure
-    # For now, return False to indicate it's not supported
-    return False
-
-def load_faces_output():
-    """Load faces output data (legacy)"""
-    try:
-        with open(FACES_OUTPUT_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
-
-def get_faces_in_image(image_filename):
-    """Get faces detected in a specific image (legacy)"""
-    faces_data = load_faces_output()
-    return faces_data.get(image_filename, [])
-
-def load_moments():
-    with open(MOMENTS_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f).get('moments', [])
-
-def save_moments(moments):
-    with open(MOMENTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump({'moments': moments}, f, ensure_ascii=False, indent=2)
-
-@app.route("/api/ping")
-def ping():
-    print("Ping endpoint called")
-    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
-
-@app.route("/api/test")
-def test():
-    """Test endpoint to verify backend is working"""
-    print("Test endpoint called")
-    return jsonify({
-        "status": "ok", 
-        "images_dir": ORIGINAL_DIR,
-        "images_dir_exists": os.path.exists(ORIGINAL_DIR),
-        "groups_file_exists": os.path.exists(GROUPS_FILE),
-        "faces_file_exists": os.path.exists(FACES_FILE)
-    })
-
-@app.route("/api/groups")
-def get_groups():
-    """Get all face groups"""
-    groups = get_all_groups_legacy()
-    return jsonify(groups)
-
-@app.route("/api/groups/<int:group_id>")
-def get_group(group_id):
-    """Get a specific face group"""
-    group = get_group_with_faces(group_id)
-    
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-    
-    return jsonify(group)
-
-@app.route("/api/groups/<int:group_id>", methods=["PUT"])
-def update_group(group_id):
-    """Update a face group"""
-    groups = load_groups()
-    faces = load_faces()
-    images = load_images()
-    
-    group = next((g for g in groups if g['groupID'] == group_id), None)
-    
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-    
-    data = request.get_json()
-    
-    # Update allowed fields
-    if 'label' in data:
-        group['name'] = data['label']
-    
-    if 'representative' in data:
-        # Find the image ID for the new representative image
-        new_representative_image_name = data['representative']
-        image_id = next((img['imageID'] for img in images if img['name'] == new_representative_image_name), None)
-        
-        if not image_id:
-            return jsonify({"error": "Representative image not found"}), 400
-        
-        # Find a face in this group that belongs to the new representative image
-        group_faces = [f for f in faces if f['groupID'] == group_id and f['imageID'] == image_id]
-        
-        if not group_faces:
-            return jsonify({"error": "No faces found in the selected image for this group"}), 400
-        
-        # Use the first face found in the new representative image
-        new_representative_face = group_faces[0]
-        
-        # Update the group's representative
-        group['representative_imageID'] = image_id
-        group['representative_faceID'] = new_representative_face['faceID']
-    
-    group['updated_at'] = datetime.now().isoformat()
-    
-    if save_groups(groups):
-        return jsonify(get_group_with_faces(group_id))
-    else:
-        return jsonify({"error": "Failed to save changes"}), 500
-
-@app.route("/api/groups/<int:group_id>", methods=["DELETE"])
-def delete_group(group_id):
-    """Delete a face group"""
-    groups = load_groups()
-    group = next((g for g in groups if g['groupID'] == group_id), None)
-    
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-    
-    groups = [g for g in groups if g['groupID'] != group_id]
-    
-    if save_groups(groups):
-        return jsonify({"message": "Group deleted successfully"})
-    else:
-        return jsonify({"error": "Failed to delete group"}), 500
-
-@app.route("/api/groups/<int:group_id>/download")
-def download_group(group_id):
-    """Download all photos from a face group"""
-    temp_file = None
-    try:
-        group = get_group_with_faces(group_id)
-        
-        if not group:
-            return jsonify({"error": "Group not found"}), 404
-        
-        # Create a temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        # Create zip file on disk
-        added_files = 0
-        with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for image_id in group.get('image_ids', []):
-                image_path = os.path.join(ORIGINAL_DIR, image_id)
-                if os.path.exists(image_path):
-                    zip_file.write(image_path, image_id)
-                    added_files += 1
-                else:
-                    print(f"Warning: Image not found: {image_path}")
-        
-        filename = f"{group.get('label', f'Person_{group_id}')}.zip"
-        return send_file(
-            temp_path,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        print(f"Error downloading group {group_id}: {e}")
-        return jsonify({"error": "Failed to download group"}), 500
-    finally:
-        # Clean up temporary file after sending
-        if temp_file and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-
-@app.route("/api/groups/<int:group_id>/download-selected", methods=["POST"])
-def download_selected_photos(group_id):
-    """Download selected photos from a face group"""
-    temp_file = None
-    try:
-        group = get_group_with_faces(group_id)
-        
-        if not group:
-            return jsonify({"error": "Group not found"}), 404
-        
-        data = request.get_json()
-        photo_ids = data.get('photoIds', [])
-        
-        if not photo_ids:
-            return jsonify({"error": "No photos selected"}), 400
-        
-        # Verify all selected photos belong to the group
-        group_photos = set(group.get('image_ids', []))
-        if not all(photo_id in group_photos for photo_id in photo_ids):
-            return jsonify({"error": "Some selected photos don't belong to this group"}), 400
-        
-        # Create a temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        # Create zip file on disk
-        with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for image_id in photo_ids:
-                image_path = os.path.join(ORIGINAL_DIR, image_id)
-                if os.path.exists(image_path):
-                    zip_file.write(image_path, image_id)
-                else:
-                    print(f"Warning: Image not found: {image_path}")
-        
-        filename = f"{group.get('label', f'Person_{group_id}')}_selected.zip"
-        return send_file(
-            temp_path,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        print(f"Error downloading selected photos for group {group_id}: {e}")
-        return jsonify({"error": "Failed to download selected photos"}), 500
-    finally:
-        # Clean up temporary file after sending
-        if temp_file and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-
-@app.route("/api/groups/merge", methods=["POST"])
-def merge_groups():
-    """Merge multiple groups into a target group"""
-    try:
-        data = request.get_json()
-        target_group_id = data.get('targetGroupId')
-        group_ids_to_merge = data.get('groupIdsToMerge', [])
-        
-        if not target_group_id or not group_ids_to_merge:
-            return jsonify({"error": "targetGroupId and groupIdsToMerge are required"}), 400
-        
-        # Load data using existing functions
-        groups = load_groups()
-        faces = load_faces()
-        
-        # Verify all groups exist
-        all_group_ids = [g['groupID'] for g in groups]
-        if target_group_id not in all_group_ids:
-            return jsonify({"error": "Target group not found"}), 404
-        
-        for group_id in group_ids_to_merge:
-            if group_id not in all_group_ids:
-                return jsonify({"error": f"Group {group_id} not found"}), 404
-        
-        # Perform the merges manually
-        target_group = next((g for g in groups if g['groupID'] == target_group_id), None)
-        if not target_group:
-            return jsonify({"error": "Target group not found"}), 404
-        
-        # Merge face IDs from all groups into target group
-        merged_face_ids = list(set(target_group['faceIDs']))
-        for group_id in group_ids_to_merge:
-            group_to_merge = next((g for g in groups if g['groupID'] == group_id), None)
-            if group_to_merge:
-                merged_face_ids.extend(group_to_merge['faceIDs'])
-        
-        # Remove duplicates
-        target_group['faceIDs'] = list(set(merged_face_ids))
-        
-        # Update all faces that belonged to merged groups to now belong to target group
-        for face in faces:
-            if face['groupID'] in group_ids_to_merge:
-                face['groupID'] = target_group_id
-        
-        # Remove merged groups
-        groups = [g for g in groups if g['groupID'] not in group_ids_to_merge]
-        
-        # Save the updated data
-        if save_groups(groups):
-            # Save faces
-            with open(FACES_FILE, 'w', encoding='utf-8') as f:
-                json.dump({"faces": faces}, f, ensure_ascii=False, indent=2)
-            
-            # Return updated group info
-            updated_group = get_group_with_faces(target_group_id)
-            return jsonify({
-                "success": True,
-                "message": f"Successfully merged {len(group_ids_to_merge)} groups into group {target_group_id}",
-                "updatedGroup": updated_group
-            })
-        else:
-            return jsonify({"error": "Failed to merge groups"}), 500
-            
-    except Exception as e:
-        print(f"Error merging groups: {e}")
-        return jsonify({"error": "Failed to merge groups"}), 500
-
-@app.route("/api/download-all")
-def download_all_photos():
-    """Download all photos from all groups"""
-    temp_file = None
-    try:
-        groups = get_all_groups_legacy()
-        
-        # Create a temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        # Create zip file on disk
-        with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add all unique photos
-            all_photos = set()
-            for group in groups:
-                all_photos.update(group.get('image_ids', []))
-            
-            for image_id in all_photos:
-                image_path = os.path.join(ORIGINAL_DIR, image_id)
-                if os.path.exists(image_path):
-                    zip_file.write(image_path, image_id)
-                else:
-                    print(f"Warning: Image not found: {image_path}")
-        
-        return send_file(
-            temp_path,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name='face-gallery-all.zip'
-        )
-    except Exception as e:
-        print(f"Error downloading all photos: {e}")
-        return jsonify({"error": "Failed to download all photos"}), 500
-    finally:
-        # Clean up temporary file after sending
-        if temp_file and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-
-@app.route("/api/photos/<path:filename>/faces")
-def get_faces_in_photo(filename):
-    """Get faces detected in a specific photo"""
-    try:
-        faces_data = load_faces()
-        groups = load_groups()
-        images = load_images()
-        
-        # Create mapping from image name to image ID
-        image_name_to_id = {img['name']: img['imageID'] for img in images}
-        image_id = image_name_to_id.get(filename)
-        
-        if not image_id:
-            return jsonify({"error": "Image not found"}), 404
-        
-        # Get all faces for this image
-        image_faces = [f for f in faces_data if f['imageID'] == image_id]
-        
-        # Create face groups with proper data
-        face_groups = []
-        for face in image_faces:
-            # Find the group this face belongs to
-            group = next((g for g in groups if g['groupID'] == face['groupID']), None)
-            
-            if group:
-                # Get group label
-                group_label = group.get('name', f'Person_{group["groupID"]}')
-                
-                # Get representative crop
-                representative_face = next((f for f in faces_data if f['faceID'] == group.get('representative_faceID')), None)
-                representative_crop = representative_face['crop_filename'] if representative_face else None
-                
-                face_groups.append({
-                    'face_coords': {
-                        'Left': face['left'],
-                        'Top': face['top'],
-                        'Width': face['width'],
-                        'Height': face['height']
-                    },
-                    'group_id': face['groupID'],
-                    'group_label': group_label,
-                    'group_representative': representative_crop,
-                    'face_crop': face['crop_filename']
-                })
-        
-        return jsonify({
-            'filename': filename,
-            'faces': face_groups
-        })
-    except Exception as e:
-        print(f"Error getting faces for photo {filename}: {e}")
-        return jsonify({"error": "Failed to get faces"}), 500
-
-@app.route("/api/photos/<path:filename>/info")
-def get_photo_info(filename):
-    """Get information about a specific photo"""
-    try:
-        images = load_images()
-        # Find the image entry by name or any path
-        photo = next((img for img in images if img['name'] == filename or img.get('original_path') == filename or img.get('display_path') == filename or img.get('thumb_path') == filename), None)
-        if not photo:
-            return jsonify({"error": "Image not found"}), 404
-        # Return all fields as-is
-        return jsonify(photo)
-    except Exception as e:
-        print(f"Error getting photo info for {filename}: {e}")
-        return jsonify({"error": "Failed to get photo info"}), 500
-
-@app.route("/api/photos/<path:filename>/moment")
-def get_photo_moment(filename):
-    """Get the moment that contains this photo"""
-    try:
-        moments = load_moments()
-        
-        # Get the photo's date taken
-        image_path = os.path.join(ORIGINAL_DIR, filename)
-        photo_date = None
-        
-        if os.path.exists(image_path):
-            try:
-                with Image.open(image_path) as img:
-                    exif_data = img.info.get('exif')
-                    if exif_data:
-                        exif_dict = piexif.load(exif_data)
-                        date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                        if date_bytes:
-                            date_str = date_bytes.decode('utf-8')
-                            # EXIF format: YYYY:MM:DD HH:MM:SS
-                            photo_date = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-            except Exception as e:
-                print(f"Error reading EXIF for {filename}: {e}")
-        
-        if not photo_date:
-            return jsonify({"error": "Could not determine photo date"}), 404
-        
-        # First check if photo is manually assigned to any moment
-        for moment in moments:
-            if 'photos' in moment and moment['photos'] and filename in moment['photos']:
-                return jsonify({
-                    'id': moment['id'],
-                    'title': moment['title'],
-                    'description': moment.get('description', ''),
-                    'start_datetime': moment['start_datetime'],
-                    'end_datetime': moment['end_datetime'],
-                    'representative_photo': moment.get('representative_photo', '')
-                })
-        
-        # Fallback to time-based assignment
-        for moment in moments:
-            start_dt = moment.get('start_datetime')
-            end_dt = moment.get('end_datetime')
-            
-            if start_dt and end_dt:
-                try:
-                    start = datetime.fromisoformat(start_dt)
-                    end = datetime.fromisoformat(end_dt)
-                    
-                    if start <= photo_date <= end:
-                        return jsonify({
-                            'id': moment['id'],
-                            'title': moment['title'],
-                            'description': moment.get('description', ''),
-                            'start_datetime': moment['start_datetime'],
-                            'end_datetime': moment['end_datetime'],
-                            'representative_photo': moment.get('representative_photo', '')
-                        })
-                except Exception as e:
-                    print(f"Error parsing moment dates for {moment['id']}: {e}")
-                    continue
-        
-        return jsonify({"error": "Photo not found in any moment"}), 404
-        
-    except Exception as e:
-        print(f"Error getting moment for photo {filename}: {e}")
-        return jsonify({"error": "Failed to get photo moment"}), 500
-
-# Serve images
-@app.route('/original/<path:filename>')
-def get_original(filename):
-    return send_from_directory(ORIGINAL_DIR, filename)
-
-# Serve display images
-@app.route('/display/<path:filename>')
-def get_display(filename):
-    display_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'display'))
-    return send_from_directory(display_dir, filename)
-
-# Serve thumb images
-@app.route('/thumb/<path:filename>')
-def get_thumb(filename):
-    thumb_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'thumb'))
-    return send_from_directory(thumb_dir, filename)
-
-@app.route("/api/groups/<int:group_id>/crops")
-def get_group_crops(group_id):
-    """Get crop filenames for all images in a group"""
-    try:
-        groups = load_groups()
-        faces = load_faces()
-        images = load_images()
-        
-        # Find the group
-        group = next((g for g in groups if g['groupID'] == group_id), None)
-        if not group:
-            return jsonify({"error": "Group not found"}), 404
-        
-        # Get all faces for this group
-        group_faces = [f for f in faces if f['groupID'] == group_id]
-        
-        # Get image names for all faces
-        image_id_to_name = {img['imageID']: img['name'] for img in images}
-        
-        # Create mapping of image names to crop filenames
-        image_crops = {}
-        for face in group_faces:
-            image_name = image_id_to_name.get(face['imageID'], '')
-            if image_name:
-                # If multiple faces in same image, use the first one
-                if image_name not in image_crops:
-                    image_crops[image_name] = face['crop_filename']
-        
-        return jsonify({
-            'group_id': group_id,
-            'image_crops': image_crops
-        })
-    except Exception as e:
-        print(f"Error getting crops for group {group_id}: {e}")
-        return jsonify({"error": "Failed to get group crops"}), 500
-
-@app.route("/api/groups/<int:group_id>/photos")
-def get_group_photos(group_id):
-    """Get photos for a group with optional sorting by date"""
-    try:
-        group = get_group_with_faces(group_id)
-        
-        if not group:
-            return jsonify({"error": "Group not found"}), 404
-        
-        # Get sort parameters from query string
-        sort_by = request.args.get('sort_by', 'date')  # 'date' or 'name'
-        sort_order = request.args.get('sort_order', 'asc')  # 'asc' or 'desc'
-        
-        photos = group.get('image_ids', [])
-        
-        if sort_by == 'date':
-            # Get photo info for all photos in the group
-            photos_with_dates = []
-            for photo_id in photos:
-                try:
-                    # Get photo info
-                    image_path = os.path.join(ORIGINAL_DIR, photo_id)
-                    date_taken = None
-                    
-                    if os.path.exists(image_path):
-                        with Image.open(image_path) as img:
-                            exif_data = img.info.get('exif')
-                            if exif_data:
-                                exif_dict = piexif.load(exif_data)
-                                date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                                if date_bytes:
-                                    date_taken = date_bytes.decode('utf-8')
-                    
-                    photos_with_dates.append({
-                        'photo_id': photo_id,
-                        'date_taken': date_taken
-                    })
-                except Exception as e:
-                    print(f"Error getting date for {photo_id}: {e}")
-                    photos_with_dates.append({
-                        'photo_id': photo_id,
-                        'date_taken': None
-                    })
-            
-            # Sort by date
-            def parse_exif_date(date_string):
-                if not date_string:
-                    return datetime.min
-                try:
-                    # Convert EXIF format "YYYY:MM:DD HH:MM:SS" to datetime
-                    return datetime.strptime(date_string, "%Y:%m:%d %H:%M:%S")
-                except:
-                    return datetime.min
-            
-            photos_with_dates.sort(
-                key=lambda x: parse_exif_date(x['date_taken']),
-                reverse=(sort_order == 'desc')
-            )
-            
-            # Return sorted photo IDs and their dates
-            return jsonify({
-                'photos': [
-                    {
-                        'photo_id': p['photo_id'],
-                        'date_taken': p['date_taken'],
-                        'formatted_date': parse_exif_date(p['date_taken']).strftime("%Y-%m-%d %H:%M:%S") if p['date_taken'] else None
-                    }
-                    for p in photos_with_dates
-                ]
-            })
-        
-        else:
-            # Sort by name
-            photos.sort(reverse=(sort_order == 'desc'))
-            return jsonify({
-                'photos': [
-                    {
-                        'photo_id': photo_id,
-                        'date_taken': None,
-                        'formatted_date': None
-                    }
-                    for photo_id in photos
-                ]
-            })
-            
-    except Exception as e:
-        print(f"Error getting group photos for {group_id}: {e}")
-        return jsonify({"error": "Failed to get group photos"}), 500
-
-@app.route('/api/moments', methods=['GET'])
-def get_moments():
-    moments = load_moments()
-    return jsonify({'moments': moments})
-
-@app.route('/api/moments', methods=['POST'])
-def create_moment():
-    data = request.json or {}
-    moments = load_moments()
-    new_moment = {
-        'id': str(uuid.uuid4()),
-        'title': data.get('title', ''),
-        'start_datetime': data.get('start_datetime', ''),
-        'end_datetime': data.get('end_datetime', ''),
-        'representative_photo': data.get('representative_photo', ''),
-        'description': data.get('description', '')
-    }
-    moments.append(new_moment)
-    save_moments(moments)
-    return jsonify({'moment': new_moment}), 201
-
-@app.route('/api/moments/<moment_id>', methods=['PUT'])
-def update_moment(moment_id):
-    data = request.json or {}
-    moments = load_moments()
-    for moment in moments:
-        if moment['id'] == moment_id:
-            moment['title'] = data.get('title', moment['title'])
-            moment['start_datetime'] = data.get('start_datetime', moment['start_datetime'])
-            moment['end_datetime'] = data.get('end_datetime', moment['end_datetime'])
-            moment['representative_photo'] = data.get('representative_photo', moment['representative_photo'])
-            moment['description'] = data.get('description', moment.get('description', ''))
-            # Always update the photos field, even if empty
-            moment['photos'] = data.get('photos', [])
-            save_moments(moments)
-            return jsonify({'moment': moment})
-    return jsonify({'error': 'Moment not found'}), 404
-
-@app.route('/api/moments/<moment_id>', methods=['DELETE'])
-def delete_moment(moment_id):
-    moments = load_moments()
-    new_moments = [m for m in moments if m['id'] != moment_id]
-    if len(new_moments) == len(moments):
-        return jsonify({'error': 'Moment not found'}), 404
-    save_moments(new_moments)
-    return jsonify({'status': 'deleted'})
-
-@app.route('/api/moments/<moment_id>/photos', methods=['GET'])
-def get_moment_photos(moment_id):
-    moments = load_moments()
-    moment = next((m for m in moments if m['id'] == moment_id), None)
-    if not moment:
-        return jsonify({'error': 'Moment not found'}), 404
-    
-    # Only use manually assigned photos from the moments.json
-    if 'photos' in moment and moment['photos']:
-        images = load_images()
-        photos_in_range = []
-        
-        for photo_name in moment['photos']:
-            # Get timestamp for the photo
-            image_path = os.path.join(ORIGINAL_DIR, photo_name)
-            date_taken = None
-            if os.path.exists(image_path):
-                try:
-                    with Image.open(image_path) as im:
-                        exif_data = im.info.get('exif')
-                        if exif_data:
-                            exif_dict = piexif.load(exif_data)
-                            date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                            if date_bytes:
-                                date_str = date_bytes.decode('utf-8')
-                                # EXIF format: YYYY:MM:DD HH:MM:SS
-                                date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                except Exception as e:
-                    print(f"Error reading EXIF for {photo_name}: {e}")
-            
-            photos_in_range.append({
-                'name': photo_name,
-                'date_taken': date_taken.isoformat() if date_taken else None
-            })
-        
-        return jsonify({'photos': photos_in_range})
-    
-    # If no photos field, return empty array
-    return jsonify({'photos': []})
-
-@app.route('/api/moments/<moment_id>/photos-in-period', methods=['GET'])
-def get_photos_in_moment_period(moment_id):
-    """Get all photos that fall within a moment's time period"""
-    try:
-        moments = load_moments()
-        moment = next((m for m in moments if m['id'] == moment_id), None)
-        if not moment:
-            return jsonify({'error': 'Moment not found'}), 404
-        
-        start_dt = moment.get('start_datetime')
-        end_dt = moment.get('end_datetime')
-        if not start_dt or not end_dt:
-            return jsonify({'photos': []})
-        
-        def parse_iso(dt):
-            try:
-                return datetime.fromisoformat(dt)
-            except:
-                return None
-        
-        start = parse_iso(start_dt)
-        end = parse_iso(end_dt)
-        if not start or not end:
-            return jsonify({'photos': []})
-        
-        # Get all images and check which ones fall in the time period
-        images = load_images()
-        photos_in_period = []
-        
-        for img in images:
-            filename = img['name']
-            image_path = os.path.join(ORIGINAL_DIR, filename)
-            date_taken = None
-            if os.path.exists(image_path):
-                try:
-                    with Image.open(image_path) as im:
-                        exif_data = im.info.get('exif')
-                        if exif_data:
-                            exif_dict = piexif.load(exif_data)
-                            date_bytes = exif_dict['Exif'].get(piexif.ExifIFD.DateTimeOriginal)
-                            if date_bytes:
-                                date_str = date_bytes.decode('utf-8')
-                                # EXIF format: YYYY:MM:DD HH:MM:SS
-                                date_taken = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                except Exception as e:
-                    print(f"Error reading EXIF for {filename}: {e}")
-                    # Continue with next image instead of failing completely
-            else:
-                print(f"File does not exist: {image_path}")
-                
-            if date_taken and start <= date_taken <= end:
-                photos_in_period.append({
-                    'name': filename,
-                    'date_taken': date_taken.isoformat()
-                })
-        
-        return jsonify({'photos': photos_in_period})
-    except Exception as e:
-        print(f"Error in get_photos_in_moment_period: {e}")
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
-
-@app.route('/api/download-selected-moment', methods=['POST'])
-def download_selected_moment_photos():
-    try:
-        data = request.json or {}
-        moment_id = data.get('momentId')
-        photo_names = data.get('photoNames', [])
-        
-        if not moment_id or not photo_names:
-            return jsonify({"error": "Missing moment ID or photo names"}), 400
-        
-        # Verify the moment exists
-        moments = load_moments()
-        moment = next((m for m in moments if m['id'] == moment_id), None)
-        if not moment:
-            return jsonify({"error": "Moment not found"}), 404
-        
-        # Create ZIP file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for photo_name in photo_names:
-                photo_path = os.path.join(ORIGINAL_DIR, photo_name)
-                if os.path.exists(photo_path):
-                    zip_file.write(photo_path, photo_name)
-        
-        zip_buffer.seek(0)
-        
-        response = make_response(zip_buffer.getvalue())
-        response.headers['Content-Type'] = 'application/zip'
-        response.headers['Content-Disposition'] = f'attachment; filename=moment_{moment.get("title", "photos")}.zip'
-        
-        return response
-        
-    except Exception as e:
-        print(f"Error downloading moment photos: {e}")
-        return jsonify({"error": "Failed to download photos"}), 500
-
-@app.route('/api/images.json')
-def get_images_json():
-    """Get the images.json file for frontend use"""
-    try:
-        with open(IMAGES_FILE, 'r', encoding='utf-8') as f:
-            return jsonify(json.load(f))
-    except FileNotFoundError:
-        return jsonify({"images": []})
-    except json.JSONDecodeError:
-        return jsonify({"images": []})
-
-# Error handlers
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({"error": "Not found"}), 404
+    return jsonify({"error": "Not Found", "message": str(error)}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    return jsonify({"error": "Internal server error"}), 500
+    return jsonify({"error": "Internal Server Error", "message": str(error), "trace": traceback.format_exc()}), 500
+
+# --- API Endpoints ---
+
+@app.route("/api/groups", methods=["GET"])
+@require_auth
+def get_groups():
+    """List all  groups for the event."""
+    event = Event(FIXED_EVENT_ID)
+    groups = event.groups_model.list()
+    return jsonify(groups)
+
+@app.route("/api/groups/<group_id>", methods=["PUT"])
+@require_auth
+def update_group(group_id):
+    """Update a group's label or representative."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    try:
+        event.groups_model.edit(group_id, data)
+        updated = event.groups_model.get(group_id)
+        return jsonify(updated)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/groups/<group_id>", methods=["DELETE"])
+@require_auth
+def delete_group(group_id):
+    """Delete a group."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        event.groups_model.delete(group_id)
+        return jsonify({"success": True})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/groups/merge", methods=["POST"])
+@require_auth
+def merge_groups():
+    """Merge multiple groups into a target group."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    try:
+        event.groups_model.merge_groups(data['source_group_ids'], data['target_group_id'])
+        return jsonify({"success": True})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/groups/<group_id>/photos", methods=["GET"])
+@require_auth
+def get_group_photos(group_id):
+    """List all photos for a group, with optional sorting."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    image_ids = event.groups_model.get_images(group_id)
+    return jsonify({"photos": image_ids})
+
+@app.route("/api/groups/<group_id>/crops", methods=["GET"])
+@require_auth
+def get_group_crops(group_id):
+    """Get list of face crop filenames for a group."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    face_ids = event.groups_model.get_faces(group_id)
+    
+    return jsonify({"face_ids": face_ids})
+
+@app.route("/api/moments", methods=["GET"])
+@require_auth
+def get_moments():
+    """List all moments for the event."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        moments = event.moments_model.list()
+        return jsonify({"moments": moments})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/moments", methods=["POST"])
+@require_auth
+def create_moment():
+    """Create a new moment."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    try:
+        moment = event.moments_model.add(data['label'], data['description'], data['start'], data['end'], data['image_IDs'])
+        return jsonify({"moment": moment})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/moments/<moment_id>", methods=["PUT"])
+@require_auth
+def update_moment(moment_id):
+    """Update a moment."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    try:
+        event.moments_model.edit(moment_id, data)
+        updated = event.moments_model.get(moment_id)
+        return jsonify({"moment": updated})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/moments/<moment_id>", methods=["DELETE"])
+@require_auth
+def delete_moment(moment_id):
+    """Delete a moment."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        event.moments_model.delete(moment_id)
+        return jsonify({"success": True})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/moments/<moment_id>/photos", methods=["GET"])
+@require_auth
+def get_moment_photos(moment_id):
+    """List all photos in a moment."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        image_ids = event.moments_model.get_images(moment_id)
+        return jsonify({"photos": image_ids})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/moments/<moment_id>/photos-in-period", methods=["GET"])
+@require_auth
+def get_moment_photos_in_period(moment_id):
+    """Get photos in a time period for a moment (stub for now)."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        # TODO: Implement logic to get photos within moment's time range
+        # For now, return empty list
+        return jsonify({"photos": []})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/photos/<image_id>/faces", methods=["GET"])
+@require_auth
+def get_photo_faces(image_id):
+    """Get face bounding boxes for a photo."""
+    event = Event(FIXED_EVENT_ID)
+    faces = event.images_model.get_faces(image_id)
+    return jsonify({"faces": faces})
+
+@app.route("/api/photos/<image_id>/info", methods=["GET"])
+@require_auth
+def get_photo_info(image_id):
+    """Get metadata for a photo."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        image = event.images_model.get(image_id)
+        if not image:
+            return not_found(f"Image {image_id} not found")
+        return jsonify(image)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/download", methods=["POST"])
+@require_auth
+def download_images():
+    """Download a zip of images specified in the request body (list of image IDs, and event_id)."""
+    data = request.json or {}
+    event_id = data.get('event_id')
+    image_ids = data.get('images', [])
+    if not event_id or not isinstance(image_ids, list):
+        return bad_request("Missing event_id or images list")
+    event = Event(event_id)
+    profile_id = g.profile_id
+    allowed_files = []
+    for image_id in image_ids:
+        # Check access
+        if hasattr(event, 'profile_model') and not event.profile_model.can_access_image(profile_id, image_id):
+            continue
+        file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
+        if os.path.exists(file_path):
+            allowed_files.append((image_id, file_path))
+    if not allowed_files:
+        return abort(403)
+    # Create zip in memory
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for image_id, file_path in allowed_files:
+            arcname = f'{image_id}.jpg'
+            zf.write(file_path, arcname=arcname)
+    mem_zip.seek(0)
+    return send_file(mem_zip, mimetype='application/zip', as_attachment=True, download_name='photos.zip')
+
+@app.route("/api/images.json", methods=["GET"])
+def get_images_json():
+    """Return images metadata (for frontend compatibility)."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        images = event.images_model.list()
+        return jsonify({"images": images})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route('/api/events/<event_id>/display/<image_id>.jpg')
+@require_auth
+def get_display_image(event_id, image_id):
+    # 1. Check access
+    event = Event(event_id)
+    profile_id = g.profile_id
+    # Implement your access logic here:
+    # e.g., event.profiles_model.can_access_image(profile_id, image_id)
+    if not event.profile_model.can_access_image(profile_id, image_id):
+        return abort(403)
+    # 2. Serve file
+    file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
+    if not os.path.exists(file_path):
+        return abort(404)
+    return send_file(file_path, mimetype='image/jpeg')
+
+@app.route('/api/events/<event_id>/faces/<face_id>.jpg')
+@require_auth
+def get_face_crop(event_id, face_id):
+    """Serve face crop images."""
+    event = Event(event_id)
+    profile_id = g.profile_id
+    
+    # Check if user has access to this face (via the image it belongs to)
+    face = event.faces_model.get(face_id)
+    if not face:
+        return abort(404)
+    
+    image_id = face['imageID']
+    if not event.profile_model.can_access_image(profile_id, image_id):
+        return abort(403)
+    
+    # Serve face crop file
+    file_path = os.path.join(event.faces_dir, f'{face_id}.jpg')
+    if not os.path.exists(file_path):
+        return abort(404)
+    return send_file(file_path, mimetype='image/jpeg')
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)

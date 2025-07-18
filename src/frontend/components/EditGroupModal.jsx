@@ -4,14 +4,15 @@ import { X, Save, User, Image } from 'lucide-react';
 
 export default function EditGroupModal({ group, onClose, onSave }) {
   const [formData, setFormData] = useState({
-    label: group.label || `Person_${group.id}`,
-    representative: group.representative
+    label: group.label || `Person_${group.groupID}`,
+    face_representive: group.face_representive
   });
   const [loading, setLoading] = useState(false);
   const [cropMappings, setCropMappings] = useState({});
   const [cropsLoading, setCropsLoading] = useState(true);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const FIXED_EVENT_ID = "demo-event-id";
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
@@ -26,10 +27,15 @@ export default function EditGroupModal({ group, onClose, onSave }) {
     const fetchCropMappings = async () => {
       try {
         setCropsLoading(true);
-        const response = await fetch(`${API_BASE}/api/groups/${group.id}/crops`);
+        const response = await fetch(`${API_BASE}/api/groups/${group.groupID}/crops`);
         if (response.ok) {
           const data = await response.json();
-          setCropMappings(data.image_crops || {});
+          // Create mapping from face_id to face_id for crops
+          const cropMapping = {};
+          data.face_ids.forEach(faceId => {
+            cropMapping[faceId] = faceId; // face_id is the filename
+          });
+          setCropMappings(cropMapping);
         } else {
           console.error('Failed to fetch crop mappings');
         }
@@ -41,7 +47,7 @@ export default function EditGroupModal({ group, onClose, onSave }) {
     };
 
     fetchCropMappings();
-  }, [group.id, API_BASE]);
+  }, [group.groupID, API_BASE]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -100,19 +106,13 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 </label>
                 <div className="w-32 h-32 rounded-lg overflow-hidden border border-gray-200">
                   <img
-                    src={group.representative_crop
-                      ? `${API_BASE}/crops/${group.representative_crop}`
-                      : `${API_BASE}/images/${group.representative}`}
+                    src={group.face_representive
+                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                      : PLACEHOLDER_DATA_URL}
                     alt="Representative"
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback to original image if crop fails, but only once
-                      if (e.target.src.includes('/crops/') && group.representative) {
-                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                        e.target.src = `/images/${group.representative}`;
-                      } else {
-                        e.target.src = PLACEHOLDER_DATA_URL;
-                      }
+                      e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
                 </div>
@@ -141,44 +141,35 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 </label>
                 {cropsLoading ? (
                   <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
-                    {group.image_ids?.map((imageId, index) => (
-                      <div key={imageId} className="w-full h-20 bg-gray-200 rounded-lg animate-pulse" />
+                    {group.face_IDs?.map((faceId, index) => (
+                      <div key={faceId} className="w-full h-20 bg-gray-200 rounded-lg animate-pulse" />
                     ))}
                   </div>
                 ) : (
                   <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
-                    {group.image_ids?.map((imageId, index) => {
-                      const cropFilename = cropMappings[imageId];
-                      const imageSrc = cropFilename 
-                        ? `${API_BASE}/crops/${cropFilename}`
-                        : `${API_BASE}/images/${imageId}`;
+                    {group.face_IDs?.map((faceId, index) => {
+                      const imageSrc = `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.jpg`;
                       
                       return (
                         <button
-                          key={imageId}
+                          key={faceId}
                           type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, representative: imageId }))}
+                          onClick={() => setFormData(prev => ({ ...prev, face_representive: faceId }))}
                           className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
-                            formData.representative === imageId
+                            formData.face_representive === faceId
                               ? 'border-primary-500'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <img
                             src={imageSrc}
-                            alt={`Photo ${index + 1}`}
+                            alt={`Face ${index + 1}`}
                             className="w-full h-20 object-cover"
                             onError={(e) => {
-                              // Fallback to original image if crop fails, but only once
-                              if (e.target.src.includes('/crops/') && imageId) {
-                                e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                                e.target.src = `/images/${imageId}`;
-                              } else {
-                                e.target.src = PLACEHOLDER_DATA_URL;
-                              }
+                              e.target.src = PLACEHOLDER_DATA_URL;
                             }}
                           />
-                          {formData.representative === imageId && (
+                          {formData.face_representive === faceId && (
                             <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
                               <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                                 <Image className="w-3 h-3 text-white" />

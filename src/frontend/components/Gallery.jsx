@@ -52,33 +52,9 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
     setShowMergeModal(true);
   };
 
-  const handleDownloadGroup = async (group) => {
-    try {
-      const response = await fetch(`/api/groups/${group.id}/download`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      if (blob.size === 0) {
-        throw new Error('Downloaded file is empty');
-      }
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${group.label || `Person_${group.id}`}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error downloading group:', error);
-      alert(`Failed to download photos: ${error.message}. Please try again.`);
-    }
+  const handleAddGroupToBucket = async (group) => {
+    // TODO: Implement add to bucket functionality
+    alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
   };
 
   return (
@@ -189,7 +165,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
                 cardSize={cardSize}
                 onEdit={() => handleEditGroup(group)}
                 onDelete={() => handleDeleteGroup(group)}
-                onDownload={() => handleDownloadGroup(group)}
+                onDownload={() => handleAddGroupToBucket(group)}
               />
             </motion.div>
           ))}

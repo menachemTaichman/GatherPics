@@ -22,15 +22,15 @@ class Moments(BaseModel):
         return moment_data
 
     def add_image_to_moment(self, moment_id: str, image_id: str) -> None:
-        existing = self.db.get_one('moment_images', {'momentID': moment_id, 'imageID': image_id})
-        if not existing:
-            self.db.insert('moment_images', {'momentID': moment_id, 'imageID': image_id})
+        self.event.images_model.edit(image_id, {'momentID': moment_id})
 
     def remove_image_from_moment(self, moment_id: str, image_id: str) -> None:
-        self.db.delete('moment_images', {'momentID': moment_id, 'imageID': image_id})
+        image = self.event.images_model.get(image_id)
+        if image and image['momentID'] == moment_id:
+            self.event.images_model.edit(image_id, {'momentID': ''})
 
     def get_images(self, moment_id: str) -> List[str]:
-        results = self.db.execute_query('SELECT imageID FROM moment_images WHERE momentID=?', (moment_id,))
+        results = self.event.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))
         return [row[0] for row in results]
 
     def get(self, moment_id: str) -> Optional[Dict]:

@@ -35,12 +35,11 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
     setShowActions(!showActions);
   };
 
-  // Prefer thumb_path for the group representative image
-  const imageSrc = group.thumb_path
-    ? `/thumb/${group.thumb_path}`
-    : (group.representative_crop
-      ? `${API_BASE}/crops/${group.representative_crop}`
-      : `${API_BASE}/images/${group.representative}`);
+  const FIXED_EVENT_ID = "demo-event-id";
+  // Use face_representive for the group representative image
+  const imageSrc = group.face_representive
+    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+    : PLACEHOLDER_DATA_URL;
 
   return (
     <>
@@ -57,7 +56,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/face/${group.id}`} className="block mb-3">
+        <Link to={`/face/${group.groupID}`} className="block mb-3">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg"
             style={{ 
@@ -67,7 +66,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
           >
             <img
               src={imageSrc}
-              alt={group.label || `Person ${group.id}`}
+              alt={group.label || `Person ${group.groupID}`}
               className="w-full h-full object-cover"
               onError={(e) => {
                 // Fallback to original image if crop fails, but only once
@@ -99,7 +98,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
           <div className="flex items-center justify-center space-x-2">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-gray-900 truncate text-sm">
-                {group.label || `Person ${group.id}`}
+                {group.label || `Person ${group.groupID}`}
               </h3>
               <p className="text-xs text-gray-500">
                 {group.image_ids?.length || 0} photos

@@ -48,15 +48,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     try {
       setLoading(true);
       
-      const [facesResponse, infoResponse, momentResponse] = await Promise.all([
+      const [facesResponse, infoResponse] = await Promise.all([
         axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/faces`),
-        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/info`),
-        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/moment`).catch(() => ({ data: null }))
+        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/info`)
       ]);
       
       setFaces(facesResponse.data.faces || []);
       setPhotoInfo(infoResponse.data);
-      setMomentInfo(momentResponse.data);
+      // Moment info is included in the photo info response
+      setMomentInfo(infoResponse.data.moment || null);
     } catch (error) {
       console.error('Error loading photo info:', error);
       setFaces([]);

@@ -4,6 +4,7 @@ import { X, Save, Users, Info } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const FIXED_EVENT_ID = "demo-event-id";
 
 export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
@@ -53,8 +54,8 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
     try {
       setLoading(true);
       const response = await axios.post(`${API_BASE}/api/groups/merge`, {
-        targetGroupId: targetGroup,
-        groupIdsToMerge: groupsToMerge
+        target_group_id: targetGroup,
+        source_group_ids: groupsToMerge
       });
 
       if (response.data.success) {
@@ -135,11 +136,11 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
                         <div className="flex items-center space-x-3 flex-1 min-w-0">
                           {/* Representative Photo */}
                           <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
-                            <img
-                              src={group.representative_crop
-                                ? `${API_BASE}/crops/${group.representative_crop}`
-                                : `${API_BASE}/images/${group.representative}`}
-                              alt={group.label || `Person ${group.id}`}
+                                            <img
+                  src={group.face_representive
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                    : PLACEHOLDER_DATA_URL}
+                                                              alt={group.label || `Person ${group.groupID}`}
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 // Fallback to original image if crop fails, but only once

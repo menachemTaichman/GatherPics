@@ -19,7 +19,9 @@ TABLES = {
         date_taken TEXT,
         file_size INTEGER,
         width INTEGER,
-        height INTEGER
+        height INTEGER,
+        momentID TEXT,
+        FOREIGN KEY (momentID) REFERENCES moments(momentID) ON DELETE SET NULL
     ''',
     'groups': '''
         groupID TEXT PRIMARY KEY,
@@ -32,13 +34,6 @@ TABLES = {
         description TEXT,
         start TEXT,
         end TEXT
-    ''',
-    'moment_images': '''
-        momentID TEXT,
-        imageID TEXT,
-        FOREIGN KEY (momentID) REFERENCES moments(momentID) ON DELETE CASCADE,
-        FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE CASCADE,
-        PRIMARY KEY (momentID, imageID)
     ''',
     'profiles': '''
         profileID TEXT PRIMARY KEY,

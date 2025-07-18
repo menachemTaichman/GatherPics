@@ -36,7 +36,7 @@ export default function App() {
     try {
       const response = await axios.put(`/api/groups/${groupId}`, updates);
       setGroups(prev => prev.map(group => 
-        group.id === groupId ? { ...group, ...response.data } : group
+        group.groupID === groupId ? { ...group, ...response.data } : group
       ));
       return response.data;
     } catch (err) {
@@ -48,7 +48,7 @@ export default function App() {
   const deleteGroup = async (groupId) => {
     try {
       await axios.delete(`/api/groups/${groupId}`);
-      setGroups(prev => prev.filter(group => group.id !== groupId));
+      setGroups(prev => prev.filter(group => group.groupID !== groupId));
     } catch (err) {
       console.error('Error deleting group:', err);
       throw err;
