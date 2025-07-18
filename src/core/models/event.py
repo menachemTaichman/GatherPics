@@ -1,10 +1,12 @@
 import json
 import os
 import uuid
-import shutil
 from typing import Optional, List
-from PIL import Image as PILImage
 from .db import AppDB
+from .image import Images
+from .group import Groups
+from .face import Faces
+from ..face_utils import FaceUtils
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
@@ -15,6 +17,10 @@ class Event:
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
         self.db = AppDB(self.DB_PATH)
+        self.images_model = Images(self)
+        self.groups_model = Groups(self)
+        self.faces_model = Faces(self)
+        self.face_utils = FaceUtils(self.id)
         self.display_dir = os.path.join(self.event_dir, 'display')
         self.original_dir = os.path.join(self.event_dir, 'original')
         self.thumb_dir = os.path.join(self.event_dir, 'thumb')
@@ -23,18 +29,18 @@ class Event:
         if not load:
             self.name = ''
             self.date = ''
-            self.photographer = ''
+            self.events_manager = ''
             self._ensure_event_dirs()
             return
         event = _get_event_dict(event_id)
         if event:
             self.name = event.get('name', '')
             self.date = event.get('date', '')
-            self.photographer = event.get('photographer', '')
+            self.events_manager = event.get('events_manager', '')
         else:
             self.name = ''
             self.date = ''
-            self.photographer = ''
+            self.events_manager = ''
         self._ensure_event_dirs()
 
     def _ensure_event_dirs(self):
@@ -68,7 +74,7 @@ class Event:
             'id': self.id,
             'name': self.name,
             'date': self.date,
-            'photographer': self.photographer,
+            'events_manager': self.events_manager,
             'DB_PATH': self.DB_PATH
         }
 
@@ -81,214 +87,149 @@ class Event:
     ) -> dict:
         """
         Process new images from to_process folder.
-        
         Args:
             display_size: Size for display images (width, height)
             thumb_size: Size for thumbnail images (width, height) 
             cluster_threshold: Similarity threshold for face clustering (0-100)
             max_matches_faces: Maximum number of faces to match for clustering
             verbose: Whether to print progress messages
-            
         Returns:
             dict: Summary of processing results
         """
-        from .image import Images
-        from .group import Groups
-        from .face import Faces
-        from ..face_utils import FaceUtils
         from ..image_utils import resize_image, crop_image
         from datetime import datetime
-        
-        if verbose:
-            print(f"Starting image processing for event: {self.name}")
-        
-        # Get list of images to process
-        image_files = [f for f in os.listdir(self.to_process_dir) 
-                      if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff'))]
-        
-        if not image_files:
-            if verbose:
-                print("No images found in to_process folder")
-            return {'images_processed': 0, 'faces_detected': 0, 'groups_created': 0}
-        
-        if verbose:
-            print(f"Found {len(image_files)} images to process")
-        
-        # Initialize database models
-        images_model = Images(self)
-        groups_model = Groups(self)
-        faces_model = Faces(self)
-        face_utils = FaceUtils(self.id)
-        
-        # Temporary storage for faces before clustering
-        all_faces = []
-        processed_images = []
-        
-        # Step 1: Process each image
-        for i, image_file in enumerate(image_files, 1):
-            if verbose:
-                print(f"Processing image {i}/{len(image_files)}: {image_file}")
-            
-            image_path = os.path.join(self.to_process_dir, image_file)
-            
-            try:
-                # Load original image
-                original_img = PILImage.open(image_path)
-                
-                # Get image metadata
-                width, height = original_img.size
-                file_size = os.path.getsize(image_path)
-                
-                # Extract date_taken from EXIF or use current time
+        import os
+        import shutil
+        from PIL import Image as PILImage
+
+        def _get_images_to_process():
+            return [f for f in os.listdir(self.to_process_dir) 
+                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+
+        def _process_face(display_img, bbox, face_id, image_id):
+            crop_img = crop_image(display_img, (
+                int(bbox['Left'] * display_img.width),
+                int(bbox['Top'] * display_img.height),
+                int((bbox['Left'] + bbox['Width']) * display_img.width),
+                int((bbox['Top'] + bbox['Height']) * display_img.height)
+            ))
+            crop_path = os.path.join(self.faces_dir, f"{face_id}.jpg")
+            crop_img.save(crop_path, 'JPEG', quality=90)
+            return self.faces_model.get_add_data(
+                image_ID=image_id,
+                width=bbox['Width'],
+                height=bbox['Height'],
+                left=bbox['Left'],
+                top=bbox['Top'],
+                face_ID=face_id,
+                group_ID=''
+            )
+
+        def _cluster_and_group_faces(face_ids):
+            clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
+            for cluster_idx, cluster in enumerate(clusters, 1):
+                representative_face_id = cluster[0]
+                group_data = self.groups_model.add(
+                    label=f"Person {cluster_idx}",
+                    face_representive=representative_face_id
+                )
+                group_id = group_data['groupID']
+                self.groups_model.add_faces(group_id, cluster)
+            return len(clusters)
+
+        def _process_image(image_file):
+            def _extract_date_taken(image):
                 date_taken = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 try:
-                    # Try to get EXIF data using getexif() method
-                    exif = original_img.getexif()
+                    exif = image.getexif()
                     if exif and 36867 in exif:  # DateTimeOriginal
                         date_taken = exif[36867]
                 except:
                     pass
-                
-                # a. Copy to original folder
+                return date_taken
+
+            def _resize_and_save_images(original_img, image_id):
+                display_img = resize_image(original_img, display_size)
+                thumb_img = resize_image(original_img, thumb_size)
+                display_path = os.path.join(self.display_dir, f"{image_id}.jpg")
+                thumb_path = os.path.join(self.thumb_dir, f"{image_id}.jpg")
+                display_img.save(display_path, 'JPEG', quality=90)
+                thumb_img.save(thumb_path, 'JPEG', quality=90)
+                return display_img
+
+            image_path = os.path.join(self.to_process_dir, image_file)
+            try:
+                original_img = PILImage.open(image_path)
+                width, height = original_img.size
+                file_size = os.path.getsize(image_path)
+                date_taken = _extract_date_taken(original_img)
                 original_save_path = os.path.join(self.original_dir, image_file)
                 shutil.copy2(image_path, original_save_path)
-                
-                # b. Add to database
-                image_data = images_model.add(
+                image_id = self.images_model.add(
                     name=image_file,
                     date_taken=date_taken,
                     file_size=file_size,
                     width=width,
                     height=height
-                )
-                image_id = image_data['imageID']
-                processed_images.append(image_id)
-                
-                # c. Resize for display and thumb
-                display_img = resize_image(original_img, display_size)
-                thumb_img = resize_image(original_img, thumb_size)
-                
-                # Save resized images
-                display_path = os.path.join(self.display_dir, f"{image_id}.jpg")
-                thumb_path = os.path.join(self.thumb_dir, f"{image_id}.jpg")
-                
-                display_img.save(display_path, 'JPEG', quality=90)
-                thumb_img.save(thumb_path, 'JPEG', quality=90)
-                
-                # d. Detect faces using display size image
-                if verbose:
-                    print(f"  Detecting faces in {image_file}...")
-                
-                detected_faces = face_utils.detect_faces(display_img, external_image_id=image_id)
-                
-                if verbose:
-                    print(f"  Detected {len(detected_faces)} faces")
-                
-                # e. Process each detected face
-                for face_id, bbox in detected_faces:
-                    # A. Save face crop
-                    crop_img = crop_image(display_img, (
-                        int(bbox['Left'] * display_img.width),
-                        int(bbox['Top'] * display_img.height),
-                        int((bbox['Left'] + bbox['Width']) * display_img.width),
-                        int((bbox['Top'] + bbox['Height']) * display_img.height)
-                    ))
-                    
-                    crop_filename = f"{face_id}.jpg"
-                    crop_path = os.path.join(self.faces_dir, crop_filename)
-                    crop_img.save(crop_path, 'JPEG', quality=90)
-                    
-                    # B. Add to faces temp list
-                    all_faces.append({
-                        'face_id': face_id,
-                        'image_id': image_id,
-                        'bbox': bbox,
-                        'crop_filename': crop_filename,
-                        'groupid': ''
-                    })
-                
-                # Remove processed image from to_process
+                )["imageID"]
                 os.remove(image_path)
-                
+                display_img = _resize_and_save_images(original_img, image_id)
+                return display_img, image_id, None
             except Exception as e:
+                return None, None, e
+
+        if verbose:
+            print(f"Starting image processing for event: {self.name}")
+        image_files = _get_images_to_process()
+        if not image_files:
+            if verbose:
+                print("No images found in to_process folder")
+            return {
+                'images_processed': 0,
+                'faces_detected': 0,
+                'groups_created': 0
+            }
+        if verbose:
+            print(f"Found {len(image_files)} images to process")
+        all_faces = []
+        processed_images = []
+        for i, image_file in enumerate(image_files, 1):
+            if verbose:
+                print(f"Processing image {i}/{len(image_files)}: {image_file}")
+            display_img, image_id, error = _process_image(image_file)
+            if error is not None or display_img is None or image_id is None:
                 if verbose:
-                    print(f"  Error processing {image_file}: {str(e)}")
+                    print(f"  Error processing {image_file}: {str(error) if error else 'Invalid image or ID'}")
                 continue
-        
+            detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
+            if verbose:
+                print(f"  Detected {len(detected_faces)} faces")
+            for face_id, bbox in detected_faces:
+                face_data = _process_face(display_img, bbox, face_id, image_id)
+                all_faces.append(face_data)
+            processed_images.append(image_id)
+
         if verbose:
             print(f"Completed image processing. Detected {len(all_faces)} total faces")
-        
-        # Step 2: Cluster faces
         if all_faces:
             if verbose:
-                print("Clustering faces...")
-            
-            face_ids = [face['face_id'] for face in all_faces]
-            clusters = face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
-            
-            if verbose:
-                print(f"Found {len(clusters)} face clusters")
-            
-            # Step 3: Process clusters
-            if verbose:
-                print("Processing face clusters...")
-            
-            for cluster_idx, cluster in enumerate(clusters, 1):
-                if verbose:
-                    print(f"  Processing cluster {cluster_idx}/{len(clusters)} with {len(cluster)} faces")
-                
-                # Get faces in this cluster
-                cluster_faces = [face for face in all_faces if face['face_id'] in cluster]
-                
-                # Use first face as representative
-                representative_face = cluster_faces[0]
-                
-                # a. Add group to database
-                group_data = groups_model.add(
-                    label=f"Person {cluster_idx}",
-                    face_representive=representative_face['face_id']
-                )
-                group_id = group_data['groupID']
-                
-                # b. Update all faces in cluster with groupid
-                for face in cluster_faces:
-                    face['groupid'] = group_id
-                
-                # Add faces to group
-                face_ids = [face['face_id'] for face in cluster_faces]
-                groups_model.add_faces(group_id, face_ids)
-            
-            # Step 4: Add all faces to database
-            if verbose:
                 print("Adding faces to database...")
-            
-            for face in all_faces:
-                # Convert bbox coordinates to absolute values
-                bbox = face['bbox']
-                faces_model.add(
-                    image_ID=face['image_id'],
-                    crop_filename=face['crop_filename'],
-                    width=bbox['Width'],
-                    height=bbox['Height'],
-                    left=bbox['Left'],
-                    top=bbox['Top'],
-                    face_ID=face['face_id'],
-                    group_ID=face['groupid']
-                )
-        
-        # Summary
+            self.faces_model.add_many(all_faces)
+            if verbose:
+                print("Clustering faces...")
+            groups_created = _cluster_and_group_faces([face['faceID'] for face in all_faces])
+        else:
+            groups_created = 0
         summary = {
             'images_processed': len(processed_images),
             'faces_detected': len(all_faces),
-            'groups_created': len(clusters) if all_faces else 0
+            'groups_created': groups_created
         }
-        
         if verbose:
             print(f"Processing complete!")
             print(f"  - Images processed: {summary['images_processed']}")
             print(f"  - Faces detected: {summary['faces_detected']}")
             print(f"  - Groups created: {summary['groups_created']}")
-        
         return summary
 
 def _load_events() -> List[dict]:
@@ -307,14 +248,14 @@ def _get_event_dict(event_id: str) -> Optional[dict]:
             return event
     return None
 
-def add_event(name: str, date: str, photographer: str) -> Event:
+def add_event(name: str, date: str, events_manager: str) -> Event:
     event = Event(event_id=str(uuid.uuid4()), load=False)
-    event.edit_fields({'name': name, 'date': date, 'photographer': photographer})
+    event.edit_fields({'name': name, 'date': date, 'events_manager': events_manager})
     event.save()
-    # Insert photographer profile
+    # Insert event_manager profile
     event.db.insert('profiles', {
         'profileID': str(uuid.uuid4()),
-        'label': photographer,
+        'label': events_manager,
         'can_edit_groups': True,
         'can_upload_photos': True,
         'can_edit_moments': True

@@ -1,40 +1,184 @@
-{
-  "name": "face-recognition-website",
-  "version": "1.0.0",
-  "description": "Face recognition website with AWS Rekognition",
-  "main": "index.js",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "vite",
-    "test": "vitest"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "axios": "^1.5.0",
-    "lucide-react": "^0.263.1",
-    "react-router-dom": "^6.8.1",
-    "framer-motion": "^10.16.4",
-    "clsx": "^2.0.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.0.3",
-    "vite": "^4.4.5",
-    "vitest": "^0.34.0",
-    "tailwindcss": "^3.3.3",
-    "autoprefixer": "^10.4.14",
-    "postcss": "^8.4.27"
-  },
-  "keywords": [
-    "face-recognition",
-    "aws",
-    "react",
-    "flask"
-  ],
-  "author": "",
-  "license": "MIT"
-} 
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from functools import wraps
+
+# --- Placeholder for Event and models import ---
+# from src.core.models.event import Event
+
+app = Flask(__name__)
+CORS(app)
+
+# --- Placeholder values for now ---
+FIXED_EVENT_ID = "demo-event-id"
+FIXED_PROFILE_ID = "demo-profile-id"
+
+# --- Auth Decorator (no-op for now) ---
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # In future: check request headers/cookies for auth, validate profile_id, etc.
+        request.profile_id = FIXED_PROFILE_ID
+        return f(*args, **kwargs)
+    return decorated
+
+# --- Error Handlers ---
+@app.errorhandler(400)
+def bad_request(error):
+    return jsonify({"error": "Bad Request", "message": str(error)}), 400
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Not Found", "message": str(error)}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal Server Error", "message": str(error)}), 500
+
+# --- API Endpoints ---
+
+@app.route("/api/groups", methods=["GET"])
+@require_auth
+def get_groups():
+    """List all face groups for the event."""
+    # event = Event(FIXED_EVENT_ID)
+    # groups = event.groups_model.list()
+    return jsonify([])
+
+@app.route("/api/groups/<group_id>", methods=["PUT"])
+@require_auth
+def update_group(group_id):
+    """Update a group's label or representative."""
+    # event = Event(FIXED_EVENT_ID)
+    # data = request.json
+    return jsonify({})
+
+@app.route("/api/groups/<group_id>", methods=["DELETE"])
+@require_auth
+def delete_group(group_id):
+    """Delete a group."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/groups/merge", methods=["POST"])
+@require_auth
+def merge_groups():
+    """Merge multiple groups into a target group."""
+    # event = Event(FIXED_EVENT_ID)
+    # data = request.json
+    return jsonify({})
+
+@app.route("/api/groups/<group_id>/crops", methods=["GET"])
+@require_auth
+def get_group_crops(group_id):
+    """Get crop mappings for all images in a group."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({"image_crops": {}})
+
+@app.route("/api/groups/<group_id>/photos", methods=["GET"])
+@require_auth
+def get_group_photos(group_id):
+    """List all photos for a group, with optional sorting."""
+    # event = Event(FIXED_EVENT_ID)
+    # sort_by = request.args.get("sort_by")
+    # sort_order = request.args.get("sort_order")
+    return jsonify({"photos": []})
+
+@app.route("/api/groups/<group_id>/download", methods=["GET"])
+@require_auth
+def download_group_photos(group_id):
+    """Download all photos for a group as a zip."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/groups/<group_id>/download-selected", methods=["POST"])
+@require_auth
+def download_selected_group_photos(group_id):
+    """Download selected photos for a group as a zip."""
+    # event = Event(FIXED_EVENT_ID)
+    # photo_ids = request.json.get("photoIds", [])
+    return jsonify({})
+
+@app.route("/api/moments", methods=["GET"])
+@require_auth
+def get_moments():
+    """List all moments for the event."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({"moments": []})
+
+@app.route("/api/moments", methods=["POST"])
+@require_auth
+def create_moment():
+    """Create a new moment."""
+    # event = Event(FIXED_EVENT_ID)
+    # data = request.json
+    return jsonify({"moment": {}})
+
+@app.route("/api/moments/<moment_id>", methods=["PUT"])
+@require_auth
+def update_moment(moment_id):
+    """Update a moment."""
+    # event = Event(FIXED_EVENT_ID)
+    # data = request.json
+    return jsonify({"moment": {}})
+
+@app.route("/api/moments/<moment_id>", methods=["DELETE"])
+@require_auth
+def delete_moment(moment_id):
+    """Delete a moment."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/moments/<moment_id>/photos", methods=["GET"])
+@require_auth
+def get_moment_photos(moment_id):
+    """List all photos in a moment."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({"photos": []})
+
+@app.route("/api/photos/<photo_name>/faces", methods=["GET"])
+@require_auth
+def get_photo_faces(photo_name):
+    """Get face bounding boxes for a photo."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({"faces": []})
+
+@app.route("/api/photos/<photo_name>/info", methods=["GET"])
+@require_auth
+def get_photo_info(photo_name):
+    """Get metadata for a photo."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/photos/<photo_name>/moment", methods=["GET"])
+@require_auth
+def get_photo_moment(photo_name):
+    """Get the moment this photo belongs to."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/download-all", methods=["GET"])
+@require_auth
+def download_all_photos():
+    """Download all photos for the event as a zip."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({})
+
+@app.route("/api/download-selected-moment", methods=["POST"])
+@require_auth
+def download_selected_moment_photos():
+    """Download selected photos for a moment as a zip."""
+    # event = Event(FIXED_EVENT_ID)
+    # moment_id = request.json.get("momentId")
+    # photo_names = request.json.get("photoNames", [])
+    return jsonify({})
+
+@app.route("/api/images.json", methods=["GET"])
+def get_images_json():
+    """Return images metadata (for frontend compatibility)."""
+    # event = Event(FIXED_EVENT_ID)
+    return jsonify({"images": []})
+
+# --- Add more endpoints as needed ---
+
+if __name__ == "__main__":
+    app.run(debug=True) 

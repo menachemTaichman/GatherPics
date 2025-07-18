@@ -6,7 +6,6 @@ TABLES = {
     'faces': '''
         faceID TEXT PRIMARY KEY,
         imageID TEXT,
-        crop_filename TEXT,
         width REAL,
         height REAL,
         left REAL,
@@ -51,6 +50,7 @@ TABLES = {
     'profile_images': '''
         profileID TEXT,
         imageID TEXT,
+        accessible BOOLEAN,
         FOREIGN KEY (profileID) REFERENCES profiles(profileID) ON DELETE CASCADE,
         FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE CASCADE,
         PRIMARY KEY (profileID, imageID)
