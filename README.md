@@ -104,9 +104,10 @@ face-recognition-website/
 │   │   ├── index.css           # Global styles
 │   │   └── main.jsx            # Application entry point
 │   └── data/
-│       ├── images/             # Face images
-│       └── clusters_faces.json # Face recognition data
+│       ├── events_managers.json
+│       ├── events.json
 ├── package.json
+├── requirements.txt
 ├── tailwind.config.js
 ├── vite.config.js
 └── README.md
@@ -126,7 +127,7 @@ face-recognition-website/
 - `POST /api/groups/<id>/download-selected` - Download selected photos
 
 ### Images
-- `GET /images/<filename>` - Serve image files
+- `GET /api/images.json` - Get images metadata (backend endpoint for frontend compatibility)
 
 ## 🎯 Usage Guide
 
