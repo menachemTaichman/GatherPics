@@ -1,5 +1,6 @@
 import os
 from .json_model import JsonModel
+from .event import Event
 
 class EventsManager(JsonModel):
     DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events_managers.json')
@@ -7,18 +8,22 @@ class EventsManager(JsonModel):
 
     def _init_fields(self):
         self.name = ''
-        self.events = []
 
     def _load_fields(self, data: dict):
         self.name = data.get('name', '')
-        self.events = data.get('events', [])
 
     def get_info(self) -> dict:
         return {
             'id': self.id,
             'name': self.name,
-            'events': self.events
+            'events': self.get_events()
         }
+
+    def get_events(self):
+        """
+        Return a list of Event objects belonging to this manager.
+        """
+        return [event for event in Event.list_all() if getattr(event, 'events_manager', None) == self.id]
 
 # Convenience functions for compatibility
 add_manager = EventsManager.add
