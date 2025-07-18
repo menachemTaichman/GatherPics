@@ -1,7 +1,4 @@
-import json
 import os
-import uuid
-from typing import Optional, List
 from .db import AppDB
 from .image import Images
 from .group import Groups
@@ -9,13 +6,16 @@ from .face import Faces
 from .moment import Moments
 from .profile import Profiles
 from ..face_utils import FaceUtils
+from .json_model import JsonModel
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
 
-class Event:
+class Event(JsonModel):
+    DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
+    ID_FIELD = 'id'
+
     def __init__(self, event_id: str, load: bool = True):
-        self.id = event_id
+        super().__init__(event_id, load=load)
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
         self.db = AppDB(self.DB_PATH)
@@ -30,22 +30,26 @@ class Event:
         self.thumb_dir = os.path.join(self.event_dir, 'thumb')
         self.to_process_dir = os.path.join(self.event_dir, 'to_process')
         self.faces_dir = os.path.join(self.event_dir, 'faces')
-        if not load:
-            self.name = ''
-            self.date = ''
-            self.events_manager = ''
-            self._ensure_event_dirs()
-            return
-        event = _get_event_dict(event_id)
-        if event:
-            self.name = event.get('name', '')
-            self.date = event.get('date', '')
-            self.events_manager = event.get('events_manager', '')
-        else:
-            self.name = ''
-            self.date = ''
-            self.events_manager = ''
         self._ensure_event_dirs()
+
+    def _init_fields(self):
+        self.name = ''
+        self.date = ''
+        self.events_manager = ''
+
+    def _load_fields(self, data: dict):
+        self.name = data.get('name', '')
+        self.date = data.get('date', '')
+        self.events_manager = data.get('events_manager', '')
+
+    def get_info(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'date': self.date,
+            'events_manager': self.events_manager,
+            'DB_PATH': self.DB_PATH
+        }
 
     def _ensure_event_dirs(self):
         os.makedirs(self.event_dir, exist_ok=True)
@@ -56,31 +60,8 @@ class Event:
         os.makedirs(self.faces_dir, exist_ok=True)
         # Ensure {event_id}.db exists as an SQLite DB
         if not os.path.exists(self.DB_PATH):
-            from .db import AppDB
             db = AppDB(self.DB_PATH)
             db.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
-
-    def edit_fields(self, fields: dict):
-        for key, value in fields.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def save(self):
-        events = _load_events()
-        # Remove old if exists
-        events = [e for e in events if e['id'] != self.id]
-        events.append(self.get_info())
-        _save_events(events)
-        self._ensure_event_dirs()
-
-    def get_info(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'date': self.date,
-            'events_manager': self.events_manager,
-            'DB_PATH': self.DB_PATH
-        }
 
     def process_new_images(self, 
                           display_size: tuple = (1920, 1080), 
@@ -236,56 +217,15 @@ class Event:
             print(f"  - Groups created: {summary['groups_created']}")
         return summary
 
-def _load_events() -> List[dict]:
-    if not os.path.exists(DATA_FILE):
-        return []
-    with open(DATA_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-def _save_events(events: List[dict]):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(events, f, ensure_ascii=False, indent=2)
-
-def _get_event_dict(event_id: str) -> Optional[dict]:
-    for event in _load_events():
-        if event['id'] == event_id:
-            return event
-    return None
-
-def add_event(name: str, date: str, events_manager: str) -> Event:
-    event = Event(event_id=str(uuid.uuid4()), load=False)
-    event.edit_fields({'name': name, 'date': date, 'events_manager': events_manager})
-    event.save()
-    # Insert event_manager profile
-    event.db.insert('profiles', {
-        'profileID': str(uuid.uuid4()),
-        'label': events_manager,
-        'can_edit_groups': True,
-        'can_upload_photos': True,
-        'can_edit_moments': True
-    })
-    # Insert manager profile
-    event.db.insert('profiles', {
-        'profileID': str(uuid.uuid4()),
-        'label': 'manager',
-        'can_edit_groups': True,
-        'can_upload_photos': True,
-        'can_edit_moments': True
-    })
-    return event
-
+# Convenience functions for compatibility
+add_event = Event.add
 def delete_event(event_id: str) -> None:
-    events = _load_events()
-    events = [e for e in events if e['id'] != event_id]
-    _save_events(events)
+    # Remove from JSON
+    Event.delete(event_id)
     # Remove the event directory and its contents
     event_dir = os.path.join(DATA_ROOT, event_id)
     if os.path.exists(event_dir):
         import shutil
         shutil.rmtree(event_dir)
-
-def get_event(event_id: str) -> Event:
-    return Event(event_id)
-
-def list_events() -> List[Event]:
-    return [Event(e['id']) for e in _load_events()] 
+get_event = lambda event_id: Event(event_id)
+list_events = Event.list_all 
