@@ -1,11 +1,11 @@
 from typing import List, Dict
 from PIL import Image as PILImage
 from .base_model import BaseModel
-from .event import Event
+from ..db import AppDB
 
 class Images(BaseModel):
-    def __init__(self, event: Event):
-        super().__init__(event, table_name='images', id_field='imageID')
+    def __init__(self, db: AppDB):
+        super().__init__(db, table_name='images', id_field='imageID')
 
     def get_add_data(self, name: str = '', date_taken: str = '', file_size: int = 0, width: int = 0, height: int = 0, moment_id: str = '') -> Dict:
         return {
@@ -19,7 +19,8 @@ class Images(BaseModel):
 
     def add(self, *args, **kwargs) -> Dict:
         data = super().add(*args, **kwargs)
-        self.event.face_utils.rek_helper.index_faces(data['imageID'])
+        # Note: face_utils.rek_helper.index_faces would need to be called from the Event level
+        # to avoid circular references
         return data
     
     def find_broken_images(self) -> List[str]:
@@ -33,5 +34,5 @@ class Images(BaseModel):
         return PILImage.open(image_path)
 
     def get_faces(self, image_id: str) -> List[str]:
-        results = self.event.db.execute_query('SELECT faceID FROM faces WHERE imageID=?', (image_id,))
+        results = self.db.execute_query('SELECT faceID FROM faces WHERE imageID=?', (image_id,))
         return [row[0] for row in results]

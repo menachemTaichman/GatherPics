@@ -1,10 +1,10 @@
 from typing import Optional, List, Dict
 from .base_model import BaseModel
-from .event import Event
+from ..db import AppDB
 
 class Profiles(BaseModel):
-    def __init__(self, event: Event):
-        super().__init__(event, table_name='profiles', id_field='profileID')
+    def __init__(self, db: AppDB):
+        super().__init__(db, table_name='profiles', id_field='profileID')
 
     def get_add_data(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_photos: bool = False, can_edit_moments: bool = False) -> Dict:
         return {

@@ -1,14 +1,11 @@
 import uuid
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict
-from .db import AppDB
-from .event import Event
+from ..db import AppDB
 
 class BaseModel(ABC):
-    def __init__(self, event: Event, table_name: str, id_field: str):
-        self.event = event
-        self.db_path = event.DB_PATH
-        self.db = AppDB(self.db_path)
+    def __init__(self, db: AppDB, table_name: str, id_field: str):
+        self.db = db
         self.table_name = table_name
         self.id_field = id_field
 

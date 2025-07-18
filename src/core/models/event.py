@@ -1,5 +1,5 @@
 import os
-from .db import AppDB
+from ..db import AppDB
 from .image import Images
 from .group import Groups
 from .face import Faces
@@ -19,11 +19,11 @@ class Event(JsonModel):
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
         self.db = AppDB(self.DB_PATH)
-        self.images_model = Images(self)
-        self.groups_model = Groups(self)
-        self.faces_model = Faces(self)
-        self.moments_model = Moments(self)
-        self.profile_model = Profiles(self)
+        self.images_model = Images(self.db)
+        self.groups_model = Groups(self.db)
+        self.faces_model = Faces(self.db)
+        self.moments_model = Moments(self.db)
+        self.profile_model = Profiles(self.db)
         self.face_utils = FaceUtils(self.id)
         self.display_dir = os.path.join(self.event_dir, 'display')
         self.original_dir = os.path.join(self.event_dir, 'original')

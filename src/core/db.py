@@ -52,10 +52,8 @@ TABLES = {
     '''
 }
 
-DB_PATH = 'src/data/faces.db'
-
 class AppDB:
-    def __init__(self, db_path: str = DB_PATH):
+    def __init__(self, db_path: str):
         self.db_path = db_path
 
     @contextmanager

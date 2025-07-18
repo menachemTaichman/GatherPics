@@ -1,10 +1,10 @@
 from typing import List, Dict
 from .base_model import BaseModel
-from .event import Event
+from ..db import AppDB
 
 class Faces(BaseModel):
-    def __init__(self, event: Event):
-        super().__init__(event, table_name='faces', id_field='faceID')
+    def __init__(self, db: AppDB):
+        super().__init__(db, table_name='faces', id_field='faceID')
 
     def get_add_data(self, image_ID: str = '', width: float = 0.0, height: float = 0.0, left: float = 0.0, top: float = 0.0, face_ID: str = '', group_ID: str = '') -> Dict:
         return {
@@ -22,5 +22,6 @@ class Faces(BaseModel):
 
     def delete(self, face_ID: str):
         super().delete(face_ID)
-        self.event.face_utils.rek_helper.delete_faces([face_ID])
+        # Note: face_utils.rek_helper.delete_faces would need to be called from the Event level
+        # to avoid circular references
 

@@ -1,10 +1,10 @@
 from typing import Optional, List, Dict
 from .base_model import BaseModel
-from .event import Event
+from ..db import AppDB
 
 class Groups(BaseModel):
-    def __init__(self, event: Event):
-        super().__init__(event, table_name='groups', id_field='groupID')
+    def __init__(self, db: AppDB):
+        super().__init__(db, table_name='groups', id_field='groupID')
 
     def get_add_data(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
         return {
@@ -30,13 +30,13 @@ class Groups(BaseModel):
         return [row[0] for row in results]
 
     def get_images(self, group_id: str) -> List[str]:
-        face_ids = self.get_faces(group_id)
-        image_ids = []
-        for face_id in face_ids:
-            face = self.event.faces_model.get(face_id)
-            if face:
-                image_ids.append(face['imageID'])
-        return image_ids
+        query = '''
+            SELECT DISTINCT f.imageID 
+            FROM faces f 
+            WHERE f.groupID = ?
+        '''
+        results = self.db.execute_query(query, (group_id,))
+        return [row[0] for row in results]
 
     def get(self, group_id: str) -> Optional[Dict]:
         group = super().get(group_id)

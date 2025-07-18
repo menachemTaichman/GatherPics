@@ -1,10 +1,10 @@
 from typing import Optional, List, Dict
 from .base_model import BaseModel
-from .event import Event
+from ..db import AppDB
 
 class Moments(BaseModel):
-    def __init__(self, event: Event):
-        super().__init__(event, table_name='moments', id_field='momentID')
+    def __init__(self, db: AppDB):
+        super().__init__(db, table_name='moments', id_field='momentID')
 
     def get_add_data(self, label: str = '', description: str = '', start: str = '', end: str = '', image_IDs: List[str] = []) -> Dict:
         return {
@@ -22,15 +22,13 @@ class Moments(BaseModel):
         return moment_data
 
     def add_image_to_moment(self, moment_id: str, image_id: str) -> None:
-        self.event.images_model.edit(image_id, {'momentID': moment_id})
+        self.db.execute_query('UPDATE images SET momentID=? WHERE imageID=?', (moment_id, image_id))
 
     def remove_image_from_moment(self, moment_id: str, image_id: str) -> None:
-        image = self.event.images_model.get(image_id)
-        if image and image['momentID'] == moment_id:
-            self.event.images_model.edit(image_id, {'momentID': ''})
+        self.db.execute_query('UPDATE images SET momentID=NULL WHERE imageID=? AND momentID=?', (image_id, moment_id))
 
     def get_images(self, moment_id: str) -> List[str]:
-        results = self.event.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))
+        results = self.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))
         return [row[0] for row in results]
 
     def get(self, moment_id: str) -> Optional[Dict]:
