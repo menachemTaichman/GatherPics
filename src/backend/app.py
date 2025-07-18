@@ -13,8 +13,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Placeholder values for now ---
-FIXED_EVENT_ID = "demo-event-id"
-FIXED_PROFILE_ID = "demo-profile-id"
+FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
+FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Auth Decorator (no-op for now) ---
 def require_auth(f):
@@ -212,7 +212,7 @@ def download_images():
     allowed_files = []
     for image_id in image_ids:
         # Check access
-        if hasattr(event, 'profile_model') and not event.profile_model.can_access_image(profile_id, image_id):
+        if hasattr(event, 'profile_model') and image_id not in event.profile_model.get_accessible_images(profile_id):
             continue
         file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
         if os.path.exists(file_path):
@@ -244,9 +244,8 @@ def get_display_image(event_id, image_id):
     # 1. Check access
     event = Event(event_id)
     profile_id = g.profile_id
-    # Implement your access logic here:
-    # e.g., event.profiles_model.can_access_image(profile_id, image_id)
-    if not event.profile_model.can_access_image(profile_id, image_id):
+    # Check if user has access to this image
+    if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
     # 2. Serve file
     file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
@@ -267,7 +266,7 @@ def get_face_crop(event_id, face_id):
         return abort(404)
     
     image_id = face['imageID']
-    if not event.profile_model.can_access_image(profile_id, image_id):
+    if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
     
     # Serve face crop file

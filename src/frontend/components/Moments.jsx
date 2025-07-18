@@ -6,7 +6,6 @@ import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation } from 'react-router-dom';
-import imagesData from '../../data/images.json';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -85,9 +84,8 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
 
   // Helper to get thumb filename
   const getThumbFilename = (photo) => {
-    // Try to find the image metadata
-    const meta = imagesData.images.find(img => img.name === photo.name || img.original_path === photo.name || img.display_path === photo.name || img.thumb_path === photo.name);
-    return meta?.thumb_path || meta?.display_path || meta?.original_path || photo.thumb_path || photo.name;
+    // Use the photo data directly since it comes from the API
+    return photo.thumb_path || photo.display_path || photo.original_path || photo.name;
   };
 
   if (loading) return <div className="py-4 text-gray-400">Loading photos...</div>;
@@ -377,13 +375,13 @@ export default function Moments() {
   };
 
   const openPhotoViewer = (photos, photoName, index) => {
-    // Find the metadata for the photoName
-    const photoMeta = imagesData.images.find(img => img.name === photoName || img.original_path === photoName || img.display_path === photoName || img.thumb_path === photoName) || { name: photoName };
+    // Find the photo in the photos array
+    const photoMeta = photos.find(p => p.name === photoName) || { name: photoName };
     setPhotoViewer({
       show: true,
       photo: photoMeta,
       index: index,
-      photos: photos.map(p => imagesData.images.find(img => img.name === p.name || img.original_path === p.name || img.display_path === p.name || img.thumb_path === p.name) || { name: p.name })
+      photos: photos
     });
   };
 

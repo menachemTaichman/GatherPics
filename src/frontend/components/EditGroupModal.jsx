@@ -12,7 +12,7 @@ export default function EditGroupModal({ group, onClose, onSave }) {
   const [cropsLoading, setCropsLoading] = useState(true);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "demo-event-id";
+  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =

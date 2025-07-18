@@ -4,7 +4,7 @@ import { X, Save, Users, Info } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-const FIXED_EVENT_ID = "demo-event-id";
+const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
 
 export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
@@ -118,19 +118,19 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
                   {groups.map((group) => (
                     <div
-                      key={group.id}
+                      key={group.groupID}
                       className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedGroups.has(group.id)
+                        selectedGroups.has(group.groupID)
                           ? 'border-primary-500 bg-primary-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      onClick={() => handleGroupSelect(group.id)}
+                                              onClick={() => handleGroupSelect(group.groupID)}
                     >
                       <div className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                          checked={selectedGroups.has(group.id)}
-                          onChange={() => handleGroupSelect(group.id)}
+                                                  checked={selectedGroups.has(group.groupID)}
+                        onChange={() => handleGroupSelect(group.groupID)}
                           className="rounded"
                         />
                         <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -155,7 +155,7 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-900 truncate">
-                              {group.label || `Person ${group.id}`}
+                              {group.label || `Person ${group.groupID}`}
                             </p>
                             <p className="text-sm text-gray-500">
                               {group.image_ids?.length || 0} photos

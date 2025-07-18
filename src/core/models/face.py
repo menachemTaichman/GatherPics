@@ -14,7 +14,7 @@ class Faces(BaseModel):
             'left': left,
             'top': top,
             'faceID': face_ID,
-            'groupID': group_ID
+            'groupID': group_ID if group_ID else None
         }
 
     def find_broken_faces(self) -> List[str]:

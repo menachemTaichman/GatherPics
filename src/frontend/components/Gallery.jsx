@@ -18,7 +18,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = groups.filter(group => 
       group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      group.id.toString().includes(searchTerm)
+              group.groupID.toString().includes(searchTerm)
     );
 
     // Sort groups
@@ -155,7 +155,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
         >
           {filteredAndSortedGroups.map((group, index) => (
             <motion.div
-              key={group.id}
+              key={group.groupID}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
@@ -181,7 +181,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
             setSelectedGroup(null);
           }}
           onSave={async (updates) => {
-            await onUpdateGroup(selectedGroup.id, updates);
+            await onUpdateGroup(selectedGroup.groupID, updates);
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
@@ -196,7 +196,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
             setSelectedGroup(null);
           }}
           onConfirm={async () => {
-            await onDeleteGroup(selectedGroup.id);
+            await onDeleteGroup(selectedGroup.groupID);
             setShowDeleteModal(false);
             setSelectedGroup(null);
           }}

@@ -1,1 +1,9 @@
-[] 
+[
+  {
+    "id": "75cb6635-879d-4386-b023-366444dc0fb2",
+    "name": "Test Event",
+    "date": "",
+    "events_manager": "81580a61-a2e8-4e1c-965a-8e0f8b590e29",
+    "DB_PATH": "C:\\Users\\metai\\VscodeProjects\\face-recognition-website\\src\\core\\models\\../../data\\75cb6635-879d-4386-b023-366444dc0fb2\\75cb6635-879d-4386-b023-366444dc0fb2.db"
+  }
+]

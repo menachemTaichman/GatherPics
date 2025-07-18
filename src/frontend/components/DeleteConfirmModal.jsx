@@ -42,13 +42,13 @@ export default function DeleteConfirmModal({ group, onClose, onConfirm }) {
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                   <img
                     src={`/images/${group.representative}`}
-                    alt={group.label || `Person ${group.id}`}
+                    alt={group.label || `Person ${group.groupID}`}
                     className="w-full h-full object-cover"
                   />
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">
-                    {group.label || `Person ${group.id}`}
+                    {group.label || `Person ${group.groupID}`}
                   </h3>
                   <p className="text-sm text-gray-500">
                     {group.image_ids?.length || 0} photos will be deleted

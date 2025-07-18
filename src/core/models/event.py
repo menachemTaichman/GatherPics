@@ -62,6 +62,32 @@ class Event(JsonModel):
         if not os.path.exists(self.DB_PATH):
             db = AppDB(self.DB_PATH)
             db.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
+            self._initialize_default_profiles()
+
+    def _initialize_default_profiles(self):
+        """Initialize default profiles for the event: Main Manager and Event Manager"""
+        # Check if profiles already exist to avoid duplicates
+        existing_profiles = self.profile_model.list()
+        if existing_profiles:
+            return  # Profiles already exist, don't create duplicates
+        
+        # Create Main Manager profile (full permissions)
+        main_manager_profile = self.profile_model.add(
+            label="Main Manager",
+            all_images=True,
+            can_edit_groups=True,
+            can_upload_photos=True,
+            can_edit_moments=True
+        )
+        
+        # Create Event Manager profile (limited permissions)
+        event_manager_profile = self.profile_model.add(
+            label="Event Manager", 
+            all_images=True,
+            can_edit_groups=True,
+            can_upload_photos=True,
+            can_edit_moments=True
+        )
 
     def process_new_images(self, 
                           display_size: tuple = (1920, 1080), 
@@ -112,7 +138,8 @@ class Event(JsonModel):
 
         def _cluster_and_group_faces(face_ids):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
-            for cluster_idx, cluster in enumerate(clusters, 1):
+            num_groups = len(self.groups_model.list())
+            for cluster_idx, cluster in enumerate(clusters, num_groups + 1):
                 representative_face_id = cluster[0]
                 group_data = self.groups_model.add(
                     label=f"Person {cluster_idx}",
@@ -148,8 +175,6 @@ class Event(JsonModel):
                 width, height = original_img.size
                 file_size = os.path.getsize(image_path)
                 date_taken = _extract_date_taken(original_img)
-                original_save_path = os.path.join(self.original_dir, image_file)
-                shutil.copy2(image_path, original_save_path)
                 image_id = self.images_model.add(
                     name=image_file,
                     date_taken=date_taken,
@@ -157,8 +182,11 @@ class Event(JsonModel):
                     width=width,
                     height=height
                 )["imageID"]
-                os.remove(image_path)
                 display_img = _resize_and_save_images(original_img, image_id)
+                original_save_path = os.path.join(self.original_dir, image_id + '.jpg')
+                shutil.copy2(image_path, original_save_path)
+                original_img.close()
+                os.remove(image_path)
                 return display_img, image_id, None
             except Exception as e:
                 return None, None, e

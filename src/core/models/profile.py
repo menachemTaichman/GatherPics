@@ -38,16 +38,12 @@ class Profiles(BaseModel):
         self.db.delete('profile_images', {'profileID': profile_id, 'imageID': image_id})
 
     def is_all_images(self, profile_id: str) -> bool:
-        profile = self.get(profile_id)
+        profile = super().get(profile_id)
         return profile['all_images'] if profile else False
-
-    def can_access_image(self, profile_id: str, image_id: str) -> bool:
-        existing = self.db.get_one('profile_images', {'profileID': profile_id, 'imageID': image_id})
-        return existing is not None
 
     def get_accessible_images(self, profile_id: str) -> List[str]:
         if self.is_all_images(profile_id):
-            # Return all images except those marked accessible=0 for this profile
+            # Return all images except those explicitly excluded (accessible=0) for this profile
             query = '''
                 SELECT images.imageID
                 FROM images
@@ -56,6 +52,7 @@ class Profiles(BaseModel):
             '''
             results = self.db.execute_query(query, (profile_id,))
         else:
+            # Return only explicitly allowed images (accessible=1) for this profile
             results = self.db.execute_query('SELECT imageID FROM profile_images WHERE profileID=? AND accessible=1', (profile_id,))
         return [row[0] for row in results]
 

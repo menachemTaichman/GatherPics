@@ -22,10 +22,9 @@ import {
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import PhotoViewer from './PhotoViewer';
-import imagesData from '../../data/images.json';
 
 export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
-  const { groupId } = useParams();
+  const { group_id } = useParams();
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
@@ -44,29 +43,29 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [imageCrops, setImageCrops] = useState({}); // New state for crop data
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "demo-event-id";
+  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
-    const foundGroup = groups.find(g => g.groupID.toString() === groupId);
+    const foundGroup = groups.find(g => g.groupID === group_id);
     if (foundGroup) {
       setGroup(foundGroup);
     } else {
       navigate('/');
     }
-  }, [groupId, groups, navigate]);
+  }, [group_id, groups, navigate]);
 
   // Fetch sorted photos from backend
   useEffect(() => {
-    if (group && group.id !== undefined && group.id !== null) {
+    if (group && group.groupID !== undefined && group.groupID !== null) {
       fetchSortedPhotos();
     }
   }, [group, sortBy, sortOrder]);
 
   // Fetch crop data when group changes
   useEffect(() => {
-    if (group && group.id !== undefined && group.id !== null) {
+    if (group && group.groupID !== undefined && group.groupID !== null) {
       fetchGroupCrops();
     }
   }, [group]);
@@ -189,8 +188,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   };
 
   const openPhotoViewer = (photoId, index) => {
-    // Find the metadata for the photoId
-    const photoMeta = imagesData.images.find(img => img.name === photoId || img.original_path === photoId || img.display_path === photoId || img.thumb_path === photoId) || { name: photoId };
+    // Use the photo data directly since it comes from the API
+    const photoMeta = { name: photoId };
     setPhotoViewer({
       show: true,
       photo: photoMeta,
@@ -244,7 +243,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                 <img
                   src={group.face_representive
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.jpg`
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"
@@ -583,7 +582,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           group={group}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            await onUpdateGroup(group.id, updates);
+            await onUpdateGroup(group.groupID, updates);
             setGroup(prev => ({ ...prev, ...updates }));
             setShowEditModal(false);
           }}
@@ -595,7 +594,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           group={group}
           onClose={() => setShowDeleteModal(false)}
           onConfirm={async () => {
-            await onDeleteGroup(group.id);
+            await onDeleteGroup(group.groupID);
             navigate('/');
           }}
         />
@@ -609,7 +608,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           onNavigate={navigatePhoto}
           totalPhotos={filteredPhotos.length}
           currentIndex={photoViewer.index}
-          currentGroupId={group.id}
+          currentGroupId={group.groupID}
           onJumpToMoment={handleJumpToMoment}
         />
       )}

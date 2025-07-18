@@ -115,7 +115,7 @@ export default function App() {
               } 
             />
             <Route 
-              path="/face/:groupId" 
+              path="/face/:group_id" 
               element={
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}

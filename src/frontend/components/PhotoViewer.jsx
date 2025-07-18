@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import imagesData from '../../data/images.json';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment }) {
   const navigate = useNavigate();
@@ -18,18 +17,18 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
 
-  // If 'photo' is a string (filename), look up the metadata from images.json
+  // Use the photo object directly since it comes from the API
   let photoMeta = photo;
   if (typeof photo === 'string') {
-    // Try to find the metadata by name
-    photoMeta = imagesData.images.find(img => img.name === photo || img.original_path === photo || img.display_path === photo || img.thumb_path === photo) || { name: photo };
+    photoMeta = { name: photo };
   }
-  // Use the *_path fields directly
+  // Use the photo data directly
   const displayFilename = photoMeta.display_path || photoMeta.thumb_path || photoMeta.original_path || photoMeta.name;
 
   useEffect(() => {
@@ -49,8 +48,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       setLoading(true);
       
       const [facesResponse, infoResponse] = await Promise.all([
-        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/faces`),
-        axios.get(`/api/photos/${encodeURIComponent(photoMeta.name)}/info`)
+        axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/faces`),
+        axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/info`)
       ]);
       
       setFaces(facesResponse.data.faces || []);
@@ -78,7 +77,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(`/images/${photoMeta.name}`);
+      const response = await fetch(`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -225,7 +224,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <h2 className="text-lg font-semibold text-gray-900">{photoMeta.name}</h2>
                 {photoInfo && (
                   <p className="text-sm text-gray-500">
-                    {photoInfo.faces_count} faces • {photoInfo.groups.length} groups
+                    {photoInfo.faces_count || 0} faces • {photoInfo.groups?.length || 0} groups
                   </p>
                 )}
               </div>
@@ -280,7 +279,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   }}
                 >
                   <img
-                    src={`${API_BASE}/${displayFilename}`}
+                    src={`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`}
                     alt={photoMeta.name}
                     className="max-w-full max-h-full object-contain select-none"
                     draggable={false}

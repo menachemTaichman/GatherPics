@@ -94,7 +94,7 @@ class FaceUtils:
         buffer.seek(0)
         image_bytes = buffer.read()
         face_details = self.rek_helper.index_faces(image_bytes, external_image_id)
-        faces = [(face['FaceId'], face['BoundingBox']) for face in face_details]
+        faces = [(face['Face']['FaceId'], face['Face']['BoundingBox']) for face in face_details]
         return faces
 
     def cluster_faces(

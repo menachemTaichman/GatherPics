@@ -11,7 +11,7 @@ TABLES = {
         left REAL,
         top REAL,
         groupID TEXT,
-        FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE CASCADE
+        FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE SET NULL
     ''',
     'images': '''
         imageID TEXT PRIMARY KEY,
@@ -38,6 +38,7 @@ TABLES = {
     'profiles': '''
         profileID TEXT PRIMARY KEY,
         label TEXT,
+        all_images BOOLEAN,
         can_edit_groups BOOLEAN,
         can_upload_photos BOOLEAN,
         can_edit_moments BOOLEAN
@@ -121,7 +122,12 @@ class AppDB:
         """Execute a custom query and return results."""
         with self.get_connection() as conn:
             cursor = conn.execute(query, params)
-            return cursor.fetchall()
+            # For SELECT queries, fetch and return results
+            if query.strip().upper().startswith('SELECT'):
+                return cursor.fetchall()
+            # For non-SELECT queries (INSERT, UPDATE, DELETE), commit and return empty list
+            conn.commit()
+            return []
 
     def update(self, table: str, where: Dict, fields: Dict):
         with self.get_connection() as conn:

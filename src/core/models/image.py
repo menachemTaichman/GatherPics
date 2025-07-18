@@ -14,7 +14,7 @@ class Images(BaseModel):
             'file_size': file_size,
             'width': width,
             'height': height,
-            'momentID': moment_id
+            'momentID': moment_id if moment_id else None
         }
 
     def add(self, *args, **kwargs) -> Dict:

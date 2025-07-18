@@ -1,3 +1,5 @@
+const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
+
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,11 +36,9 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
     }
     setShowActions(!showActions);
   };
-
-  const FIXED_EVENT_ID = "demo-event-id";
   // Use face_representive for the group representative image
   const imageSrc = group.face_representive
-    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.jpg`
     : PLACEHOLDER_DATA_URL;
 
   return (
@@ -122,7 +122,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
       {/* Dropdown Menu - Rendered as Portal */}
       <AnimatePresence>
         {showActions && (
-          <>
+          <div key="dropdown-menu">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -175,7 +175,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
               className="fixed inset-0 z-[999]"
               onClick={() => setShowActions(false)}
             />
-          </>
+          </div>
         )}
       </AnimatePresence>
     </>
