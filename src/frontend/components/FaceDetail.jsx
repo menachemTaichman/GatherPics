@@ -97,12 +97,21 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     try {
       setLoading(true);
       const response = await fetch(
-        `${API_BASE}/api/groups/${group.groupID}/photos?sort_by=${sortBy}&sort_order=${sortOrder}`
+        `${API_BASE}/api/groups/${group.groupID}/photos-complete`
       );
       
       if (response.ok) {
         const data = await response.json();
-        setSortedPhotos(data.photos || []);
+        // Transform the complete photo data to match expected format
+        const transformedPhotos = data.photos.map(photo => ({
+          photo_id: photo.id,
+          date_taken: photo.date_taken,
+          formatted_date: photo.date_taken,
+          urls: photo.urls,
+          faces: photo.faces,
+          moment: photo.moment
+        }));
+        setSortedPhotos(transformedPhotos);
       } else {
         console.error('Failed to fetch sorted photos');
         setSortedPhotos(group.face_IDs?.map(id => ({ photo_id: id, date_taken: null, formatted_date: null })) || []);
@@ -490,16 +499,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <img
                     src={showCrops && imageCrops[photo.photo_id] 
                       ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
-                      : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
+                      : photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
                     }
                     alt={`Photo ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
                     onLoad={(e) => handleImageLoad(photo.photo_id, e)}
                     onError={(e) => {
-                      if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/crops/')) {
-                        // Fallback to full image if crop fails
+                      if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/faces/')) {
+                        // Fallback to display image if crop fails
                         e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                        e.target.src = `${API_BASE}/images/${photo.photo_id}`;
+                        e.target.src = photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`;
                       } else {
                         e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
                         e.target.src = PLACEHOLDER_DATA_URL;
@@ -540,16 +549,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                     <img
                       src={showCrops && imageCrops[photo.photo_id] 
                         ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
-                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
+                        : photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => openPhotoViewer(photo.photo_id, index)}
                       onError={(e) => {
-                        if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/crops/')) {
-                          // Fallback to full image if crop fails
+                        if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/faces/')) {
+                          // Fallback to display image if crop fails
                           e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                          e.target.src = `${API_BASE}/images/${photo.photo_id}`;
+                          e.target.src = photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`;
                         } else {
                           e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
                           e.target.src = PLACEHOLDER_DATA_URL;

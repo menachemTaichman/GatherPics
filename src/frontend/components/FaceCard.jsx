@@ -56,7 +56,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/face/${group.groupID}`} className="block mb-3">
+        <Link to={`/group/${group.groupID}`} className="block mb-3">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg"
             style={{ 
@@ -68,6 +68,9 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
               src={imageSrc}
               alt={group.label || `Person ${group.groupID}`}
               className="w-full h-full object-cover"
+              style={{
+                objectPosition: 'center center'
+              }}
               onError={(e) => {
                 // Fallback to original image if crop fails, but only once
                 if (e.target.src.includes('/crops/') && group.representative) {

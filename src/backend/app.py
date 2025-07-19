@@ -16,6 +16,78 @@ CORS(app)
 FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
+# --- Utility Functions ---
+def build_complete_photo_data(event, image_id, include_all_faces=True, group_filter=None):
+    """Build complete photo data including metadata, faces, and URLs."""
+    try:
+        # Get basic image info
+        image = event.images_model.get(image_id)
+        if not image:
+            return None
+        
+        # Get face data
+        face_ids = event.images_model.get_faces(image_id)
+        faces_data = []
+        for face_id in face_ids:
+            face = event.faces_model.get(face_id)
+            if face:
+                # Apply group filter if specified
+                if group_filter and face.get('groupID') != group_filter:
+                    continue
+                
+                group = None
+                if face.get('groupID'):
+                    group = event.groups_model.get(face['groupID'])
+                
+                face_data = {
+                    'face_id': face_id,
+                    'face_coords': {
+                        'Left': face['left'],
+                        'Top': face['top'], 
+                        'Width': face['width'],
+                        'Height': face['height']
+                    },
+                    'group_id': face.get('groupID'),
+                    'group_label': group['label'] if group else 'Unknown',
+                    'group_representative': group.get('face_representive') if group else None
+                }
+                faces_data.append(face_data)
+        
+        # Get moment info if available
+        moment_info = None
+        if image.get('momentID'):
+            moment = event.moments_model.get(image['momentID'])
+            if moment:
+                moment_info = {
+                    'id': moment['id'],
+                    'title': moment['title'],
+                    'description': moment.get('description', ''),
+                    'start': moment.get('start'),
+                    'end': moment.get('end')
+                }
+        
+        # Build complete response
+        photo_data = {
+            'id': image_id,
+            'name': image['name'],
+            'date_taken': image.get('date_taken'),
+            'file_size': image.get('file_size'),
+            'width': image.get('width'),
+            'height': image.get('height'),
+            'faces_count': len(faces_data),
+            'faces': faces_data,
+            'moment': moment_info,
+            'urls': {
+                'display': f'/api/events/{FIXED_EVENT_ID}/display/{image_id}.jpg',
+                'thumbnail': f'/api/events/{FIXED_EVENT_ID}/thumb/{image_id}.jpg',
+                'original': f'/api/events/{FIXED_EVENT_ID}/original/{image_id}.jpg'
+            }
+        }
+        
+        return photo_data
+    except Exception as e:
+        return None
+
 # --- Auth Decorator (no-op for now) ---
 def require_auth(f):
     @wraps(f)
@@ -182,8 +254,35 @@ def get_moment_photos_in_period(moment_id):
 def get_photo_faces(image_id):
     """Get face bounding boxes for a photo."""
     event = Event(FIXED_EVENT_ID)
-    faces = event.images_model.get_faces(image_id)
-    return jsonify({"faces": faces})
+    
+    # Get face IDs for this image
+    face_ids = event.images_model.get_faces(image_id)
+    
+    # Get complete face data with group information
+    faces_data = []
+    for face_id in face_ids:
+        face = event.faces_model.get(face_id)
+        if face:
+            # Get group information
+            group = None
+            if face.get('groupID'):
+                group = event.groups_model.get(face['groupID'])
+            
+            face_data = {
+                'face_id': face_id,
+                'face_coords': {
+                    'Left': face['left'],
+                    'Top': face['top'], 
+                    'Width': face['width'],
+                    'Height': face['height']
+                },
+                'group_id': face.get('groupID'),
+                'group_label': group['label'] if group else 'Unknown',
+                'group_representative': group.get('face_representive') if group else None
+            }
+            faces_data.append(face_data)
+    
+    return jsonify({"faces": faces_data})
 
 @app.route("/api/photos/<image_id>/info", methods=["GET"])
 @require_auth
@@ -195,6 +294,60 @@ def get_photo_info(image_id):
         if not image:
             return not_found(f"Image {image_id} not found")
         return jsonify(image)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/photos/<image_id>/complete", methods=["GET"])
+@require_auth
+def get_photo_complete(image_id):
+    """Get complete photo data including metadata, faces, and URLs."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        photo_data = build_complete_photo_data(event, image_id)
+        if not photo_data:
+            return not_found(f"Image {image_id} not found")
+        return jsonify(photo_data)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/groups/<group_id>/photos-complete", methods=["GET"])
+@require_auth
+def get_group_photos_complete(group_id):
+    """Get complete photo data for all photos in a group."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    
+    # Get image IDs for this group
+    image_ids = event.groups_model.get_images(group_id)
+    
+    # Get complete photo data for each image (filtered to this group)
+    photos_data = []
+    for image_id in image_ids:
+        photo_data = build_complete_photo_data(event, image_id, group_filter=group_id)
+        if photo_data:
+            photos_data.append(photo_data)
+    
+    return jsonify({"photos": photos_data})
+
+@app.route("/api/moments/<moment_id>/photos-complete", methods=["GET"])
+@require_auth
+def get_moment_photos_complete(moment_id):
+    """Get complete photo data for all photos in a moment."""
+    event = Event(FIXED_EVENT_ID)
+    try:
+        # Get image IDs for this moment
+        image_ids = event.moments_model.get_images(moment_id)
+        
+        # Get complete photo data for each image
+        photos_data = []
+        for image_id in image_ids:
+            photo_data = build_complete_photo_data(event, image_id)
+            if photo_data:
+                photos_data.append(photo_data)
+        
+        return jsonify({"photos": photos_data})
     except Exception as e:
         return bad_request(e)
 
@@ -271,6 +424,40 @@ def get_face_crop(event_id, face_id):
     
     # Serve face crop file
     file_path = os.path.join(event.faces_dir, f'{face_id}.jpg')
+    if not os.path.exists(file_path):
+        return abort(404)
+    return send_file(file_path, mimetype='image/jpeg')
+
+@app.route('/api/events/<event_id>/thumb/<image_id>.jpg')
+@require_auth
+def get_thumbnail_image(event_id, image_id):
+    """Serve thumbnail images."""
+    event = Event(event_id)
+    profile_id = g.profile_id
+    
+    # Check if user has access to this image
+    if image_id not in event.profile_model.get_accessible_images(profile_id):
+        return abort(403)
+    
+    # Serve thumbnail file
+    file_path = os.path.join(event.thumb_dir, f'{image_id}.jpg')
+    if not os.path.exists(file_path):
+        return abort(404)
+    return send_file(file_path, mimetype='image/jpeg')
+
+@app.route('/api/events/<event_id>/original/<image_id>.jpg')
+@require_auth
+def get_original_image(event_id, image_id):
+    """Serve original images."""
+    event = Event(event_id)
+    profile_id = g.profile_id
+    
+    # Check if user has access to this image
+    if image_id not in event.profile_model.get_accessible_images(profile_id):
+        return abort(403)
+    
+    # Serve original file
+    file_path = os.path.join(event.original_dir, f'{image_id}.jpg')
     if not os.path.exists(file_path):
         return abort(404)
     return send_file(file_path, mimetype='image/jpeg')

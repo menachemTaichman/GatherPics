@@ -42,12 +42,14 @@ class Groups(BaseModel):
         group = super().get(group_id)
         if group:
             group['face_IDs'] = self.get_faces(group_id)
+            group['image_ids'] = self.get_images(group_id)
         return group
 
     def list(self) -> List[Dict]:
         groups = super().list()
         for group in groups:
             group['face_IDs'] = self.get_faces(group['groupID'])
+            group['image_ids'] = self.get_images(group['groupID'])
         return groups
 
     def merge_groups(self, group_ids: List[str], main_group_id: str = '') -> str:

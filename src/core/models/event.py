@@ -89,9 +89,26 @@ class Event(JsonModel):
             can_edit_moments=True
         )
 
+    def delete_image(self, image_id: str) -> None:
+        faces = self.images_model.get_faces(image_id)
+        self.face_utils.rek_helper.delete_faces(faces)
+        for face in faces:
+            try:
+                os.remove(os.path.join(self.faces_dir, f"{face}.jpg"))
+            except FileNotFoundError:
+                pass
+
+        self.images_model.delete(image_id)
+        try:
+            os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.display_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
+        except FileNotFoundError:
+            pass
+
     def process_new_images(self, 
-                          display_size: tuple = (1920, 1080), 
-                          thumb_size: tuple = (300, 300),
+                          display_size: int = 1080, 
+                          thumb_size: int = 300,
                           cluster_threshold: int = 90,
                           max_matches_faces: int = 100,
                           verbose: bool = True
@@ -113,19 +130,55 @@ class Event(JsonModel):
         import shutil
         from PIL import Image as PILImage
 
+        def _extract_date_taken(image):
+            date_taken = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                exif = image.getexif()
+                if exif:
+                    # Try multiple EXIF date tags in order of preference
+                    date_tags = [36867, 306, 36868]  # DateTimeOriginal, DateTime, DateTimeDigitized
+                    for tag in date_tags:
+                        if tag in exif:
+                            date_str = exif[tag]
+                            if date_str and isinstance(date_str, str):
+                                # EXIF dates are typically in format: "YYYY:MM:DD HH:MM:SS"
+                                # Convert to our format: "YYYY-MM-DD HH:MM:SS"
+                                if ':' in date_str and len(date_str) >= 19:
+                                    date_taken = date_str.replace(':', '-', 2)  # Replace first two colons
+                                    break
+            except Exception as e:
+                if verbose:
+                    print(f"  Warning: Could not extract EXIF date: {e}")
+            return date_taken
+
         def _get_images_to_process():
             return [f for f in os.listdir(self.to_process_dir) 
                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
 
-        def _process_face(display_img, bbox, face_id, image_id):
-            crop_img = crop_image(display_img, (
-                int(bbox['Left'] * display_img.width),
-                int(bbox['Top'] * display_img.height),
-                int((bbox['Left'] + bbox['Width']) * display_img.width),
-                int((bbox['Top'] + bbox['Height']) * display_img.height)
-            ))
+        def _save_image_with_exif(img, path, original_img, date_taken):
+            """Save image with preserved EXIF data including date_taken"""
+            exif = original_img.getexif()
+            if exif:
+                # Update or add date taken to EXIF
+                exif_dict = dict(exif)
+                # Convert date_taken to EXIF format (YYYY:MM:DD HH:MM:SS)
+                exif_date = date_taken.replace('-', ':', 2)
+                exif_dict[36867] = exif_date  # DateTimeOriginal
+                exif_dict[306] = exif_date    # DateTime
+                exif_dict[36868] = exif_date  # DateTimeDigitized
+                
+                # Use the original exif object and update it
+                for tag_id, value in exif_dict.items():
+                    exif[tag_id] = value
+                
+                img.save(path, 'JPEG', quality=90, exif=exif.tobytes())
+            else:
+                img.save(path, 'JPEG', quality=90)
+
+        def _process_face(img, bbox, face_id, image_id, date_taken):
+            crop_img = crop_image(img, bbox, padding_width=40, padding_height=0)
             crop_path = os.path.join(self.faces_dir, f"{face_id}.jpg")
-            crop_img.save(crop_path, 'JPEG', quality=90)
+            _save_image_with_exif(crop_img, crop_path, img, date_taken)
             return self.faces_model.get_add_data(
                 image_ID=image_id,
                 width=bbox['Width'],
@@ -150,23 +203,15 @@ class Event(JsonModel):
             return len(clusters)
 
         def _process_image(image_file):
-            def _extract_date_taken(image):
-                date_taken = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                try:
-                    exif = image.getexif()
-                    if exif and 36867 in exif:  # DateTimeOriginal
-                        date_taken = exif[36867]
-                except:
-                    pass
-                return date_taken
-
-            def _resize_and_save_images(original_img, image_id):
+            def _resize_and_save_images(original_img, image_id, date_taken):
                 display_img = resize_image(original_img, display_size)
                 thumb_img = resize_image(original_img, thumb_size)
                 display_path = os.path.join(self.display_dir, f"{image_id}.jpg")
                 thumb_path = os.path.join(self.thumb_dir, f"{image_id}.jpg")
-                display_img.save(display_path, 'JPEG', quality=90)
-                thumb_img.save(thumb_path, 'JPEG', quality=90)
+                
+                _save_image_with_exif(display_img, display_path, original_img, date_taken)
+                _save_image_with_exif(thumb_img, thumb_path, original_img, date_taken)
+                
                 return display_img
 
             image_path = os.path.join(self.to_process_dir, image_file)
@@ -182,14 +227,22 @@ class Event(JsonModel):
                     width=width,
                     height=height
                 )["imageID"]
-                display_img = _resize_and_save_images(original_img, image_id)
+                display_img = _resize_and_save_images(original_img, image_id, date_taken)
                 original_save_path = os.path.join(self.original_dir, image_id + '.jpg')
                 shutil.copy2(image_path, original_save_path)
+                
+                # Process faces for this image (use display image for AWS, crop from original)
+                detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
+                image_faces = []
+                for face_id, bbox in detected_faces:
+                    face_data = _process_face(original_img, bbox, face_id, image_id, date_taken)
+                    image_faces.append(face_data)
+                
                 original_img.close()
                 os.remove(image_path)
-                return display_img, image_id, None
+                return display_img, image_id, image_faces, None
             except Exception as e:
-                return None, None, e
+                return None, None, [], e
 
         if verbose:
             print(f"Starting image processing for event: {self.name}")
@@ -209,17 +262,14 @@ class Event(JsonModel):
         for i, image_file in enumerate(image_files, 1):
             if verbose:
                 print(f"Processing image {i}/{len(image_files)}: {image_file}")
-            display_img, image_id, error = _process_image(image_file)
+            display_img, image_id, image_faces, error = _process_image(image_file)
             if error is not None or display_img is None or image_id is None:
                 if verbose:
                     print(f"  Error processing {image_file}: {str(error) if error else 'Invalid image or ID'}")
                 continue
-            detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
             if verbose:
-                print(f"  Detected {len(detected_faces)} faces")
-            for face_id, bbox in detected_faces:
-                face_data = _process_face(display_img, bbox, face_id, image_id)
-                all_faces.append(face_data)
+                print(f"  Detected {len(image_faces)} faces")
+            all_faces.extend(image_faces)
             processed_images.append(image_id)
 
         if verbose:

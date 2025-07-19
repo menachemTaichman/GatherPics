@@ -47,15 +47,13 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     try {
       setLoading(true);
       
-      const [facesResponse, infoResponse] = await Promise.all([
-        axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/faces`),
-        axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/info`)
-      ]);
+      // Use the new complete photo endpoint instead of multiple calls
+      const response = await axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/complete`);
       
-      setFaces(facesResponse.data.faces || []);
-      setPhotoInfo(infoResponse.data);
-      // Moment info is included in the photo info response
-      setMomentInfo(infoResponse.data.moment || null);
+      const photoData = response.data;
+      setFaces(photoData.faces || []);
+      setPhotoInfo(photoData);
+      setMomentInfo(photoData.moment || null);
     } catch (error) {
       console.error('Error loading photo info:', error);
       setFaces([]);
@@ -114,7 +112,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleFaceNavigation = (face) => {
     // Navigate to the face group page
-    navigate(`/face/${face.group_id}`);
+    navigate(`/group/${face.group_id}`);
     onClose(); // Close the photo viewer
   };
 
@@ -221,10 +219,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </button>
               
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{photoMeta.name}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{photoInfo?.name || photoMeta.name}</h2>
                 {photoInfo && (
                   <p className="text-sm text-gray-500">
-                    {photoInfo.faces_count || 0} faces • {photoInfo.groups?.length || 0} groups
+                    {photoInfo.faces_count || 0} faces • {new Set(photoInfo.faces?.map(f => f.group_id) || []).size} groups
                   </p>
                 )}
               </div>
@@ -279,7 +277,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   }}
                 >
                   <img
-                    src={`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`}
+                    src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`}
                     alt={photoMeta.name}
                     className="max-w-full max-h-full object-contain select-none"
                     draggable={false}
@@ -317,7 +315,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           height: `${face.face_coords.Height * 100}%`,
                           transform: `scale(${1/zoom})`
                         }}
-                        title={`${face.group_label} (Group ${face.group_id})`}
+                        title={`${face.group_label}`}
                         onClick={() => handleFaceClick(index)}
                       >
                         <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
@@ -395,7 +393,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {photoInfo?.filename || photoMeta.name}</div>
+                    <div><span className="font-semibold">Name:</span> {photoInfo?.name || photoMeta.name}</div>
                     <div><span className="font-semibold">Date:</span> {photoInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Size:</span> {(() => {
                       const size = photoInfo?.file_size;
@@ -453,15 +451,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           <img
                             src={
                               face.group_representative
-                                ? `${API_BASE}/crops/${face.group_representative}`
+                                ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${face.group_representative}.jpg`
                                 : PLACEHOLDER_DATA_URL
                             }
                             alt={face.group_label}
                             className="w-12 h-12 object-cover rounded-full"
                             onError={(e) => {
-                              if (face.group_representative && e.target.src.includes('/crops/')) {
+                              if (face.group_representative && e.target.src.includes('/faces/')) {
                                 e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                                e.target.src = `${API_BASE}/images/${face.group_representative}`;
+                                e.target.src = PLACEHOLDER_DATA_URL;
                               } else {
                                 e.target.src = PLACEHOLDER_DATA_URL;
                               }
@@ -470,9 +468,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-900 truncate">
                               {face.group_label}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Group {face.group_id}
                             </p>
                           </div>
                           <button
