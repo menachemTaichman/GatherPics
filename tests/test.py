@@ -234,7 +234,9 @@ def update_image_dates_from_onedrive(event: Event, onedrive_path: str, verbose: 
     }
 
 
-reset_event(event)
+# event.process_new_images(verbose=True)
+
+# reset_event(event)
 
 # onedrive_path = r"C:\Users\metai\OneDrive\Pictures\חתונה\צלם"
 # result = update_image_dates_from_onedrive(event, onedrive_path, verbose=True)
@@ -245,4 +247,4 @@ reset_event(event)
 
 # process_images(images)
 
-# reset_event(event)
+reset_event(event)

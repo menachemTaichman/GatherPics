@@ -213,9 +213,14 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       {moment.representative_photo ? (
                         <div className="w-16 h-16 rounded-lg overflow-hidden border">
                           <img 
-                            src={`/images/${moment.representative_photo}`} 
+                            src={`/images/${moment.representative_photo}`}
                             alt="" 
                             className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+                            }}
                           />
                         </div>
                       ) : (
@@ -383,6 +388,11 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       src={`/images/${img.name}`}
                       alt={img.name}
                       className="w-full h-24 object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+                      }}
                     />
                     <div className="p-2 text-xs text-gray-600 truncate">
                       {img.date_taken ? formatDateTime(img.date_taken) : img.name}

@@ -138,18 +138,14 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
                           <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
                                             <img
                   src={group.face_representive
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.webp`
                     : PLACEHOLDER_DATA_URL}
                                                               alt={group.label || `Person ${group.groupID}`}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                               onError={(e) => {
-                                // Fallback to original image if crop fails, but only once
-                                if (e.target.src.includes('/crops/') && group.representative) {
-                                  e.target.onerror = () => { e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>'; };
-                                  e.target.src = `${API_BASE}/images/${group.representative}`;
-                                } else {
-                                  e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-                                }
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
                               }}
                             />
                           </div>

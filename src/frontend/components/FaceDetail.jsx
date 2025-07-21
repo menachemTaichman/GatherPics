@@ -252,11 +252,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                 <img
                   src={group.face_representive
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.jpg`
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"
+                  loading="lazy"
                   onError={(e) => {
+                    e.target.onerror = null;
                     e.target.src = PLACEHOLDER_DATA_URL;
                   }}
                 />
@@ -498,21 +500,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   />
                   <img
                     src={showCrops && imageCrops[photo.photo_id] 
-                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
-                      : photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
+                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.webp`
+                      : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.webp`
                     }
                     alt={`Photo ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
+                    loading="lazy"
                     onLoad={(e) => handleImageLoad(photo.photo_id, e)}
                     onError={(e) => {
-                      if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/faces/')) {
-                        // Fallback to display image if crop fails
-                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                        e.target.src = photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`;
-                      } else {
-                        e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                        e.target.src = PLACEHOLDER_DATA_URL;
-                      }
+                      e.target.onerror = null;
+                      e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
@@ -548,21 +545,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <div className="relative">
                     <img
                       src={showCrops && imageCrops[photo.photo_id] 
-                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.jpg`
-                        : photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`
+                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.webp`
+                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.webp`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                      loading="lazy"
                       onClick={() => openPhotoViewer(photo.photo_id, index)}
                       onError={(e) => {
-                        if (showCrops && imageCrops[photo.photo_id] && e.target.src.includes('/faces/')) {
-                          // Fallback to display image if crop fails
-                          e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                          e.target.src = photo.urls?.display ? `${API_BASE}${photo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.jpg`;
-                        } else {
-                          e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                          e.target.src = PLACEHOLDER_DATA_URL;
-                        }
+                        e.target.onerror = null;
+                        e.target.src = PLACEHOLDER_DATA_URL;
                       }}
                     />
                     {/* Crop indicator for list view */}

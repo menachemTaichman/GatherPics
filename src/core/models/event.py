@@ -30,6 +30,7 @@ class Event(JsonModel):
         self.thumb_dir = os.path.join(self.event_dir, 'thumb')
         self.to_process_dir = os.path.join(self.event_dir, 'to_process')
         self.faces_dir = os.path.join(self.event_dir, 'faces')
+        self.high_quality_dir = os.path.join(self.event_dir, 'high_quality')
         self._ensure_event_dirs()
 
     def _init_fields(self):
@@ -58,6 +59,7 @@ class Event(JsonModel):
         os.makedirs(self.thumb_dir, exist_ok=True)
         os.makedirs(self.to_process_dir, exist_ok=True)
         os.makedirs(self.faces_dir, exist_ok=True)
+        os.makedirs(self.high_quality_dir, exist_ok=True)
         # Ensure {event_id}.db exists as an SQLite DB
         if not os.path.exists(self.DB_PATH):
             db = AppDB(self.DB_PATH)
@@ -101,14 +103,15 @@ class Event(JsonModel):
         self.images_model.delete(image_id)
         try:
             os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
             os.remove(os.path.join(self.display_dir, f"{image_id}.jpg"))
             os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
         except FileNotFoundError:
             pass
 
     def process_new_images(self, 
-                          display_size: int = 1080, 
-                          thumb_size: int = 300,
+                          display_size: int = 2048, 
+                          thumb_size: int = 512,
                           cluster_threshold: int = 90,
                           max_matches_faces: int = 100,
                           verbose: bool = True
@@ -124,61 +127,23 @@ class Event(JsonModel):
         Returns:
             dict: Summary of processing results
         """
-        from ..image_utils import resize_image, crop_image
-        from datetime import datetime
+        from ..image_utils import resize_image, crop_image, extract_all_metadata, save_image
         import os
         import shutil
         from PIL import Image as PILImage
-
-        def _extract_date_taken(image):
-            date_taken = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                exif = image.getexif()
-                if exif:
-                    # Try multiple EXIF date tags in order of preference
-                    date_tags = [36867, 306, 36868]  # DateTimeOriginal, DateTime, DateTimeDigitized
-                    for tag in date_tags:
-                        if tag in exif:
-                            date_str = exif[tag]
-                            if date_str and isinstance(date_str, str):
-                                # EXIF dates are typically in format: "YYYY:MM:DD HH:MM:SS"
-                                # Convert to our format: "YYYY-MM-DD HH:MM:SS"
-                                if ':' in date_str and len(date_str) >= 19:
-                                    date_taken = date_str.replace(':', '-', 2)  # Replace first two colons
-                                    break
-            except Exception as e:
-                if verbose:
-                    print(f"  Warning: Could not extract EXIF date: {e}")
-            return date_taken
 
         def _get_images_to_process():
             return [f for f in os.listdir(self.to_process_dir) 
                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
 
-        def _save_image_with_exif(img, path, original_img, date_taken):
-            """Save image with preserved EXIF data including date_taken"""
-            exif = original_img.getexif()
-            if exif:
-                # Update or add date taken to EXIF
-                exif_dict = dict(exif)
-                # Convert date_taken to EXIF format (YYYY:MM:DD HH:MM:SS)
-                exif_date = date_taken.replace('-', ':', 2)
-                exif_dict[36867] = exif_date  # DateTimeOriginal
-                exif_dict[306] = exif_date    # DateTime
-                exif_dict[36868] = exif_date  # DateTimeDigitized
-                
-                # Use the original exif object and update it
-                for tag_id, value in exif_dict.items():
-                    exif[tag_id] = value
-                
-                img.save(path, 'JPEG', quality=90, exif=exif.tobytes())
-            else:
-                img.save(path, 'JPEG', quality=90)
+        # No longer needed, handled by save_image
 
-        def _process_face(img, bbox, face_id, image_id, date_taken):
-            crop_img = crop_image(img, bbox, padding_width=40, padding_height=0)
-            crop_path = os.path.join(self.faces_dir, f"{face_id}.jpg")
-            _save_image_with_exif(crop_img, crop_path, img, date_taken)
+        def _process_face(display_img, bbox, face_id, image_id, date_taken):
+            crop_img = crop_image(display_img, bbox, padding_width=40, padding_height=0)
+            crop_path = os.path.join(self.faces_dir, f"{face_id}.webp")
+            save_image(
+                crop_img, crop_path, format='WEBP', quality=90, optimize=True
+            )
             return self.faces_model.get_add_data(
                 image_ID=image_id,
                 width=bbox['Width'],
@@ -203,23 +168,15 @@ class Event(JsonModel):
             return len(clusters)
 
         def _process_image(image_file):
-            def _resize_and_save_images(original_img, image_id, date_taken):
-                display_img = resize_image(original_img, display_size)
-                thumb_img = resize_image(original_img, thumb_size)
-                display_path = os.path.join(self.display_dir, f"{image_id}.jpg")
-                thumb_path = os.path.join(self.thumb_dir, f"{image_id}.jpg")
-                
-                _save_image_with_exif(display_img, display_path, original_img, date_taken)
-                _save_image_with_exif(thumb_img, thumb_path, original_img, date_taken)
-                
-                return display_img
-
             image_path = os.path.join(self.to_process_dir, image_file)
             try:
                 original_img = PILImage.open(image_path)
                 width, height = original_img.size
                 file_size = os.path.getsize(image_path)
-                date_taken = _extract_date_taken(original_img)
+                # Extract all metadata (including EXIF and date_taken)
+                metadata = extract_all_metadata(original_img)
+                date_taken = metadata.get('date_taken')
+                exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
                 image_id = self.images_model.add(
                     name=image_file,
                     date_taken=date_taken,
@@ -227,17 +184,33 @@ class Event(JsonModel):
                     width=width,
                     height=height
                 )["imageID"]
-                display_img = _resize_and_save_images(original_img, image_id, date_taken)
+                # Save high quality (4096px, jpg, quality=95, with EXIF)
+                high_quality_img = resize_image(original_img, 4096)
+                high_quality_path = os.path.join(self.high_quality_dir, f"{image_id}.jpg")
+                save_image(
+                    high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True
+                )
+                # Save display (2048px, webp, quality=90)
+                display_img = resize_image(original_img, display_size)
+                display_path = os.path.join(self.display_dir, f"{image_id}.webp")
+                save_image(
+                    display_img, display_path, format='WEBP', quality=90, optimize=True
+                )
+                # Save thumb (512px, webp, quality=80)
+                thumb_img = resize_image(original_img, thumb_size)
+                thumb_path = os.path.join(self.thumb_dir, f"{image_id}.webp")
+                save_image(
+                    thumb_img, thumb_path, format='WEBP', quality=80, optimize=True
+                )
+                # Save original (copy)
                 original_save_path = os.path.join(self.original_dir, image_id + '.jpg')
                 shutil.copy2(image_path, original_save_path)
-                
-                # Process faces for this image (use display image for AWS, crop from original)
+                # Process faces for this image (use display image for AWS, crop from display)
                 detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
                 image_faces = []
                 for face_id, bbox in detected_faces:
-                    face_data = _process_face(original_img, bbox, face_id, image_id, date_taken)
+                    face_data = _process_face(display_img, bbox, face_id, image_id, date_taken)
                     image_faces.append(face_data)
-                
                 original_img.close()
                 os.remove(image_path)
                 return display_img, image_id, image_faces, None
@@ -299,6 +272,8 @@ class Event(JsonModel):
 add_event = Event.add
 def delete_event(event_id: str) -> None:
     # Remove from JSON
+    event = Event(event_id)
+    event.face_utils.rek_helper.delete_collection()
     Event.delete(event_id)
     # Remove the event directory and its contents
     event_dir = os.path.join(DATA_ROOT, event_id)

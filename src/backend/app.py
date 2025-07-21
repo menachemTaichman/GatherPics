@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, g, send_file, abort
+from flask import Flask, jsonify, request, g, send_file, abort, make_response
 from flask_cors import CORS
 from functools import wraps
 import traceback
@@ -78,9 +78,10 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
             'faces': faces_data,
             'moment': moment_info,
             'urls': {
-                'display': f'/api/events/{FIXED_EVENT_ID}/display/{image_id}.jpg',
-                'thumbnail': f'/api/events/{FIXED_EVENT_ID}/thumb/{image_id}.jpg',
-                'original': f'/api/events/{FIXED_EVENT_ID}/original/{image_id}.jpg'
+                'display': f'/api/events/{FIXED_EVENT_ID}/display/{image_id}.webp',
+                'thumbnail': f'/api/events/{FIXED_EVENT_ID}/thumb/{image_id}.webp',
+                'high_quality': f'/api/events/{FIXED_EVENT_ID}/high_quality/{image_id}.webp',
+                'original': f'/api/events/{FIXED_EVENT_ID}/original/{image_id}.webp',
             }
         }
         
@@ -367,7 +368,7 @@ def download_images():
         # Check access
         if hasattr(event, 'profile_model') and image_id not in event.profile_model.get_accessible_images(profile_id):
             continue
-        file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
+        file_path = os.path.join(event.high_quality_dir, f'{image_id}.jpg')
         if os.path.exists(file_path):
             allowed_files.append((image_id, file_path))
     if not allowed_files:
@@ -391,76 +392,65 @@ def get_images_json():
     except Exception as e:
         return bad_request(e)
 
-@app.route('/api/events/<event_id>/display/<image_id>.jpg')
+@app.route('/api/events/<event_id>/display/<image_id>.webp')
 @require_auth
-def get_display_image(event_id, image_id):
-    # 1. Check access
+def get_display_image_webp(event_id, image_id):
     event = Event(event_id)
     profile_id = g.profile_id
-    # Check if user has access to this image
     if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
-    # 2. Serve file
-    file_path = os.path.join(event.display_dir, f'{image_id}.jpg')
+    file_path = os.path.join(event.display_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
-    return send_file(file_path, mimetype='image/jpeg')
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
-@app.route('/api/events/<event_id>/faces/<face_id>.jpg')
+@app.route('/api/events/<event_id>/faces/<face_id>.webp')
 @require_auth
-def get_face_crop(event_id, face_id):
-    """Serve face crop images."""
+def get_face_crop_webp(event_id, face_id):
     event = Event(event_id)
     profile_id = g.profile_id
-    
-    # Check if user has access to this face (via the image it belongs to)
     face = event.faces_model.get(face_id)
     if not face:
         return abort(404)
-    
     image_id = face['imageID']
     if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
-    
-    # Serve face crop file
-    file_path = os.path.join(event.faces_dir, f'{face_id}.jpg')
+    file_path = os.path.join(event.faces_dir, f'{face_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
-    return send_file(file_path, mimetype='image/jpeg')
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
-@app.route('/api/events/<event_id>/thumb/<image_id>.jpg')
+@app.route('/api/events/<event_id>/thumb/<image_id>.webp')
 @require_auth
-def get_thumbnail_image(event_id, image_id):
-    """Serve thumbnail images."""
+def get_thumbnail_image_webp(event_id, image_id):
     event = Event(event_id)
     profile_id = g.profile_id
-    
-    # Check if user has access to this image
     if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
-    
-    # Serve thumbnail file
-    file_path = os.path.join(event.thumb_dir, f'{image_id}.jpg')
+    file_path = os.path.join(event.thumb_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
-    return send_file(file_path, mimetype='image/jpeg')
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
-@app.route('/api/events/<event_id>/original/<image_id>.jpg')
+@app.route('/api/events/<event_id>/original/<image_id>.webp')
 @require_auth
-def get_original_image(event_id, image_id):
-    """Serve original images."""
+def get_original_image_webp(event_id, image_id):
     event = Event(event_id)
     profile_id = g.profile_id
-    
-    # Check if user has access to this image
     if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
-    
-    # Serve original file
-    file_path = os.path.join(event.original_dir, f'{image_id}.jpg')
+    file_path = os.path.join(event.original_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
-    return send_file(file_path, mimetype='image/jpeg')
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -116,8 +116,10 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
                   src={`/${getThumbFilename(photo)}`}
                   alt={`Photo ${index + 1}`}
                   className="w-full h-full object-cover rounded-lg"
+                  loading="lazy"
                   onLoad={(e) => handleImageLoad(photo.name, e)}
                   onError={(e) => {
+                    e.target.onerror = null;
                     e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
                   }}
                 />
@@ -155,8 +157,10 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
                   src={`/${getThumbFilename(photo)}`}
                   alt={`Photo ${index + 1}`}
                   className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                  loading="lazy"
                   onClick={() => openPhotoViewer(photo.name, index)}
                   onError={(e) => {
+                    e.target.onerror = null;
                     e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
                   }}
                 />
@@ -557,7 +561,7 @@ export default function Moments() {
                     >
                       <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
                         {moment.representative_photo ? (
-                          <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" />
+                          <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" loading="lazy" />
                         ) : (
                           <Image className="w-8 h-8 text-white" />
                         )}
@@ -644,6 +648,7 @@ export default function Moments() {
                                   src={`/images/${moment.representative_photo}`} 
                                   alt="" 
                                   className="w-full h-full object-cover"
+                                  loading="lazy"
                                 />
                               ) : (
                                 <Image className="w-8 h-8 text-white" />

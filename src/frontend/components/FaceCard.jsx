@@ -38,7 +38,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
   };
   // Use face_representive for the group representative image
   const imageSrc = group.face_representive
-    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.jpg`
+    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
     : PLACEHOLDER_DATA_URL;
 
   return (
@@ -71,14 +71,10 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
               style={{
                 objectPosition: 'center center'
               }}
+              loading="lazy"
               onError={(e) => {
-                // Fallback to original image if crop fails, but only once
-                if (e.target.src.includes('/crops/') && group.representative) {
-                  e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                  e.target.src = `/images/${group.representative}`;
-                } else {
-                  e.target.src = PLACEHOLDER_DATA_URL;
-                }
+                e.target.onerror = null;
+                e.target.src = PLACEHOLDER_DATA_URL;
               }}
             />
             

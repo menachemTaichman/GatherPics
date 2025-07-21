@@ -75,12 +75,12 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`);
+      const response = await fetch(`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = photoMeta.name;
+      a.download = photoMeta.name.replace(/\.[^.]+$/, '.webp');
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -277,10 +277,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   }}
                 >
                   <img
-                    src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.jpg`}
+                    src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
                     alt={photoMeta.name}
                     className="max-w-full max-h-full object-contain select-none"
                     draggable={false}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = PLACEHOLDER_DATA_URL;
+                    }}
                   />
                   
                   {/* Face Overlays */}
@@ -451,18 +456,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           <img
                             src={
                               face.group_representative
-                                ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${face.group_representative}.jpg`
+                                ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${face.group_representative}.webp`
                                 : PLACEHOLDER_DATA_URL
                             }
                             alt={face.group_label}
                             className="w-12 h-12 object-cover rounded-full"
+                            loading="lazy"
                             onError={(e) => {
-                              if (face.group_representative && e.target.src.includes('/faces/')) {
-                                e.target.onerror = () => { e.target.src = PLACEHOLDER_DATA_URL; };
-                                e.target.src = PLACEHOLDER_DATA_URL;
-                              } else {
-                                e.target.src = PLACEHOLDER_DATA_URL;
-                              }
+                              e.target.onerror = null;
+                              e.target.src = PLACEHOLDER_DATA_URL;
                             }}
                           />
                           <div className="flex-1 min-w-0">

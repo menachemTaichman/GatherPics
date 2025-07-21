@@ -82,6 +82,13 @@ class AWSRekognitionHelper:
         """Clear all faces from the collection"""
         self.delete_faces(self.get_face_ids())
 
+    def delete_collection(self):
+        """Delete the collection"""
+        try:
+            self.client.delete_collection(CollectionId=self.collection_id)
+        except Exception as e:
+            print(f"Error deleting collection: {e}")
+
 class FaceUtils:
     def __init__(self, event_id: str):
         self.event_id = event_id

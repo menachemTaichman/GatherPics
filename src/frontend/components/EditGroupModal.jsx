@@ -107,11 +107,13 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 <div className="w-32 h-32 rounded-lg overflow-hidden border border-gray-200">
                   <img
                     src={group.face_representive
-                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.jpg`
+                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.webp`
                       : PLACEHOLDER_DATA_URL}
                     alt="Representative"
                     className="w-full h-full object-cover"
+                    loading="lazy"
                     onError={(e) => {
+                      e.target.onerror = null;
                       e.target.src = PLACEHOLDER_DATA_URL;
                     }}
                   />
@@ -148,7 +150,7 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                 ) : (
                   <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
                     {group.face_IDs?.map((faceId, index) => {
-                      const imageSrc = `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.jpg`;
+                      const imageSrc = `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`;
                       
                       return (
                         <button
@@ -165,7 +167,9 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                             src={imageSrc}
                             alt={`Face ${index + 1}`}
                             className="w-full h-20 object-cover"
+                            loading="lazy"
                             onError={(e) => {
+                              e.target.onerror = null;
                               e.target.src = PLACEHOLDER_DATA_URL;
                             }}
                           />
