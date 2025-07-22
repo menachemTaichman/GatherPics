@@ -232,14 +232,14 @@ def recrop_faces(image_ids: list):
     for image in image_ids:
         image_id = image['imageID']
         faces_in_image = event.images_model.get_faces(image_id)
-        display_path = os.path.join(event.display_dir, f"{image_id}.webp")
-        display_pil = PILImage.open(display_path)
+        original_path = os.path.join(event.original_dir, f"{image_id}.jpg")
+        original_pil = PILImage.open(original_path)
         for face in faces_in_image:
             bbox = event.faces_model.get(face)
             if not bbox:
                 continue
             face_path = os.path.join(event.faces_dir, f"{face}.webp")
-            face_pil = crop_image(display_pil, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
+            face_pil = crop_image(original_pil, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
             face_pil.save(face_path)
 
 # event.process_new_images(verbose=True)

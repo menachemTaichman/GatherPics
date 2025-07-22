@@ -207,7 +207,7 @@ class Event(JsonModel):
                 detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
                 image_faces = []
                 for face_id, bbox in detected_faces:
-                    face_data = _process_face(display_img, bbox, face_id, image_id)
+                    face_data = _process_face(original_img, bbox, face_id, image_id)
                     image_faces.append(face_data)
                 original_img.close()
                 os.remove(image_path)
