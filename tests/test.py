@@ -61,13 +61,8 @@ def process_images(images):
                 continue
             
             face_path = os.path.join(event.faces_dir, f"{face}.jpg")
-            conv_bbox = {
-                'Left': bbox['left'],
-                'Top': bbox['top'],
-                'Width': bbox['width'],
-                'Height': bbox['height']
-            }
-            face_pil = crop_image(original_pil, conv_bbox, padding_width=40, padding_height=0)
+
+            face_pil = crop_image(original_pil, bbox, padding_width_percent=0.1, padding_height_percent=0.0)
             face_pil.save(face_path)
 
 def _extract_date_taken(image, verbose=True):
@@ -233,6 +228,19 @@ def update_image_dates_from_onedrive(event: Event, onedrive_path: str, verbose: 
         'total': len(images)
     }
 
+def recrop_faces(image_ids: list):
+    for image in image_ids:
+        image_id = image['imageID']
+        faces_in_image = event.images_model.get_faces(image_id)
+        display_path = os.path.join(event.display_dir, f"{image_id}.webp")
+        display_pil = PILImage.open(display_path)
+        for face in faces_in_image:
+            bbox = event.faces_model.get(face)
+            if not bbox:
+                continue
+            face_path = os.path.join(event.faces_dir, f"{face}.webp")
+            face_pil = crop_image(display_pil, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
+            face_pil.save(face_path)
 
 # event.process_new_images(verbose=True)
 
@@ -247,4 +255,7 @@ def update_image_dates_from_onedrive(event: Event, onedrive_path: str, verbose: 
 
 # process_images(images)
 
-reset_event(event)
+# recrop_faces(['ff15918c-327f-43c2-a9ee-aa66d906d645'])
+
+recrop_faces(event.images_model.list())
+

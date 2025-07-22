@@ -94,6 +94,16 @@ class FaceUtils:
         self.event_id = event_id
         self.rek_helper = AWSRekognitionHelper(event_id)
 
+    @staticmethod
+    def bbox_conv(bbox: dict) -> dict:
+        """Converts the AWS Rekognition bounding box to a PIL image bounding box."""
+        return {
+            'left': bbox['Left'],
+            'top': bbox['Top'],
+            'width': bbox['Width'],
+            'height': bbox['Height']
+        }
+    
     def detect_faces(self, image: Image.Image, external_image_id = '') -> list[tuple[str, dict]]:
         """Detects faces in the given PIL image and returns a list of tuples of AWSfaceId and face bounding box dicts."""
         buffer = BytesIO()
@@ -101,7 +111,7 @@ class FaceUtils:
         buffer.seek(0)
         image_bytes = buffer.read()
         face_details = self.rek_helper.index_faces(image_bytes, external_image_id)
-        faces = [(face['Face']['FaceId'], face['Face']['BoundingBox']) for face in face_details]
+        faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
         return faces
 
     def cluster_faces(

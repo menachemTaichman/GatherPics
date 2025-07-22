@@ -1,21 +1,29 @@
 from PIL import Image as PILImage
 from PIL.ExifTags import TAGS
 
-def crop_image(pil_img: PILImage.Image, box: dict, padding_width: int = 0, padding_height: int = 0) -> PILImage.Image:
+def crop_image(pil_img: PILImage.Image, box: dict, padding_width_percent: float = 0.0, padding_height_percent: float = 0.0) -> PILImage.Image:
     """Crops a PIL image to the given box and returns the cropped PIL image."""
     """Args:
         pil_img: PILImage.Image - the image to crop
-        box: dict - the box to crop the image to, must be in the format of the AWS Rekognition API
-        padding_width: int - the width of the padding to add to the box
-        padding_height: int - the height of the padding to add to the box
+        box: dict - the box to crop the image to: left, top, width, height as a percentage of the image size
+        padding_width_percent: float - the width of the padding to add to the box as a percentage of the box width
+        padding_height_percent: float - the height of the padding to add to the box as a percentage of the box height
     """
     width, height = pil_img.size
+    # Calculate box in pixels
+    left = box['left'] * width
+    top = box['top'] * height
+    box_width = box['width'] * width
+    box_height = box['height'] * height
+    # Calculate padding in pixels (as percent of box size)
+    pad_w = box_width * padding_width_percent
+    pad_h = box_height * padding_height_percent
     bbox = (
-            max(0, int(box['Left'] * width - padding_width)),
-            max(0, int(box['Top'] * height - padding_height)),
-            min(width, int((box['Left'] + box['Width']) * width + padding_width * 2)),
-            min(height, int((box['Top'] + box['Height']) * height + padding_height * 2))
-        )
+        max(0, int(left - 0.5 * pad_w)),
+        max(0, int(top - 0.5 * pad_h)),
+        min(width, int(left + box_width + pad_w)),
+        min(height, int(top + box_height + pad_h))
+    )
     return pil_img.crop(bbox)
 
 

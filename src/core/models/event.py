@@ -136,20 +136,18 @@ class Event(JsonModel):
             return [f for f in os.listdir(self.to_process_dir) 
                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
 
-        # No longer needed, handled by save_image
-
-        def _process_face(display_img, bbox, face_id, image_id, date_taken):
-            crop_img = crop_image(display_img, bbox, padding_width=40, padding_height=0)
+        def _process_face(display_img, bbox, face_id, image_id):
+            crop_img = crop_image(display_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
             crop_path = os.path.join(self.faces_dir, f"{face_id}.webp")
             save_image(
                 crop_img, crop_path, format='WEBP', quality=90, optimize=True
             )
             return self.faces_model.get_add_data(
                 image_ID=image_id,
-                width=bbox['Width'],
-                height=bbox['Height'],
-                left=bbox['Left'],
-                top=bbox['Top'],
+                width=bbox['width'],
+                height=bbox['height'],
+                left=bbox['left'],
+                top=bbox['top'],
                 face_ID=face_id,
                 group_ID=''
             )
@@ -209,7 +207,7 @@ class Event(JsonModel):
                 detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
                 image_faces = []
                 for face_id, bbox in detected_faces:
-                    face_data = _process_face(display_img, bbox, face_id, image_id, date_taken)
+                    face_data = _process_face(display_img, bbox, face_id, image_id)
                     image_faces.append(face_data)
                 original_img.close()
                 os.remove(image_path)
