@@ -1,6 +1,6 @@
 import uuid
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict
+from typing import List, Dict
 from ..db import AppDB
 
 class BaseModel(ABC):
@@ -39,7 +39,7 @@ class BaseModel(ABC):
     def edit(self, entity_id: str, fields: Dict) -> None:
         self.db.update(self.table_name, {self.id_field: entity_id}, fields)
 
-    def get(self, entity_id: str) -> Optional[Dict]:
+    def get(self, entity_id: str) -> Dict | None:
         entity = self.db.get_one(self.table_name, {self.id_field: entity_id})
         return entity if entity else None
 

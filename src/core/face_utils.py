@@ -50,7 +50,7 @@ class AWSRekognitionHelper:
                 Image={'Bytes': image_bytes},
                 ExternalImageId=external_image_id,
                 DetectionAttributes=['DEFAULT'],
-                MaxFaces=30
+                MaxFaces=50
             )
             return response['FaceRecords']
         except Exception as e:

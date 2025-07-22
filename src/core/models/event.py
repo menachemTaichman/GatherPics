@@ -152,11 +152,23 @@ class Event(JsonModel):
                 group_ID=''
             )
 
+        def _biggest_face_in_cluster(cluster: list[str]) -> str:
+            biggest_face = None
+            biggest_face_size = 0
+            for face_id in cluster:
+                face = self.faces_model.get(face_id)
+                if face:
+                    face_size = face['width'] * face['height']
+                    if face_size > biggest_face_size:
+                        biggest_face_size = face_size
+                        biggest_face = face_id
+            return biggest_face
+
         def _cluster_and_group_faces(face_ids):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             num_groups = len(self.groups_model.list())
             for cluster_idx, cluster in enumerate(clusters, num_groups + 1):
-                representative_face_id = cluster[0]
+                representative_face_id = _biggest_face_in_cluster(cluster)
                 group_data = self.groups_model.add(
                     label=f"Person {cluster_idx}",
                     face_representive=representative_face_id
