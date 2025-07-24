@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List, Dict, Optional
+from typing import List, Dict
 from contextlib import contextmanager
 
 TABLES = {
@@ -100,7 +100,7 @@ class AppDB:
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    def get_one(self, table: str, where: Dict) -> Optional[Dict]:
+    def get_one(self, table: str, where: Dict) -> Dict | None:
         with self.get_connection() as conn:
             clause = ' AND '.join([f'{k}=?' for k in where.keys()])
             values = tuple(where.values())
@@ -137,7 +137,7 @@ class AppDB:
             conn.execute(f'UPDATE {table} SET {set_clause} WHERE {where_clause}', values)
             conn.commit()
 
-    def create_new_db_in_dir(self, dir_path: str, db_name: Optional[str] = None):
+    def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):
         """Create a new SQLite DB in the given directory, initializing all tables and settings."""
         import os
         if db_name is None:
