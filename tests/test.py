@@ -247,4 +247,10 @@ def update_image_dates_from_onedrive(event: Event, onedrive_path: str, verbose: 
 
 # process_images(images)
 
-reset_event(event)
+# reset_event(event)
+
+image = '52bc7104-f56e-4d98-bafe-fc5ce3b66e5b'
+faces_in_group = event.groups_model.get_faces('7a81acd3-98ee-40c8-aa66-71b60b34bda8')
+images_in_group = event.groups_model.get_images('7a81acd3-98ee-40c8-aa66-71b60b34bda8')
+faces_images = []
+print(faces_in_group)
