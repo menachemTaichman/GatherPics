@@ -1,6 +1,6 @@
 from src.core.models.event import Event
 from src.core.models.events_manager import EventsManager
-from src.core.image_utils import resize_image, crop_image
+from src.core.image_utils import resize_image, crop_image, extract_all_metadata
 import os
 from PIL import Image as PILImage
 
@@ -257,8 +257,11 @@ def recrop_faces(image_ids: list):
 
 # reset_event(event)
 
-image = '52bc7104-f56e-4d98-bafe-fc5ce3b66e5b'
-faces_in_group = event.groups_model.get_faces('7a81acd3-98ee-40c8-aa66-71b60b34bda8')
-images_in_group = event.groups_model.get_images('7a81acd3-98ee-40c8-aa66-71b60b34bda8')
-faces_images = []
-print(faces_in_group)
+def update_date_taken(image_ids: list):
+    for image in image_ids:
+        image_id = image['imageID']
+        image_path = os.path.join(event.original_dir, f"{image_id}.jpg")
+        date_taken = extract_all_metadata(image_path)['date_taken'] 
+        event.images_model.edit(image_id, {'date_taken': date_taken})
+
+update_date_taken(event.images_model.list())

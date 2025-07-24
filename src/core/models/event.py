@@ -184,7 +184,7 @@ class Event(JsonModel):
                 width, height = original_img.size
                 file_size = os.path.getsize(image_path)
                 # Extract all metadata (including EXIF and date_taken)
-                metadata = extract_all_metadata(original_img)
+                metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
                 image_id = self.images_model.add(
