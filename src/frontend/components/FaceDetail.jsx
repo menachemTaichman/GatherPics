@@ -210,16 +210,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     setPhotoViewer({ show: false, photo: null, index: 0 });
   };
 
-  const navigatePhoto = (direction) => {
+  const navigatePhoto = (direction, index) => {
     const currentIndex = photoViewer.index;
     let newIndex;
-    
-    if (direction === 'next') {
+    if (direction === 'jump' && typeof index === 'number') {
+      newIndex = index;
+    } else if (direction === 'next') {
       newIndex = Math.min(currentIndex + 1, filteredPhotos.length - 1);
     } else {
       newIndex = Math.max(currentIndex - 1, 0);
     }
-    
     setPhotoViewer({
       show: true,
       photo: filteredPhotos[newIndex].photo_id,

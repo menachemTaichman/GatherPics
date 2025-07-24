@@ -22,6 +22,37 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
+  const [zoomInputValue, setZoomInputValue] = useState();
+  const [editIndexValue, setEditIndexValue] = useState();
+  const [isEditingIndex, setIsEditingIndex] = useState(false);
+  const imageRef = useRef(null);
+
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = original; };
+  }, []);
+
+  // Circular navigation
+  const handleNavigate = (direction, index) => {
+    if (!onNavigate) return;
+    if (direction === 'prev') {
+      if (currentIndex === 0) {
+        onNavigate('jump', totalPhotos - 1);
+      } else {
+        onNavigate('prev');
+      }
+    } else if (direction === 'next') {
+      if (currentIndex === totalPhotos - 1) {
+        onNavigate('jump', 0);
+      } else {
+        onNavigate('next');
+      }
+    } else if (direction === 'jump' && typeof index === 'number') {
+      onNavigate('jump', index);
+    }
+  };
 
   // Use the photo object directly since it comes from the API
   let photoMeta = photo;
@@ -90,12 +121,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   };
 
-  const handleNavigate = (direction) => {
-    if (onNavigate) {
-      onNavigate(direction);
-    }
-  };
-
   const handleFaceClick = (index) => {
     // Turn on face tags if not already on
     if (!showRectangles) {
@@ -141,10 +166,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   // Mouse handlers for dragging
   const handleMouseDown = (e) => {
-    if (zoom > 1) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    }
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
 
   const handleMouseMove = (e) => {
@@ -234,18 +257,52 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <>
                   <button
                     onClick={() => handleNavigate('prev')}
-                    disabled={currentIndex === 0}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
                   <span className="text-sm text-gray-500">
-                    {currentIndex + 1} / {totalPhotos}
+                    {isEditingIndex ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
+                        onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
+                        onBlur={e => {
+                          let val = parseInt(e.target.value, 10);
+                          if (isNaN(val)) val = currentIndex + 1;
+                          val = Math.max(1, Math.min(totalPhotos, val));
+                          handleNavigate('jump', val - 1);
+                          setIsEditingIndex(false);
+                          setEditIndexValue(undefined);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.target.blur();
+                          } else if (e.key === 'Escape') {
+                            setIsEditingIndex(false);
+                            setEditIndexValue(undefined);
+                          }
+                        }}
+                        className="w-12 text-center border-b border-gray-300 focus:outline-none focus:border-primary-500 bg-transparent"
+                        style={{width: '3rem'}}
+                        autoFocus
+                      />
+                    ) : (
+                      <span
+                        className="cursor-pointer hover:underline w-12 inline-block text-center"
+                        style={{width: '3rem'}}
+                        title="Jump to photo"
+                        onClick={() => setIsEditingIndex(true)}
+                      >
+                        {currentIndex + 1}
+                      </span>
+                    )} / {totalPhotos}
                   </span>
                   <button
                     onClick={() => handleNavigate('next')}
-                    disabled={currentIndex === totalPhotos - 1}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <ArrowRight className="w-4 h-4" />
                   </button>
@@ -272,63 +329,72 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <motion.div
                   className="relative"
                   style={{
+                    width: '100%',
+                    height: '100%',
                     transform: `scale(${zoom}) rotate(${rotation}deg) translate(${pan.x}px, ${pan.y}px)`,
                     transition: isDragging ? 'none' : 'transform 0.2s ease-out'
                   }}
                 >
-                  <img
-                    src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
-                    alt={photoMeta.name}
-                    className="max-w-full max-h-full object-contain select-none"
-                    draggable={false}
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
-                  
-                  {/* Face Overlays */}
-                  {showRectangles && faces.map((face, index) => {
-                    let borderColor, bgColor, labelBgColor;
-                    
-                    if (selectedFaceIndex === index) {
-                      // Selected face: red
-                      borderColor = 'border-red-500';
-                      bgColor = 'bg-red-500';
-                      labelBgColor = 'bg-red-500';
-                    } else if (face.group_id === currentGroupId) {
-                      // Current face (belongs to current group): green
-                      borderColor = 'border-green-500';
-                      bgColor = 'bg-green-500';
-                      labelBgColor = 'bg-green-500';
-                    } else {
-                      // Other faces: blue
-                      borderColor = 'border-blue-500';
-                      bgColor = 'bg-blue-500';
-                      labelBgColor = 'bg-blue-500';
-                    }
-                    
-                    return (
-                      <div
-                        key={index}
-                        className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
-                        style={{
-                          left: `${face.face_coords.Left * 100}%`,
-                          top: `${face.face_coords.Top * 100}%`,
-                          width: `${face.face_coords.Width * 100}%`,
-                          height: `${face.face_coords.Height * 100}%`,
-                          transform: `scale(${1/zoom})`
-                        }}
-                        title={`${face.group_label}`}
-                        onClick={() => handleFaceClick(index)}
-                      >
-                        <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
-                          {face.group_label}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <div style={{position: 'relative', display: 'inline-block', width: '100%', height: '100%'}}>
+                    <img
+                      src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
+                      alt={photoMeta.name}
+                      className="max-w-full max-h-full object-contain select-none"
+                      draggable={false}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = PLACEHOLDER_DATA_URL;
+                      }}
+                      ref={imageRef}
+                      style={{display: 'block', width: '100%', height: '100%'}}
+                    />
+                    {/* Face Overlays */}
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none',
+                    }}>
+                      {showRectangles && faces.map((face, index) => {
+                        let borderColor, bgColor, labelBgColor;
+                        if (selectedFaceIndex === index) {
+                          borderColor = 'border-red-500';
+                          bgColor = 'bg-red-500';
+                          labelBgColor = 'bg-red-500';
+                        } else if (face.group_id === currentGroupId) {
+                          borderColor = 'border-green-500';
+                          bgColor = 'bg-green-500';
+                          labelBgColor = 'bg-green-500';
+                        } else {
+                          borderColor = 'border-blue-500';
+                          bgColor = 'bg-blue-500';
+                          labelBgColor = 'bg-blue-500';
+                        }
+                        return (
+                          <div
+                            key={index}
+                            className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
+                            style={{
+                              left: `${face.face_coords.Left * 100}%`,
+                              top: `${face.face_coords.Top * 100}%`,
+                              width: `${face.face_coords.Width * 100}%`,
+                              height: `${face.face_coords.Height * 100}%`,
+                              pointerEvents: 'auto',
+                            }}
+                            title={`${face.group_label}`}
+                            onClick={() => handleFaceClick(index)}
+                          >
+                            <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
+                              {face.group_label}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -354,9 +420,29 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     >
                       <ZoomOut className="w-4 h-4" />
                     </button>
-                    <span className="text-sm text-gray-600 min-w-[3rem] text-center">
-                      {Math.round(zoom * 100)}%
-                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
+                      onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                      onBlur={e => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val)) val = 100;
+                        val = Math.max(50, Math.min(300, val));
+                        setZoom(val / 100);
+                        setZoomInputValue(undefined);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.target.blur();
+                        } else if (e.key === 'Escape') {
+                          setZoomInputValue(undefined);
+                        }
+                      }}
+                      className="text-sm text-gray-600 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                      style={{width: '3rem'}}
+                    />
                     <button
                       onClick={handleZoomIn}
                       className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -364,7 +450,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       <ZoomIn className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-row gap-x-2">
                     <button
                       onClick={handleRotate}
                       className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -375,15 +461,14 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <button
                       onClick={() => {
                         if (showRectangles) {
-                          // When hiding tags, also deselect the face
                           setSelectedFaceIndex(null);
                         }
                         setShowRectangles(v => !v);
                       }}
-                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="flex items-center justify-center space-x-1 p-2 px-4 w-[110px] hover:bg-gray-100 rounded-lg transition-colors"
                     >
                       {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      <span className="text-xs">{showRectangles ? 'Hide' : 'Show'} Tags</span>
+                      <span className="text-xs whitespace-nowrap">{showRectangles ? 'Hide' : 'Show'} Tags</span>
                     </button>
                     <button
                       onClick={handleDownload}
@@ -400,14 +485,14 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   <div className="text-xs text-gray-500 space-y-0.5">
                     <div><span className="font-semibold">Name:</span> {photoInfo?.name || photoMeta.name}</div>
                     <div><span className="font-semibold">Date:</span> {photoInfo?.date_taken || 'Unknown'}</div>
-                    <div><span className="font-semibold">Size:</span> {(() => {
+                    <div><span className="font-semibold">Original size:</span> {(() => {
                       const size = photoInfo?.file_size;
                       if (!size) return 'Unknown';
                       if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
                       if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
                       return (size / 1024).toFixed(1) + ' KB';
                     })()}</div>
-                    <div><span className="font-semibold">Res:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
+                    <div><span className="font-semibold">Original resolution:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
                   </div>
                   
                   {/* Moment Information */}

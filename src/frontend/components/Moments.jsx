@@ -393,16 +393,16 @@ export default function Moments() {
     setPhotoViewer({ show: false, photo: null, index: 0, photos: [] });
   };
 
-  const navigatePhoto = (direction) => {
+  const navigatePhoto = (direction, index) => {
     const currentIndex = photoViewer.index;
     let newIndex;
-    
-    if (direction === 'next') {
+    if (direction === 'jump' && typeof index === 'number') {
+      newIndex = index;
+    } else if (direction === 'next') {
       newIndex = Math.min(currentIndex + 1, photoViewer.photos.length - 1);
     } else {
       newIndex = Math.max(currentIndex - 1, 0);
     }
-    
     setPhotoViewer({
       show: true,
       photo: photoViewer.photos[newIndex].name,
