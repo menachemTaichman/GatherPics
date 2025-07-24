@@ -1,5 +1,4 @@
 from typing import List, Dict
-from PIL import Image as PILImage
 from .base_model import BaseModel
 from ..db import AppDB
 
@@ -26,14 +25,6 @@ class Images(BaseModel):
     def find_broken_images(self) -> List[str]:
         # Implement logic if needed
         return []
-    
-    """
-    def get_pil_image(self, image_id: str, version: str = 'original') -> 'PILImage.Image':
-        import os
-        from PIL import Image as PILImage
-        image_path = os.path.join('src', 'data', version, f'{image_id}.jpg')
-        return PILImage.open(image_path)
-    """
     
     def get_faces(self, image_id: str) -> List[str]:
         results = self.db.execute_query('SELECT faceID FROM faces WHERE imageID=?', (image_id,))
