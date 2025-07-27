@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -95,8 +95,20 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   };
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.5));
+  const handleZoomIn = () => {
+    const currentPercent = Math.round(zoom * 100);
+    const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+    const add25 = currentPercent + 25;
+    const newPercent = Math.min(300, Math.min(add25, next25));
+    setZoom(newPercent / 100);
+  };
+  const handleZoomOut = () => {
+    const currentPercent = Math.round(zoom * 100);
+    const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+    const subtract25 = currentPercent - 25;
+    const newPercent = Math.max(50, Math.max(subtract25, prev25));
+    setZoom(newPercent / 100);
+  };
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
   const handleReset = () => {
     setZoom(1);
@@ -416,9 +428,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={handleZoomOut}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-1 hover:bg-gray-200 rounded transition-colors"
                     >
-                      <ZoomOut className="w-4 h-4" />
+                      <Minus className="w-4 h-4" />
                     </button>
                     <input
                       type="text"
@@ -440,14 +452,14 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           setZoomInputValue(undefined);
                         }
                       }}
-                      className="text-sm text-gray-600 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                      className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                       style={{width: '3rem'}}
                     />
                     <button
                       onClick={handleZoomIn}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-1 hover:bg-gray-200 rounded transition-colors"
                     >
-                      <ZoomIn className="w-4 h-4" />
+                      <Plus className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex flex-row gap-x-2">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List } from 'lucide-react';
+import { sortMoments } from '../utils/sorting';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -29,13 +30,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
   useEffect(() => {
     if (open) {
-      // Sort moments by start_datetime, with moments without start time at the end
-      const sortedMoments = [...moments].sort((a, b) => {
-        if (!a.start_datetime && !b.start_datetime) return 0;
-        if (!a.start_datetime) return 1;
-        if (!b.start_datetime) return -1;
-        return new Date(a.start_datetime) - new Date(b.start_datetime);
-      });
+      // Sort moments using global utility
+      const sortedMoments = sortMoments(moments, 'asc');
       setEditingMoments(sortedMoments);
       
       // Reset changed moments tracking

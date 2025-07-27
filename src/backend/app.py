@@ -171,14 +171,28 @@ def get_group_photos(group_id):
 @app.route("/api/groups/<group_id>/crops", methods=["GET"])
 @require_auth
 def get_group_crops(group_id):
-    """Get list of face crop filenames for a group."""
+    """Get mapping from image_id to face_id for crop display."""
     event = Event(FIXED_EVENT_ID)
     group = event.groups_model.get(group_id)
     if not group:
         return not_found(f"Group {group_id} not found")
-    face_ids = event.groups_model.get_faces(group_id)
     
-    return jsonify({"face_ids": face_ids})
+    # Get image IDs for this group
+    image_ids = event.groups_model.get_images(group_id)
+    
+    # Create mapping from image_id to face_id
+    crop_mapping = {}
+    for image_id in image_ids:
+        # Get faces for this image that belong to this group
+        face_ids = event.images_model.get_faces(image_id)
+        for face_id in face_ids:
+            face = event.faces_model.get(face_id)
+            if face and face.get('groupID') == group_id:
+                # Map image_id to face_id for crop display
+                crop_mapping[image_id] = face_id
+                break  # Use the first face found for this image in this group
+    
+    return jsonify({"crop_mapping": crop_mapping})
 
 @app.route("/api/moments", methods=["GET"])
 @require_auth

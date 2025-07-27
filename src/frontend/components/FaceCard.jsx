@@ -56,7 +56,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/group/${group.groupID}`} className="block mb-3">
+        <Link to={`/group/${group.label}`} className="block mb-3">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg"
             style={{ 

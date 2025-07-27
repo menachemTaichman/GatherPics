@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Download, Edit, Trash2, User, Minus, Plus, Users } from 'lucide-react';
+import { Search, Filter, Download, Edit, Trash2, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import MergeGroupsModal from './MergeGroupsModal';
+import { sortGroups } from '../utils/sorting';
+import { useSetting } from '../utils/useSettings';
 
 export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeComplete }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,8 +14,10 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
-  const [sortBy, setSortBy] = useState('name'); // 'name', 'count', 'date'
-  const [cardSize, setCardSize] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3
+  const [sortBy, setSortBy] = useSetting('gallery_sortBy', 'name');
+  const [sortOrder, setSortOrder] = useSetting('gallery_sortOrder', 'desc');
+  const [cardSize, setCardSize] = useSetting('gallery_cardSize', 1.0);
+  const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = groups.filter(group => 
@@ -21,22 +25,9 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
               group.groupID.toString().includes(searchTerm)
     );
 
-    // Sort groups
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.label || `Person_${a.id}`).localeCompare(b.label || `Person_${b.id}`);
-        case 'count':
-          return (b.image_ids?.length || 0) - (a.image_ids?.length || 0);
-        case 'date':
-          return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }, [groups, searchTerm, sortBy]);
+    // Sort groups using global utility
+    return sortGroups(filtered, sortBy, sortOrder);
+  }, [groups, searchTerm, sortBy, sortOrder]);
 
   const handleEditGroup = (group) => {
     setSelectedGroup(group);
@@ -83,17 +74,31 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
               />
             </div>
             
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="appearance-none pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+            <div className="flex items-center space-x-2">
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="appearance-none pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                >
+                  <option value="name">Sort by Name</option>
+                  <option value="count">Sort by Count</option>
+                  <option value="date">Sort by Date</option>
+                </select>
+                <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+              </div>
+              
+              <button
+                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
+                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
-                <option value="name">Sort by Name</option>
-                <option value="count">Sort by Count</option>
-                <option value="date">Sort by Date</option>
-              </select>
-              <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                {sortOrder === 'asc' ? (
+                  <ArrowUp className="w-4 h-4" />
+                ) : (
+                  <ArrowDown className="w-4 h-4" />
+                )}
+              </button>
             </div>
 
             <button
@@ -107,17 +112,50 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
             {/* Size Control */}
             <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
               <button
-                onClick={() => setCardSize(prev => Math.max(0.75, prev - 0.25))}
+                onClick={() => {
+                  const currentPercent = Math.round(cardSize * 100);
+                  const next25 = Math.ceil(currentPercent / 25) * 25;
+                  const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                  const subtract25 = currentPercent - 25;
+                  const newPercent = Math.max(75, Math.max(subtract25, prev25));
+                  setCardSize(newPercent / 100);
+                }}
                 disabled={cardSize <= 0.75}
                 className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Minus className="w-4 h-4" />
               </button>
-              <span className="text-sm font-medium text-gray-700 min-w-[3rem] text-center">
-                {Math.round(cardSize * 100)}%
-              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={cardSizeInputValue !== undefined ? cardSizeInputValue : Math.round(cardSize * 100)}
+                onChange={e => setCardSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={e => {
+                  let val = parseInt(e.target.value, 10);
+                  if (isNaN(val)) val = Math.round(cardSize * 100);
+                  val = Math.max(75, Math.min(175, val));
+                  setCardSize(val / 100);
+                  setCardSizeInputValue(undefined);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.target.blur();
+                  } else if (e.key === 'Escape') {
+                    setCardSizeInputValue(undefined);
+                  }
+                }}
+                className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                style={{width: '3rem'}}
+              />
               <button
-                onClick={() => setCardSize(prev => Math.min(1.75, prev + 0.25))}
+                onClick={() => {
+                  const currentPercent = Math.round(cardSize * 100);
+                  const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                  const add25 = currentPercent + 25;
+                  const newPercent = Math.min(175, Math.min(add25, next25));
+                  setCardSize(newPercent / 100);
+                }}
                 disabled={cardSize >= 1.75}
                 className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >

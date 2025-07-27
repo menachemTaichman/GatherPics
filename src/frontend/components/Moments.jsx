@@ -6,6 +6,7 @@ import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation } from 'react-router-dom';
+import { useSetting } from '../utils/useSettings';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -95,7 +96,13 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
     <div className="mt-4">
       {/* Photos Grid/List */}
       {viewMode === 'grid' ? (
-        <div className={`photo-gallery-grid size-${Math.round(photoSize * 100).toString().padStart(3, '0')}`}>
+        <div 
+          className="photo-gallery-grid"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * photoSize)}px, 1fr))`,
+            gridAutoRows: `${Math.max(100, 266 * photoSize)}px`
+          }}
+        >
           {photos.map((photo, index) => (
             <div
               key={photo.name}
@@ -187,13 +194,14 @@ export default function Moments() {
   const [error, setError] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [images, setImages] = useState([]);
-  const [viewMode, setViewMode] = useState('grid');
-  const [photoSize, setPhotoSize] = useState(1);
+  const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
+  const [photoSize, setPhotoSize] = useSetting('moments_photoSize', 1.0);
+  const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [momentPhotosMap, setMomentPhotosMap] = useState({});
   const [globalSelection, setGlobalSelection] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
-  const [carouselVisible, setCarouselVisible] = useState(true);
+  const [carouselVisible, setCarouselVisible] = useSetting('moments_carouselVisible', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
   const [showEditPhotosModal, setShowEditPhotosModal] = useState(false);
@@ -496,17 +504,50 @@ export default function Moments() {
 
               <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
                 <button
-                  onClick={() => setPhotoSize(prev => Math.max(0.5, prev - 0.25))}
+                  onClick={() => {
+                    const currentPercent = Math.round(photoSize * 100);
+                    const next25 = Math.ceil(currentPercent / 25) * 25;
+                    const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                    const subtract25 = currentPercent - 25;
+                    const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                    setPhotoSize(newPercent / 100);
+                  }}
                   disabled={photoSize <= 0.5}
                   className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
-                <span className="text-sm font-medium text-gray-700 min-w-[3rem] text-center">
-                  {Math.round(photoSize * 100)}%
-                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
+                  onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                  onBlur={e => {
+                    let val = parseInt(e.target.value, 10);
+                    if (isNaN(val)) val = Math.round(photoSize * 100);
+                    val = Math.max(50, Math.min(300, val));
+                    setPhotoSize(val / 100);
+                    setPhotoSizeInputValue(undefined);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.target.blur();
+                    } else if (e.key === 'Escape') {
+                      setPhotoSizeInputValue(undefined);
+                    }
+                  }}
+                  className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                  style={{width: '3rem'}}
+                />
                 <button
-                  onClick={() => setPhotoSize(prev => Math.min(3, prev + 0.25))}
+                  onClick={() => {
+                    const currentPercent = Math.round(photoSize * 100);
+                    const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                    const add25 = currentPercent + 25;
+                    const newPercent = Math.min(300, Math.min(add25, next25));
+                    setPhotoSize(newPercent / 100);
+                  }}
                   disabled={photoSize >= 3}
                   className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >

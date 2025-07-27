@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter } from 'lucide-react';
+import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
+import { useSetting } from '../utils/useSettings';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -23,8 +25,8 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
   const [photosInPeriod, setPhotosInPeriod] = useState([]);
-  const [sortOrder, setSortOrder] = useState('asc');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'in-moment', 'not-in-moment', 'in-period'
+  const [sortOrder, setSortOrder] = useSetting('editMomentPhotos_sortOrder', 'asc');
+  const [filterType, setFilterType] = useSetting('editMomentPhotos_filterType', 'all');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -36,12 +38,19 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
     }
   }, [open, moment, momentPhotosMap]);
 
-  // Fetch all images with timestamps after photosInPeriod is loaded
+  // Fetch all images with timestamps when modal opens
   useEffect(() => {
     if (open && moment) {
       fetchAllImagesWithTimestamps();
     }
-  }, [open, moment, photosInPeriod, momentPhotosMap]);
+  }, [open, moment]); // Removed photosInPeriod and momentPhotosMap dependencies
+
+  // Refetch images when dependencies change (only if modal is open)
+  useEffect(() => {
+    if (open && moment && (photosInPeriod.length > 0 || Object.keys(momentPhotosMap).length > 0)) {
+      fetchAllImagesWithTimestamps();
+    }
+  }, [photosInPeriod, momentPhotosMap]);
 
   useEffect(() => {
     if (open) {
@@ -155,8 +164,8 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
     });
   };
 
-  const toggleSortOrder = () => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  const handleToggleSortOrder = () => {
+    setSortOrder(prev => toggleSortOrder(prev));
   };
 
   const selectAllFiltered = () => {
@@ -204,27 +213,8 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
       filteredImages = photosInPeriod;
     }
     
-    // Sort by date_taken, with photos without timestamps sorted by filename
-    filteredImages.sort((a, b) => {
-      const hasDateA = !!a.date_taken;
-      const hasDateB = !!b.date_taken;
-      
-      // If both have dates, sort by date
-      if (hasDateA && hasDateB) {
-        const dateA = new Date(a.date_taken);
-        const dateB = new Date(b.date_taken);
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-      }
-      
-      // If only one has a date, prioritize the one with date
-      if (hasDateA && !hasDateB) return sortOrder === 'asc' ? -1 : 1;
-      if (!hasDateA && hasDateB) return sortOrder === 'asc' ? 1 : -1;
-      
-      // If neither has a date, sort by filename
-      return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-    });
-    
-    return filteredImages;
+    // Sort using global utility with date priority
+    return sortPhotosWithDatePriority(filteredImages, sortOrder);
   };
 
   if (!open || !moment) return null;
@@ -308,7 +298,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
               </button>
               <span className="text-sm font-medium text-gray-700">Sort:</span>
               <button
-                onClick={toggleSortOrder}
+                onClick={handleToggleSortOrder}
                 className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                 title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
               >

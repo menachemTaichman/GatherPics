@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Download, Home, Users, Settings, Clock, Smile } from 'lucide-react';
+import SettingsManager from './SettingsManager';
 
 export default function Header() {
   const location = useLocation();
@@ -71,13 +72,7 @@ export default function Header() {
               <span className="hidden sm:inline">Add All to Bucket</span>
             </button>
 
-            <button
-              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </button>
+            <SettingsManager />
           </nav>
         </div>
       </div>
