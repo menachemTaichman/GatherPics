@@ -73,9 +73,7 @@ export const sortGroups = (groups, sortBy = 'name', sortOrder = 'asc') => {
     
     switch (sortBy) {
       case 'name':
-        comparison = (a.label || `Person_${a.groupID || a.id}`).localeCompare(
-          b.label || `Person_${b.groupID || b.id}`
-        );
+        comparison = (a.label || '').localeCompare(b.label || '');
         break;
       case 'count':
         comparison = (a.image_ids?.length || a.face_IDs?.length || 0) - 

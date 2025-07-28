@@ -37,11 +37,13 @@ class Event(JsonModel):
         self.name = ''
         self.date = ''
         self.events_manager = ''
+        self.last_group_id = ''
 
     def _load_fields(self, data: dict):
         self.name = data.get('name', '')
         self.date = data.get('date', '')
         self.events_manager = data.get('events_manager', '')
+        self.last_group_id = data.get('last_group_id', '')
 
     def get_info(self) -> dict:
         return {
@@ -49,8 +51,13 @@ class Event(JsonModel):
             'name': self.name,
             'date': self.date,
             'events_manager': self.events_manager,
+            'last_group_id': self.last_group_id,
             'DB_PATH': self.DB_PATH
         }
+    def add(self, **fields) -> 'Event':
+        super().add(**fields)
+        self.last_group_id = 0
+        return self
 
     def _ensure_event_dirs(self):
         os.makedirs(self.event_dir, exist_ok=True)
@@ -166,15 +173,16 @@ class Event(JsonModel):
 
         def _cluster_and_group_faces(face_ids):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
-            num_groups = len(self.groups_model.list())
-            for cluster_idx, cluster in enumerate(clusters, num_groups + 1):
+            for cluster in clusters:
+                group_num = self.last_group_id + 1
                 representative_face_id = _biggest_face_in_cluster(cluster)
                 group_data = self.groups_model.add(
-                    label=f"Person {cluster_idx}",
+                    label=f"Person {group_num}",
                     face_representive=representative_face_id
                 )
                 group_id = group_data['groupID']
                 self.groups_model.add_faces(group_id, cluster)
+                self.last_group_id = group_num
             return len(clusters)
 
         def _process_image(image_file):

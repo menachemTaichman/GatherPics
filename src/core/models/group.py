@@ -13,10 +13,35 @@ class Groups(BaseModel):
         }
 
     def add(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
-        group_data = super().add(label, face_representive, face_IDs)
+        # Handle duplicate labels by appending a number
+        final_label = self._ensure_unique_label(label)
+        group_data = super().add(final_label, face_representive, face_IDs)
         group_id = group_data['groupID']
         self.add_faces(group_id, face_IDs)
         return group_data
+
+    def _ensure_unique_label(self, label: str) -> str:
+        """Ensure label is unique by appending a number if needed."""
+        if not label:
+            return label
+        
+        original_label = label
+        counter = 1
+        while True:
+            existing = self.db.get_one(self.table_name, {'label': label})
+            if not existing:
+                return label
+            label = f"{original_label} ({counter})"
+            counter += 1
+
+    def edit(self, entity_id: str, fields: Dict) -> None:
+        """Edit a group with validation for unique labels."""
+        if 'label' in fields and fields['label']:
+            # Check for duplicate labels (excluding current group)
+            existing = self.db.get_one(self.table_name, {'label': fields['label']})
+            if existing and existing[self.id_field] != entity_id:
+                raise ValueError(f"Group with label '{fields['label']}' already exists")
+        super().edit(entity_id, fields)
 
     def add_faces(self, group_id: str, face_ids: List[str]) -> None:
         if not face_ids:

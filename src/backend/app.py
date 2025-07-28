@@ -131,6 +131,9 @@ def update_group(group_id):
         event.groups_model.edit(group_id, data)
         updated = event.groups_model.get(group_id)
         return jsonify(updated)
+    except ValueError as e:
+        # Handle unique constraint violation
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return bad_request(e)
 

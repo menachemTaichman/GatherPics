@@ -4,7 +4,7 @@ import { X, Save, User, Image, Edit, Check } from 'lucide-react';
 
 export default function EditGroupModal({ group, onClose, onSave }) {
   const [formData, setFormData] = useState({
-    label: group.label || `Person_${group.groupID}`,
+    label: group.label || '',
     face_representive: group.face_representive
   });
   const [loading, setLoading] = useState(false);
