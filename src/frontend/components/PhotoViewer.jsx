@@ -27,6 +27,15 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [isEditingIndex, setIsEditingIndex] = useState(false);
   const imageRef = useRef(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [rectangleKey, setRectangleKey] = useState(0);
+
+  // Force re-render of face rectangles when zoom/rotation changes
+  useEffect(() => {
+    if (imageLoaded && showRectangles) {
+      setRectangleKey(prev => prev + 1);
+    }
+  }, [zoom, rotation, pan, imageLoaded, showRectangles]);
 
   // Prevent background scroll when modal is open
   useEffect(() => {
@@ -159,88 +168,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   };
 
-  // Debug function to log face data
-  const debugFaceData = () => {
-    console.log('=== DEBUG RECTANGLES INVESTIGATION ===');
-    
-    // Image size info
-    if (imageRef.current) {
-      const imgRect = imageRef.current.getBoundingClientRect();
-      console.log('IMAGE SIZE INFO:', {
-        displayWidth: imgRect.width,
-        displayHeight: imgRect.height,
-        naturalWidth: imageRef.current.naturalWidth,
-        naturalHeight: imageRef.current.naturalHeight
-      });
-    }
-    
-    // Mode info
-    console.log('MODE INFO:', {
-      zoom: zoom,
-      rotation: rotation,
-      pan: pan,
-      showRectangles: showRectangles
-    });
-    
-    // Faces bbox info
-    console.log('FACES BBOX INFO:');
-    faces.forEach((face, index) => {
-      console.log(`Face ${index} (${face.group_label}):`, {
-        face_id: face.face_id,
-        group_id: face.group_id,
-        original_coords: face.face_coords,
-        percentages: {
-          left: `${face.face_coords.Left * 100}%`,
-          top: `${face.face_coords.Top * 100}%`,
-          width: `${face.face_coords.Width * 100}%`,
-          height: `${face.face_coords.Height * 100}%`
-        }
-      });
-    });
-    
-    // Rectangles bboxes info
-    console.log('RECTANGLES BBOXES INFO:');
-    faces.forEach((face, index) => {
-      const style = getFaceRectangleStyle(face);
-      console.log(`Rectangle ${index} (${face.group_label}):`, {
-        calculated_style: style,
-        css_properties: {
-          left: style.left,
-          top: style.top,
-          width: style.width,
-          height: style.height
-        }
-      });
-    });
-    
-    // DOM element positions (if rectangles are visible)
-    if (showRectangles) {
-      console.log('DOM RECTANGLE POSITIONS:');
-      const rectangleElements = document.querySelectorAll('[data-face-rectangle]');
-      rectangleElements.forEach((element, index) => {
-        const rect = element.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(element);
-        console.log(`DOM Rectangle ${index}:`, {
-          element: element,
-          boundingRect: {
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height
-          },
-          computedStyle: {
-            left: computedStyle.left,
-            top: computedStyle.top,
-            width: computedStyle.width,
-            height: computedStyle.height,
-            position: computedStyle.position
-          }
-        });
-      });
-    }
-    
-    console.log('=== END DEBUG ===');
-  };
+
 
   // Mouse wheel handler for zoom
   const handleWheel = (e) => {
@@ -315,8 +243,40 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [totalPhotos, currentIndex, onClose, handleNavigate]);
 
-  // Fixed face rectangle style calculation - now much simpler since rectangles are inside transformed container
+  // Fixed face rectangle style calculation - accounts for object-contain image scaling
   const getFaceRectangleStyle = (face) => {
+    // Always use the complex calculation when image is loaded
+    if (imageRef.current && imageLoaded) {
+      const img = imageRef.current;
+      const container = img.parentElement;
+      
+      // Get the actual displayed image dimensions
+      const imgRect = img.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      // Calculate the offset of the image within the container
+      const offsetX = (imgRect.left - containerRect.left) / containerRect.width * 100;
+      const offsetY = (imgRect.top - containerRect.top) / containerRect.height * 100;
+      
+      // Calculate the scaled dimensions of the image as percentages of the container
+      const imageWidthPercent = (imgRect.width / containerRect.width) * 100;
+      const imageHeightPercent = (imgRect.height / containerRect.height) * 100;
+      
+      // Calculate the face rectangle position and size
+      const left = offsetX + (face.face_coords.Left * imageWidthPercent);
+      const top = offsetY + (face.face_coords.Top * imageHeightPercent);
+      const width = face.face_coords.Width * imageWidthPercent;
+      const height = face.face_coords.Height * imageHeightPercent;
+      
+      return {
+        left: `${left}%`,
+        top: `${top}%`,
+        width: `${width}%`,
+        height: `${height}%`,
+      };
+    }
+    
+    // Fallback to simple calculation only when image is not loaded
     return {
       left: `${face.face_coords.Left * 100}%`,
       top: `${face.face_coords.Top * 100}%`,
@@ -446,7 +406,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     transformOrigin: 'center center', // Ensure rotation happens from center
                   }}
                 >
-                  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
                       src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
                       alt={photoMeta.name}
@@ -458,12 +418,20 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         e.target.src = PLACEHOLDER_DATA_URL;
                       }}
                       ref={imageRef}
-                      onLoad={() => setImageLoaded(true)}
-                      style={{display: 'block', width: '100%', height: '100%'}}
+                      onLoad={() => {
+                        setImageLoaded(true);
+                        if (imageRef.current) {
+                          setImageDimensions({
+                            width: imageRef.current.naturalWidth,
+                            height: imageRef.current.naturalHeight
+                          });
+                        }
+                      }}
+                      style={{display: 'block'}}
                     />
                     
                     {/* Face rectangles - now inside the transformed container */}
-                    {showRectangles && faces.map((face, index) => {
+                    {showRectangles && imageLoaded && faces.map((face, index) => {
                       let borderColor, bgColor, labelBgColor;
                       if (selectedFaceIndex === index) {
                         borderColor = 'border-red-500';
@@ -480,7 +448,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       }
                       return (
                         <div
-                          key={index}
+                          key={`${index}-${rectangleKey}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -511,13 +479,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={debugFaceData}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xs bg-yellow-100 hover:bg-yellow-200"
-                      title="Debug face data"
-                    >
-                      🐛 Debug
-                    </button>
                     <button
                       onClick={handleReset}
                       className="text-sm text-primary-600 hover:text-primary-700"
