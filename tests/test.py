@@ -264,5 +264,28 @@ def update_date_taken(image_ids: list):
         date_taken = extract_all_metadata(image_path)['date_taken'] 
         event.images_model.edit(image_id, {'date_taken': date_taken})
 
+"""
 face = event.faces_model.get('57b76b0d-db5f-49e3-87d2-8190cf484e89')
 print(face)
+"""
+# create function to show in matplotlib a frop from image, with the face bbox
+def show_face_from_image(image_path, face_bbox):
+    import matplotlib.pyplot as plt
+    image = PILImage.open(image_path)
+    face_pil = crop_image(image, face_bbox, padding_width_percent=0, padding_height_percent=0)
+    plt.imshow(face_pil)
+    plt.show()
+
+"""
+image_id = 'da2446df-b5c9-4fdc-b320-8a3871f48366'
+face_id = '57b76b0d-db5f-49e3-87d2-8190cf484e89'
+face = event.faces_model.get(face_id)
+face_bbox = {
+    'left': face['left'],
+    'top': face['top'],
+    'width': face['width'],
+    'height': face['height']
+}
+
+show_face_from_image(os.path.join(event.original_dir, f'{image_id}.jpg'), face_bbox)
+"""
