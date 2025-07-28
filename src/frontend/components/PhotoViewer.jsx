@@ -213,6 +213,32 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       });
     });
     
+    // DOM element positions (if rectangles are visible)
+    if (showRectangles) {
+      console.log('DOM RECTANGLE POSITIONS:');
+      const rectangleElements = document.querySelectorAll('[data-face-rectangle]');
+      rectangleElements.forEach((element, index) => {
+        const rect = element.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(element);
+        console.log(`DOM Rectangle ${index}:`, {
+          element: element,
+          boundingRect: {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+          },
+          computedStyle: {
+            left: computedStyle.left,
+            top: computedStyle.top,
+            width: computedStyle.width,
+            height: computedStyle.height,
+            position: computedStyle.position
+          }
+        });
+      });
+    }
+    
     console.log('=== END DEBUG ===');
   };
 
