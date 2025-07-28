@@ -304,6 +304,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
+                      id="edit-group-title"
+                      name="edit-group-title"
                       value={editingTitle}
                       onChange={(e) => setEditingTitle(e.target.value)}
                       onKeyDown={(e) => {
@@ -383,6 +385,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
+                id="search-photos"
+                name="search-photos"
                 placeholder="Search photos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -452,6 +456,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                 </button>
                 <input
                   type="text"
+                  id="face-detail-photo-size"
+                  name="face-detail-photo-size"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
@@ -593,6 +599,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.photo_id, index)}>
                     <input
                       type="checkbox"
+                      id={`photo-checkbox-grid-${photo.photo_id}`}
+                      name={`photo-checkbox-grid-${photo.photo_id}`}
                       checked={selectedPhotos.has(photo.photo_id)}
                       onChange={(e) => {
                         e.stopPropagation();
@@ -638,6 +646,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   <>
                     <input
                       type="checkbox"
+                      id={`photo-checkbox-list-${photo.photo_id}`}
+                      name={`photo-checkbox-list-${photo.photo_id}`}
                       checked={selectedPhotos.has(photo.photo_id)}
                       onChange={(e) => {
                         togglePhotoSelection(photo.photo_id);

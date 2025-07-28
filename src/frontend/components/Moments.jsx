@@ -111,6 +111,8 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
               <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.name, index)}>
                 <input
                   type="checkbox"
+                  id={`photo-checkbox-${momentId}-${photo.name}`}
+                  name={`photo-checkbox-${momentId}-${photo.name}`}
                   checked={globalSelection.has(`${momentId}:${photo.name}`)}
                   onChange={(e) => {
                     e.stopPropagation();
@@ -152,6 +154,8 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
             <div key={photo.name} className="flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full">
               <input
                 type="checkbox"
+                id={`photo-checkbox-list-${momentId}-${photo.name}`}
+                name={`photo-checkbox-list-${momentId}-${photo.name}`}
                 checked={globalSelection.has(`${momentId}:${photo.name}`)}
                 onChange={(e) => {
                   togglePhotoSelection(photo.name);
@@ -519,6 +523,8 @@ export default function Moments() {
                 </button>
                 <input
                   type="text"
+                  id="photo-size-input"
+                  name="photo-size-input"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}

@@ -373,6 +373,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     {isEditingIndex ? (
                       <input
                         type="text"
+                        id="photo-viewer-index"
+                        name="photo-viewer-index"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
@@ -534,6 +536,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     </button>
                     <input
                       type="text"
+                      id="photo-viewer-zoom"
+                      name="photo-viewer-zoom"
                       inputMode="numeric"
                       pattern="[0-9]*"
                       value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}

@@ -129,8 +129,10 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
                       <div className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                                                  checked={selectedGroups.has(group.groupID)}
-                        onChange={() => handleGroupSelect(group.groupID)}
+                          id={`merge-group-checkbox-${group.groupID}`}
+                          name={`merge-group-checkbox-${group.groupID}`}
+                          checked={selectedGroups.has(group.groupID)}
+                          onChange={() => handleGroupSelect(group.groupID)}
                           className="rounded"
                         />
                         <div className="flex items-center space-x-3 flex-1 min-w-0">

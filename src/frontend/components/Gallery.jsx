@@ -67,6 +67,8 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
+                id="search-faces"
+                name="search-faces"
                 placeholder="Search faces..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -127,6 +129,8 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
               </button>
               <input
                 type="text"
+                id="card-size-input"
+                name="card-size-input"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={cardSizeInputValue !== undefined ? cardSizeInputValue : Math.round(cardSize * 100)}

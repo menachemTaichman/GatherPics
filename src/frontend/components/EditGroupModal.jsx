@@ -143,6 +143,8 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
+                      id="edit-group-name"
+                      name="edit-group-name"
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
                       onKeyDown={(e) => {

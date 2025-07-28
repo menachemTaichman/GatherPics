@@ -241,6 +241,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       {editingTitle?.id === moment.id ? (
                         <input
                           type="text"
+                          id={`edit-moment-title-${moment.id}`}
+                          name={`edit-moment-title-${moment.id}`}
                           value={editingTitle.title}
                           onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
                           onBlur={() => handleTitleEdit(moment.id, editingTitle.title)}
@@ -298,6 +300,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
                     <textarea
+                      id={`moment-description-${moment.id}`}
+                      name={`moment-description-${moment.id}`}
                       value={moment.description}
                       onChange={(e) => updateMoment(moment.id, { description: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm resize-none"
@@ -311,6 +315,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       <label className="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
                       <input
                         type="datetime-local"
+                        id={`moment-start-${moment.id}`}
+                        name={`moment-start-${moment.id}`}
                         value={moment.start_datetime}
                         onChange={(e) => updateMoment(moment.id, { start_datetime: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
@@ -326,6 +332,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       <label className="block text-xs font-medium text-gray-600 mb-1">End Time</label>
                       <input
                         type="datetime-local"
+                        id={`moment-end-${moment.id}`}
+                        name={`moment-end-${moment.id}`}
                         value={moment.end_datetime}
                         onChange={(e) => updateMoment(moment.id, { end_datetime: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
