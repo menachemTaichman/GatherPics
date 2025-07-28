@@ -26,6 +26,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [editIndexValue, setEditIndexValue] = useState();
   const [isEditingIndex, setIsEditingIndex] = useState(false);
   const imageRef = useRef(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   // Prevent background scroll when modal is open
   useEffect(() => {
@@ -67,12 +68,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       loadPhotoInfo();
       // Reset selected face when photo changes
       setSelectedFaceIndex(null);
+      // Reset image loaded state when photo changes
+      setImageLoaded(false);
     }
   }, [photo]);
-
-
-
-
 
   const loadPhotoInfo = async () => {
     try {
@@ -148,8 +147,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleFaceNavigation = (face) => {
-    // Navigate to the face group page
-    navigate(`/group/${face.group_id}`);
+    // Navigate to the face group page using the group label
+    navigate(`/group/${encodeURIComponent(face.group_label)}`);
     onClose(); // Close the photo viewer
   };
 
@@ -158,6 +157,63 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       onJumpToMoment(momentInfo);
       onClose(); // Close the photo viewer
     }
+  };
+
+  // Debug function to log face data
+  const debugFaceData = () => {
+    console.log('=== DEBUG RECTANGLES INVESTIGATION ===');
+    
+    // Image size info
+    if (imageRef.current) {
+      const imgRect = imageRef.current.getBoundingClientRect();
+      console.log('IMAGE SIZE INFO:', {
+        displayWidth: imgRect.width,
+        displayHeight: imgRect.height,
+        naturalWidth: imageRef.current.naturalWidth,
+        naturalHeight: imageRef.current.naturalHeight
+      });
+    }
+    
+    // Mode info
+    console.log('MODE INFO:', {
+      zoom: zoom,
+      rotation: rotation,
+      pan: pan,
+      showRectangles: showRectangles
+    });
+    
+    // Faces bbox info
+    console.log('FACES BBOX INFO:');
+    faces.forEach((face, index) => {
+      console.log(`Face ${index} (${face.group_label}):`, {
+        face_id: face.face_id,
+        group_id: face.group_id,
+        original_coords: face.face_coords,
+        percentages: {
+          left: `${face.face_coords.Left * 100}%`,
+          top: `${face.face_coords.Top * 100}%`,
+          width: `${face.face_coords.Width * 100}%`,
+          height: `${face.face_coords.Height * 100}%`
+        }
+      });
+    });
+    
+    // Rectangles bboxes info
+    console.log('RECTANGLES BBOXES INFO:');
+    faces.forEach((face, index) => {
+      const style = getFaceRectangleStyle(face);
+      console.log(`Rectangle ${index} (${face.group_label}):`, {
+        calculated_style: style,
+        css_properties: {
+          left: style.left,
+          top: style.top,
+          width: style.width,
+          height: style.height
+        }
+      });
+    });
+    
+    console.log('=== END DEBUG ===');
   };
 
   // Mouse wheel handler for zoom
@@ -178,6 +234,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   // Mouse handlers for dragging
   const handleMouseDown = (e) => {
+    // Prevent dragging when clicking on face rectangles
+    if (e.target.closest('[data-face-rectangle]')) {
+      return;
+    }
     setIsDragging(true);
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
@@ -228,6 +288,16 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [totalPhotos, currentIndex, onClose, handleNavigate]);
+
+  // Fixed face rectangle style calculation - now much simpler since rectangles are inside transformed container
+  const getFaceRectangleStyle = (face) => {
+    return {
+      left: `${face.face_coords.Left * 100}%`,
+      top: `${face.face_coords.Top * 100}%`,
+      width: `${face.face_coords.Width * 100}%`,
+      height: `${face.face_coords.Height * 100}%`,
+    };
+  };
 
   return (
     <AnimatePresence>
@@ -341,13 +411,14 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 <motion.div
                   className="relative"
                   style={{
+                    transform: `scale(${zoom}) rotate(${rotation}deg) translate(${pan.x}px, ${pan.y}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.2s ease-out',
                     width: '100%',
                     height: '100%',
-                    transform: `scale(${zoom}) rotate(${rotation}deg) translate(${pan.x}px, ${pan.y}px)`,
-                    transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+                    transformOrigin: 'center center', // Ensure rotation happens from center
                   }}
                 >
-                  <div style={{position: 'relative', display: 'inline-block', width: '100%', height: '100%'}}>
+                  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                     <img
                       src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
                       alt={photoMeta.name}
@@ -359,53 +430,47 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         e.target.src = PLACEHOLDER_DATA_URL;
                       }}
                       ref={imageRef}
+                      onLoad={() => setImageLoaded(true)}
                       style={{display: 'block', width: '100%', height: '100%'}}
                     />
-                    {/* Face Overlays */}
-                    <div style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'none',
-                    }}>
-                      {showRectangles && faces.map((face, index) => {
-                        let borderColor, bgColor, labelBgColor;
-                        if (selectedFaceIndex === index) {
-                          borderColor = 'border-red-500';
-                          bgColor = 'bg-red-500';
-                          labelBgColor = 'bg-red-500';
-                        } else if (face.group_id === currentGroupId) {
-                          borderColor = 'border-green-500';
-                          bgColor = 'bg-green-500';
-                          labelBgColor = 'bg-green-500';
-                        } else {
-                          borderColor = 'border-blue-500';
-                          bgColor = 'bg-blue-500';
-                          labelBgColor = 'bg-blue-500';
-                        }
-                        return (
-                          <div
-                            key={index}
-                            className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
-                            style={{
-                              left: `${face.face_coords.Left * 100}%`,
-                              top: `${face.face_coords.Top * 100}%`,
-                              width: `${face.face_coords.Width * 100}%`,
-                              height: `${face.face_coords.Height * 100}%`,
-                              pointerEvents: 'auto',
-                            }}
-                            title={`${face.group_label}`}
-                            onClick={() => handleFaceClick(index)}
-                          >
-                            <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
-                              {face.group_label}
-                            </div>
+                    
+                    {/* Face rectangles - now inside the transformed container */}
+                    {showRectangles && faces.map((face, index) => {
+                      let borderColor, bgColor, labelBgColor;
+                      if (selectedFaceIndex === index) {
+                        borderColor = 'border-red-500';
+                        bgColor = 'bg-red-500';
+                        labelBgColor = 'bg-red-500';
+                      } else if (face.group_id === currentGroupId) {
+                        borderColor = 'border-green-500';
+                        bgColor = 'bg-green-500';
+                        labelBgColor = 'bg-green-500';
+                      } else {
+                        borderColor = 'border-blue-500';
+                        bgColor = 'bg-blue-500';
+                        labelBgColor = 'bg-blue-500';
+                      }
+                      return (
+                        <div
+                          key={index}
+                          data-face-rectangle="true" // Marker to prevent dragging conflicts
+                          className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
+                          style={{
+                            ...getFaceRectangleStyle(face),
+                            pointerEvents: 'auto',
+                          }}
+                          title={`${face.group_label}`}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering drag
+                            handleFaceClick(index);
+                          }}
+                        >
+                          <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
+                            {face.group_label}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
@@ -417,12 +482,21 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               <div className="p-3 border-b border-gray-200 photo-viewer-controls">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
-                  <button
-                    onClick={handleReset}
-                    className="text-sm text-primary-600 hover:text-primary-700"
-                  >
-                    Reset
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={debugFaceData}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xs bg-yellow-100 hover:bg-yellow-200"
+                      title="Debug face data"
+                    >
+                      🐛 Debug
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      className="text-sm text-primary-600 hover:text-primary-700"
+                    >
+                      Reset
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
@@ -591,4 +665,4 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       </div>
     </AnimatePresence>
   );
-} 
+}

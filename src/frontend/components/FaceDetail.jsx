@@ -17,7 +17,9 @@ import {
   ArrowDown,
   Minus,
   Plus,
-  Crop
+  Crop,
+  Check,
+  X
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -44,6 +46,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [showCrops, setShowCrops] = useState(false);
   const [imageCrops, setImageCrops] = useState({});
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitle, setEditingTitle] = useState('');
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -54,10 +58,15 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     const foundGroup = groups.find(g => g.label === group_name);
     if (foundGroup) {
       setGroup(foundGroup);
+    } else if (group && group.groupID) {
+      // If we have a group but the label doesn't match the URL, 
+      // it might be because we just updated the group name
+      // Don't redirect in this case
+      return;
     } else {
       navigate('/');
     }
-  }, [group_name, groups, navigate]);
+  }, [group_name, groups, navigate, group]);
 
   // Fetch sorted photos from backend
   useEffect(() => {
@@ -234,6 +243,31 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     navigate('/moments', { state: { scrollToMoment: momentInfo.id } });
   };
 
+  const handleTitleEdit = () => {
+    setEditingTitle(group.label || `Person ${group.groupID}`);
+    setIsEditingTitle(true);
+  };
+
+  const handleTitleSave = async () => {
+    if (editingTitle.trim() && editingTitle !== group.label) {
+      try {
+        await onUpdateGroup(group.groupID, { label: editingTitle.trim() });
+        setGroup(prev => ({ ...prev, label: editingTitle.trim() }));
+        
+        // Update the URL to reflect the new group name
+        const newUrl = `/${encodeURIComponent(editingTitle.trim())}`;
+        window.history.replaceState(null, '', newUrl);
+      } catch (error) {
+        console.error('Error updating group name:', error);
+      }
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleCancel = () => {
+    setIsEditingTitle(false);
+  };
+
   if (!group) {
     return <div>Loading...</div>;
   }
@@ -265,30 +299,66 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   }}
                 />
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {group.label || `Person ${group.groupID}`}
-                </h1>
-                <p className="text-gray-600">
-                  {filteredPhotos.length} of {group.image_ids?.length || 0} photos
-                  {showCrops && (
-                    <span className="ml-2 text-primary-600 font-medium">
-                      • Showing face crops
-                    </span>
-                  )}
-                </p>
+              <div className="flex items-center space-x-3">
+                {isEditingTitle ? (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleTitleSave();
+                        } else if (e.key === 'Escape') {
+                          handleTitleCancel();
+                        }
+                      }}
+                      className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-primary-500 focus:outline-none w-[200px]"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleTitleSave}
+                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                    >
+                      <Check className="w-4 h-4 text-green-600" />
+                    </button>
+                    <button
+                      onClick={handleTitleCancel}
+                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4 text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <h1 
+                      className="text-3xl font-bold text-gray-900 cursor-pointer hover:text-primary-600 transition-colors w-[200px]"
+                      onClick={handleTitleEdit}
+                    >
+                      {group.label || `Person ${group.groupID}`}
+                    </h1>
+                    <button
+                      onClick={() => setShowEditModal(true)}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      title="Edit group details"
+                    >
+                      <Edit className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
+                )}
               </div>
+              <p className="text-gray-600">
+                {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                {showCrops && (
+                  <span className="ml-2 text-primary-600 font-medium">
+                    • Showing face crops
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-3 min-w-max">
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="btn-secondary flex items-center space-x-2"
-            >
-              <Edit className="w-4 h-4" />
-              <span>Edit</span>
-            </button>
             <button
               onClick={handleAddGroupToBucket}
               className="btn-primary flex items-center space-x-2"
@@ -442,42 +512,39 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               )}
             </div>
 
-            {/* Select All/Clear Buttons */}
+            {/* Compact Selection Controls */}
             {filteredPhotos.length > 0 && (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
                 <button
                   onClick={selectAllPhotos}
                   disabled={selectedPhotos.size === filteredPhotos.length}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-3 py-2 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 >
                   Select All
                 </button>
                 {selectedPhotos.size > 0 && (
-                  <button
-                    onClick={clearSelection}
-                    className="text-sm text-gray-600 hover:text-gray-700 font-medium px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors"
-                  >
-                    Clear
-                  </button>
+                  <>
+                    <span className="text-sm text-gray-600 px-2">
+                      {selectedPhotos.size} selected
+                    </span>
+                    <button
+                      onClick={clearSelection}
+                      className="text-sm text-gray-600 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={handleAddSelectedToBucket}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Add to Bucket</span>
+                    </button>
+                  </>
                 )}
               </div>
             )}
           </div>
-
-          {selectedPhotos.size > 0 && (
-            <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-600">
-                {selectedPhotos.size} selected
-              </span>
-              <button
-                onClick={handleAddSelectedToBucket}
-                className="btn-primary flex items-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Add Selected to Bucket</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

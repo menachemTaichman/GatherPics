@@ -264,4 +264,5 @@ def update_date_taken(image_ids: list):
         date_taken = extract_all_metadata(image_path)['date_taken'] 
         event.images_model.edit(image_id, {'date_taken': date_taken})
 
-update_date_taken(event.images_model.list())
+face = event.faces_model.get('57b76b0d-db5f-49e3-87d2-8190cf484e89')
+print(face)

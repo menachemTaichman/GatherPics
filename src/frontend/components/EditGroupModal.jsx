@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, User, Image } from 'lucide-react';
+import { X, Save, User, Image, Edit, Check } from 'lucide-react';
 
 export default function EditGroupModal({ group, onClose, onSave }) {
   const [formData, setFormData] = useState({
@@ -10,6 +10,8 @@ export default function EditGroupModal({ group, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
   const [cropMappings, setCropMappings] = useState({});
   const [cropsLoading, setCropsLoading] = useState(true);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingName, setEditingName] = useState('');
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -44,12 +46,39 @@ export default function EditGroupModal({ group, onClose, onSave }) {
     fetchCropMappings();
   }, [group.groupID, API_BASE]);
 
+  // Add keyboard event listeners for modal shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (isEditingName) {
+        // When editing name, don't handle ESC/Enter at document level
+        // Let the input field handle them
+        return;
+      } else {
+        // When not editing name, ESC and Enter should behave like modal shortcuts
+        if (e.key === 'Escape') {
+          onClose();
+        } else if (e.key === 'Enter') {
+          handleSubmit(e);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isEditingName, onClose]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     
     try {
       await onSave(formData);
+      
+      // Update the URL to reflect the new group name if it changed
+      if (formData.label !== group.label) {
+        const newUrl = `/${encodeURIComponent(formData.label)}`;
+        window.history.replaceState(null, '', newUrl);
+      }
     } catch (error) {
       console.error('Error saving group:', error);
       alert('Failed to save changes. Please try again.');
@@ -58,9 +87,35 @@ export default function EditGroupModal({ group, onClose, onSave }) {
     }
   };
 
+  const handleNameEdit = () => {
+    setEditingName(formData.label);
+    setIsEditingName(true);
+  };
+
+  const handleNameSave = () => {
+    if (editingName.trim()) {
+      setFormData(prev => ({ ...prev, label: editingName.trim() }));
+    }
+    setIsEditingName(false);
+  };
+
+  const handleNameCancel = () => {
+    setIsEditingName(false);
+  };
+
+  const getRepresentativeImageSrc = () => {
+    if (!formData.face_representive) return PLACEHOLDER_DATA_URL;
+    
+    // Always use faces endpoint for representative images
+    return `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${formData.face_representive}.webp`;
+  };
+
   return (
     <AnimatePresence>
-      <div className="modal-overlay" onClick={onClose}>
+      <div 
+        className="modal-overlay" 
+        onClick={onClose}
+      >
         <motion.div
           className="modal-content"
           initial={{ opacity: 0, scale: 0.95 }}
@@ -70,17 +125,68 @@ export default function EditGroupModal({ group, onClose, onSave }) {
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                <User className="w-5 h-5 text-primary-600" />
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200 shadow-lg">
+                <img
+                  src={getRepresentativeImageSrc()}
+                  alt="Representative"
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = PLACEHOLDER_DATA_URL;
+                  }}
+                />
               </div>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Edit Face Group
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Update the name and representative photo
-                </p>
+              <div className="flex items-center space-x-2">
+                {isEditingName ? (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.stopPropagation();
+                          handleNameSave();
+                        } else if (e.key === 'Escape') {
+                          e.stopPropagation();
+                          handleNameCancel();
+                        }
+                      }}
+                      className="text-xl font-semibold text-gray-900 bg-transparent border-b-2 border-primary-500 focus:outline-none w-[150px]"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleNameSave}
+                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                    >
+                      <Check className="w-4 h-4 text-green-600" />
+                    </button>
+                    <button
+                      onClick={handleNameCancel}
+                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4 text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <h2 
+                      className="text-xl font-semibold text-gray-900 cursor-pointer hover:text-primary-600 transition-colors w-[150px]"
+                      onClick={handleNameEdit}
+                    >
+                      {formData.label}
+                    </h2>
+                    <button
+                      onClick={handleNameEdit}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      title="Edit group name"
+                    >
+                      <Edit className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <button
@@ -93,57 +199,20 @@ export default function EditGroupModal({ group, onClose, onSave }) {
 
           {/* Content */}
           <form onSubmit={handleSubmit} className="p-6">
-            <div className="space-y-6">
-              {/* Current Representative Photo */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Current Representative Photo
-                </label>
-                <div className="w-32 h-32 rounded-lg overflow-hidden border border-gray-200">
-                  <img
-                    src={group.face_representive
-                      ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.webp`
-                      : PLACEHOLDER_DATA_URL}
-                    alt="Representative"
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Name Input */}
-              <div>
-                <label htmlFor="label" className="block text-sm font-medium text-gray-700 mb-2">
-                  Group Name
-                </label>
-                <input
-                  type="text"
-                  id="label"
-                  value={formData.label}
-                  onChange={(e) => setFormData(prev => ({ ...prev, label: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter group name..."
-                  required
-                />
-              </div>
-
+            <div className="space-y-4">
               {/* Representative Photo Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Select Representative Photo
                 </label>
                 {cropsLoading ? (
-                  <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
                     {group.image_ids?.map((imageId, index) => (
-                      <div key={imageId} className="w-full h-20 bg-gray-200 rounded-lg animate-pulse" />
+                      <div key={imageId} className="w-full h-16 bg-gray-200 rounded-lg animate-pulse" />
                     ))}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
                     {group.image_ids?.map((imageId, index) => {
                       const faceId = cropMappings[imageId];
                       const imageSrc = faceId 
@@ -164,7 +233,7 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                           <img
                             src={imageSrc}
                             alt={`Photo ${index + 1}`}
-                            className="w-full h-20 object-cover"
+                            className="w-full h-16 object-cover"
                             loading="lazy"
                             onError={(e) => {
                               e.target.onerror = null;
@@ -173,8 +242,8 @@ export default function EditGroupModal({ group, onClose, onSave }) {
                           />
                           {formData.face_representive === (faceId || imageId) && (
                             <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
-                              <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
-                                <Image className="w-3 h-3 text-white" />
+                              <div className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+                                <Image className="w-2 h-2 text-white" />
                               </div>
                             </div>
                           )}
