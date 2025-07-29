@@ -4,16 +4,14 @@ import { Search, Filter, Download, Edit, Trash2, User, Minus, Plus, Users, Arrow
 import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
-import MergeGroupsModal from './MergeGroupsModal';
 import { sortGroups } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 
-export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeComplete }) {
+export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showMergeModal, setShowMergeModal] = useState(false);
   const [sortBy, setSortBy] = useSetting('gallery_sortBy', 'name');
   const [sortOrder, setSortOrder] = useSetting('gallery_sortOrder', 'desc');
   const [cardSize, setCardSize] = useSetting('gallery_cardSize', 1.0);
@@ -34,13 +32,24 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
     setShowEditModal(true);
   };
 
-  const handleDeleteGroup = (group) => {
+  const handleDeleteGroup = async (group) => {
     setSelectedGroup(group);
     setShowDeleteModal(true);
   };
 
-  const handleMergeGroups = () => {
-    setShowMergeModal(true);
+  const handleDeleteConfirm = async () => {
+    try {
+      await onDeleteGroup(selectedGroup.groupID);
+      setShowDeleteModal(false);
+      setSelectedGroup(null);
+      
+      // Refresh groups data to ensure UI is updated
+      if (onRefreshGroups) {
+        await onRefreshGroups();
+      }
+    } catch (error) {
+      console.error('Error deleting group:', error);
+    }
   };
 
   const handleAddGroupToBucket = async (group) => {
@@ -102,14 +111,6 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
                 )}
               </button>
             </div>
-
-            <button
-              onClick={handleMergeGroups}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2"
-            >
-              <Users className="w-4 h-4" />
-              <span>Merge Groups</span>
-            </button>
 
             {/* Size Control */}
             <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
@@ -227,6 +228,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
+          onRefreshGroups={onRefreshGroups}
         />
       )}
 
@@ -237,19 +239,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onMergeC
             setShowDeleteModal(false);
             setSelectedGroup(null);
           }}
-          onConfirm={async () => {
-            await onDeleteGroup(selectedGroup.groupID);
-            setShowDeleteModal(false);
-            setSelectedGroup(null);
-          }}
-        />
-      )}
-
-      {showMergeModal && (
-        <MergeGroupsModal
-          groups={groups}
-          onClose={() => setShowMergeModal(false)}
-          onMergeComplete={onMergeComplete}
+          onConfirm={handleDeleteConfirm}
         />
       )}
     </div>

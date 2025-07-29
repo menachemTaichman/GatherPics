@@ -27,12 +27,14 @@ class Groups(BaseModel):
         
         original_label = label
         counter = 1
-        while True:
+        for _ in range(100):
             existing = self.db.get_one(self.table_name, {'label': label})
             if not existing:
                 return label
             label = f"{original_label} ({counter})"
             counter += 1
+
+        raise ValueError(f"Group with label '{label}' already exists")
 
     def edit(self, entity_id: str, fields: Dict) -> None:
         """Edit a group with validation for unique labels."""
@@ -76,16 +78,19 @@ class Groups(BaseModel):
             group['face_IDs'] = self.get_faces(group['groupID'])
             group['image_ids'] = self.get_images(group['groupID'])
         return groups
-
-    def merge_groups(self, group_ids: List[str], main_group_id: str = '') -> str:
-        if not group_ids:
-            return ''
-        if not main_group_id:
-            main_group_id = group_ids[0]
-        placeholders = ','.join(['?'] * len(group_ids))
-        query = f"UPDATE faces SET groupID=? WHERE groupID IN ({placeholders})"
-        self.db.execute_query(query, (main_group_id, *group_ids))
-        return main_group_id
+    
+    def check_name_conflict(self, label: str, exclude_group_id: str = '') -> Dict:
+        """Check if a group name already exists and return conflict info."""
+        existing = self.db.get_one(self.table_name, {'label': label})
+        if not existing or existing[self.id_field] == exclude_group_id:
+            return {'conflict': False}
+        
+        # Get the conflicting group details
+        conflicting_group = self.get(existing[self.id_field])
+        return {
+            'conflict': True,
+            'conflicting_group': conflicting_group
+        }
 
     def find_overlaps(self) -> List[List[str]]:
         return []

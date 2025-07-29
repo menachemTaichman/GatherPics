@@ -137,6 +137,24 @@ def update_group(group_id):
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/groups/check-name", methods=["POST"])
+@require_auth
+def check_group_name():
+    """Check if a group name already exists and return conflict info."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    label = data.get('label', '')
+    exclude_group_id = data.get('exclude_group_id', '')
+    
+    if not label:
+        return jsonify({"error": "Label is required"}), 400
+    
+    try:
+        conflict_info = event.groups_model.check_name_conflict(label, exclude_group_id)
+        return jsonify(conflict_info)
+    except Exception as e:
+        return bad_request(e)
+
 @app.route("/api/groups/<group_id>", methods=["DELETE"])
 @require_auth
 def delete_group(group_id):
@@ -155,8 +173,25 @@ def merge_groups():
     event = Event(FIXED_EVENT_ID)
     data = request.json or {}
     try:
-        event.groups_model.merge_groups(data['source_group_ids'], data['target_group_id'])
+        event.merge_groups(data['source_group_ids'], data['target_group_id'])
         return jsonify({"success": True})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/groups/transfer-faces", methods=["POST"])
+@require_auth
+def transfer_faces():
+    """Transfer faces from one group to another or create a new group."""
+    event = Event(FIXED_EVENT_ID)
+    data = request.json or {}
+    try:
+        result = event.transfer_faces(
+            old_group_id=data['old_group_id'],
+            face_ids=data['face_ids'],
+            target_group_id=data.get('target_group_id'),
+            new_group_name=data.get('new_group_name')
+        )
+        return jsonify(result)
     except Exception as e:
         return bad_request(e)
 

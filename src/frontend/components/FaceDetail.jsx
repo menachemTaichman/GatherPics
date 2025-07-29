@@ -19,15 +19,20 @@ import {
   Plus,
   Crop,
   Check,
-  X
+  X,
+  AlertTriangle,
+  Users
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import PhotoViewer from './PhotoViewer';
+import MergeConflictModal from './MergeConflictModal';
+import TransferFacesModal from './TransferFacesModal';
 import { sortPhotos, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
+import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
-export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
+export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
@@ -48,6 +53,21 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+
+  // Use the custom hook for conflict handling
+  const {
+    nameConflict,
+    showMergeModal,
+    conflictData,
+    checkNameConflict,
+    handleMergeGroups,
+    handleMergeCancel,
+    showMergeConflictModal,
+    clearConflict,
+    setShowMergeModal
+  } = useGroupNameConflict(group, onRefreshGroups);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -189,6 +209,55 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
     alert(`Add ${selectedPhotos.size} selected photos to bucket functionality will be implemented later`);
   };
 
+  const getSelectedFaceIds = () => {
+    const faceIds = new Set();
+    filteredPhotos.forEach(photo => {
+      if (selectedPhotos.has(photo.photo_id) && photo.faces) {
+        photo.faces.forEach(face => {
+          if (face.group_id === group.groupID) {
+            faceIds.add(face.face_id);
+          }
+        });
+      }
+    });
+    return faceIds;
+  };
+
+  const handleTransferFaces = () => {
+    const selectedFaceIds = getSelectedFaceIds();
+    if (selectedFaceIds.size === 0) {
+      alert('No faces from this group are selected');
+      return;
+    }
+    setShowTransferModal(true);
+  };
+
+  const handleTransferComplete = async (result) => {
+    // Clear selection
+    setSelectedPhotos(new Set());
+    
+    // Show success notification
+    if (result.target_group_id) {
+      const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+      const groupName = targetGroup ? targetGroup.label : 'new group';
+      showToast(`Successfully transferred faces to "${groupName}"`, 'success');
+    }
+    
+    // Refresh groups data to update counts and grid
+    if (onRefreshGroups) {
+      await onRefreshGroups();
+    }
+    
+    // If old group was deleted, redirect to home
+    if (result.old_group_deleted) {
+      showToast('Group was empty and has been deleted', 'success');
+      navigate('/');
+    } else {
+      // Refresh the group data
+      fetchSortedPhotos();
+    }
+  };
+
   const togglePhotoSelection = (photoId) => {
     const newSelected = new Set(selectedPhotos);
     if (newSelected.has(photoId)) {
@@ -246,10 +315,21 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
   const handleTitleEdit = () => {
     setEditingTitle(group.label || `Person ${group.groupID}`);
     setIsEditingTitle(true);
+    clearConflict(); // Clear any previous conflict
   };
 
   const handleTitleSave = async () => {
     if (editingTitle.trim() && editingTitle !== group.label) {
+      // Check for conflicts before saving
+      await checkNameConflict(editingTitle.trim());
+      
+      if (nameConflict) {
+        // Show merge conflict modal
+        showMergeConflictModal(editingTitle.trim());
+        setIsEditingTitle(false);
+        return;
+      }
+      
       try {
         await onUpdateGroup(group.groupID, { label: editingTitle.trim() });
         setGroup(prev => ({ ...prev, label: editingTitle.trim() }));
@@ -262,10 +342,17 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
       }
     }
     setIsEditingTitle(false);
+    clearConflict(); // Clear conflict after saving
   };
 
   const handleTitleCancel = () => {
     setIsEditingTitle(false);
+    clearConflict(); // Clear conflict on cancel
+  };
+
+  const handleMergeCancelLocal = () => {
+    handleMergeCancel(); // Use the hook's function
+    setIsEditingTitle(true); // Restore editing mode
   };
 
   if (!group) {
@@ -302,22 +389,35 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <div className="flex items-center space-x-3">
                 {isEditingTitle ? (
                   <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      id="edit-group-title"
-                      name="edit-group-title"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleTitleSave();
-                        } else if (e.key === 'Escape') {
-                          handleTitleCancel();
-                        }
-                      }}
-                      className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-primary-500 focus:outline-none w-[200px]"
-                      autoFocus
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="edit-group-title"
+                        name="edit-group-title"
+                        value={editingTitle}
+                        onChange={(e) => {
+                          setEditingTitle(e.target.value);
+                          checkNameConflict(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleTitleSave();
+                          } else if (e.key === 'Escape') {
+                            handleTitleCancel();
+                          }
+                        }}
+                        className={`text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-[200px] ${
+                          nameConflict ? 'border-red-500' : 'border-primary-500'
+                        }`}
+                        autoFocus
+                      />
+                      {nameConflict && (
+                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Name already exists</span>
+                        </div>
+                      )}
+                    </div>
                     <button
                       onClick={handleTitleSave}
                       className="p-1 hover:bg-green-100 rounded transition-colors"
@@ -349,14 +449,21 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                   </div>
                 )}
               </div>
-              <p className="text-gray-600">
-                {filteredPhotos.length} of {group.image_ids?.length || 0} photos
-                {showCrops && (
-                  <span className="ml-2 text-primary-600 font-medium">
-                    • Showing face crops
-                  </span>
+              <div className="relative">
+                <p className="text-gray-600">
+                  {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                  {showCrops && (
+                    <span className="ml-2 text-primary-600 font-medium">
+                      • Showing face crops
+                    </span>
+                  )}
+                </p>
+                {selectedPhotos.size > 0 && (
+                  <p className="text-sm text-gray-500 absolute top-full left-0">
+                    {selectedPhotos.size} selected
+                  </p>
                 )}
-              </p>
+              </div>
             </div>
           </div>
 
@@ -418,11 +525,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               </button>
             </div>
             
-            <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => setViewMode('grid')}
                 className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                  viewMode === 'grid' ? 'bg-gray-100' : 'hover:bg-gray-100'
                 }`}
               >
                 <Grid className="w-4 h-4" />
@@ -430,7 +537,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
               <button
                 onClick={() => setViewMode('list')}
                 className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                  viewMode === 'list' ? 'bg-gray-100' : 'hover:bg-gray-100'
                 }`}
               >
                 <List className="w-4 h-4" />
@@ -439,7 +546,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
 
             {/* Size Control - Only show in grid mode */}
             {viewMode === 'grid' && (
-              <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+              <div className="flex items-center space-x-2 px-3 py-2">
                 <button
                   onClick={() => {
                     const currentPercent = Math.round(photoSize * 100);
@@ -496,7 +603,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             )}
 
             {/* Crop Toggle */}
-            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+            <div className="flex items-center space-x-2 px-3 py-2">
               <button
                 onClick={() => setShowCrops(!showCrops)}
                 className={`flex items-center space-x-2 px-3 py-1 rounded-md transition-colors ${
@@ -520,24 +627,40 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
 
             {/* Compact Selection Controls */}
             {filteredPhotos.length > 0 && (
-              <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+              <div className="flex items-center space-x-2 px-3 py-2">
                 <button
-                  onClick={selectAllPhotos}
-                  disabled={selectedPhotos.size === filteredPhotos.length}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  onClick={() => setSelectionMode(!selectionMode)}
+                  className={`text-sm font-medium px-2 py-1 rounded transition-colors ${
+                    selectionMode 
+                      ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
+                      : 'text-primary-600 hover:text-primary-700 hover:bg-primary-50'
+                  }`}
                 >
-                  Select All
+                  {selectionMode ? 'Cancel' : 'Select'}
                 </button>
+                {selectionMode && (
+                  <button
+                    onClick={selectAllPhotos}
+                    disabled={selectedPhotos.size === filteredPhotos.length}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  >
+                    All
+                  </button>
+                )}
                 {selectedPhotos.size > 0 && (
                   <>
-                    <span className="text-sm text-gray-600 px-2">
-                      {selectedPhotos.size} selected
-                    </span>
                     <button
                       onClick={clearSelection}
                       className="text-sm text-gray-600 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded transition-colors"
                     >
                       Clear
+                    </button>
+                    <button
+                      onClick={handleTransferFaces}
+                      className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>Change Group</span>
                     </button>
                     <button
                       onClick={handleAddSelectedToBucket}
@@ -607,7 +730,9 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                         togglePhotoSelection(photo.photo_id);
                       }}
                       onClick={e => e.stopPropagation()}
-                      className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
+                      className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
                     />
                     <img
                       src={showCrops && imageCrops[photo.photo_id] 
@@ -653,7 +778,9 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
                         togglePhotoSelection(photo.photo_id);
                       }}
                       onClick={e => e.stopPropagation()}
-                      className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
+                      className={`w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
                     />
                     <div className="relative">
                       <img
@@ -701,6 +828,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
             setGroup(prev => ({ ...prev, ...updates }));
             setShowEditModal(false);
           }}
+          onRefreshGroups={onRefreshGroups}
         />
       )}
 
@@ -725,6 +853,35 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup }) {
           currentIndex={photoViewer.index}
           currentGroupId={group.groupID}
           onJumpToMoment={handleJumpToMoment}
+          groups={groups}
+          onTransferComplete={handleTransferComplete}
+          onRefreshGroups={onRefreshGroups}
+        />
+      )}
+
+      {/* Merge Conflict Modal */}
+      {showMergeModal && conflictData && (
+        <MergeConflictModal
+          isOpen={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          newName={conflictData.newName}
+          currentGroup={conflictData.currentGroup}
+          conflictingGroup={conflictData.conflictingGroup}
+          onMerge={handleMergeGroups}
+          onCancel={handleMergeCancelLocal}
+        />
+      )}
+
+      {/* Transfer Faces Modal */}
+      {showTransferModal && (
+        <TransferFacesModal
+          isOpen={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+          groups={groups}
+          currentGroup={group}
+          selectedFaces={getSelectedFaceIds()}
+          onTransferComplete={handleTransferComplete}
+          onRefreshGroups={onRefreshGroups}
         />
       )}
     </div>

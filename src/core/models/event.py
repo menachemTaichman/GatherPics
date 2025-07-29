@@ -116,6 +116,103 @@ class Event(JsonModel):
         except FileNotFoundError:
             pass
 
+    def transfer_faces(self, old_group_id: str, face_ids: list, target_group_id: str = None, new_group_name: str = None) -> dict:
+        """
+        Transfer faces from one group to another group or create a new group.
+        
+        Args:
+            old_group_id: ID of the source group
+            face_ids: List of face IDs to transfer
+            target_group_id: ID of the target group (if None, will create new group)
+            new_group_name: Name for the new group (required if target_group_id is None)
+            
+        Returns:
+            dict: Result with target_group_id and whether old group was deleted
+        """
+        if not face_ids:
+            return {'target_group_id': None, 'old_group_deleted': False}
+        
+        # Validate old group exists
+        old_group = self.groups_model.get(old_group_id)
+        if not old_group:
+            raise ValueError(f"Source group {old_group_id} not found")
+        
+        # Determine target group
+        if target_group_id:
+            # Transfer to existing group
+            target_group = self.groups_model.get(target_group_id)
+            if not target_group:
+                raise ValueError(f"Target group {target_group_id} not found")
+        else:
+            # Create new group
+            if not new_group_name:
+                raise ValueError("new_group_name is required when target_group_id is not provided")
+            
+            # Check for name conflicts
+            conflict_check = self.groups_model.check_name_conflict(new_group_name)
+            if conflict_check['conflict']:
+                raise ValueError(f"Group name '{new_group_name}' already exists")
+            
+            # Create new group with biggest face as representative
+            representative_face = self.faces_model.get_biggest_face(face_ids) if face_ids else ''
+            target_group_data = self.groups_model.add(
+                label=new_group_name,
+                face_representive=representative_face
+            )
+            target_group_id = target_group_data['groupID']
+        
+        # Transfer faces to target group
+        self.groups_model.add_faces(target_group_id, face_ids)
+        
+        # Check if old group is now empty and delete it if so
+        old_group_faces = self.groups_model.get_faces(old_group_id)
+        old_group_deleted = False
+        if not old_group_faces:
+            self.groups_model.delete(old_group_id)
+            old_group_deleted = True
+        
+        return {
+            'target_group_id': target_group_id,
+            'old_group_deleted': old_group_deleted
+        }
+
+    def merge_groups(self, group_ids: list, main_group_id: str = '') -> str:
+        """
+        Merge multiple groups into one main group.
+        
+        Args:
+            group_ids: List of group IDs to merge
+            main_group_id: ID of the main group (if not provided, will be determined by resolution)
+            
+        Returns:
+            The ID of the main group after merging
+        """
+        if not group_ids:
+            return ''
+        
+        # If no main group specified, determine it based on face representative resolution
+        if not main_group_id:
+            faces = []
+            for group_id in group_ids:
+                faces.extend(self.groups_model.get_faces(group_id))
+            biggest_face = self.faces_model.get_biggest_face(faces)
+            main_group_id = self.faces_model.get(biggest_face)['groupID']
+        
+        # Get all groups to merge
+        groups_to_merge = [self.groups_model.get(gid) for gid in group_ids if gid != main_group_id]
+        
+        # Update all faces to point to the main group
+        placeholders = ','.join(['?'] * len(group_ids))
+        query = f"UPDATE faces SET groupID=? WHERE groupID IN ({placeholders})"
+        self.db.execute_query(query, (main_group_id, *group_ids))
+        
+        # Delete the other groups
+        for group in groups_to_merge:
+            if group:
+                self.groups_model.delete(group['groupID'])
+        
+        return main_group_id
+
     def process_new_images(self, 
                           display_size: int = 2048, 
                           thumb_size: int = 512,
@@ -159,23 +256,11 @@ class Event(JsonModel):
                 group_ID=''
             )
 
-        def _biggest_face_in_cluster(cluster: list[str]) -> str:
-            biggest_face = None
-            biggest_face_size = 0
-            for face_id in cluster:
-                face = self.faces_model.get(face_id)
-                if face:
-                    face_size = face['width'] * face['height']
-                    if face_size > biggest_face_size:
-                        biggest_face_size = face_size
-                        biggest_face = face_id
-            return biggest_face
-
         def _cluster_and_group_faces(face_ids):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             for cluster in clusters:
                 group_num = self.last_group_id + 1
-                representative_face_id = _biggest_face_in_cluster(cluster)
+                representative_face_id = self.faces_model.get_biggest_face(cluster)
                 group_data = self.groups_model.add(
                     label=f"Person {group_num}",
                     face_representive=representative_face_id

@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import TransferFacesModal from './TransferFacesModal';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment }) {
+export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, onRefreshGroups }) {
   const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -29,6 +30,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [rectangleKey, setRectangleKey] = useState(0);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -165,6 +168,28 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
       onClose(); // Close the photo viewer
+    }
+  };
+
+  const handleTransferFace = (face) => {
+    setSelectedFaceForTransfer(face);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferComplete = async (result) => {
+    // Refresh the photo info to show updated faces
+    loadPhotoInfo();
+    setShowTransferModal(false);
+    setSelectedFaceForTransfer(null);
+    
+    // Refresh groups data to update counts and grid
+    if (onRefreshGroups) {
+      await onRefreshGroups();
+    }
+    
+    // Call the parent's onTransferComplete if provided
+    if (onTransferComplete) {
+      onTransferComplete(result);
     }
   };
 
@@ -644,6 +669,16 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           >
                             <User className="w-4 h-4 text-gray-600" />
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTransferFace(face);
+                            }}
+                            className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                            title="Transfer face to another group"
+                          >
+                            <Edit className="w-4 h-4 text-orange-600" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -654,6 +689,22 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           </div>
         </motion.div>
       </div>
+
+      {/* Transfer Faces Modal */}
+      {showTransferModal && selectedFaceForTransfer && (
+        <TransferFacesModal
+          isOpen={showTransferModal}
+          onClose={() => {
+            setShowTransferModal(false);
+            setSelectedFaceForTransfer(null);
+          }}
+          groups={groups}
+          currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
+          selectedFaces={new Set([selectedFaceForTransfer.face_id])}
+          onTransferComplete={handleTransferComplete}
+          onRefreshGroups={onRefreshGroups}
+        />
+      )}
     </AnimatePresence>
   );
 }

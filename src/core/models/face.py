@@ -25,3 +25,29 @@ class Faces(BaseModel):
         # Note: face_utils.rek_helper.delete_faces would need to be called from the Event level
         # to avoid circular references
 
+    def get_biggest_face(self, face_ids: List[str]) -> str:
+        """
+        Get the face with the highest resolution from a list of face IDs.
+        
+        Args:
+            face_ids: List of face IDs to compare
+            
+        Returns:
+            The face ID with the highest resolution, or the first face if none found
+        """
+        if not face_ids:
+            return ''
+        
+        max_resolution = 0
+        biggest_face_id = face_ids[0]  # Default to first face
+        
+        for face_id in face_ids:
+            face = self.get(face_id)
+            if face:
+                resolution = face.get('width', 0) * face.get('height', 0)
+                if resolution > max_resolution:
+                    max_resolution = resolution
+                    biggest_face_id = face_id
+        
+        return biggest_face_id
+

@@ -289,3 +289,5 @@ face_bbox = {
 
 show_face_from_image(os.path.join(event.original_dir, f'{image_id}.jpg'), face_bbox)
 """
+
+event.process_new_images(verbose=True)

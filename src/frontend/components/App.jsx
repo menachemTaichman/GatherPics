@@ -55,17 +55,15 @@ export default function App() {
     }
   };
 
-  const handleMergeComplete = async () => {
-    // Refresh groups data after merge
-    await fetchGroups();
-    showToast('Groups merged successfully!', 'success');
-  };
-
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => {
       setToast({ show: false, message: '', type: 'success' });
     }, 3000);
+  };
+
+  const refreshGroups = async () => {
+    await fetchGroups();
   };
 
   if (loading) {
@@ -109,7 +107,7 @@ export default function App() {
                     groups={groups}
                     onUpdateGroup={updateGroup}
                     onDeleteGroup={deleteGroup}
-                    onMergeComplete={handleMergeComplete}
+                    onRefreshGroups={refreshGroups}
                   />
                 </motion.div>
               } 
@@ -127,6 +125,8 @@ export default function App() {
                     groups={groups}
                     onUpdateGroup={updateGroup}
                     onDeleteGroup={deleteGroup}
+                    showToast={showToast}
+                    onRefreshGroups={refreshGroups}
                   />
                 </motion.div>
               } 

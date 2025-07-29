@@ -1,16 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, Users, Info } from 'lucide-react';
+import { X, Users } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
+const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
 export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [targetGroup, setTargetGroup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'Enter' && selectedGroups.size >= 2 && targetGroup) {
+        handleManualMerge();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedGroups, targetGroup]);
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -80,7 +94,7 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
     <AnimatePresence>
       <div className="modal-overlay" onClick={onClose}>
         <motion.div
-          className="modal-content max-w-4xl max-h-[90vh] overflow-y-auto"
+          className="modal-content max-w-md"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
@@ -94,10 +108,10 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Merge Face Groups
+                  Merge Groups?
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Combine multiple groups into one
+                  Select groups to combine
                 </p>
               </div>
             </div>
@@ -111,118 +125,99 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
 
           {/* Content */}
           <div className="p-6">
-            {/* Manual Merge Mode */}
-            <div>
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Select Groups to Merge</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
-                  {groups.map((group) => (
-                    <div
-                      key={group.groupID}
-                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedGroups.has(group.groupID)
-                          ? 'border-primary-500 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                                              onClick={() => handleGroupSelect(group.groupID)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="checkbox"
-                          id={`merge-group-checkbox-${group.groupID}`}
-                          name={`merge-group-checkbox-${group.groupID}`}
-                          checked={selectedGroups.has(group.groupID)}
-                          onChange={() => handleGroupSelect(group.groupID)}
-                          className="rounded"
+            {/* Groups Grid */}
+            <div className="mb-6">
+              <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+                {groups.map((group) => (
+                  <div
+                    key={group.groupID}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedGroups.has(group.groupID)
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => handleGroupSelect(group.groupID)}
+                  >
+                    <div className="flex flex-col items-center space-y-2">
+                      <input
+                        type="checkbox"
+                        id={`merge-group-checkbox-${group.groupID}`}
+                        name={`merge-group-checkbox-${group.groupID}`}
+                        checked={selectedGroups.has(group.groupID)}
+                        onChange={() => handleGroupSelect(group.groupID)}
+                        className="rounded"
+                      />
+                      {/* Representative Photo */}
+                      <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                        <img
+                          src={group.face_representive
+                            ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
+                            : PLACEHOLDER_DATA_URL}
+                          alt={group.label || `Person ${group.groupID}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = PLACEHOLDER_DATA_URL;
+                          }}
                         />
-                        <div className="flex items-center space-x-3 flex-1 min-w-0">
-                          {/* Representative Photo */}
-                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
-                                            <img
-                  src={group.face_representive
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${group.face_representive}.webp`
-                    : PLACEHOLDER_DATA_URL}
-                                                              alt={group.label || `Person ${group.groupID}`}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-                              }}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate">
-                              {group.label || `Person ${group.groupID}`}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {group.image_ids?.length || 0} photos
-                            </p>
-                          </div>
-                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {selectedGroups.size > 0 && (
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Target Group (kept after merge)
-                  </label>
-                  <select
-                    value={targetGroup || ''}
-                    onChange={(e) => handleTargetGroupChange(parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  >
-                    <option value="">Select target group...</option>
-                    {Array.from(selectedGroups).map((groupId) => {
-                      const group = getGroupById(groupId);
-                      return (
-                        <option key={groupId} value={groupId}>
-                          {group?.label || `Person ${groupId}`} ({group?.image_ids?.length || 0} photos)
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div className="flex items-start space-x-3">
-                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-medium text-blue-900 mb-1">How Manual Merge Works</h4>
-                    <p className="text-sm text-blue-700">
-                      Select multiple groups and choose one as the target. All faces from the other groups 
-                      will be moved to the target group, and the other groups will be deleted.
-                    </p>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleManualMerge}
-                disabled={loading || (!targetGroup || selectedGroups.size < 2)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                {loading && (
+            {selectedGroups.size >= 2 && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Target group:
+                </label>
+                <select
+                  value={targetGroup || ''}
+                  onChange={(e) => handleTargetGroupChange(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Choose target...</option>
+                  {Array.from(selectedGroups).map((groupId) => {
+                    const group = getGroupById(groupId);
+                    return (
+                      <option key={groupId} value={groupId}>
+                        {group?.label || `Person ${groupId}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleManualMerge}
+              disabled={loading || (!targetGroup || selectedGroups.size < 2)}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              {loading ? (
+                <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                )}
-                <span>Merge Groups</span>
-              </button>
-            </div>
+                  <span>Merging...</span>
+                </>
+              ) : (
+                <>
+                  <Users className="w-4 h-4" />
+                  <span>Merge</span>
+                </>
+              )}
+            </button>
           </div>
         </motion.div>
       </div>
