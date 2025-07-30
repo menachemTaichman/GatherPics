@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUpDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { getSetting, setSetting } from '../utils/settings';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -23,18 +24,18 @@ export default function TransferFacesModal({
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
-  // Load sorting preferences from localStorage
+  // Load sorting preferences from settings cache
   useEffect(() => {
-    const savedSortBy = localStorage.getItem('transferModal_sortBy');
-    const savedSortOrder = localStorage.getItem('transferModal_sortOrder');
+    const savedSortBy = getSetting('transferModal_sortBy');
+    const savedSortOrder = getSetting('transferModal_sortOrder');
     if (savedSortBy) setSortBy(savedSortBy);
     if (savedSortOrder) setSortOrder(savedSortOrder);
   }, []);
 
-  // Save sorting preferences to localStorage
+  // Save sorting preferences to settings cache
   useEffect(() => {
-    localStorage.setItem('transferModal_sortBy', sortBy);
-    localStorage.setItem('transferModal_sortOrder', sortOrder);
+    setSetting('transferModal_sortBy', sortBy);
+    setSetting('transferModal_sortOrder', sortOrder);
   }, [sortBy, sortOrder]);
 
   // Filter out current group from available groups
@@ -130,11 +131,6 @@ export default function TransferFacesModal({
     setError('');
 
     try {
-      console.log('TransferFacesModal - selectedFaces:', selectedFaces);
-      console.log('TransferFacesModal - currentGroup:', currentGroup);
-      console.log('TransferFacesModal - selectedGroupId:', selectedGroupId);
-      console.log('TransferFacesModal - newGroupName:', newGroupName);
-      
       const result = await groupsAPI.transferFaces(
         currentGroup.groupID,
         selectedFaces, // Already an array from getSelectedFaceIds()

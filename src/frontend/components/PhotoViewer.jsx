@@ -462,7 +462,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       }
                       return (
                         <div
-                          key={`${face.face_id || index}-${rectangleKey}`}
+                          key={`face-${face.face_id || `index-${index}`}-${rectangleKey}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -625,7 +625,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
-                          key={`${face.face_id || index}-${face.group_id || 'unknown'}`}
+                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}`}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >

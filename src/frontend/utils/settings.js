@@ -24,7 +24,11 @@ const DEFAULT_SETTINGS = {
   
   // EditMomentPhotosModal settings
   editMomentPhotos_sortOrder: 'asc',
-  editMomentPhotos_filterType: 'all'
+  editMomentPhotos_filterType: 'all',
+  
+  // TransferFacesModal settings
+  transferModal_sortBy: 'name',
+  transferModal_sortOrder: 'asc'
 };
 
 /**
