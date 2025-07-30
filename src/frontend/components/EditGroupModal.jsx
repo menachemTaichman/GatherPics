@@ -14,6 +14,11 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   const [cropsLoading, setCropsLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editingName, setEditingName] = useState('');
+  // Use original group data for header display until saved
+  const [displayData, setDisplayData] = useState({
+    label: group.label || '',
+    face_representive: group.face_representive
+  });
 
   // Use the custom hook for conflict handling
   const {
@@ -89,6 +94,12 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     try {
       await onSave(formData);
       
+      // Update display data only after successful save
+      setDisplayData({
+        label: formData.label,
+        face_representive: formData.face_representive
+      });
+      
       // Update the URL to reflect the new group name if it changed
       if (formData.label !== group.label) {
         const newUrl = `/${encodeURIComponent(formData.label)}`;
@@ -103,7 +114,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   };
 
   const handleNameEdit = () => {
-    setEditingName(formData.label);
+    setEditingName(displayData.label);
     setIsEditingName(true);
     clearConflict(); // Clear any previous conflict
   };
@@ -121,6 +132,8 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
       }
       
       setFormData(prev => ({ ...prev, label: editingName.trim() }));
+      // Update display data immediately for name changes since they're saved immediately
+      setDisplayData(prev => ({ ...prev, label: editingName.trim() }));
     }
     setIsEditingName(false);
     clearConflict(); // Clear conflict after saving
@@ -137,10 +150,10 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   };
 
   const getRepresentativeImageSrc = () => {
-    if (!formData.face_representive) return PLACEHOLDER_DATA_URL;
+    if (!displayData.face_representive) return PLACEHOLDER_DATA_URL;
     
     // Always use faces endpoint for representative images
-    return `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${formData.face_representive}.webp`;
+    return `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${displayData.face_representive}.webp`;
   };
 
   return (
@@ -225,7 +238,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                         className="text-xl font-semibold text-gray-900 cursor-pointer hover:text-primary-600 transition-colors w-[150px]"
                         onClick={handleNameEdit}
                       >
-                        {formData.label}
+                        {displayData.label}
                       </h2>
                       <button
                         onClick={handleNameEdit}

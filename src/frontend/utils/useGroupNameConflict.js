@@ -59,7 +59,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
         }
         
         // Close modal and redirect to the main group
-        window.location.href = `/${encodeURIComponent(conflictData.conflictingGroup.label)}`;
+        window.location.href = `/group/${encodeURIComponent(conflictData.conflictingGroup.label)}`;
       } else {
         throw new Error('Failed to merge groups');
       }

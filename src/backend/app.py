@@ -121,6 +121,16 @@ def get_groups():
     groups = event.groups_model.list()
     return jsonify(groups)
 
+@app.route("/api/groups/<group_id>", methods=["GET"])
+@require_auth
+def get_group(group_id):
+    """Get a specific group by ID."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    return jsonify(group)
+
 @app.route("/api/groups/<group_id>", methods=["PUT"])
 @require_auth
 def update_group(group_id):
@@ -191,6 +201,8 @@ def transfer_faces():
             target_group_id=data.get('target_group_id'),
             new_group_name=data.get('new_group_name')
         )
+        # Add old_group_id to the response for frontend updates
+        result['old_group_id'] = data['old_group_id']
         return jsonify(result)
     except Exception as e:
         return bad_request(e)

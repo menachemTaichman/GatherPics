@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
   Download, 
@@ -32,7 +32,7 @@ import { sortPhotos, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
-export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showToast, onRefreshGroups }) {
+export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showToast, onRefreshGroups, onUpdateGroupsAfterTransfer }) {
   const { group_name } = useParams();
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
@@ -93,7 +93,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     if (group && group.groupID !== undefined && group.groupID !== null) {
       fetchSortedPhotos();
     }
-  }, [group]); // Removed sortBy and sortOrder dependencies for frontend sorting
+  }, [group?.groupID]); // Only refetch when groupID changes, not when group object updates
 
   // Fetch crop data when group changes
   useEffect(() => {
@@ -236,25 +236,125 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     // Clear selection
     setSelectedPhotos(new Set());
     
+    // Update groups state surgically to reflect the transfer
+    if (onUpdateGroupsAfterTransfer) {
+      onUpdateGroupsAfterTransfer(result);
+    }
+    
+    // Note: The backend now returns updated_source_group data when the representative face is transferred
+    // This will be handled in the local state update below, avoiding the need for a full refresh
+    
     // Show success notification
     if (result.target_group_id) {
       const targetGroup = groups.find(g => g.groupID === result.target_group_id);
-      const groupName = targetGroup ? targetGroup.label : 'new group';
+      let groupName = result.new_group_name || (targetGroup ? targetGroup.label : 'new group');
       showToast(`Successfully transferred faces to "${groupName}"`, 'success');
     }
     
-    // Refresh groups data to update counts and grid
-    if (onRefreshGroups) {
-      await onRefreshGroups();
-    }
-    
-    // If old group was deleted, redirect to home
+    // If old group was deleted, redirect to the new group
     if (result.old_group_deleted) {
       showToast('Group was empty and has been deleted', 'success');
-      navigate('/');
-    } else {
-      // Refresh the group data
-      fetchSortedPhotos();
+      // Find the target group and redirect to it
+      const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+      if (targetGroup) {
+        navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+      } else {
+        navigate('/');
+      }
+      return; // Exit early since we're navigating away
+    }
+    
+    // Handle PhotoViewer navigation if we're currently viewing a photo
+    if (photoViewer.show && result.transferred_photos && result.transferred_photos.length > 0) {
+      const currentPhotoId = photoViewer.photo;
+      const wasCurrentPhotoTransferred = result.transferred_photos.includes(currentPhotoId);
+      
+      if (wasCurrentPhotoTransferred) {
+        // Current photo was transferred, need to navigate to next photo or close
+        const remainingPhotos = sortedPhotos.filter(photo => 
+          !result.transferred_photos.includes(photo.photo_id)
+        );
+        
+        if (remainingPhotos.length > 0) {
+          // Find the next photo to show
+          const currentIndex = sortedPhotos.findIndex(p => p.photo_id === currentPhotoId);
+          let nextIndex = currentIndex;
+          
+          // Try to find the next photo, or go to the previous one if at the end
+          while (nextIndex < sortedPhotos.length - 1) {
+            nextIndex++;
+            if (!result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+              break;
+            }
+          }
+          
+          // If we didn't find a next photo, try going backwards
+          if (nextIndex >= sortedPhotos.length || result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+            nextIndex = currentIndex;
+            while (nextIndex > 0) {
+              nextIndex--;
+              if (!result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+                break;
+              }
+            }
+          }
+          
+          // If we found a valid photo, navigate to it
+          if (nextIndex >= 0 && nextIndex < sortedPhotos.length && 
+              !result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+            const nextPhoto = sortedPhotos[nextIndex];
+            setPhotoViewer({
+              show: true,
+              photo: nextPhoto.photo_id,
+              index: remainingPhotos.findIndex(p => p.photo_id === nextPhoto.photo_id)
+            });
+          } else {
+            // No more photos in this group, redirect to target group
+            const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+            if (targetGroup) {
+              navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+            } else {
+              closePhotoViewer();
+            }
+          }
+        } else {
+          // No photos left in this group, redirect to target group
+          const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+          if (targetGroup) {
+            navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+          } else {
+            closePhotoViewer();
+          }
+        }
+      }
+    }
+    
+    // Update the photos list to remove transferred photos
+    if (result.transferred_photos && result.transferred_photos.length > 0) {
+      setSortedPhotos(prev => prev.filter(photo => 
+        !result.transferred_photos.includes(photo.photo_id)
+      ));
+      
+      // Update group's image_ids count
+      setGroup(prev => ({
+        ...prev,
+        image_ids: prev.image_ids ? prev.image_ids.filter(id => 
+          !result.transferred_photos.includes(id)
+        ) : []
+      }));
+      
+      // Update group with backend data if available (includes updated face_representive)
+      if (result.updated_source_group) {
+        console.log('Updating group with backend data:', result.updated_source_group);
+        setGroup(prev => {
+          const updated = {
+            ...prev,
+            ...result.updated_source_group
+          };
+          console.log('Updated group state:', updated);
+          return updated;
+        });
+      }
     }
   };
 
@@ -278,10 +378,9 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
 
   const openPhotoViewer = (photoId, index) => {
     // Use the photo data directly since it comes from the API
-    const photoMeta = { name: photoId };
     setPhotoViewer({
       show: true,
-      photo: photoMeta,
+      photo: photoId, // Store just the photo_id string for consistency
       index: index
     });
   };
@@ -302,7 +401,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     }
     setPhotoViewer({
       show: true,
-      photo: filteredPhotos[newIndex].photo_id,
+      photo: filteredPhotos[newIndex].photo_id, // This is already correct
       index: newIndex
     });
   };
@@ -374,7 +473,8 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg">
                 <img
-                  src={group.face_representive
+                  key={group.face_representive || 'no-representative'}
+                  src={group.face_representive && group.face_representive.trim() !== ''
                     ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
@@ -713,10 +813,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
             {filteredPhotos.map((photo, index) => (
               <motion.div
                 key={photo.photo_id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                className={viewMode === 'grid' ? `photo-card ${photoClasses[photo.photo_id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className={`${viewMode === 'grid' ? `photo-card ${photoClasses[photo.photo_id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
               >
                 {viewMode === 'grid' ? (
                   <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.photo_id, index)}>
@@ -855,7 +956,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           onJumpToMoment={handleJumpToMoment}
           groups={groups}
           onTransferComplete={handleTransferComplete}
-          onRefreshGroups={onRefreshGroups}
         />
       )}
 
@@ -881,7 +981,6 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           currentGroup={group}
           selectedFaces={getSelectedFaceIds()}
           onTransferComplete={handleTransferComplete}
-          onRefreshGroups={onRefreshGroups}
         />
       )}
     </div>

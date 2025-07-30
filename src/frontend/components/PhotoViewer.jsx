@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import TransferFacesModal from './TransferFacesModal';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, onRefreshGroups }) {
+export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete }) {
   const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -172,20 +172,27 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleTransferFace = (face) => {
-    setSelectedFaceForTransfer(face);
+    // When transferring from photo viewer, transfer only the specific face
+    setSelectedFaceForTransfer({
+      ...face,
+      all_faces_in_photo: [face.face_id] // Only transfer the specific face
+    });
     setShowTransferModal(true);
   };
 
   const handleTransferComplete = async (result) => {
-    // Refresh the photo info to show updated faces
-    loadPhotoInfo();
+    // Smoothly update faces list without full refresh
+    if (result.transferred_faces && result.transferred_faces.length > 0) {
+      setFaces(prev => prev.filter(face => 
+        !result.transferred_faces.includes(face.face_id)
+      ));
+    } else {
+      // Fallback to full refresh if no specific face info
+      loadPhotoInfo();
+    }
+    
     setShowTransferModal(false);
     setSelectedFaceForTransfer(null);
-    
-    // Refresh groups data to update counts and grid
-    if (onRefreshGroups) {
-      await onRefreshGroups();
-    }
     
     // Call the parent's onTransferComplete if provided
     if (onTransferComplete) {
@@ -473,7 +480,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       }
                       return (
                         <div
-                          key={`${index}-${rectangleKey}`}
+                          key={`${face.face_id || index}-${rectangleKey}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -636,7 +643,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
-                          key={index}
+                          key={`${face.face_id || index}-${face.group_id || 'unknown'}`}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >
@@ -700,9 +707,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           }}
           groups={groups}
           currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
-          selectedFaces={new Set([selectedFaceForTransfer.face_id])}
+          selectedFaces={new Set(selectedFaceForTransfer.all_faces_in_photo || [selectedFaceForTransfer.face_id])}
           onTransferComplete={handleTransferComplete}
-          onRefreshGroups={onRefreshGroups}
         />
       )}
     </AnimatePresence>

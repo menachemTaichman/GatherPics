@@ -127,7 +127,7 @@ class Event(JsonModel):
             new_group_name: Name for the new group (required if target_group_id is None)
             
         Returns:
-            dict: Result with target_group_id and whether old group was deleted
+            dict: Result with target_group_id, whether old group was deleted, and transferred info
         """
         if not face_ids:
             return {'target_group_id': None, 'old_group_deleted': False}
@@ -136,6 +136,17 @@ class Event(JsonModel):
         old_group = self.groups_model.get(old_group_id)
         if not old_group:
             raise ValueError(f"Source group {old_group_id} not found")
+        
+        # Get photos that contain the transferred faces for smooth UI updates
+        transferred_photos = set()
+        for face_id in face_ids:
+            face = self.faces_model.get(face_id)
+            if face and face.get('imageID'):
+                transferred_photos.add(face['imageID'])
+        
+        # Check if any transferred face was the representative of the old group
+        old_representative = old_group.get('face_representive', '')
+        representative_transferred = old_representative in face_ids
         
         # Determine target group
         if target_group_id:
@@ -170,10 +181,23 @@ class Event(JsonModel):
         if not old_group_faces:
             self.groups_model.delete(old_group_id)
             old_group_deleted = True
+        elif representative_transferred:
+            # If the representative was transferred, choose a new representative with highest resolution
+            new_representative = self.faces_model.get_biggest_face(old_group_faces)
+            if new_representative:
+                self.groups_model.edit(old_group_id, {'face_representive': new_representative})
+        
+        # Get updated source group data if it wasn't deleted
+        updated_source_group = None
+        if not old_group_deleted:
+            updated_source_group = self.groups_model.get(old_group_id)
         
         return {
             'target_group_id': target_group_id,
-            'old_group_deleted': old_group_deleted
+            'old_group_deleted': old_group_deleted,
+            'transferred_faces': face_ids,
+            'transferred_photos': list(transferred_photos),
+            'updated_source_group': updated_source_group
         }
 
     def merge_groups(self, group_ids: list, main_group_id: str = '') -> str:
