@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users } from 'lucide-react';
-import axios from 'axios';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -67,27 +67,22 @@ export default function MergeGroupsModal({ groups, onClose, onMergeComplete }) {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${API_BASE}/api/groups/merge`, {
-        target_group_id: targetGroup,
-        source_group_ids: groupsToMerge
-      });
+      const result = await groupsAPI.merge(groupsToMerge, targetGroup);
 
-      if (response.data.success) {
-        showToast(`Successfully merged ${groupsToMerge.length} groups into group ${targetGroup}`, 'success');
-        onMergeComplete();
-        onClose();
-      }
+      // The API service interceptor will automatically handle the state updates
+      showToast(`Successfully merged ${groupsToMerge.length} groups into target group`, 'success');
+      onMergeComplete();
+      onClose();
     } catch (error) {
-      console.error('Error merging groups:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to merge groups';
-      showToast(errorMessage, 'error');
+      const errorInfo = handleAPIError(error, 'Failed to merge groups');
+      showToast(errorInfo.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const getGroupById = (id) => {
-    return groups.find(g => g.id === id);
+    return groups.find(g => g.groupID === id);
   };
 
   return (

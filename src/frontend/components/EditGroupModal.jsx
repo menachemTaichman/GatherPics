@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
 import MergeConflictModal from './MergeConflictModal';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
 
 export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups }) {
   const [formData, setFormData] = useState({
@@ -49,22 +50,19 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     const fetchCropMappings = async () => {
       try {
         setCropsLoading(true);
-        const response = await fetch(`${API_BASE}/api/groups/${group.groupID}/crops`);
-        if (response.ok) {
-          const data = await response.json();
-          setCropMappings(data.crop_mapping || {});
-        } else {
-          console.error('Failed to fetch crop mappings');
-        }
+        const response = await groupsAPI.getCrops(group.groupID);
+        setCropMappings(response.crop_mapping || {});
       } catch (error) {
         console.error('Error fetching crop mappings:', error);
+        const errorInfo = handleAPIError(error, 'Failed to fetch crop mappings');
+        console.error(errorInfo.message);
       } finally {
         setCropsLoading(false);
       }
     };
 
     fetchCropMappings();
-  }, [group.groupID, API_BASE]);
+  }, [group.groupID]);
 
   // Add keyboard event listeners for modal shortcuts
   useEffect(() => {
@@ -100,14 +98,11 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
         face_representive: formData.face_representive
       });
       
-      // Update the URL to reflect the new group name if it changed
-      if (formData.label !== group.label) {
-        const newUrl = `/${encodeURIComponent(formData.label)}`;
-        window.history.replaceState(null, '', newUrl);
-      }
+      onClose();
     } catch (error) {
       console.error('Error saving group:', error);
-      alert('Failed to save changes. Please try again.');
+      const errorInfo = handleAPIError(error, 'Failed to save group');
+      alert(errorInfo.message);
     } finally {
       setLoading(false);
     }

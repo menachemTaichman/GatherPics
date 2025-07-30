@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter } from 'lucide-react';
 import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
+import { imagesAPI, momentsAPI, handleAPIError } from '../utils/apiService';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -58,12 +59,9 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
     }
   }, [open]);
 
-
-
   const fetchAllImagesWithTimestamps = async () => {
     try {
-      const response = await fetch('/api/images.json');
-      const data = await response.json();
+      const data = await imagesAPI.getAll();
       const allImages = data.images || [];
       const imagesWithTimestamps = [];
       
@@ -96,54 +94,45 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
       
       setAllImagesWithTimestamps(imagesWithTimestamps);
     } catch (error) {
+      console.error('Error fetching images:', error);
+      const errorInfo = handleAPIError(error, 'Failed to fetch images');
+      setError(errorInfo.message);
       setAllImagesWithTimestamps([]);
     }
   };
 
   const fetchPhotosInPeriod = async () => {
-    if (!moment) return;
+    if (!moment || !moment.start_datetime || !moment.end_datetime) {
+      setPhotosInPeriod([]);
+      return;
+    }
+
     try {
-      const response = await fetch(`/api/moments/${moment.id}/photos-in-period`);
-      if (response.ok) {
-        const data = await response.json();
-        setPhotosInPeriod(data.photos || []);
-      } else {
-        setPhotosInPeriod([]);
-      }
+      const result = await momentsAPI.getPhotosInPeriod(moment.id);
+      setPhotosInPeriod(result.photos || []);
     } catch (error) {
+      console.error('Error fetching photos in period:', error);
+      const errorInfo = handleAPIError(error, 'Failed to fetch photos in period');
+      setError(errorInfo.message);
       setPhotosInPeriod([]);
     }
   };
 
   const handleSavePhotos = async () => {
     try {
-      setError('');
+      // Update the moment with the selected photos
       const updatedMoment = {
         ...moment,
-        photos: Array.from(selectedPhotos)
+        image_IDs: Array.from(selectedPhotos)
       };
-      const response = await fetch(`/api/moments/${moment.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedMoment)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to save photo changes');
-      }
-      const result = await response.json();
-      if (typeof onSave === 'function') {
-        await onSave(result.moment); // Pass the updated moment
-      }
-      if (onRefreshPhotos) {
-        onRefreshPhotos();
-      }
-      setError(''); // Clear error after successful save
+
+      // The API service interceptor will automatically handle the state updates
+      await onSave(updatedMoment);
       onClose();
     } catch (error) {
-      setError('Failed to save photo changes. Please try again.');
-      console.error('Error saving photo changes:', error);
+      console.error('Error saving photos:', error);
+      const errorInfo = handleAPIError(error, 'Failed to save photos');
+      setError(errorInfo.message);
     }
   };
 

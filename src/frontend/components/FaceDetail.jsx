@@ -31,8 +31,10 @@ import TransferFacesModal from './TransferFacesModal';
 import { sortPhotos, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
+import { useDataStore } from '../utils/dataManager';
+import { groupsAPI, handleAPIError, showToast, optimisticUpdates } from '../utils/apiService';
 
-export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showToast, onRefreshGroups, onUpdateGroupsAfterTransfer }) {
+export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
@@ -56,6 +58,9 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
   const [selectionMode, setSelectionMode] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
 
+  // Use the data store for groups
+  const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup } = useDataStore();
+
   // Use the custom hook for conflict handling
   const {
     nameConflict,
@@ -74,8 +79,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
+  // Use groups from store if available, otherwise fall back to props
+  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
+
   useEffect(() => {
-    const foundGroup = groups.find(g => g.label === group_name);
+    const foundGroup = currentGroups.find(g => g.label === group_name);
     if (foundGroup) {
       setGroup(foundGroup);
     } else if (group && group.groupID) {
@@ -86,7 +94,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     } else {
       navigate('/');
     }
-  }, [group_name, groups, navigate, group]);
+  }, [group_name, currentGroups, navigate, group]);
 
   // Fetch sorted photos from backend
   useEffect(() => {
@@ -95,23 +103,65 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     }
   }, [group?.groupID]); // Only refetch when groupID changes, not when group object updates
 
+  // Subscribe to global groups state changes to keep local photos in sync
+  useEffect(() => {
+    const unsubscribe = useDataStore.subscribe(
+      (state) => {
+        // Handle transfer results
+        const transferResult = state.lastTransferResult;
+        if (transferResult && transferResult.transferred_photos) {
+          // If this is the source group, remove transferred photos surgically
+          if (transferResult.old_group_id === group?.groupID) {
+            setSortedPhotos(prevPhotos => 
+              prevPhotos.filter(photo => !transferResult.transferred_photos.includes(photo.id))
+            );
+          }
+          // If this is the target group, add transferred photos surgically
+          else if (transferResult.target_group_id === group?.groupID) {
+            // Use the full photo data from the transfer result
+            if (transferResult.transferred_photos_data && transferResult.transferred_photos_data.length > 0) {
+              setSortedPhotos(prevPhotos => {
+                // Add new photos and sort them
+                const newPhotos = [...prevPhotos, ...transferResult.transferred_photos_data];
+                return sortPhotos(newPhotos, sortBy, sortOrder);
+              });
+            }
+          }
+        }
+        
+        // Handle group updates (including name and representative changes)
+        const updatedGroup = state.groups.find(g => g.groupID === group?.groupID);
+        if (updatedGroup && group) {
+          const hasChanges = 
+            updatedGroup.label !== group.label ||
+            updatedGroup.face_representive !== group.face_representive;
+          
+          if (hasChanges) {
+            setGroup(updatedGroup);
+          }
+        }
+        
+        // Also check if this group was updated in a transfer result
+        if (transferResult && transferResult.updated_source_group && transferResult.updated_source_group.groupID === group?.groupID) {
+          setGroup(transferResult.updated_source_group);
+        }
+      }
+    );
+    
+    return unsubscribe;
+  }, [group?.groupID, sortBy, sortOrder]); // Removed sortedPhotos.length to prevent unnecessary re-subscriptions
+
   // Fetch crop data when group changes
   useEffect(() => {
     if (group && group.groupID !== undefined && group.groupID !== null) {
       fetchGroupCrops();
     }
-  }, [group]);
+  }, [group?.groupID]);
 
   const fetchGroupCrops = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/groups/${group.groupID}/crops`);
-      if (response.ok) {
-        const data = await response.json();
-        setImageCrops(data.crop_mapping || {});
-      } else {
-        console.error('Failed to fetch group crops');
-        setImageCrops({});
-      }
+      const response = await groupsAPI.getCrops(group.groupID);
+      setImageCrops(response.crop_mapping || {});
     } catch (error) {
       console.error('Error fetching group crops:', error);
       setImageCrops({});
@@ -121,49 +171,28 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
   const fetchSortedPhotos = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `${API_BASE}/api/groups/${group.groupID}/photos-complete`
-      );
+      const response = await groupsAPI.getPhotosComplete(group.groupID);
+      const photos = response.photos || [];
       
-      if (response.ok) {
-        const data = await response.json();
-        // Transform the complete photo data to match expected format
-        const transformedPhotos = data.photos.map(photo => ({
-          photo_id: photo.id,
-          name: photo.name, // Use the name from backend
-          date_taken: photo.date_taken,
-          formatted_date: photo.date_taken,
-          urls: photo.urls,
-          faces: photo.faces,
-          moment: photo.moment
-        }));
-        setSortedPhotos(transformedPhotos);
-      } else {
-        console.error('Failed to fetch sorted photos');
-        setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, name: id, date_taken: null, formatted_date: null })) || []);
-      }
+      // Sort photos based on current settings
+      const sorted = sortPhotos(photos, sortBy, sortOrder);
+      setSortedPhotos(sorted);
     } catch (error) {
       console.error('Error fetching sorted photos:', error);
-      setSortedPhotos(group.image_ids?.map(id => ({ photo_id: id, name: id, date_taken: null, formatted_date: null })) || []);
+      setSortedPhotos([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Client-side sorting function using global utility
   const getSortedPhotos = () => {
-    return sortPhotos(sortedPhotos, sortBy, sortOrder);
+    return sortedPhotos;
   };
-
-  const filteredPhotos = getSortedPhotos().filter(photo =>
-    photo.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleImageLoad = (photoId, e) => {
     const img = e.target;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
     
-    // Determine image class based on aspect ratio
     let imageClass = 'square';
     if (aspectRatio > 1.2) {
       imageClass = 'landscape';
@@ -178,55 +207,52 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
   };
 
   const handleToggleSortOrder = () => {
-    setSortOrder(prev => toggleSortOrder(prev));
+    const newOrder = toggleSortOrder(sortOrder);
+    setSortOrder(newOrder);
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
+    if (!dateString) return '';
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Unknown';
-      
       return date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
       });
-    } catch (error) {
-      return 'Unknown';
+    } catch {
+      return dateString;
     }
   };
 
   const handleAddGroupToBucket = async () => {
     // TODO: Implement add to bucket functionality
-    alert('Add to bucket functionality will be implemented later');
+    alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
   };
 
   const handleAddSelectedToBucket = async () => {
-    if (selectedPhotos.size === 0) return;
-    
     // TODO: Implement add selected to bucket functionality
     alert(`Add ${selectedPhotos.size} selected photos to bucket functionality will be implemented later`);
   };
 
   const getSelectedFaceIds = () => {
-    const faceIds = new Set();
-    filteredPhotos.forEach(photo => {
-      if (selectedPhotos.has(photo.photo_id) && photo.faces) {
+    const selectedFaceIds = [];
+    for (const photoId of selectedPhotos) {
+      const photo = sortedPhotos.find(p => p.id === photoId);
+      if (photo && photo.faces) {
         photo.faces.forEach(face => {
           if (face.group_id === group.groupID) {
-            faceIds.add(face.face_id);
+            selectedFaceIds.push(face.face_id);
           }
         });
       }
-    });
-    return faceIds;
+    }
+    return selectedFaceIds;
   };
 
   const handleTransferFaces = () => {
-    const selectedFaceIds = getSelectedFaceIds();
-    if (selectedFaceIds.size === 0) {
-      alert('No faces from this group are selected');
+    if (selectedPhotos.size === 0) {
+      showToast('Please select photos to transfer', 'error');
       return;
     }
     setShowTransferModal(true);
@@ -236,17 +262,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     // Clear selection
     setSelectedPhotos(new Set());
     
-    // Update groups state surgically to reflect the transfer
-    if (onUpdateGroupsAfterTransfer) {
-      onUpdateGroupsAfterTransfer(result);
-    }
-    
-    // Note: The backend now returns updated_source_group data when the representative face is transferred
-    // This will be handled in the local state update below, avoiding the need for a full refresh
+    // The change instruction system will handle all updates automatically
+    // No need for manual updates here - the API service interceptor
+    // will process the GROUP_FACES_TRANSFERRED change instruction
     
     // Show success notification
     if (result.target_group_id) {
-      const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+      const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
       let groupName = result.new_group_name || (targetGroup ? targetGroup.label : 'new group');
       showToast(`Successfully transferred faces to "${groupName}"`, 'success');
     }
@@ -255,7 +277,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     if (result.old_group_deleted) {
       showToast('Group was empty and has been deleted', 'success');
       // Find the target group and redirect to it
-      const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+      const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
       if (targetGroup) {
         navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
       } else {
@@ -272,28 +294,28 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
       if (wasCurrentPhotoTransferred) {
         // Current photo was transferred, need to navigate to next photo or close
         const remainingPhotos = sortedPhotos.filter(photo => 
-          !result.transferred_photos.includes(photo.photo_id)
+          !result.transferred_photos.includes(photo.id)
         );
         
         if (remainingPhotos.length > 0) {
           // Find the next photo to show
-          const currentIndex = sortedPhotos.findIndex(p => p.photo_id === currentPhotoId);
+          const currentIndex = sortedPhotos.findIndex(p => p.id === currentPhotoId);
           let nextIndex = currentIndex;
           
           // Try to find the next photo, or go to the previous one if at the end
           while (nextIndex < sortedPhotos.length - 1) {
             nextIndex++;
-            if (!result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+            if (!result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
               break;
             }
           }
           
           // If we didn't find a next photo, try going backwards
-          if (nextIndex >= sortedPhotos.length || result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+          if (nextIndex >= sortedPhotos.length || result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
             nextIndex = currentIndex;
             while (nextIndex > 0) {
               nextIndex--;
-              if (!result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+              if (!result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
                 break;
               }
             }
@@ -301,16 +323,16 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           
           // If we found a valid photo, navigate to it
           if (nextIndex >= 0 && nextIndex < sortedPhotos.length && 
-              !result.transferred_photos.includes(sortedPhotos[nextIndex].photo_id)) {
+              !result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
             const nextPhoto = sortedPhotos[nextIndex];
             setPhotoViewer({
               show: true,
-              photo: nextPhoto.photo_id,
-              index: remainingPhotos.findIndex(p => p.photo_id === nextPhoto.photo_id)
+              photo: nextPhoto.id,
+              index: remainingPhotos.findIndex(p => p.id === nextPhoto.id)
             });
           } else {
             // No more photos in this group, redirect to target group
-            const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+            const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
             if (targetGroup) {
               navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
             } else {
@@ -319,7 +341,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           }
         } else {
           // No photos left in this group, redirect to target group
-          const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+          const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
           if (targetGroup) {
             navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
           } else {
@@ -329,33 +351,9 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
       }
     }
     
-    // Update the photos list to remove transferred photos
-    if (result.transferred_photos && result.transferred_photos.length > 0) {
-      setSortedPhotos(prev => prev.filter(photo => 
-        !result.transferred_photos.includes(photo.photo_id)
-      ));
-      
-      // Update group's image_ids count
-      setGroup(prev => ({
-        ...prev,
-        image_ids: prev.image_ids ? prev.image_ids.filter(id => 
-          !result.transferred_photos.includes(id)
-        ) : []
-      }));
-      
-      // Update group with backend data if available (includes updated face_representive)
-      if (result.updated_source_group) {
-        console.log('Updating group with backend data:', result.updated_source_group);
-        setGroup(prev => {
-          const updated = {
-            ...prev,
-            ...result.updated_source_group
-          };
-          console.log('Updated group state:', updated);
-          return updated;
-        });
-      }
-    }
+    // The data store subscription already handles the surgical updates
+    // No need to refetch photos - the API interceptor and data store
+    // will handle all the updates automatically
   };
 
   const togglePhotoSelection = (photoId) => {
@@ -369,7 +367,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
   };
 
   const selectAllPhotos = () => {
-    setSelectedPhotos(new Set(filteredPhotos.map(p => p.photo_id)));
+    setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
   };
 
   const clearSelection = () => {
@@ -395,13 +393,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
     if (direction === 'jump' && typeof index === 'number') {
       newIndex = index;
     } else if (direction === 'next') {
-      newIndex = Math.min(currentIndex + 1, filteredPhotos.length - 1);
+      newIndex = Math.min(currentIndex + 1, sortedPhotos.length - 1);
     } else {
       newIndex = Math.max(currentIndex - 1, 0);
     }
     setPhotoViewer({
       show: true,
-      photo: filteredPhotos[newIndex].photo_id, // This is already correct
+      photo: sortedPhotos[newIndex].id, // This is already correct
       index: newIndex
     });
   };
@@ -430,11 +428,10 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
       }
       
       try {
-        await onUpdateGroup(group.groupID, { label: editingTitle.trim() });
-        setGroup(prev => ({ ...prev, label: editingTitle.trim() }));
+        await optimisticUpdates.updateGroup(group.groupID, { label: editingTitle.trim() });
         
         // Update the URL to reflect the new group name
-        const newUrl = `/${encodeURIComponent(editingTitle.trim())}`;
+        const newUrl = `/group/${encodeURIComponent(editingTitle.trim())}`;
         window.history.replaceState(null, '', newUrl);
       } catch (error) {
         console.error('Error updating group name:', error);
@@ -551,7 +548,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {filteredPhotos.length} of {group.image_ids?.length || 0} photos
+                  {sortedPhotos.length} of {group.image_ids?.length || 0} photos
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops
@@ -726,7 +723,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
             </div>
 
             {/* Compact Selection Controls */}
-            {filteredPhotos.length > 0 && (
+            {sortedPhotos.length > 0 && (
               <div className="flex items-center space-x-2 px-3 py-2">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
@@ -741,13 +738,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                 {selectionMode && (
                   <button
                     onClick={selectAllPhotos}
-                    disabled={selectedPhotos.size === filteredPhotos.length}
+                    disabled={selectedPhotos.size === sortedPhotos.length}
                     className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
                     All
                   </button>
                 )}
-                {selectedPhotos.size > 0 && (
+                                    {selectedPhotos.size > 0 && (
                   <>
                     <button
                       onClick={clearSelection}
@@ -785,7 +782,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
             <p className="text-gray-500 mt-2">Loading photos...</p>
           </div>
-        ) : filteredPhotos.length === 0 ? (
+        ) : sortedPhotos.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -810,25 +807,25 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            {filteredPhotos.map((photo, index) => (
+            {sortedPhotos.map((photo, index) => (
               <motion.div
-                key={photo.photo_id}
+                key={photo.id || `photo-${index}`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className={`${viewMode === 'grid' ? `photo-card ${photoClasses[photo.photo_id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
+                className={`${viewMode === 'grid' ? `photo-card ${photoClasses[photo.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
               >
                 {viewMode === 'grid' ? (
-                  <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.photo_id, index)}>
+                  <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.id, index)}>
                     <input
                       type="checkbox"
-                      id={`photo-checkbox-grid-${photo.photo_id}`}
-                      name={`photo-checkbox-grid-${photo.photo_id}`}
-                      checked={selectedPhotos.has(photo.photo_id)}
+                      id={`photo-checkbox-grid-${photo.id}`}
+                      name={`photo-checkbox-grid-${photo.id}`}
+                      checked={selectedPhotos.has(photo.id)}
                       onChange={(e) => {
                         e.stopPropagation();
-                        togglePhotoSelection(photo.photo_id);
+                        togglePhotoSelection(photo.id);
                       }}
                       onClick={e => e.stopPropagation()}
                       className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
@@ -836,14 +833,14 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                       }`}
                     />
                     <img
-                      src={showCrops && imageCrops[photo.photo_id] 
-                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.webp`
-                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.webp`
+                      src={showCrops && imageCrops[photo.id] 
+                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
+                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.id}.webp`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-full h-full object-cover rounded-lg"
                       loading="lazy"
-                      onLoad={(e) => handleImageLoad(photo.photo_id, e)}
+                      onLoad={(e) => handleImageLoad(photo.id, e)}
                       onError={(e) => {
                         e.target.onerror = null;
                         e.target.src = PLACEHOLDER_DATA_URL;
@@ -856,13 +853,13 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                       </div>
                     </div>
                     {/* Date overlay */}
-                    {photo.formatted_date && (
+                    {photo.date_taken && (
                       <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                        {formatDate(photo.formatted_date)}
+                        {formatDate(photo.date_taken)}
                       </div>
                     )}
                     {/* Crop indicator */}
-                    {showCrops && imageCrops[photo.photo_id] && (
+                    {showCrops && imageCrops[photo.id] && (
                       <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
                         Crop
                       </div>
@@ -872,11 +869,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                   <>
                     <input
                       type="checkbox"
-                      id={`photo-checkbox-list-${photo.photo_id}`}
-                      name={`photo-checkbox-list-${photo.photo_id}`}
-                      checked={selectedPhotos.has(photo.photo_id)}
+                      id={`photo-checkbox-list-${photo.id}`}
+                      name={`photo-checkbox-list-${photo.id}`}
+                      checked={selectedPhotos.has(photo.id)}
                       onChange={(e) => {
-                        togglePhotoSelection(photo.photo_id);
+                        togglePhotoSelection(photo.id);
                       }}
                       onClick={e => e.stopPropagation()}
                       className={`w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
@@ -885,21 +882,21 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                     />
                     <div className="relative">
                       <img
-                        src={showCrops && imageCrops[photo.photo_id] 
-                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.photo_id]}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.photo_id}.webp`
+                        src={showCrops && imageCrops[photo.id] 
+                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
+                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.id}.webp`
                         }
                         alt={`Photo ${index + 1}`}
                         className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                         loading="lazy"
-                        onClick={() => openPhotoViewer(photo.photo_id, index)}
+                        onClick={() => openPhotoViewer(photo.id, index)}
                         onError={(e) => {
                           e.target.onerror = null;
                           e.target.src = PLACEHOLDER_DATA_URL;
                         }}
                       />
                       {/* Crop indicator for list view */}
-                      {showCrops && imageCrops[photo.photo_id] && (
+                      {showCrops && imageCrops[photo.id] && (
                         <div className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">
                           C
                         </div>
@@ -908,7 +905,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900">{photo.name}</p>
                       <p className="text-sm text-gray-500">
-                        {photo.formatted_date ? formatDate(photo.formatted_date) : 'Unknown date'}
+                        {photo.date_taken ? formatDate(photo.date_taken) : 'Unknown date'}
                       </p>
                     </div>
                   </>
@@ -925,8 +922,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           group={group}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            await onUpdateGroup(group.groupID, updates);
-            setGroup(prev => ({ ...prev, ...updates }));
+            await optimisticUpdates.updateGroup(group.groupID, updates);
             setShowEditModal(false);
           }}
           onRefreshGroups={onRefreshGroups}
@@ -938,7 +934,7 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           group={group}
           onClose={() => setShowDeleteModal(false)}
           onConfirm={async () => {
-            await onDeleteGroup(group.groupID);
+            await storeDeleteGroup(group.groupID);
             navigate('/');
           }}
         />
@@ -950,11 +946,11 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
           photo={photoViewer.photo}
           onClose={closePhotoViewer}
           onNavigate={navigatePhoto}
-          totalPhotos={filteredPhotos.length}
+          totalPhotos={sortedPhotos.length}
           currentIndex={photoViewer.index}
           currentGroupId={group.groupID}
           onJumpToMoment={handleJumpToMoment}
-          groups={groups}
+          groups={currentGroups}
           onTransferComplete={handleTransferComplete}
         />
       )}
@@ -977,12 +973,12 @@ export default function FaceDetail({ groups, onUpdateGroup, onDeleteGroup, showT
         <TransferFacesModal
           isOpen={showTransferModal}
           onClose={() => setShowTransferModal(false)}
-          groups={groups}
+          groups={currentGroups}
           currentGroup={group}
-          selectedFaces={getSelectedFaceIds()}
+          selectedFaces={Array.from(getSelectedFaceIds())}
           onTransferComplete={handleTransferComplete}
         />
       )}
     </div>
   );
-} 
+}

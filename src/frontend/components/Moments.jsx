@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar } from 'lucide-react';
 import PhotoViewer from './PhotoViewer';
@@ -7,6 +6,8 @@ import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
+import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
+import { momentsAPI, imagesAPI } from '../utils/apiService';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -49,8 +50,8 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
   const fetchPhotos = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`/api/moments/${momentId}/photos`);
-      setPhotos(res.data.photos || []);
+      const result = await momentsAPI.getPhotos(momentId);
+      setPhotos(result.photos || []);
     } catch {
       setPhotos([]);
     } finally {
@@ -193,9 +194,18 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
 
 export default function Moments() {
   const location = useLocation();
-  const [moments, setMoments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { 
+    moments, 
+    setMoments, 
+    updateMoment, 
+    deleteMoment, 
+    addMoment,
+    setLoading, 
+    setError 
+  } = useDataStore();
+  
+  const [loading, setLocalLoading] = useState(true);
+  const [error, setLocalError] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [images, setImages] = useState([]);
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
@@ -263,8 +273,8 @@ export default function Moments() {
     const map = {};
     for (const moment of moments) {
       try {
-        const res = await axios.get(`/api/moments/${moment.id}/photos`);
-        map[moment.id] = res.data.photos || [];
+        const result = await momentsAPI.getPhotos(moment.id);
+        map[moment.id] = result.photos || [];
       } catch {
         map[moment.id] = [];
       }
@@ -279,35 +289,64 @@ export default function Moments() {
   const fetchMoments = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/moments');
-      setMoments(response.data.moments || []);
+      setLocalLoading(true);
+      const response = await momentsAPI.getAll();
+      setMoments(response.moments || []);
       setError(null);
+      setLocalError(null);
     } catch (err) {
       setError('Failed to load moments.');
+      setLocalError('Failed to load moments.');
     } finally {
       setLoading(false);
+      setLocalLoading(false);
     }
   };
-  
+
   const fetchImages = async () => {
     try {
-      const res = await axios.get('/api/images.json');
-      setImages(res.data.images || []);
-    } catch {
-      setImages([]);
+      const response = await imagesAPI.getAll();
+      setImages(response.images || []);
+    } catch (err) {
+      console.error('Error fetching images:', err);
     }
   };
 
   const handleSaveMoments = async (updatedMoment) => {
-    setMoments(prev => prev.map(m => m.id === updatedMoment.id ? updatedMoment : m));
+    try {
+      const response = await momentsAPI.update(updatedMoment.id, updatedMoment);
+      
+      // Handle any change instructions from the backend
+      if (response.changes) {
+        response.changes.forEach(change => {
+          handleDataChange(change.type, change.data);
+        });
+      } else {
+        // Fallback to direct update if no change instructions
+        updateMoment(updatedMoment.id, response.moment || response);
+      }
+      
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Error saving moment:', error);
+    }
   };
 
   const handleDeleteMoment = async (id) => {
     try {
-      await axios.delete(`/api/moments/${id}`);
-      fetchMoments();
+      const response = await momentsAPI.delete(id);
+      
+      // Handle any change instructions from the backend
+      if (response.changes) {
+        response.changes.forEach(change => {
+          handleDataChange(change.type, change.data);
+        });
+      } else {
+        // Fallback to direct delete if no change instructions
+        deleteMoment(id);
+      }
     } catch (error) {
-      alert('Failed to delete moment.');
+      console.error('Error deleting moment:', error);
     }
   };
 

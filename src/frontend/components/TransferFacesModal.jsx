@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUpDown } from 'lucide-react';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -95,20 +96,11 @@ export default function TransferFacesModal({
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/groups/check-name`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ label: name.trim() }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNameConflict(data.conflict);
-      }
+      const result = await groupsAPI.checkName(name);
+      setNameConflict(result.conflict);
     } catch (error) {
       console.error('Error checking name conflict:', error);
+      setNameConflict(false);
     }
   };
 
@@ -119,59 +111,43 @@ export default function TransferFacesModal({
   };
 
   const handleTransfer = async () => {
-    if (isLoading) return;
+    if (!selectedFaces || selectedFaces.length === 0) {
+      setError('No faces selected for transfer');
+      return;
+    }
+
+    if (!selectedGroupId && !newGroupName.trim()) {
+      setError('Please select a target group or enter a new group name');
+      return;
+    }
+
+    if (nameConflict) {
+      setError('Group name already exists. Please choose a different name.');
+      return;
+    }
 
     setIsLoading(true);
     setError('');
 
     try {
-      const requestData = {
-        old_group_id: currentGroup.groupID,
-        face_ids: Array.from(selectedFaces)
-      };
+      console.log('TransferFacesModal - selectedFaces:', selectedFaces);
+      console.log('TransferFacesModal - currentGroup:', currentGroup);
+      console.log('TransferFacesModal - selectedGroupId:', selectedGroupId);
+      console.log('TransferFacesModal - newGroupName:', newGroupName);
+      
+      const result = await groupsAPI.transferFaces(
+        currentGroup.groupID,
+        selectedFaces, // Already an array from getSelectedFaceIds()
+        selectedGroupId || null,
+        newGroupName.trim() || null
+      );
 
-      if (selectedGroupId) {
-        // Transfer to existing group
-        requestData.target_group_id = selectedGroupId;
-      } else if (newGroupName.trim()) {
-        // Create new group
-        if (nameConflict) {
-          setError('Group name already exists');
-          setIsLoading(false);
-          return;
-        }
-        requestData.new_group_name = newGroupName.trim();
-      } else {
-        setError('Please select a group or enter a new group name');
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/api/groups/transfer-faces`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Include new group name in result for better messaging
-        if (newGroupName.trim() && result.target_group_id) {
-          result.new_group_name = newGroupName.trim();
-        }
-        
-        onTransferComplete(result);
-        onClose();
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to transfer faces');
-      }
+      // The API service interceptor will automatically handle the state updates
+      onTransferComplete(result);
+      onClose();
     } catch (error) {
-      console.error('Error transferring faces:', error);
-      setError('Failed to transfer faces');
+      const errorInfo = handleAPIError(error, 'Failed to transfer faces');
+      setError(errorInfo.message);
     } finally {
       setIsLoading(false);
     }

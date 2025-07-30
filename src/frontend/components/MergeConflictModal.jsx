@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -19,17 +20,27 @@ export default function MergeConflictModal({
   const handleMerge = async () => {
     setLoading(true);
     try {
-      await onMerge();
+      // Use the API service for merging groups
+      await groupsAPI.merge([currentGroup.groupID], conflictingGroup.groupID);
+      
+      // The API service interceptor will automatically handle the state updates
+      if (onMerge) {
+        await onMerge();
+      }
       onClose();
     } catch (error) {
       console.error('Error merging groups:', error);
+      const errorInfo = handleAPIError(error, 'Failed to merge groups');
+      alert(errorInfo.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    onCancel();
+    if (onCancel) {
+      onCancel();
+    }
     onClose();
   };
 

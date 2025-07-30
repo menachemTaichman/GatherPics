@@ -5,6 +5,7 @@ import traceback
 import os
 import io
 import zipfile
+import copy
 
 from src.core.models.event import Event
 # from src.core.models.profile import Profiles  # If needed for permissions
@@ -18,15 +19,16 @@ FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
 def build_complete_photo_data(event, image_id, include_all_faces=True, group_filter=None):
-    """Build complete photo data including metadata, faces, and URLs."""
+    """Build complete photo data with all related information."""
     try:
-        # Get basic image info
         image = event.images_model.get(image_id)
         if not image:
             return None
         
-        # Get face data
+        # Get face IDs for this image
         face_ids = event.images_model.get_faces(image_id)
+        
+        # Build faces data
         faces_data = []
         for face_id in face_ids:
             face = event.faces_model.get(face_id)
@@ -63,7 +65,6 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
                     'title': moment['title'],
                     'description': moment.get('description', ''),
                     'start': moment.get('start'),
-                    'end': moment.get('end')
                 }
         
         # Build complete response
@@ -88,6 +89,21 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
         return photo_data
     except Exception as e:
         return None
+
+def add_change_instruction(response_data, change_type, change_data=None):
+    """Add change instruction to API response for frontend data updates."""
+    if 'changes' not in response_data:
+        response_data['changes'] = []
+    
+    # Create a simple change instruction without circular references
+    change_instruction = {
+        'type': change_type,
+        'data': change_data if change_data is not None else {}
+    }
+    
+    response_data['changes'].append(change_instruction)
+    
+    return response_data
 
 # --- Auth Decorator (no-op for now) ---
 def require_auth(f):
@@ -140,7 +156,10 @@ def update_group(group_id):
     try:
         event.groups_model.edit(group_id, data)
         updated = event.groups_model.get(group_id)
-        return jsonify(updated)
+        
+        # Add change instruction for frontend
+        response_data = add_change_instruction(updated, 'GROUP_UPDATED')
+        return jsonify(response_data)
     except ValueError as e:
         # Handle unique constraint violation
         return jsonify({"error": str(e)}), 400
@@ -172,7 +191,8 @@ def delete_group(group_id):
     event = Event(FIXED_EVENT_ID)
     try:
         event.groups_model.delete(group_id)
-        return jsonify({"success": True})
+        response_data = add_change_instruction({"success": True}, 'GROUP_DELETED', {"groupID": group_id})
+        return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 
@@ -183,8 +203,12 @@ def merge_groups():
     event = Event(FIXED_EVENT_ID)
     data = request.json or {}
     try:
-        event.merge_groups(data['source_group_ids'], data['target_group_id'])
-        return jsonify({"success": True})
+        result = event.merge_groups(data['source_group_ids'], data['target_group_id'])
+        response_data = add_change_instruction({"success": True}, 'GROUP_MERGED', {
+            'source_group_ids': data['source_group_ids'],
+            'target_group_id': data['target_group_id']
+        })
+        return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 
@@ -194,7 +218,19 @@ def transfer_faces():
     """Transfer faces from one group to another or create a new group."""
     event = Event(FIXED_EVENT_ID)
     data = request.json or {}
+    
+    # Debug logging
+    print(f"Transfer faces request data: {data}")
+    
     try:
+        # Validate required fields
+        if 'old_group_id' not in data:
+            return bad_request("Missing old_group_id")
+        if 'face_ids' not in data:
+            return bad_request("Missing face_ids")
+        if not data['face_ids']:
+            return bad_request("face_ids cannot be empty")
+        
         result = event.transfer_faces(
             old_group_id=data['old_group_id'],
             face_ids=data['face_ids'],
@@ -203,8 +239,28 @@ def transfer_faces():
         )
         # Add old_group_id to the response for frontend updates
         result['old_group_id'] = data['old_group_id']
-        return jsonify(result)
+        
+        # Add change instruction for frontend with explicit change data
+        change_data = {
+            'target_group_id': result.get('target_group_id'),
+            'old_group_id': data['old_group_id'],
+            'old_group_deleted': result.get('old_group_deleted', False),
+            'transferred_faces': result.get('transferred_faces', []),
+            'transferred_photos': result.get('transferred_photos', []),
+            'transferred_photos_data': []  # Will be populated with full photo data
+        }
+        
+        # Get full photo data for transferred photos
+        if result.get('transferred_photos'):
+            for photo_id in result['transferred_photos']:
+                photo_data = build_complete_photo_data(event, photo_id)
+                if photo_data:
+                    change_data['transferred_photos_data'].append(photo_data)
+        
+        response_data = add_change_instruction(result, 'GROUP_FACES_TRANSFERRED', change_data)
+        return jsonify(response_data)
     except Exception as e:
+        print(f"Transfer faces error: {str(e)}")
         return bad_request(e)
 
 @app.route("/api/groups/<group_id>/photos", methods=["GET"])
@@ -263,7 +319,8 @@ def create_moment():
     data = request.json or {}
     try:
         moment = event.moments_model.add(data['label'], data['description'], data['start'], data['end'], data['image_IDs'])
-        return jsonify({"moment": moment})
+        response_data = add_change_instruction({"moment": moment}, 'MOMENT_CREATED', moment)
+        return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 
@@ -276,7 +333,8 @@ def update_moment(moment_id):
     try:
         event.moments_model.edit(moment_id, data)
         updated = event.moments_model.get(moment_id)
-        return jsonify({"moment": updated})
+        response_data = add_change_instruction({"moment": updated}, 'MOMENT_UPDATED', updated)
+        return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 
@@ -287,7 +345,8 @@ def delete_moment(moment_id):
     event = Event(FIXED_EVENT_ID)
     try:
         event.moments_model.delete(moment_id)
-        return jsonify({"success": True})
+        response_data = add_change_instruction({"success": True}, 'MOMENT_DELETED', {"id": moment_id})
+        return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 

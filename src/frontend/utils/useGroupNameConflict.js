@@ -1,6 +1,5 @@
 import { useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+import { groupsAPI, handleAPIError } from './apiService';
 
 export function useGroupNameConflict(currentGroup, onRefreshGroups) {
   const [nameConflict, setNameConflict] = useState(null);
@@ -15,57 +14,39 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/groups/check-name`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          label: name.trim(),
-          exclude_group_id: currentGroup?.groupID
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.conflict) {
-          setNameConflict(data.conflicting_group);
-        } else {
-          setNameConflict(null);
-        }
+      const result = await groupsAPI.checkName(name.trim(), currentGroup?.groupID);
+      if (result.conflict) {
+        setNameConflict(result.conflicting_group);
+      } else {
+        setNameConflict(null);
       }
     } catch (error) {
       console.error('Error checking name conflict:', error);
+      const errorInfo = handleAPIError(error, 'Failed to check name conflict');
+      console.error(errorInfo.message);
     }
   };
 
   const handleMergeGroups = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/groups/merge`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          target_group_id: conflictData.conflictingGroup.groupID,
-          source_group_ids: [currentGroup.groupID]
-        })
-      });
-
-      if (response.ok) {
-        // Refresh groups data to update counts and grid
-        if (onRefreshGroups) {
-          await onRefreshGroups();
-        }
-        
-        // Close modal and redirect to the main group
-        window.location.href = `/group/${encodeURIComponent(conflictData.conflictingGroup.label)}`;
-      } else {
-        throw new Error('Failed to merge groups');
+      // Use the API service for merging groups
+      await groupsAPI.merge([currentGroup.groupID], conflictData.conflictingGroup.groupID);
+      
+      // The API service interceptor will automatically handle the state updates
+      // No need for manual refresh or window.location.href
+      
+      // Close modal and let the parent component handle navigation
+      setShowMergeModal(false);
+      setConflictData(null);
+      
+      // Call the parent's refresh function if provided
+      if (onRefreshGroups) {
+        await onRefreshGroups();
       }
     } catch (error) {
       console.error('Error merging groups:', error);
-      alert('Failed to merge groups. Please try again.');
+      const errorInfo = handleAPIError(error, 'Failed to merge groups');
+      alert(errorInfo.message);
     }
   };
 

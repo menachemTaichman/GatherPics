@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import TransferFacesModal from './TransferFacesModal';
+import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete }) {
   const navigate = useNavigate();
@@ -90,9 +90,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       setLoading(true);
       
       // Use the new complete photo endpoint instead of multiple calls
-      const response = await axios.get(`${API_BASE}/api/photos/${encodeURIComponent(photoMeta.name)}/complete`);
+      const photoData = await photosAPI.getComplete(photoMeta.name);
       
-      const photoData = response.data;
       setFaces(photoData.faces || []);
       setPhotoInfo(photoData);
       setMomentInfo(photoData.moment || null);
@@ -129,28 +128,23 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = photoMeta.name.replace(/\.[^.]+$/, '.webp');
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const result = await downloadAPI.download([photoMeta.name]);
+      
+      // Create a temporary link to download the file
+      const link = document.createElement('a');
+      link.href = `${API_BASE}${result.download_url}`;
+      link.download = photoMeta.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
       console.error('Error downloading photo:', error);
+      const errorInfo = handleAPIError(error, 'Failed to download photo');
+      alert(errorInfo.message);
     }
   };
 
   const handleFaceClick = (index) => {
-    // Turn on face tags if not already on
-    if (!showRectangles) {
-      setShowRectangles(true);
-    }
-    
-    // If clicking on already selected face, deselect it
     if (selectedFaceIndex === index) {
       setSelectedFaceIndex(null);
     } else {
@@ -159,45 +153,33 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleFaceNavigation = (face) => {
-    // Navigate to the face group page using the group label
-    navigate(`/group/${encodeURIComponent(face.group_label)}`);
-    onClose(); // Close the photo viewer
+    if (face.group_id) {
+      const group = groups.find(g => g.groupID === face.group_id);
+      if (group) {
+        navigate(`/group/${encodeURIComponent(group.label)}`);
+        onClose();
+      }
+    }
   };
 
   const handleJumpToMoment = () => {
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
-      onClose(); // Close the photo viewer
     }
   };
 
   const handleTransferFace = (face) => {
-    // When transferring from photo viewer, transfer only the specific face
-    setSelectedFaceForTransfer({
-      ...face,
-      all_faces_in_photo: [face.face_id] // Only transfer the specific face
-    });
+    setSelectedFaceForTransfer(face);
     setShowTransferModal(true);
   };
 
   const handleTransferComplete = async (result) => {
-    // Smoothly update faces list without full refresh
-    if (result.transferred_faces && result.transferred_faces.length > 0) {
-      setFaces(prev => prev.filter(face => 
-        !result.transferred_faces.includes(face.face_id)
-      ));
-    } else {
-      // Fallback to full refresh if no specific face info
-      loadPhotoInfo();
-    }
-    
-    setShowTransferModal(false);
-    setSelectedFaceForTransfer(null);
-    
-    // Call the parent's onTransferComplete if provided
+    // The API service interceptor will automatically handle the state updates
     if (onTransferComplete) {
       onTransferComplete(result);
     }
+    setShowTransferModal(false);
+    setSelectedFaceForTransfer(null);
   };
 
 
@@ -707,7 +689,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           }}
           groups={groups}
           currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
-          selectedFaces={new Set(selectedFaceForTransfer.all_faces_in_photo || [selectedFaceForTransfer.face_id])}
+          selectedFaces={selectedFaceForTransfer.all_faces_in_photo || [selectedFaceForTransfer.face_id]}
           onTransferComplete={handleTransferComplete}
         />
       )}

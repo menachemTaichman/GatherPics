@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
+import { momentsAPI, handleAPIError } from '../utils/apiService';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -39,8 +40,6 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
     }
   }, [open, moments]);
 
-
-
   const handleSave = async () => {
     // Check if any moment was just created or updated with time range
     const momentsWithTimeRange = editingMoments.filter(m => 
@@ -70,69 +69,51 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
       if (moment.id.startsWith('temp-')) {
         // Create new moment
         const { id, ...momentData } = moment;
-        const response = await fetch('/api/moments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(momentData)
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to create moment');
-        }
-        
-        const result = await response.json();
+        const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
+        
         // Update the local state with the saved moment
         setEditingMoments(prev => prev.map(m => 
           m.id === moment.id ? { ...savedMoment, id: savedMoment.id } : m
         ));
       } else {
         // Update existing moment
-        const response = await fetch(`/api/moments/${moment.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(moment)
-        });
+        const result = await momentsAPI.update(moment.id, moment);
+        savedMoment = result.moment;
         
-        if (!response.ok) {
-          throw new Error('Failed to update moment');
-        }
+        // Update the local state with the saved moment
+        setEditingMoments(prev => prev.map(m => 
+          m.id === moment.id ? savedMoment : m
+        ));
       }
       
-      // Clear the changed state for this moment
-      setChangedMoments(prev => {
-        const next = new Set(prev);
-        next.delete(moment.id);
-        return next;
-      });
+      // Mark as changed
+      setChangedMoments(prev => new Set([...prev, savedMoment.id]));
       
-      // If moment has time range, open edit photos modal, but DO NOT call onSave yet
-      if (savedMoment.start_datetime && savedMoment.end_datetime) {
-        onOpenEditPhotos(savedMoment);
-        // Do NOT call onSave here! (prevents jump)
-      } else {
-        // Only call onSave if not opening the photo modal
-        if (onSave) onSave(editingMoments);
-      }
+      return savedMoment;
     } catch (error) {
       console.error('Error saving moment:', error);
-      alert('Failed to save moment. Please try again.');
+      const errorInfo = handleAPIError(error, 'Failed to save moment');
+      alert(errorInfo.message);
+      throw error;
     }
   };
 
-  const handleDelete = (id) => {
-    if (confirm('Are you sure you want to delete this moment?')) {
-      // Only call onDelete if it's not a temporary ID
-      if (!id.startsWith('temp-')) {
+  const handleDelete = async (id) => {
+    try {
+      await momentsAPI.delete(id);
+      
+      // Remove from editing moments
+      setEditingMoments(prev => prev.filter(m => m.id !== id));
+      
+      // Call parent's onDelete
+      if (onDelete) {
         onDelete(id);
-      } else {
-        // Remove from local state if it's a temporary moment
-        setEditingMoments(prev => prev.filter(m => m.id !== id));
       }
+    } catch (error) {
+      console.error('Error deleting moment:', error);
+      const errorInfo = handleAPIError(error, 'Failed to delete moment');
+      alert(errorInfo.message);
     }
   };
 
