@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete }) {
+export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -691,6 +691,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
           selectedFaces={selectedFaceForTransfer.all_faces_in_photo || [selectedFaceForTransfer.face_id]}
           onTransferComplete={handleTransferComplete}
+          showToast={showToast}
         />
       )}
     </AnimatePresence>

@@ -219,9 +219,6 @@ def transfer_faces():
     event = Event(FIXED_EVENT_ID)
     data = request.json or {}
     
-    # Debug logging
-    print(f"Transfer faces request data: {data}")
-    
     try:
         # Validate required fields
         if 'old_group_id' not in data:
@@ -260,7 +257,6 @@ def transfer_faces():
         response_data = add_change_instruction(result, 'GROUP_FACES_TRANSFERRED', change_data)
         return jsonify(response_data)
     except Exception as e:
-        print(f"Transfer faces error: {str(e)}")
         return bad_request(e)
 
 @app.route("/api/groups/<group_id>/photos", methods=["GET"])

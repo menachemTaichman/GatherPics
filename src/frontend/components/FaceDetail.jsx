@@ -5,7 +5,6 @@ import {
   ArrowLeft, 
   Download, 
   Edit, 
-  Trash2, 
   User, 
   Image, 
   Grid, 
@@ -24,12 +23,12 @@ import {
   Users
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
-import DeleteConfirmModal from './DeleteConfirmModal';
 import PhotoViewer from './PhotoViewer';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
 import { sortPhotos, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
+import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, showToast, optimisticUpdates } from '../utils/apiService';
@@ -41,8 +40,33 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [viewMode, setViewMode] = useSetting('faceDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  
+  // Load selected photos from cache when group changes
+  useEffect(() => {
+    if (group?.groupID) {
+      const cachedSelection = getSetting(`faceDetail_selection_${group.groupID}`);
+      if (cachedSelection && Array.isArray(cachedSelection)) {
+        setSelectedPhotos(new Set(cachedSelection));
+      } else {
+        setSelectedPhotos(new Set());
+      }
+    }
+  }, [group?.groupID]);
+  
+  // Save selection to cache whenever it changes
+  useEffect(() => {
+    if (group?.groupID && selectedPhotos.size > 0) {
+      setSetting(`faceDetail_selection_${group.groupID}`, Array.from(selectedPhotos));
+    } else if (group?.groupID && selectedPhotos.size === 0) {
+      // Clear cache when selection is empty
+      try {
+        localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${group.groupID}`);
+      } catch (error) {
+        console.warn('Failed to clear selection cache:', error);
+      }
+    }
+  }, [selectedPhotos, group?.groupID]);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0 });
   const [photoClasses, setPhotoClasses] = useState({});
   const [sortedPhotos, setSortedPhotos] = useState([]);
@@ -225,10 +249,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   };
 
-  const handleAddGroupToBucket = async () => {
-    // TODO: Implement add to bucket functionality
-    alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
-  };
+
 
   const handleAddSelectedToBucket = async () => {
     // TODO: Implement add selected to bucket functionality
@@ -236,18 +257,18 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const getSelectedFaceIds = () => {
-    const selectedFaceIds = [];
+    const selectedFaceIds = new Set();
     for (const photoId of selectedPhotos) {
       const photo = sortedPhotos.find(p => p.id === photoId);
       if (photo && photo.faces) {
         photo.faces.forEach(face => {
           if (face.group_id === group.groupID) {
-            selectedFaceIds.push(face.face_id);
+            selectedFaceIds.add(face.face_id);
           }
         });
       }
     }
-    return selectedFaceIds;
+    return Array.from(selectedFaceIds);
   };
 
   const handleTransferFaces = () => {
@@ -266,12 +287,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     // No need for manual updates here - the API service interceptor
     // will process the GROUP_FACES_TRANSFERRED change instruction
     
-    // Show success notification
-    if (result.target_group_id) {
-      const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
-      let groupName = result.new_group_name || (targetGroup ? targetGroup.label : 'new group');
-      showToast(`Successfully transferred faces to "${groupName}"`, 'success');
-    }
+    // Success message is now handled in TransferFacesModal
     
     // If old group was deleted, redirect to the new group
     if (result.old_group_deleted) {
@@ -564,22 +580,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 min-w-max">
-            <button
-              onClick={handleAddGroupToBucket}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <Download className="w-4 h-4" />
-              <span>Add All to Bucket</span>
-            </button>
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 flex items-center space-x-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete</span>
-            </button>
-          </div>
+
         </div>
 
         {/* Controls Row */}
@@ -929,31 +930,21 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         />
       )}
 
-      {showDeleteModal && (
-        <DeleteConfirmModal
-          group={group}
-          onClose={() => setShowDeleteModal(false)}
-          onConfirm={async () => {
-            await storeDeleteGroup(group.groupID);
-            navigate('/');
-          }}
-        />
-      )}
-
-      {/* Photo Viewer */}
-      {photoViewer.show && (
-        <PhotoViewer
-          photo={photoViewer.photo}
-          onClose={closePhotoViewer}
-          onNavigate={navigatePhoto}
-          totalPhotos={sortedPhotos.length}
-          currentIndex={photoViewer.index}
-          currentGroupId={group.groupID}
-          onJumpToMoment={handleJumpToMoment}
-          groups={currentGroups}
-          onTransferComplete={handleTransferComplete}
-        />
-      )}
+             {/* Photo Viewer */}
+       {photoViewer.show && (
+         <PhotoViewer
+           photo={photoViewer.photo}
+           onClose={closePhotoViewer}
+           onNavigate={navigatePhoto}
+           totalPhotos={sortedPhotos.length}
+           currentIndex={photoViewer.index}
+           currentGroupId={group.groupID}
+           onJumpToMoment={handleJumpToMoment}
+           groups={currentGroups}
+           onTransferComplete={handleTransferComplete}
+           showToast={showToast}
+         />
+       )}
 
       {/* Merge Conflict Modal */}
       {showMergeModal && conflictData && (
@@ -968,17 +959,18 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         />
       )}
 
-      {/* Transfer Faces Modal */}
-      {showTransferModal && (
-        <TransferFacesModal
-          isOpen={showTransferModal}
-          onClose={() => setShowTransferModal(false)}
-          groups={currentGroups}
-          currentGroup={group}
-          selectedFaces={Array.from(getSelectedFaceIds())}
-          onTransferComplete={handleTransferComplete}
-        />
-      )}
+             {/* Transfer Faces Modal */}
+       {showTransferModal && (
+         <TransferFacesModal
+           isOpen={showTransferModal}
+           onClose={() => setShowTransferModal(false)}
+           groups={currentGroups}
+           currentGroup={group}
+           selectedFaces={Array.from(getSelectedFaceIds())}
+           onTransferComplete={handleTransferComplete}
+           showToast={showToast}
+         />
+       )}
     </div>
   );
 }

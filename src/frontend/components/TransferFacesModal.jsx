@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, AlertTriangle, User, Plus, Users, Search, ArrowUpDown } from 'lucide-react';
+import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
-import { getSetting, setSetting } from '../utils/settings';
+import { useSetting } from '../utils/useSettings';
+import { toggleSortOrder } from '../utils/sorting';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -9,7 +10,8 @@ export default function TransferFacesModal({
   groups, 
   currentGroup,
   selectedFaces,
-  onTransferComplete
+  onTransferComplete,
+  showToast
 }) {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -17,26 +19,12 @@ export default function TransferFacesModal({
   const [error, setError] = useState('');
   const [nameConflict, setNameConflict] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // 'name' or 'count'
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  const [sortBy, setSortBy] = useSetting('transferModal_sortBy', 'name');
+  const [sortOrder, setSortOrder] = useSetting('transferModal_sortOrder', 'asc');
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-
-  // Load sorting preferences from settings cache
-  useEffect(() => {
-    const savedSortBy = getSetting('transferModal_sortBy');
-    const savedSortOrder = getSetting('transferModal_sortOrder');
-    if (savedSortBy) setSortBy(savedSortBy);
-    if (savedSortOrder) setSortOrder(savedSortOrder);
-  }, []);
-
-  // Save sorting preferences to settings cache
-  useEffect(() => {
-    setSetting('transferModal_sortBy', sortBy);
-    setSetting('transferModal_sortOrder', sortOrder);
-  }, [sortBy, sortOrder]);
 
   // Filter out current group from available groups
   const availableGroups = groups.filter(g => g.groupID !== currentGroup?.groupID);
@@ -72,23 +60,24 @@ export default function TransferFacesModal({
       setError('');
       setNameConflict(false);
       setSearchTerm('');
+    } else {
+      // Clean up timeout when modal closes
+      if (window.nameConflictTimeout) {
+        clearTimeout(window.nameConflictTimeout);
+        window.nameConflictTimeout = null;
+      }
     }
   }, [isOpen]);
 
+  // Cleanup timeout on unmount
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!isOpen) return;
-      
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'Enter') {
-        handleTransfer();
+    return () => {
+      if (window.nameConflictTimeout) {
+        clearTimeout(window.nameConflictTimeout);
+        window.nameConflictTimeout = null;
       }
     };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedGroupId, newGroupName, nameConflict]);
+  }, []);
 
   const checkNameConflict = async (name) => {
     if (!name.trim()) {
@@ -108,26 +97,40 @@ export default function TransferFacesModal({
   const handleNewGroupNameChange = (e) => {
     const name = e.target.value;
     setNewGroupName(name);
-    checkNameConflict(name);
+    
+    // Clear any existing timeout
+    if (window.nameConflictTimeout) {
+      clearTimeout(window.nameConflictTimeout);
+    }
+    
+    // Debounce the name conflict check
+    window.nameConflictTimeout = setTimeout(() => {
+      checkNameConflict(name);
+    }, 300);
   };
 
   const handleTransfer = async () => {
+    if (isLoading) return; // Strictly prevent double submit
+    setIsLoading(true); // Set immediately
+
     if (!selectedFaces || selectedFaces.length === 0) {
       setError('No faces selected for transfer');
+      setIsLoading(false);
       return;
     }
 
     if (!selectedGroupId && !newGroupName.trim()) {
       setError('Please select a target group or enter a new group name');
+      setIsLoading(false);
       return;
     }
 
     if (nameConflict) {
       setError('Group name already exists. Please choose a different name.');
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
     setError('');
 
     try {
@@ -138,7 +141,15 @@ export default function TransferFacesModal({
         newGroupName.trim() || null
       );
 
-      // The API service interceptor will automatically handle the state updates
+      // Show success notification with proper group name
+      if (result.target_group_id && showToast) {
+        const targetGroup = groups.find(g => g.groupID === result.target_group_id);
+        const isNewGroup = !selectedGroupId && newGroupName.trim();
+        const groupName = isNewGroup ? newGroupName.trim() : (targetGroup?.label || `Group ${result.target_group_id}`);
+        const groupLabel = isNewGroup ? `new group "${groupName}"` : `"${groupName}"`;
+        showToast(`Successfully transferred ${selectedFaces.length} face${selectedFaces.length !== 1 ? 's' : ''} to ${groupLabel}`, 'success');
+      }
+
       onTransferComplete(result);
       onClose();
     } catch (error) {
@@ -149,8 +160,9 @@ export default function TransferFacesModal({
     }
   };
 
-  const toggleSortOrder = () => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  const handleToggleSortOrder = () => {
+    const newOrder = toggleSortOrder(sortOrder);
+    setSortOrder(newOrder);
   };
 
   if (!isOpen) return null;
@@ -164,14 +176,14 @@ export default function TransferFacesModal({
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
               <Users className="w-5 h-5 text-orange-600" />
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                Transfer {selectedFaces.size} Face{selectedFaces.size !== 1 ? 's' : ''}
-              </h2>
-              <p className="text-sm text-gray-500">
-                Choose destination group or create new one
-              </p>
-            </div>
+                         <div>
+               <h2 className="text-xl font-semibold text-gray-900">
+                 Transfer {selectedFaces.length} Face{selectedFaces.length !== 1 ? 's' : ''}
+               </h2>
+               <p className="text-sm text-gray-500">
+                 Choose destination group or create new one
+               </p>
+             </div>
           </div>
           <button
             onClick={onClose}
@@ -205,14 +217,18 @@ export default function TransferFacesModal({
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               >
                 <option value="name">Sort by Name</option>
-                <option value="count">Sort by Photo Count</option>
+                <option value="count">Sort by Count</option>
               </select>
               <button
-                onClick={toggleSortOrder}
+                onClick={handleToggleSortOrder}
                 className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
-                <ArrowUpDown className="w-4 h-4" />
+                {sortOrder === 'asc' ? (
+                  <ArrowUp className="w-4 h-4" />
+                ) : (
+                  <ArrowDown className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
@@ -282,7 +298,12 @@ export default function TransferFacesModal({
                   nameConflict ? 'border-red-500' : 'border-gray-300'
                 }`}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (
+                    e.key === 'Enter' &&
+                    !isLoading &&
+                    !nameConflict &&
+                    (selectedGroupId || newGroupName.trim())
+                  ) {
                     handleTransfer();
                   }
                 }}

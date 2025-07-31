@@ -18,7 +18,7 @@ export const useSetting = (key, defaultValue) => {
     setSetting(key, newValue);
   };
 
-  // Update state if setting changes externally
+  // Update state if setting changes externally (from other tabs/windows)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === `face_gallery_settings_${key}`) {

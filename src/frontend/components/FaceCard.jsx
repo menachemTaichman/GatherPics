@@ -3,9 +3,9 @@ const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Edit, Trash2, MoreVertical, User } from 'lucide-react';
+import { Download, Edit, MoreVertical, User } from 'lucide-react';
 
-export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDownload }) {
+export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
   const [showActions, setShowActions] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
@@ -58,7 +58,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
         {/* Circular Image Container */}
         <Link to={`/group/${group.label}`} className="block mb-3">
           <div 
-            className="relative rounded-full overflow-hidden shadow-lg"
+            className="relative rounded-full overflow-hidden shadow-lg group"
             style={{ 
               width: `${144 * cardSize}px`, 
               height: `${144 * cardSize}px` 
@@ -78,17 +78,8 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
               }}
             />
             
-            {/* Overlay with photo count */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full">
-              <div className="absolute bottom-2 left-2 text-white">
-                <div className="flex items-center space-x-1">
-                  <User className="w-3 h-3" />
-                  <span className="text-xs font-medium">
-                    {group.image_ids?.length || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
+            {/* Shadow overlay on hover */}
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-full"></div>
           </div>
         </Link>
 
@@ -152,20 +143,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDelete, onDown
                 className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                <span>Download</span>
-              </button>
-              
-              <hr className="my-1" />
-              
-              <button
-                onClick={() => {
-                  onDelete();
-                  setShowActions(false);
-                }}
-                className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Delete</span>
+                <span>Add to Bucket</span>
               </button>
             </motion.div>
 

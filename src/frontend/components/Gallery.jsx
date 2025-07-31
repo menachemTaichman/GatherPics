@@ -1,17 +1,15 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Download, Edit, Trash2, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Filter, Download, Edit, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
-import DeleteConfirmModal from './DeleteConfirmModal';
-import { sortGroups } from '../utils/sorting';
+import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 
 export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [sortBy, setSortBy] = useSetting('gallery_sortBy', 'name');
   const [sortOrder, setSortOrder] = useSetting('gallery_sortOrder', 'desc');
   const [cardSize, setCardSize] = useSetting('gallery_cardSize', 1.0);
@@ -32,25 +30,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
     setShowEditModal(true);
   };
 
-  const handleDeleteGroup = async (group) => {
-    setSelectedGroup(group);
-    setShowDeleteModal(true);
-  };
 
-  const handleDeleteConfirm = async () => {
-    try {
-      await onDeleteGroup(selectedGroup.groupID);
-      setShowDeleteModal(false);
-      setSelectedGroup(null);
-      
-      // Refresh groups data to ensure UI is updated
-      if (onRefreshGroups) {
-        await onRefreshGroups();
-      }
-    } catch (error) {
-      console.error('Error deleting group:', error);
-    }
-  };
 
   const handleAddGroupToBucket = async (group) => {
     // TODO: Implement add to bucket functionality
@@ -100,7 +80,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
               </div>
               
               <button
-                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                onClick={() => setSortOrder(toggleSortOrder(sortOrder))}
                 className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
                 title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
@@ -207,7 +187,6 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
                 group={group}
                 cardSize={cardSize}
                 onEdit={() => handleEditGroup(group)}
-                onDelete={() => handleDeleteGroup(group)}
                 onDownload={() => handleAddGroupToBucket(group)}
               />
             </motion.div>
@@ -232,16 +211,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
         />
       )}
 
-      {showDeleteModal && selectedGroup && (
-        <DeleteConfirmModal
-          group={selectedGroup}
-          onClose={() => {
-            setShowDeleteModal(false);
-            setSelectedGroup(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-        />
-      )}
+
     </div>
   );
 } 
