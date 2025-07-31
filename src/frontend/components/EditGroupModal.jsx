@@ -235,13 +235,6 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                       >
                         {displayData.label}
                       </h2>
-                      <button
-                        onClick={handleNameEdit}
-                        className="p-1 hover:bg-gray-100 rounded transition-colors"
-                        title="Edit group name"
-                      >
-                        <Edit className="w-4 h-4 text-gray-500" />
-                      </button>
                     </div>
                   )}
                 </div>

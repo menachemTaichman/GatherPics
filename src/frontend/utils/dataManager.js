@@ -105,43 +105,68 @@ export const useDataStore = create((set, get) => ({
       
       // Update target group if it exists
       if (targetGroupIndex !== -1) {
-        const targetGroup = { ...newGroups[targetGroupIndex] };
-        
-        // Update photo count by adding transferred photos
-        if (result.transferred_photos) {
-          const currentCount = targetGroup.photo_count || targetGroup.photoCount || targetGroup.image_ids?.length || 0;
-          targetGroup.photo_count = currentCount + result.transferred_photos.length;
-          if (targetGroup.photoCount !== undefined) {
-            targetGroup.photoCount = targetGroup.photo_count;
+        // Use updated target group data from backend if available, otherwise update manually
+        if (result.updated_target_group) {
+          newGroups[targetGroupIndex] = result.updated_target_group;
+        } else {
+          const targetGroup = { ...newGroups[targetGroupIndex] };
+          
+          // Update photo count by adding transferred photos
+          if (result.transferred_photos) {
+            const currentCount = targetGroup.photo_count || targetGroup.photoCount || targetGroup.image_ids?.length || 0;
+            targetGroup.photo_count = currentCount + result.transferred_photos.length;
+            if (targetGroup.photoCount !== undefined) {
+              targetGroup.photoCount = targetGroup.photo_count;
+            }
+            if (targetGroup.image_ids) {
+              // Create a set of existing image IDs to avoid duplicates
+              const existingImageIds = new Set(targetGroup.image_ids);
+              const newImageIds = result.transferred_photos.filter(id => !existingImageIds.has(id));
+              targetGroup.image_ids = [...targetGroup.image_ids, ...newImageIds];
+            } else {
+              targetGroup.image_ids = [...result.transferred_photos];
+            }
           }
-          if (targetGroup.image_ids) {
-            targetGroup.image_ids = [...targetGroup.image_ids, ...result.transferred_photos];
-          } else {
-            targetGroup.image_ids = [...result.transferred_photos];
+          
+          // Update representative face if the target group didn't have one
+          if (!targetGroup.face_representive && result.transferred_faces && result.transferred_faces.length > 0) {
+            targetGroup.face_representive = result.transferred_faces[0];
           }
+          
+          newGroups[targetGroupIndex] = targetGroup;
         }
-        
-        // Update representative face if the target group didn't have one
-        if (!targetGroup.face_representive && result.transferred_faces && result.transferred_faces.length > 0) {
-          targetGroup.face_representive = result.transferred_faces[0];
-        }
-        
-        newGroups[targetGroupIndex] = targetGroup;
       }
       
-      // Add new group if it was created
-      if (result.new_group_name && targetGroupIndex === -1) {
-        const newGroup = {
-          groupID: result.target_group_id,
-          label: result.new_group_name,
-          photo_count: result.transferred_photos ? result.transferred_photos.length : 0,
-          photoCount: result.transferred_photos ? result.transferred_photos.length : 0,
-          image_ids: result.transferred_photos || [],
-          face_representive: result.transferred_faces && result.transferred_faces.length > 0 ? result.transferred_faces[0] : '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        newGroups.push(newGroup);
+      // Add new group if it was created or if target group doesn't exist in store
+      if (targetGroupIndex === -1) {
+        // Target group doesn't exist in store - add it
+        if (result.new_group_name) {
+          // New group created
+          const newGroup = {
+            groupID: result.target_group_id,
+            label: result.new_group_name,
+            photo_count: result.transferred_photos ? result.transferred_photos.length : 0,
+            photoCount: result.transferred_photos ? result.transferred_photos.length : 0,
+            image_ids: result.transferred_photos || [],
+            face_representive: result.transferred_faces && result.transferred_faces.length > 0 ? result.transferred_faces[0] : '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          newGroups.push(newGroup);
+        } else if (result.updated_target_group) {
+          // Existing group that wasn't in store - add it with complete data
+          const newGroup = {
+            groupID: result.updated_target_group.groupID,
+            label: result.updated_target_group.label,
+            photo_count: result.updated_target_group.image_ids?.length || 0,
+            photoCount: result.updated_target_group.image_ids?.length || 0,
+            image_ids: result.updated_target_group.image_ids || [],
+            face_representive: result.updated_target_group.face_representive || '',
+            created_at: result.updated_target_group.created_at || new Date().toISOString(),
+            updated_at: result.updated_target_group.updated_at || new Date().toISOString()
+          };
+          newGroups.push(newGroup);
+        }
       }
       
       return { 

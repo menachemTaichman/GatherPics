@@ -244,7 +244,9 @@ def transfer_faces():
             'old_group_deleted': result.get('old_group_deleted', False),
             'transferred_faces': result.get('transferred_faces', []),
             'transferred_photos': result.get('transferred_photos', []),
-            'transferred_photos_data': []  # Will be populated with full photo data
+            'transferred_photos_data': [],  # Will be populated with full photo data
+            'updated_source_group': result.get('updated_source_group'),  # Include updated source group with new representative
+            'updated_target_group': result.get('updated_target_group')  # Include updated target group
         }
         
         # Get full photo data for transferred photos

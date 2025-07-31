@@ -149,6 +149,7 @@ class Event(JsonModel):
         representative_transferred = old_representative in face_ids
         
         # Determine target group
+        target_group_id_was_provided = target_group_id is not None
         if target_group_id:
             # Transfer to existing group
             target_group = self.groups_model.get(target_group_id)
@@ -192,13 +193,23 @@ class Event(JsonModel):
         if not old_group_deleted:
             updated_source_group = self.groups_model.get(old_group_id)
         
-        return {
+        # Get updated target group data
+        updated_target_group = self.groups_model.get(target_group_id)
+        
+        result = {
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
             'transferred_faces': face_ids,
             'transferred_photos': list(transferred_photos),
-            'updated_source_group': updated_source_group
+            'updated_source_group': updated_source_group,
+            'updated_target_group': updated_target_group
         }
+        
+        # Include new group name if a new group was created
+        if not target_group_id_was_provided:
+            result['new_group_name'] = new_group_name
+            
+        return result
 
     def merge_groups(self, group_ids: list, main_group_id: str = '') -> str:
         """

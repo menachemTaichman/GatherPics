@@ -145,9 +145,17 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             // Use the full photo data from the transfer result
             if (transferResult.transferred_photos_data && transferResult.transferred_photos_data.length > 0) {
               setSortedPhotos(prevPhotos => {
-                // Add new photos and sort them
-                const newPhotos = [...prevPhotos, ...transferResult.transferred_photos_data];
-                return sortPhotos(newPhotos, sortBy, sortOrder);
+                // Create a map of existing photo IDs for efficient lookup
+                const existingPhotoIds = new Set(prevPhotos.map(photo => photo.id));
+                
+                // Filter out photos that already exist in the current array
+                const newPhotos = transferResult.transferred_photos_data.filter(
+                  photo => !existingPhotoIds.has(photo.id)
+                );
+                
+                // Add only new photos and sort them
+                const updatedPhotos = [...prevPhotos, ...newPhotos];
+                return sortPhotos(updatedPhotos, sortBy, sortOrder);
               });
             }
           }
@@ -484,7 +492,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg">
+              <div 
+                className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
+                onClick={() => setShowEditModal(true)}
+                title="Edit group details"
+              >
                 <img
                   key={group.face_representive || 'no-representative'}
                   src={group.face_representive && group.face_representive.trim() !== ''
@@ -552,13 +564,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     >
                       {group.label || `Person ${group.groupID}`}
                     </h1>
-                    <button
-                      onClick={() => setShowEditModal(true)}
-                      className="p-1 hover:bg-gray-100 rounded transition-colors"
-                      title="Edit group details"
-                    >
-                      <Edit className="w-4 h-4 text-gray-500" />
-                    </button>
                   </div>
                 )}
               </div>
@@ -810,7 +815,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           >
             {sortedPhotos.map((photo, index) => (
               <motion.div
-                key={photo.id || `photo-${index}`}
+                key={`${photo.id || 'unknown'}-${index}`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -924,6 +929,13 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
             await optimisticUpdates.updateGroup(group.groupID, updates);
+            
+            // Update the URL if the group name changed
+            if (updates.label && updates.label !== group.label) {
+              const newUrl = `/group/${encodeURIComponent(updates.label)}`;
+              window.history.replaceState(null, '', newUrl);
+            }
+            
             setShowEditModal(false);
           }}
           onRefreshGroups={onRefreshGroups}

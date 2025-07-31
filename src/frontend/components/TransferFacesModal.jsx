@@ -3,16 +3,17 @@ import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
+import { useDataStore } from '../utils/dataManager';
 
 export default function TransferFacesModal({ 
   isOpen, 
   onClose, 
-  groups, 
   currentGroup,
   selectedFaces,
   onTransferComplete,
   showToast
 }) {
+  const groups = useDataStore(state => state.groups);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
