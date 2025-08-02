@@ -976,6 +976,15 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           conflictingGroup={conflictData.conflictingGroup}
           onMerge={handleMergeGroups}
           onCancel={handleMergeCancelLocal}
+          onNavigateToGroup={(targetGroupId) => {
+            // Find the target group and navigate to it
+            const targetGroup = currentGroups.find(g => g.groupID === targetGroupId);
+            if (targetGroup) {
+              navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+            } else {
+              navigate('/');
+            }
+          }}
         />
       )}
 

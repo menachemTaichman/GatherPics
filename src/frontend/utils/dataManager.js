@@ -178,6 +178,72 @@ export const useDataStore = create((set, get) => ({
       };
     });
   },
+
+  // Merge groups
+  mergeGroups: (result) => {
+    set((state) => {
+      const newGroups = [...state.groups];
+      
+      // Find source and target groups
+      const sourceGroupIds = result.source_group_ids || [];
+      const targetGroupId = result.target_group_id;
+      
+      // Remove all source groups (they get merged into the target)
+      const filteredGroups = newGroups.filter(group => 
+        !sourceGroupIds.includes(group.groupID)
+      );
+      
+      // Find the target group and update it with merged data
+      const targetGroupIndex = filteredGroups.findIndex(g => g.groupID === targetGroupId);
+      
+      if (targetGroupIndex !== -1) {
+        // Get all source groups that were merged
+        const sourceGroups = newGroups.filter(group => 
+          sourceGroupIds.includes(group.groupID)
+        );
+        
+        // Calculate total photos from all source groups
+        const totalPhotos = sourceGroups.reduce((total, group) => {
+          const photoCount = group.photo_count || group.photoCount || group.image_ids?.length || 0;
+          return total + photoCount;
+        }, 0);
+        
+        // Update target group with merged data
+        const targetGroup = { ...filteredGroups[targetGroupIndex] };
+        targetGroup.photo_count = (targetGroup.photo_count || targetGroup.photoCount || 0) + totalPhotos;
+        if (targetGroup.photoCount !== undefined) {
+          targetGroup.photoCount = targetGroup.photo_count;
+        }
+        
+        // Merge image_ids arrays
+        const allImageIds = new Set(targetGroup.image_ids || []);
+        sourceGroups.forEach(group => {
+          if (group.image_ids) {
+            group.image_ids.forEach(id => allImageIds.add(id));
+          }
+        });
+        targetGroup.image_ids = Array.from(allImageIds);
+        
+        // Update representative face if target doesn't have one
+        if (!targetGroup.face_representive) {
+          for (const sourceGroup of sourceGroups) {
+            if (sourceGroup.face_representive) {
+              targetGroup.face_representive = sourceGroup.face_representive;
+              break;
+            }
+          }
+        }
+        
+        // Update the target group
+        filteredGroups[targetGroupIndex] = targetGroup;
+      }
+      
+      return { 
+        groups: filteredGroups,
+        lastMergeResult: result
+      };
+    });
+  },
   
   // Moment operations
   updateMoment: (momentId, updates) => {
@@ -232,6 +298,10 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
       
     case CHANGE_TYPES.GROUP_FACES_TRANSFERRED:
       store.transferFaces(data);
+      break;
+      
+    case CHANGE_TYPES.GROUP_MERGED:
+      store.mergeGroups(data);
       break;
       
     case CHANGE_TYPES.MOMENT_UPDATED:

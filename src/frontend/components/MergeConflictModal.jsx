@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -17,17 +18,27 @@ export default function MergeConflictModal({
   onNavigateToGroup
 }) {
   const [loading, setLoading] = useState(false);
+  const dataStore = useDataStore();
 
   const handleMerge = async () => {
     setLoading(true);
     try {
+      // Use the API service which will automatically update the dataManager
       await groupsAPI.merge([currentGroup.groupID], conflictingGroup.groupID);
+      
+      // The API service interceptor will automatically handle state updates
+      // No need for manual refresh or window.location.href
+      
+      // Call the parent's merge callback if provided
       if (onMerge) {
         await onMerge();
       }
+      
+      // Navigate to the target group if callback provided
       if (onNavigateToGroup) {
         onNavigateToGroup(conflictingGroup.groupID);
       }
+      
       onClose();
     } catch (error) {
       console.error('Error merging groups:', error);

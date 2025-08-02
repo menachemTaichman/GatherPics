@@ -39,10 +39,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
       setShowMergeModal(false);
       setConflictData(null);
       
-      // Call the parent's refresh function if provided
-      if (onRefreshGroups) {
-        await onRefreshGroups();
-      }
+      // No need to call onRefreshGroups since dataManager handles all updates automatically
     } catch (error) {
       console.error('Error merging groups:', error);
       const errorInfo = handleAPIError(error, 'Failed to merge groups');
