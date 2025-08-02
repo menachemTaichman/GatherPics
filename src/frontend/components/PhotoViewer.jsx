@@ -4,6 +4,7 @@ import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRig
 import { useNavigate } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
@@ -83,6 +84,30 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       // Reset image loaded state when photo changes
       setImageLoaded(false);
     }
+  }, [photo]);
+
+  // Subscribe to data store changes to update face data when transfers happen
+  useEffect(() => {
+    const unsubscribe = useDataStore.subscribe(
+      (state) => {
+        const transferResult = state.lastTransferResult;
+        if (transferResult && transferResult.transferred_photos_data && photo) {
+          // Check if the current photo was affected by the transfer
+          const updatedPhotoData = transferResult.transferred_photos_data.find(
+            photoData => photoData.id === photo || photoData.name === photo
+          );
+          
+          if (updatedPhotoData) {
+            // Update face data without reloading
+            setFaces(updatedPhotoData.faces || []);
+            setPhotoInfo(updatedPhotoData);
+            setMomentInfo(updatedPhotoData.moment || null);
+          }
+        }
+      }
+    );
+    
+    return unsubscribe;
   }, [photo]);
 
   const loadPhotoInfo = async () => {
@@ -301,7 +326,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   return (
     <AnimatePresence>
-      <div className="modal-overlay" onClick={onClose}>
+      <div key="photo-viewer-modal" className="modal-overlay" onClick={onClose}>
         <motion.div
           className="modal-content max-w-7xl w-full photo-viewer-modal"
           style={{ 
@@ -462,7 +487,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       }
                       return (
                         <div
-                          key={`face-${face.face_id || `index-${index}`}-${rectangleKey}-${index}`}
+                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${photoMeta.name}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -478,6 +503,16 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
                             {face.group_label}
                           </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTransferFace(face);
+                            }}
+                            className={`absolute -bottom-4 -left-1 ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                            title="Transfer face to another group"
+                          >
+                            <Edit className="w-2.5 h-2.5" />
+                          </button>
                         </div>
                       );
                     })}
@@ -624,9 +659,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                   ) : (
                     <div className="space-y-3">
                       {faces.map((face, index) => (
-                                                 <div
-                           key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}`}
-                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                        <div
+                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${photoMeta.name}`}
+                          className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >
                           <img
@@ -658,16 +693,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                           >
                             <User className="w-4 h-4 text-gray-600" />
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTransferFace(face);
-                            }}
-                            className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
-                            title="Transfer face to another group"
-                          >
-                            <Edit className="w-4 h-4 text-orange-600" />
-                          </button>
                         </div>
                       ))}
                     </div>
@@ -682,6 +707,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
       {/* Transfer Faces Modal */}
       {showTransferModal && selectedFaceForTransfer && (
         <TransferFacesModal
+          key="transfer-faces-modal"
           isOpen={showTransferModal}
           onClose={() => {
             setShowTransferModal(false);

@@ -243,18 +243,33 @@ def transfer_faces():
             'old_group_id': data['old_group_id'],
             'old_group_deleted': result.get('old_group_deleted', False),
             'transferred_faces': result.get('transferred_faces', []),
-            'transferred_photos': result.get('transferred_photos', []),
+            'photos_to_remove_from_source': result.get('photos_to_remove_from_source', []),
+            'photos_to_add_to_target': result.get('photos_to_add_to_target', []),
             'transferred_photos_data': [],  # Will be populated with full photo data
             'updated_source_group': result.get('updated_source_group'),  # Include updated source group with new representative
             'updated_target_group': result.get('updated_target_group')  # Include updated target group
         }
         
-        # Get full photo data for transferred photos
-        if result.get('transferred_photos'):
-            for photo_id in result['transferred_photos']:
-                photo_data = build_complete_photo_data(event, photo_id)
-                if photo_data:
-                    change_data['transferred_photos_data'].append(photo_data)
+        # Get full photo data for photos that were moved
+        moved_photos = set(result.get('photos_to_remove_from_source', []) + result.get('photos_to_add_to_target', []))
+        for photo_id in moved_photos:
+            photo_data = build_complete_photo_data(event, photo_id)
+            if photo_data:
+                change_data['transferred_photos_data'].append(photo_data)
+        
+        # Also include updated photo data for photos that contain transferred faces but weren't moved
+        # This is needed for PhotoViewer to update face data without reloading
+        transferred_photos = set()
+        for face_id in result.get('transferred_faces', []):
+            face = event.faces_model.get(face_id)
+            if face and face.get('imageID'):
+                transferred_photos.add(face['imageID'])
+        
+        # Add updated photo data for all photos that contain transferred faces
+        for photo_id in transferred_photos:
+            photo_data = build_complete_photo_data(event, photo_id)
+            if photo_data:
+                change_data['transferred_photos_data'].append(photo_data)
         
         response_data = add_change_instruction(result, 'GROUP_FACES_TRANSFERRED', change_data)
         return jsonify(response_data)
@@ -281,20 +296,8 @@ def get_group_crops(group_id):
     if not group:
         return not_found(f"Group {group_id} not found")
     
-    # Get image IDs for this group
-    image_ids = event.groups_model.get_images(group_id)
-    
-    # Create mapping from image_id to face_id
-    crop_mapping = {}
-    for image_id in image_ids:
-        # Get faces for this image that belong to this group
-        face_ids = event.images_model.get_faces(image_id)
-        for face_id in face_ids:
-            face = event.faces_model.get(face_id)
-            if face and face.get('groupID') == group_id:
-                # Map image_id to face_id for crop display
-                crop_mapping[image_id] = face_id
-                break  # Use the first face found for this image in this group
+    # Get crop mapping using the event method
+    crop_mapping = event.get_crop_mapping(group_id)
     
     return jsonify({"crop_mapping": crop_mapping})
 

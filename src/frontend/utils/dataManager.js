@@ -80,16 +80,16 @@ export const useDataStore = create((set, get) => ({
         } else {
           const sourceGroup = { ...newGroups[sourceGroupIndex] };
           
-          // Update photo count by subtracting transferred photos
-          if (result.transferred_photos) {
+          // Update photo count by subtracting photos that need to be removed
+          if (result.photos_to_remove_from_source) {
             const currentCount = sourceGroup.photo_count || sourceGroup.photoCount || sourceGroup.image_ids?.length || 0;
-            sourceGroup.photo_count = Math.max(0, currentCount - result.transferred_photos.length);
+            sourceGroup.photo_count = Math.max(0, currentCount - result.photos_to_remove_from_source.length);
             if (sourceGroup.photoCount !== undefined) {
               sourceGroup.photoCount = sourceGroup.photo_count;
             }
             if (sourceGroup.image_ids) {
               sourceGroup.image_ids = sourceGroup.image_ids.filter(id => 
-                !result.transferred_photos.includes(id)
+                !result.photos_to_remove_from_source.includes(id)
               );
             }
           }
@@ -111,20 +111,20 @@ export const useDataStore = create((set, get) => ({
         } else {
           const targetGroup = { ...newGroups[targetGroupIndex] };
           
-          // Update photo count by adding transferred photos
-          if (result.transferred_photos) {
+          // Update photo count by adding photos that need to be added
+          if (result.photos_to_add_to_target) {
             const currentCount = targetGroup.photo_count || targetGroup.photoCount || targetGroup.image_ids?.length || 0;
-            targetGroup.photo_count = currentCount + result.transferred_photos.length;
+            targetGroup.photo_count = currentCount + result.photos_to_add_to_target.length;
             if (targetGroup.photoCount !== undefined) {
               targetGroup.photoCount = targetGroup.photo_count;
             }
             if (targetGroup.image_ids) {
               // Create a set of existing image IDs to avoid duplicates
               const existingImageIds = new Set(targetGroup.image_ids);
-              const newImageIds = result.transferred_photos.filter(id => !existingImageIds.has(id));
+              const newImageIds = result.photos_to_add_to_target.filter(id => !existingImageIds.has(id));
               targetGroup.image_ids = [...targetGroup.image_ids, ...newImageIds];
             } else {
-              targetGroup.image_ids = [...result.transferred_photos];
+              targetGroup.image_ids = [...result.photos_to_add_to_target];
             }
           }
           
@@ -145,9 +145,9 @@ export const useDataStore = create((set, get) => ({
           const newGroup = {
             groupID: result.target_group_id,
             label: result.new_group_name,
-            photo_count: result.transferred_photos ? result.transferred_photos.length : 0,
-            photoCount: result.transferred_photos ? result.transferred_photos.length : 0,
-            image_ids: result.transferred_photos || [],
+            photo_count: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
+            photoCount: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
+            image_ids: result.photos_to_add_to_target || [],
             face_representive: result.transferred_faces && result.transferred_faces.length > 0 ? result.transferred_faces[0] : '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()

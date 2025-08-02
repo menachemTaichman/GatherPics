@@ -7,6 +7,7 @@ from .moment import Moments
 from .profile import Profiles
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
+from typing import List
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
 
@@ -54,6 +55,36 @@ class Event(JsonModel):
             'last_group_id': self.last_group_id,
             'DB_PATH': self.DB_PATH
         }
+    
+    def get_crop_mapping(self, group_id: str) -> dict:
+        """
+        Get mapping from image_id to face_id for crop display.
+        For each image in the group, returns the first face that belongs to this group.
+        """
+        query = '''
+            SELECT DISTINCT f.imageID, f.faceID
+            FROM faces f 
+            WHERE f.groupID = ?
+            GROUP BY f.imageID
+        '''
+        results = self.db.execute_query(query, (group_id,))
+        return {row[0]: row[1] for row in results}
+
+    def get_faces_by_image_and_group(self, image_id: str, group_id: str) -> List[str]:
+        """
+        Get all face IDs that belong to a specific group in a specific image.
+        
+        Args:
+            image_id: The image ID
+            group_id: The group ID
+            
+        Returns:
+            List of face IDs that belong to the specified group in the specified image
+        """
+        query = 'SELECT faceID FROM faces WHERE imageID=? AND groupID=?'
+        results = self.db.execute_query(query, (image_id, group_id))
+        return [row[0] for row in results]
+    
     def add(self, **fields) -> 'Event':
         super().add(**fields)
         self.last_group_id = 0
@@ -137,17 +168,6 @@ class Event(JsonModel):
         if not old_group:
             raise ValueError(f"Source group {old_group_id} not found")
         
-        # Get photos that contain the transferred faces for smooth UI updates
-        transferred_photos = set()
-        for face_id in face_ids:
-            face = self.faces_model.get(face_id)
-            if face and face.get('imageID'):
-                transferred_photos.add(face['imageID'])
-        
-        # Check if any transferred face was the representative of the old group
-        old_representative = old_group.get('face_representive', '')
-        representative_transferred = old_representative in face_ids
-        
         # Determine target group
         target_group_id_was_provided = target_group_id is not None
         if target_group_id:
@@ -173,8 +193,32 @@ class Event(JsonModel):
             )
             target_group_id = target_group_data['groupID']
         
+        # Get all photos that will be added to target group (photos containing transferred faces)
+        query = '''
+            SELECT DISTINCT imageID 
+            FROM faces 
+            WHERE faceID IN ({}) AND groupID = ?
+        '''.format(','.join(['?'] * len(face_ids)))
+        
+        photos_to_add_to_target = set()
+        results = self.db.execute_query(query, (*face_ids, old_group_id))
+        for row in results:
+            photos_to_add_to_target.add(row[0])
+        
         # Transfer faces to target group
         self.groups_model.add_faces(target_group_id, face_ids)
+        
+        # Check which photos no longer belong to source group after transfer
+        photos_to_remove_from_source = set()
+        for photo_id in photos_to_add_to_target:
+            # Check if source group still has faces in this photo
+            source_faces_in_photo = self.get_faces_by_image_and_group(photo_id, old_group_id)
+            if not source_faces_in_photo:
+                photos_to_remove_from_source.add(photo_id)
+        
+        # Check if any transferred face was the representative of the old group
+        old_representative = old_group.get('face_representive', '')
+        representative_transferred = old_representative in face_ids
         
         # Check if old group is now empty and delete it if so
         old_group_faces = self.groups_model.get_faces(old_group_id)
@@ -200,7 +244,8 @@ class Event(JsonModel):
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
             'transferred_faces': face_ids,
-            'transferred_photos': list(transferred_photos),
+            'photos_to_remove_from_source': list(photos_to_remove_from_source),
+            'photos_to_add_to_target': list(photos_to_add_to_target),
             'updated_source_group': updated_source_group,
             'updated_target_group': updated_target_group
         }

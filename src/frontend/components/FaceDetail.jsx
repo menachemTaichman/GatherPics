@@ -79,7 +79,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useSetting('faceDetail_selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
 
   // Use the data store for groups
@@ -133,15 +133,17 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       (state) => {
         // Handle transfer results
         const transferResult = state.lastTransferResult;
-        if (transferResult && transferResult.transferred_photos) {
-          // If this is the source group, remove transferred photos surgically
-          if (transferResult.old_group_id === group?.groupID) {
+        if (transferResult) {
+          // If this is the source group, remove photos that should be removed
+          if (transferResult.old_group_id === group?.groupID && transferResult.photos_to_remove_from_source) {
             setSortedPhotos(prevPhotos => 
-              prevPhotos.filter(photo => !transferResult.transferred_photos.includes(photo.id))
+              prevPhotos.filter(photo => !transferResult.photos_to_remove_from_source.includes(photo.id))
             );
+            // Refresh crop data since faces were removed
+            fetchGroupCrops();
           }
-          // If this is the target group, add transferred photos surgically
-          else if (transferResult.target_group_id === group?.groupID) {
+          // If this is the target group, add photos that should be added
+          else if (transferResult.target_group_id === group?.groupID && transferResult.photos_to_add_to_target) {
             // Use the full photo data from the transfer result
             if (transferResult.transferred_photos_data && transferResult.transferred_photos_data.length > 0) {
               setSortedPhotos(prevPhotos => {
@@ -150,7 +152,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 
                 // Filter out photos that already exist in the current array
                 const newPhotos = transferResult.transferred_photos_data.filter(
-                  photo => !existingPhotoIds.has(photo.id)
+                  photo => !existingPhotoIds.has(photo.id) && transferResult.photos_to_add_to_target.includes(photo.id)
                 );
                 
                 // Add only new photos and sort them
@@ -158,6 +160,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 return sortPhotos(updatedPhotos, sortBy, sortOrder);
               });
             }
+            // Refresh crop data since faces were added
+            fetchGroupCrops();
           }
         }
         
@@ -311,14 +315,16 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
     
     // Handle PhotoViewer navigation if we're currently viewing a photo
-    if (photoViewer.show && result.transferred_photos && result.transferred_photos.length > 0) {
+    if (photoViewer.show && result.photos_to_remove_from_source && result.photos_to_remove_from_source.length > 0) {
       const currentPhotoId = photoViewer.photo;
-      const wasCurrentPhotoTransferred = result.transferred_photos.includes(currentPhotoId);
+      const wasCurrentPhotoRemoved = result.photos_to_remove_from_source.includes(currentPhotoId);
       
-      if (wasCurrentPhotoTransferred) {
-        // Current photo was transferred, need to navigate to next photo or close
+      // Only navigate away if the current photo was actually removed from the source group
+      // AND if we're the source group (not the target group)
+      if (wasCurrentPhotoRemoved && result.old_group_id === group?.groupID) {
+        // Current photo was removed from source group, need to navigate to next photo or close
         const remainingPhotos = sortedPhotos.filter(photo => 
-          !result.transferred_photos.includes(photo.id)
+          !result.photos_to_remove_from_source.includes(photo.id)
         );
         
         if (remainingPhotos.length > 0) {
@@ -329,17 +335,17 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           // Try to find the next photo, or go to the previous one if at the end
           while (nextIndex < sortedPhotos.length - 1) {
             nextIndex++;
-            if (!result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
+            if (!result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
               break;
             }
           }
           
           // If we didn't find a next photo, try going backwards
-          if (nextIndex >= sortedPhotos.length || result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
+          if (nextIndex >= sortedPhotos.length || result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
             nextIndex = currentIndex;
             while (nextIndex > 0) {
               nextIndex--;
-              if (!result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
+              if (!result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
                 break;
               }
             }
@@ -347,7 +353,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           
           // If we found a valid photo, navigate to it
           if (nextIndex >= 0 && nextIndex < sortedPhotos.length && 
-              !result.transferred_photos.includes(sortedPhotos[nextIndex].id)) {
+              !result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
             const nextPhoto = sortedPhotos[nextIndex];
             setPhotoViewer({
               show: true,
@@ -373,6 +379,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           }
         }
       }
+      // If the photo wasn't removed from the source group, stay on the current photo
+      // The face data will be updated automatically by the data store subscription
     }
     
     // The data store subscription already handles the surgical updates

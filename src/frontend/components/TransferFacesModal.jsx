@@ -70,16 +70,6 @@ export default function TransferFacesModal({
     }
   }, [isOpen]);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (window.nameConflictTimeout) {
-        clearTimeout(window.nameConflictTimeout);
-        window.nameConflictTimeout = null;
-      }
-    };
-  }, []);
-
   const checkNameConflict = async (name) => {
     if (!name.trim()) {
       setNameConflict(false);
@@ -160,6 +150,41 @@ export default function TransferFacesModal({
       setIsLoading(false);
     }
   };
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!isOpen) return;
+      
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      } else if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedGroupId || newGroupName.trim())) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleTransfer();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isLoading, nameConflict, selectedGroupId, newGroupName, onClose]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (window.nameConflictTimeout) {
+        clearTimeout(window.nameConflictTimeout);
+        window.nameConflictTimeout = null;
+      }
+    };
+  }, []);
 
   const handleToggleSortOrder = () => {
     const newOrder = toggleSortOrder(sortOrder);
