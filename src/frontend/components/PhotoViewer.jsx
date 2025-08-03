@@ -199,10 +199,37 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleTransferComplete = async (result) => {
+    // Extract transfer data from the changes array
+    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
+    
+    // Handle navigation after transfer if we're in a group context
+    let shouldCallParent = true;
+    if (currentGroupId && transferData && transferData.photos_to_remove_from_source && transferData.photos_to_remove_from_source.length > 0) {
+      // Get the current photo ID - it could be a string or an object with id/name
+      const currentPhotoId = typeof photo === 'string' ? photo : (photoMeta.id || photoMeta.name);
+      const wasCurrentPhotoRemoved = transferData.photos_to_remove_from_source.includes(currentPhotoId);
+      
+      // Only navigate away if the current photo was actually removed from the source group
+      // AND if we're the source group (not the target group)
+      if (wasCurrentPhotoRemoved && transferData.old_group_id === currentGroupId) {
+        // Current photo was removed from source group, need to navigate to next photo or close
+        if (totalPhotos > 1) {
+          // Navigate to next photo
+          handleNavigate('next');
+        } else {
+          // No more photos in this group, close the viewer
+          onClose();
+        }
+        // Don't call parent's onTransferComplete since we handled the navigation
+        shouldCallParent = false;
+      }
+    }
+    
     // The API service interceptor will automatically handle the state updates
-    if (onTransferComplete) {
+    if (onTransferComplete && shouldCallParent) {
       onTransferComplete(result);
     }
+    
     setShowTransferModal(false);
     setSelectedFaceForTransfer(null);
   };

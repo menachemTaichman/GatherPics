@@ -244,6 +244,19 @@ class AppDB:
                 return dict(zip(columns, row))
             return None
 
+    def get_one_unfiltered(self, table: str, where: Dict) -> Dict | None:
+        """Get one record without applying profile filtering (for conflict checking)."""
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        where_params = tuple(where.values())
+        
+        with self.get_connection() as conn:
+            cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause}', where_params)
+            row = cursor.fetchone()
+            if row:
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, row))
+            return None
+
     def delete(self, table: str, where: Dict):
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
@@ -267,17 +280,42 @@ class AppDB:
             return []
 
     def update(self, table: str, where: Dict, fields: Dict):
+        print(f"AppDB.update called with table: {table}, where: {where}, fields: {fields}")
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
-        # Apply profile filtering for restricted tables
-        final_where, final_params = self._apply_profile_filter(table, where_clause, where_params)
+        # Don't apply profile filtering for UPDATE operations
+        # Users should be able to update groups they have access to
+        final_where = where_clause
+        final_params = where_params
+        
+        print(f"Final where clause: {final_where}")
+        print(f"Final where params: {final_params}")
+        print(f"Fields: {fields}")
         
         with self.get_connection() as conn:
-            set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
-            values = tuple(fields.values()) + final_params
-            conn.execute(f'UPDATE {table} SET {set_clause} WHERE {final_where}', values)
-            conn.commit()
+            try:
+                set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
+                values = tuple(fields.values()) + final_params
+                query = f'UPDATE {table} SET {set_clause} WHERE {final_where}'
+                print(f"SQL Query: {query}")
+                print(f"SQL Values: {values}")
+                result = conn.execute(query, values)
+                conn.commit()
+                print(f"Database update completed. Rows affected: {result.rowcount}")
+                if result.rowcount == 0:
+                    print("WARNING: No rows were updated!")
+                    # Check if the group exists
+                    check_query = f'SELECT groupID FROM {table} WHERE {final_where}'
+                    check_result = conn.execute(check_query, final_params)
+                    existing = check_result.fetchone()
+                    if existing:
+                        print(f"Group exists but update failed. Existing: {existing}")
+                    else:
+                        print("Group does not exist!")
+            except Exception as e:
+                print(f"Database update failed with error: {e}")
+                raise
 
     def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):
         """Create a new SQLite DB in the given directory, initializing all tables and settings."""

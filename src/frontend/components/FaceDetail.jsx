@@ -486,10 +486,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     // Success message is now handled in TransferFacesModal
     
     // If old group was deleted, redirect to the new group
-    if (result.old_group_deleted) {
+    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
+    if (transferData && transferData.old_group_deleted) {
       showToast('Group was empty and has been deleted', 'success');
       // Find the target group and redirect to it
-      const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
+      const targetGroup = currentGroups.find(g => g.groupID === transferData.target_group_id);
       if (targetGroup) {
         navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
       } else {
@@ -498,75 +499,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       return; // Exit early since we're navigating away
     }
     
-    // Handle PhotoViewer navigation if we're currently viewing a photo
-    if (photoViewer.show && result.photos_to_remove_from_source && result.photos_to_remove_from_source.length > 0) {
-      const currentPhotoId = photoViewer.photo;
-      const wasCurrentPhotoRemoved = result.photos_to_remove_from_source.includes(currentPhotoId);
-      
-      // Only navigate away if the current photo was actually removed from the source group
-      // AND if we're the source group (not the target group)
-      if (wasCurrentPhotoRemoved && result.old_group_id === group?.groupID) {
-        // Current photo was removed from source group, need to navigate to next photo or close
-        const remainingPhotos = sortedPhotos.filter(photo => 
-          !result.photos_to_remove_from_source.includes(photo.id)
-        );
-        
-        if (remainingPhotos.length > 0) {
-          // Find the next photo to show
-          const currentIndex = sortedPhotos.findIndex(p => p.id === currentPhotoId);
-          let nextIndex = currentIndex;
-          
-          // Try to find the next photo, or go to the previous one if at the end
-          while (nextIndex < sortedPhotos.length - 1) {
-            nextIndex++;
-            if (!result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
-              break;
-            }
-          }
-          
-          // If we didn't find a next photo, try going backwards
-          if (nextIndex >= sortedPhotos.length || result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
-            nextIndex = currentIndex;
-            while (nextIndex > 0) {
-              nextIndex--;
-              if (!result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
-                break;
-              }
-            }
-          }
-          
-          // If we found a valid photo, navigate to it
-          if (nextIndex >= 0 && nextIndex < sortedPhotos.length && 
-              !result.photos_to_remove_from_source.includes(sortedPhotos[nextIndex].id)) {
-            const nextPhoto = sortedPhotos[nextIndex];
-            setPhotoViewer({
-              show: true,
-              photo: nextPhoto.id,
-              index: remainingPhotos.findIndex(p => p.id === nextPhoto.id)
-            });
-          } else {
-            // No more photos in this group, redirect to target group
-            const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
-            if (targetGroup) {
-              navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
-            } else {
-              closePhotoViewer();
-            }
-          }
-        } else {
-          // No photos left in this group, redirect to target group
-          const targetGroup = currentGroups.find(g => g.groupID === result.target_group_id);
-          if (targetGroup) {
-            navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
-          } else {
-            closePhotoViewer();
-          }
-        }
-      }
-      // If the photo wasn't removed from the source group, stay on the current photo
-      // The face data will be updated automatically by the data store subscription
-    }
-    
+    // PhotoViewer navigation is now handled within PhotoViewer itself
     // The data store subscription already handles the surgical updates
     // No need to refetch photos - the API interceptor and data store
     // will handle all the updates automatically
@@ -681,48 +614,82 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     const currentGroups = useDataStore.getState().groups;
     const groupExists = currentGroups.some(g => g.groupID === group?.groupID);
     
+    console.log('handleTitleSave debug:', {
+      groupId: group?.groupID,
+      groupExists,
+      currentGroupsCount: currentGroups.length,
+      editingTitle,
+      groupLabel: group?.label
+    });
+    
     if (!groupExists) {
+      console.log('Group does not exist in store, aborting');
       setIsEditingTitle(false);
       clearConflict();
       return;
     }
     
-    if (editingTitle.trim() && editingTitle !== group.label) {
-      try {
-        // Check for conflicts first - call the API directly to avoid state timing issues
-        const conflictResult = await groupsAPI.checkName(editingTitle.trim(), group.groupID);
-        
-        if (conflictResult.conflict) {
-          // Show merge conflict modal with the conflicting group
-          showMergeConflictModal(editingTitle.trim(), conflictResult.conflicting_group);
-          setIsEditingTitle(false);
-          return;
-        }
-        
-        // No conflict, proceed with update
-        await optimisticUpdates.updateGroup(group.groupID, { label: editingTitle.trim() });
-        
-        // Update the URL to reflect the new group name
-        const newUrl = `/group/${encodeURIComponent(editingTitle.trim())}`;
-        window.history.replaceState(null, '', newUrl);
-        
+    // Validate editingTitle
+    const trimmedTitle = editingTitle.trim();
+    if (!trimmedTitle) {
+      alert('Group name cannot be empty');
+      setIsEditingTitle(false);
+      clearConflict();
+      return;
+    }
+    
+    if (trimmedTitle === group.label) {
+      // No change needed
+      setIsEditingTitle(false);
+      clearConflict();
+      return;
+    }
+    
+    try {
+      // Debug: Log what we're about to send
+      console.log('About to update group:', {
+        groupId: group.groupID,
+        currentLabel: group.label,
+        newLabel: trimmedTitle,
+        updates: { label: trimmedTitle }
+      });
+      
+      // Check for conflicts first - call the API directly to avoid state timing issues
+      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.groupID);
+      
+      if (conflictResult.conflict) {
+        // Show merge conflict modal with the conflicting group
+        showMergeConflictModal(trimmedTitle, conflictResult.conflicting_group);
         setIsEditingTitle(false);
-        clearConflict();
-      } catch (error) {
-        console.error('Error updating group name:', error);
-        
-        // Show user-friendly error message
-        if (error.response?.status === 400 && error.response?.data?.error) {
-          // Backend returned a specific error message
-          alert(`Failed to update group name: ${error.response.data.error}`);
-        } else {
-          alert('Failed to update group name. Please try again.');
-        }
-        
-        setIsEditingTitle(false);
-        clearConflict();
+        return;
       }
-    } else {
+      
+      // No conflict, proceed with update
+      console.log('No conflict found, proceeding with update...');
+      await optimisticUpdates.updateGroup(group.groupID, { label: trimmedTitle });
+      
+      // Update the URL to reflect the new group name
+      const newUrl = `/group/${encodeURIComponent(trimmedTitle)}`;
+      window.history.replaceState(null, '', newUrl);
+      
+      setIsEditingTitle(false);
+      clearConflict();
+    } catch (error) {
+      console.error('Error updating group name:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // Show user-friendly error message
+      if (error.response?.status === 400 && error.response?.data?.error) {
+        // Backend returned a specific error message
+        alert(`Failed to update group name: ${error.response.data.error}`);
+      } else {
+        alert('Failed to update group name. Please try again.');
+      }
+      
       setIsEditingTitle(false);
       clearConflict();
     }

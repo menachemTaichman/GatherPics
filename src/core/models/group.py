@@ -38,12 +38,31 @@ class Groups(BaseModel):
 
     def edit(self, entity_id: str, fields: Dict) -> None:
         """Edit a group with validation for unique labels."""
+        print(f"Groups.edit called with entity_id: {entity_id}, fields: {fields}")
+        
         if 'label' in fields and fields['label']:
-            # Check for duplicate labels (excluding current group)
-            existing = self.db.get_one(self.table_name, {'label': fields['label']})
+            print(f"Checking for duplicate label: '{fields['label']}'")
+            # Check for duplicate labels (excluding current group) - use unfiltered method
+            existing = self.db.get_one_unfiltered(self.table_name, {'label': fields['label']})
+            print(f"Existing group with same label: {existing}")
+            
+            if existing:
+                print(f"Existing group ID: {existing[self.id_field]}, Current entity ID: {entity_id}")
+                print(f"IDs match: {existing[self.id_field] == entity_id}")
+                
             if existing and existing[self.id_field] != entity_id:
+                print(f"Raising ValueError: Group with label '{fields['label']}' already exists")
                 raise ValueError(f"Group with label '{fields['label']}' already exists")
-        super().edit(entity_id, fields)
+            else:
+                print("No conflict found, proceeding with edit")
+        
+        print("Calling super().edit")
+        try:
+            super().edit(entity_id, fields)
+            print("Edit completed successfully")
+        except Exception as e:
+            print(f"Edit failed with error: {e}")
+            raise
 
     def add_faces(self, group_id: str, face_ids: List[str]) -> None:
         if not face_ids:
@@ -81,7 +100,7 @@ class Groups(BaseModel):
     
     def check_name_conflict(self, label: str, exclude_group_id: str = '') -> Dict:
         """Check if a group name already exists and return conflict info."""
-        existing = self.db.get_one(self.table_name, {'label': label})
+        existing = self.db.get_one_unfiltered(self.table_name, {'label': label})
         if not existing or existing[self.id_field] == exclude_group_id:
             return {'conflict': False}
         

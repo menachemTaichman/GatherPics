@@ -37,7 +37,9 @@ class BaseModel(ABC):
         self.db.delete(self.table_name, {self.id_field: entity_id})
 
     def edit(self, entity_id: str, fields: Dict) -> None:
+        print(f"BaseModel.edit called with entity_id: {entity_id}, fields: {fields}")
         self.db.update(self.table_name, {self.id_field: entity_id}, fields)
+        print("BaseModel.edit completed")
 
     def get(self, entity_id: str) -> Dict | None:
         entity = self.db.get_one(self.table_name, {self.id_field: entity_id})
