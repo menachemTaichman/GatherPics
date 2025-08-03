@@ -3,8 +3,12 @@ import { motion } from 'framer-motion';
 import { Search, Filter, Download, Edit, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
+import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
+import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
+import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
 export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,26 +19,68 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
   const [cardSize, setCardSize] = useSetting('gallery_cardSize', 1.0);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
+  // Use the data store for groups
+  const { groups: storeGroups } = useDataStore();
+
+  // Use groups from store if available, otherwise fall back to props
+  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
+
+  // Use the custom hook for conflict handling
+  const {
+    nameConflict,
+    showMergeModal,
+    conflictData,
+    checkNameConflict,
+    handleMergeGroups,
+    handleMergeCancel,
+    showMergeConflictModal,
+    clearConflict,
+    setShowMergeModal,
+    setConflictData
+  } = useGroupNameConflict(selectedGroup, onRefreshGroups);
+
   const filteredAndSortedGroups = useMemo(() => {
-    let filtered = groups.filter(group => 
+    let filtered = currentGroups.filter(group => 
       group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
               group.groupID.toString().includes(searchTerm)
     );
 
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);
-  }, [groups, searchTerm, sortBy, sortOrder]);
+  }, [currentGroups, searchTerm, sortBy, sortOrder]);
 
   const handleEditGroup = (group) => {
     setSelectedGroup(group);
     setShowEditModal(true);
   };
 
-
-
   const handleAddGroupToBucket = async (group) => {
     // TODO: Implement add to bucket functionality
     alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
+  };
+
+  // Custom merge handler that preserves the group data
+  const handleMergeGroupsWithData = async () => {
+    if (!conflictData || !conflictData.currentGroup) {
+      console.error('No conflict data or current group available');
+      return;
+    }
+    
+    try {
+      // Use the API service for merging groups
+      await groupsAPI.merge([conflictData.currentGroup.groupID], conflictData.conflictingGroup.groupID);
+      
+      // Close modal and clear data
+      setShowMergeModal(false);
+      setConflictData(null);
+      
+      // Clear any name conflict state
+      clearConflict();
+    } catch (error) {
+      console.error('Error merging groups:', error);
+      const errorInfo = handleAPIError(error, 'Failed to merge groups');
+      alert(errorInfo.message);
+    }
   };
 
   return (
@@ -47,7 +93,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
               Face Gallery
             </h1>
             <p className="text-gray-600">
-              {filteredAndSortedGroups.length} of {groups.length} face groups
+              {filteredAndSortedGroups.length} of {currentGroups.length} face groups
             </p>
           </div>
           
@@ -208,11 +254,32 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
             setSelectedGroup(null);
           }}
           onSave={async (updates) => {
-            await onUpdateGroup(selectedGroup.groupID, updates);
+            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates);
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
           onRefreshGroups={onRefreshGroups}
+          onNameConflict={(newName, conflictingGroup) => {
+            // Use Gallery's merge logic
+            showMergeConflictModal(newName, conflictingGroup);
+          }}
+        />
+      )}
+
+      {/* Merge Conflict Modal */}
+      {showMergeModal && conflictData && (
+        <MergeConflictModal
+          isOpen={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          newName={conflictData.newName}
+          currentGroup={conflictData.currentGroup}
+          conflictingGroup={conflictData.conflictingGroup}
+          onMerge={handleMergeGroupsWithData}
+          onCancel={handleMergeCancel}
+          onNavigateToGroup={() => {
+            // No navigation needed - just close the modal
+            setShowMergeModal(false);
+          }}
         />
       )}
 

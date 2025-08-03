@@ -205,6 +205,14 @@ export const optimisticUpdates = {
     
     try {
       const result = await groupsAPI.update(groupId, updates);
+      
+      // Process any change instructions from the backend
+      if (result.changes) {
+        result.changes.forEach(change => {
+          handleDataChange(change.type, change.data);
+        });
+      }
+      
       return result;
     } catch (error) {
       // Rollback on error

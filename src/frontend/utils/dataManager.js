@@ -51,6 +51,14 @@ export const useDataStore = create((set, get) => ({
     }));
   },
   
+  replaceGroup: (groupId, newGroupData) => {
+    set((state) => ({
+      groups: state.groups.map(group => 
+        group.groupID === groupId ? newGroupData : group
+      )
+    }));
+  },
+  
   deleteGroup: (groupId) => {
     set((state) => ({
       groups: state.groups.filter(group => group.groupID !== groupId)
@@ -321,7 +329,9 @@ export const useDataStore = create((set, get) => ({
 export const handleDataChange = (changeType, data, store = useDataStore.getState()) => {
   switch (changeType) {
     case CHANGE_TYPES.GROUP_UPDATED:
-      store.updateGroup(data.groupID, data);
+      // For GROUP_UPDATED, data contains the complete updated group object
+      // We need to replace the entire group instead of merging updates
+      store.replaceGroup(data.groupID, data);
       break;
       
     case CHANGE_TYPES.GROUP_DELETED:

@@ -157,8 +157,12 @@ def update_group(group_id):
         event.groups_model.edit(group_id, data)
         updated = event.groups_model.get(group_id)
         
+        if updated is None:
+            return not_found(f"Group {group_id} not found")
+        
         # Add change instruction for frontend
-        response_data = add_change_instruction(updated, 'GROUP_UPDATED')
+        response_data = {"success": True}
+        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated)
         return jsonify(response_data)
     except ValueError as e:
         # Handle unique constraint violation

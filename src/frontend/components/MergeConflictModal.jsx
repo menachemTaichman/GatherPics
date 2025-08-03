@@ -41,6 +41,12 @@ export default function MergeConflictModal({
   const handleMerge = async () => {
     setLoading(true);
     try {
+      // Check if currentGroup exists before accessing its groupID
+      if (!currentGroup || !currentGroup.groupID) {
+        console.error('Current group is null or missing groupID');
+        return;
+      }
+      
       // Use the API service which will automatically update the dataManager
       await groupsAPI.merge([currentGroup.groupID], conflictingGroup.groupID);
       

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
@@ -21,6 +21,9 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
 
   // Simple conflict state for inline validation
   const [nameConflict, setNameConflict] = useState(null);
+  
+  // Use ref to track current selection for save
+  const currentSelectionRef = useRef(group.face_representive);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -77,13 +80,19 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     e.preventDefault();
     setLoading(true);
     
+    // Use the ref value to ensure we have the latest selection
+    const dataToSave = {
+      ...formData,
+      face_representive: currentSelectionRef.current
+    };
+    
     try {
-      await onSave(formData);
+      await onSave(dataToSave);
       
       // Update display data only after successful save
       setDisplayData({
         label: formData.label,
-        face_representive: formData.face_representive
+        face_representive: currentSelectionRef.current
       });
       
       onClose();
@@ -144,10 +153,10 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   };
 
   const getRepresentativeImageSrc = () => {
-    if (!displayData.face_representive) return PLACEHOLDER_DATA_URL;
-    
-    // Always use faces endpoint for representative images
-    return `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${displayData.face_representive}.webp`;
+    // Use displayData for header image - only changes after saving
+    const representativeId = displayData.face_representive;
+    const imageUrl = representativeId ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${representativeId}.webp?t=${Date.now()}` : PLACEHOLDER_DATA_URL;
+    return imageUrl;
   };
 
   return (
@@ -169,6 +178,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200 shadow-lg">
                   <img
+                    key={displayData.face_representive}
                     src={getRepresentativeImageSrc()}
                     alt="Representative"
                     className="w-full h-full object-cover"
@@ -281,7 +291,14 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                           <button
                             key={imageId}
                             type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, face_representive: faceId || imageId }))}
+                            onClick={() => {
+                              const newRepresentative = faceId || imageId;
+                              currentSelectionRef.current = newRepresentative;
+                              setFormData(prev => ({
+                                ...prev,
+                                face_representive: newRepresentative
+                              }));
+                            }}
                             className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
                               formData.face_representive === (faceId || imageId)
                                 ? 'border-primary-500'

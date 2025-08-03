@@ -32,6 +32,12 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
 
   const handleMergeGroups = async () => {
     try {
+      // Check if currentGroup exists before accessing its groupID
+      if (!currentGroup || !currentGroup.groupID) {
+        console.error('Current group is null or missing groupID');
+        return;
+      }
+      
       // Use the API service for merging groups
       await groupsAPI.merge([currentGroup.groupID], conflictData.conflictingGroup.groupID);
       
@@ -80,6 +86,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
     handleMergeCancel,
     showMergeConflictModal,
     clearConflict,
-    setShowMergeModal
+    setShowMergeModal,
+    setConflictData
   };
 } 
