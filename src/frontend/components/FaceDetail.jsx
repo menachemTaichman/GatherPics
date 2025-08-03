@@ -26,6 +26,7 @@ import EditGroupModal from './EditGroupModal';
 import PhotoViewer from './PhotoViewer';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
+import GroupsFilter from './GroupsFilter';
 import { sortPhotos, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { getSetting, setSetting } from '../utils/settings';
@@ -83,6 +84,15 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [editingTitle, setEditingTitle] = useState('');
   const [selectionMode, setSelectionMode] = useSetting('faceDetail_selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  
+  // Filter state
+  const [filterGroups, setFilterGroups] = useState([]);
+  const [filterMode, setFilterMode] = useSetting('faceDetail_filterMode', 'and');
+  const [onlySelected, setOnlySelected] = useState(false);
+  const [relatedGroups, setRelatedGroups] = useState([]);
+  const [filterVisible, setFilterVisible] = useSetting('faceDetail_filterVisible', true);
+  const [filterLoading, setFilterLoading] = useState(false);
+  
   // No complex flag checking needed - the data store handles everything
 
   // Use the data store for groups
@@ -313,7 +323,87 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   };
 
+  const fetchFilteredPhotos = async () => {
+    if (!group?.groupID) {
+      return;
+    }
+    
+    try {
+      setFilterLoading(true);
+      const response = await groupsAPI.getFilteredPhotos(
+        group.groupID, 
+        filterGroups, 
+        filterMode, 
+        onlySelected
+      );
+      
+      const photos = response.photos || [];
+      const relatedGroupsData = response.related_groups || [];
+      
+      // Sort photos based on current settings
+      const sorted = sortPhotos(photos, sortBy, sortOrder);
+      setSortedPhotos(sorted);
+      setRelatedGroups(relatedGroupsData);
+    } catch (error) {
+      console.error('Error fetching filtered photos:', error);
+      setSortedPhotos([]);
+      setRelatedGroups([]);
+    } finally {
+      setFilterLoading(false);
+    }
+  };
 
+  const fetchRelatedGroups = async () => {
+    if (!group?.groupID) {
+      return;
+    }
+    
+    try {
+      const response = await groupsAPI.getRelatedGroups(group.groupID);
+      setRelatedGroups(response.related_groups || []);
+    } catch (error) {
+      console.error('Error fetching related groups:', error);
+      setRelatedGroups([]);
+    }
+  };
+
+  const handleFilterChange = (newFilterGroups) => {
+    setFilterGroups(newFilterGroups);
+  };
+
+  const handleFilterModeChange = (newMode) => {
+    setFilterMode(newMode);
+  };
+
+  const handleOnlySelectedChange = (newOnlySelected) => {
+    setOnlySelected(newOnlySelected);
+  };
+
+  const handleFilterReset = () => {
+    setFilterGroups([]);
+    setOnlySelected(false);
+  };
+
+  const handleFilterVisibilityToggle = () => {
+    setFilterVisible(!filterVisible);
+  };
+
+  // Fetch related groups when group changes
+  useEffect(() => {
+    if (group?.groupID) {
+      fetchRelatedGroups();
+    }
+  }, [group?.groupID]);
+
+  // Fetch filtered photos when filter changes
+  useEffect(() => {
+    if (group?.groupID && (filterGroups.length > 0 || onlySelected)) {
+      fetchFilteredPhotos();
+    } else if (group?.groupID && filterGroups.length === 0 && !onlySelected) {
+      // No filter active, fetch normal photos
+      fetchSortedPhotos();
+    }
+  }, [group?.groupID, filterGroups, filterMode, onlySelected]);
 
   const getSortedPhotos = () => {
     return sortedPhotos;
@@ -821,7 +911,19 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 <List className="w-4 h-4" />
               </button>
               
-
+              {/* Filter Toggle */}
+              <button
+                onClick={handleFilterVisibilityToggle}
+                className={`p-2 rounded-md transition-colors ${
+                  filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
+                }`}
+                title={filterVisible ? 'Hide group filter' : 'Show group filter'}
+              >
+                <Filter className="w-4 h-4" />
+                {filterVisible && (
+                  <span className="ml-1 text-xs">ON</span>
+                )}
+              </button>
             </div>
 
             {/* Size Control - Only show in grid mode */}
@@ -937,13 +1039,15 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     >
                       Clear
                     </button>
-                    <button
-                      onClick={handleTransferFaces}
-                      className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
-                    >
-                      <Users className="w-3 h-3" />
-                      <span>Change Group</span>
-                    </button>
+                    {filterMode !== 'or' && (
+                      <button
+                        onClick={handleTransferFaces}
+                        className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
+                      >
+                        <Users className="w-3 h-3" />
+                        <span>Change Group</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleAddSelectedToBucket}
                       className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
@@ -975,13 +1079,15 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     >
                       Clear
                     </button>
-                    <button
-                      onClick={handleTransferFaces}
-                      className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
-                    >
-                      <Users className="w-3 h-3" />
-                      <span>Change Group</span>
-                    </button>
+                    {filterMode !== 'or' && (
+                      <button
+                        onClick={handleTransferFaces}
+                        className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
+                      >
+                        <Users className="w-3 h-3" />
+                        <span>Change Group</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleAddSelectedToBucket}
                       className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
@@ -996,6 +1102,20 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           </div>
         </div>
       </div>
+
+      {/* Groups Filter */}
+      <GroupsFilter
+        group={group}
+        relatedGroups={relatedGroups}
+        selectedGroups={filterGroups}
+        filterMode={filterMode}
+        onlySelected={onlySelected}
+        onFilterChange={handleFilterChange}
+        onModeChange={handleFilterModeChange}
+        onOnlySelectedChange={handleOnlySelectedChange}
+        onReset={handleFilterReset}
+        isVisible={filterVisible}
+      />
 
       {/* Content Area */}
       <div className="px-8 py-8">

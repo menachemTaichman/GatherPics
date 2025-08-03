@@ -11,7 +11,7 @@ from src.core.models.event import Event
 # from src.core.models.profile import Profiles  # If needed for permissions
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins="*", supports_credentials=True)
 
 # --- Placeholder values for now ---
 FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
@@ -313,16 +313,89 @@ def get_group_photos(group_id):
 @app.route("/api/groups/<group_id>/crops", methods=["GET"])
 @require_auth
 def get_group_crops(group_id):
-    """Get mapping from image_id to face_id for crop display."""
+    """Get crop mapping for a group."""
     event = Event(FIXED_EVENT_ID)
     group = event.groups_model.get(group_id)
     if not group:
         return not_found(f"Group {group_id} not found")
     
-    # Get crop mapping using the event method
     crop_mapping = event.get_crop_mapping(group_id)
-    
     return jsonify({"crop_mapping": crop_mapping})
+
+@app.route("/api/groups/<group_id>/related-groups", methods=["GET"])
+@require_auth
+def get_related_groups(group_id):
+    """Get groups that share images with the given group."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    
+    # Use the new get_related_groups method with just the main group
+    related_group_ids = event.get_related_groups([group_id], 'and', False)
+    
+    # Get full group data for related groups (excluding the main group)
+    related_groups = []
+    for related_group_id in related_group_ids:
+        if related_group_id != group_id:  # Skip main group
+            group_data = event.groups_model.get(related_group_id)
+            if group_data:
+                related_groups.append(group_data)
+    
+    return jsonify({"related_groups": related_groups})
+
+@app.route("/api/groups/<group_id>/filtered-photos", methods=["GET"])
+@require_auth
+def get_filtered_photos(group_id):
+    """Get filtered photos based on filter criteria."""
+    event = Event(FIXED_EVENT_ID)
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found")
+    
+    # Get query parameters
+    filter_groups = request.args.getlist('filter_groups')
+    filter_mode = request.args.get('filter_mode', 'and')
+    only_selected = request.args.get('only_selected', 'false').lower() == 'true'
+    
+    # Validate filter mode
+    if filter_mode not in ['and', 'or', 'only']:
+        return bad_request("Invalid filter_mode. Must be 'and', 'or', or 'only'")
+    
+    # Create groups_id list with main group first
+    groups_id = [group_id] + filter_groups
+    
+    # Get filtered image IDs
+    image_ids = event.get_filtered_images(groups_id, filter_mode, only_selected)
+    
+    # Build complete photo data for each image
+    photos_data = []
+    for image_id in image_ids:
+        photo_data = event._build_complete_photo_data(image_id, group_filter=group_id)
+        if photo_data:
+            photos_data.append(photo_data)
+    
+    # Get related groups for the current filter
+    related_group_ids = event.get_related_groups(groups_id, filter_mode, only_selected)
+    
+    # Get full group data for related groups (excluding the main group)
+    related_groups = []
+    for related_group_id in related_group_ids:
+        if related_group_id != group_id:  # Skip main group
+            group_data = event.groups_model.get(related_group_id)
+            if group_data:
+                related_groups.append(group_data)
+    
+    return jsonify({
+        "photos": photos_data,
+        "related_groups": related_groups,
+        "filter_info": {
+            "filter_groups": filter_groups,
+            "filter_mode": filter_mode,
+            "only_selected": only_selected,
+            "total_photos": len(photos_data)
+        }
+    })
 
 @app.route("/api/moments", methods=["GET"])
 @require_auth

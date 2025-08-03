@@ -103,6 +103,28 @@ export const groupsAPI = {
   getCrops: async (groupId) => {
     const response = await api.get(`/api/groups/${groupId}/crops`);
     return response.data;
+  },
+
+  // Get related groups
+  getRelatedGroups: async (groupId) => {
+    const response = await api.get(`/api/groups/${groupId}/related-groups`);
+    return response.data;
+  },
+
+  // Get filtered photos
+  getFilteredPhotos: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false) => {
+    const params = new URLSearchParams();
+    
+    // Add filter groups as multiple parameters
+    filterGroups.forEach(groupId => {
+      params.append('filter_groups', groupId);
+    });
+    
+    params.append('filter_mode', filterMode);
+    params.append('only_selected', onlySelected.toString());
+    
+    const response = await api.get(`/api/groups/${groupId}/filtered-photos?${params.toString()}`);
+    return response.data;
   }
 };
 
