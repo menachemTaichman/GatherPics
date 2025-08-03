@@ -41,6 +41,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  const [lastSelectedPhoto, setLastSelectedPhoto] = useState(null);
   
   // Load selected photos from cache when group changes
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       } else {
         setSelectedPhotos(new Set());
       }
+      setLastSelectedPhoto(null);
     }
   }, [group?.groupID]);
   
@@ -480,23 +482,68 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     // will handle all the updates automatically
   };
 
-  const togglePhotoSelection = (photoId) => {
+  const togglePhotoSelection = (photoId, event) => {
     const newSelected = new Set(selectedPhotos);
+    
+    // Handle shift-click for range selection
+    if (event?.shiftKey && lastSelectedPhoto && lastSelectedPhoto !== photoId) {
+      const lastIndex = sortedPhotos.findIndex(p => p.id === lastSelectedPhoto);
+      const currentIndex = sortedPhotos.findIndex(p => p.id === photoId);
+      
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const startIndex = Math.min(lastIndex, currentIndex);
+        const endIndex = Math.max(lastIndex, currentIndex);
+        
+        // Add all photos in the range
+        for (let i = startIndex; i <= endIndex; i++) {
+          newSelected.add(sortedPhotos[i].id);
+        }
+        setSelectedPhotos(newSelected);
+        setLastSelectedPhoto(photoId);
+        return;
+      }
+    }
+    
+    // Regular click - toggle the photo
     if (newSelected.has(photoId)) {
       newSelected.delete(photoId);
     } else {
       newSelected.add(photoId);
     }
+    
     setSelectedPhotos(newSelected);
+    setLastSelectedPhoto(photoId);
   };
 
   const selectAllPhotos = () => {
     setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
+    setLastSelectedPhoto(sortedPhotos.length > 0 ? sortedPhotos[sortedPhotos.length - 1].id : null);
   };
 
   const clearSelection = () => {
     setSelectedPhotos(new Set());
+    setLastSelectedPhoto(null);
   };
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Ctrl+A or Cmd+A for select all
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        if (sortedPhotos.length > 0) {
+          selectAllPhotos();
+        }
+      }
+      // Escape to clear selection
+      if (event.key === 'Escape') {
+        clearSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [sortedPhotos]);
 
   const openPhotoViewer = (photoId, index) => {
     // Use the photo data directly since it comes from the API
@@ -704,7 +751,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   )}
                 </p>
                 {selectedPhotos.size > 0 && (
-                  <p className="text-sm text-gray-500 absolute top-full left-0">
+                  <p className="text-sm text-primary-600 font-medium absolute top-full left-0">
                     {selectedPhotos.size} selected
                   </p>
                 )}
@@ -717,6 +764,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
         {/* Controls Row */}
         <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
           <div className="flex items-center space-x-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -867,6 +915,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
                       : 'text-primary-600 hover:text-primary-700 hover:bg-primary-50'
                   }`}
+                  title={selectionMode ? 'Cancel selection mode' : 'Enter selection mode (Ctrl+A to select all, Shift+click for range selection)'}
                 >
                   {selectionMode ? 'Cancel' : 'Select'}
                 </button>
@@ -875,6 +924,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     onClick={selectAllPhotos}
                     disabled={selectedPhotos.size === sortedPhotos.length}
                     className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    title="Select all photos (Ctrl+A)"
                   >
                     All
                   </button>
@@ -913,6 +963,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   onClick={selectAllPhotos}
                   disabled={selectedPhotos.size === sortedPhotos.length}
                   className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  title="Select all photos (Ctrl+A)"
                 >
                   All
                 </button>
@@ -989,17 +1040,21 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 className={`${viewMode === 'grid' ? `photo-card ${photoClasses[photo.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
               >
                 {viewMode === 'grid' ? (
-                  <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.id, index)}>
+                  <div className="relative group cursor-pointer h-full" onClick={(e) => {
+                    if (!e.target.closest('input[type="checkbox"]')) {
+                      openPhotoViewer(photo.id, index);
+                    }
+                  }}>
                     <input
                       type="checkbox"
                       id={`photo-checkbox-grid-${photo.id}`}
                       name={`photo-checkbox-grid-${photo.id}`}
                       checked={selectedPhotos.has(photo.id)}
-                      onChange={(e) => {
+                      onChange={() => {}} // Empty handler to satisfy React
+                      onClick={(e) => {
                         e.stopPropagation();
-                        togglePhotoSelection(photo.id);
+                        togglePhotoSelection(photo.id, e);
                       }}
-                      onClick={e => e.stopPropagation()}
                       className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
                         selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}
@@ -1044,10 +1099,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       id={`photo-checkbox-list-${photo.id}`}
                       name={`photo-checkbox-list-${photo.id}`}
                       checked={selectedPhotos.has(photo.id)}
-                      onChange={(e) => {
-                        togglePhotoSelection(photo.id);
+                      onChange={() => {}} // Empty handler to satisfy React
+                      onClick={(e) => {
+                        togglePhotoSelection(photo.id, e);
                       }}
-                      onClick={e => e.stopPropagation()}
                       className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                     />
                     <div className="relative">
@@ -1059,7 +1114,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                         alt={`Photo ${index + 1}`}
                         className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                         loading="lazy"
-                        onClick={() => openPhotoViewer(photo.id, index)}
+                        onClick={(e) => {
+                          if (!e.target.closest('input[type="checkbox"]')) {
+                            openPhotoViewer(photo.id, index);
+                          }
+                        }}
                         onError={(e) => {
                           e.target.onerror = null;
                           e.target.src = PLACEHOLDER_DATA_URL;
