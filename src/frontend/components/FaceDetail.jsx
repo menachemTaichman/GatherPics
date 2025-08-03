@@ -858,7 +858,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             </div>
 
             {/* Compact Selection Controls */}
-            {sortedPhotos.length > 0 && (
+            {sortedPhotos.length > 0 && viewMode === 'grid' && (
               <div className="flex items-center space-x-2 px-3 py-2">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
@@ -880,6 +880,43 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   </button>
                 )}
                                     {selectedPhotos.size > 0 && (
+                  <>
+                    <button
+                      onClick={clearSelection}
+                      className="text-sm text-gray-600 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={handleTransferFaces}
+                      className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>Change Group</span>
+                    </button>
+                    <button
+                      onClick={handleAddSelectedToBucket}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Add to Bucket</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {/* List View Selection Controls - Always show when in list mode */}
+            {sortedPhotos.length > 0 && viewMode === 'list' && (
+              <div className="flex items-center space-x-2 px-3 py-2">
+                <button
+                  onClick={selectAllPhotos}
+                  disabled={selectedPhotos.size === sortedPhotos.length}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                >
+                  All
+                </button>
+                {selectedPhotos.size > 0 && (
                   <>
                     <button
                       onClick={clearSelection}
@@ -1011,9 +1048,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                         togglePhotoSelection(photo.id);
                       }}
                       onClick={e => e.stopPropagation()}
-                      className={`w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                      }`}
+                      className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                     />
                     <div className="relative">
                       <img

@@ -44,7 +44,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
   return (
     <>
       <motion.div
-        className="face-card group relative flex flex-col items-center"
+        className="face-card group relative flex flex-col items-center w-full"
         style={{ 
           transition: 'transform 0.2s ease-out'
         }}
@@ -56,7 +56,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/group/${group.label}`} className="block mb-3">
+        <Link to={`/group/${group.label}`} className="block mb-3 w-full flex justify-center">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg group"
             style={{ 

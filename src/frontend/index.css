@@ -26,46 +26,12 @@
   }
   
   .gallery-grid {
-    @apply w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3;
-  }
-
-  /* Dynamic gaps and row heights based on card size */
-  .gallery-grid.size-075 { 
-    gap: 0.75rem; 
-  }
-  .gallery-grid.size-100 { 
-    gap: 1rem; 
-  }
-  .gallery-grid.size-125 { 
-    gap: 1.25rem; 
-  }
-  .gallery-grid.size-150 { 
-    gap: 1.5rem; 
-  }
-  .gallery-grid.size-175 { 
-    gap: 1.75rem; 
+    @apply w-full grid gap-3;
   }
   
-  /* Dynamic grid sizes based on card size */
-  .gallery-grid.size-075 {
-    @apply grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12;
-  }
 
-  .gallery-grid.size-100 {
-    @apply grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10;
-  }
+  
 
-  .gallery-grid.size-125 {
-    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8;
-  }
-
-  .gallery-grid.size-150 {
-    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7;
-  }
-
-  .gallery-grid.size-175 {
-    @apply grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7;
-  }
   
   /* Photo grid for FaceDetail - masonry layout */
   .photo-gallery-grid {

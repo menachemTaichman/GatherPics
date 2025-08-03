@@ -100,10 +100,10 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
                   const next25 = Math.ceil(currentPercent / 25) * 25;
                   const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
                   const subtract25 = currentPercent - 25;
-                  const newPercent = Math.max(75, Math.max(subtract25, prev25));
+                  const newPercent = Math.max(50, Math.max(subtract25, prev25));
                   setCardSize(newPercent / 100);
                 }}
-                disabled={cardSize <= 0.75}
+                disabled={cardSize <= 0.50}
                 className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Minus className="w-4 h-4" />
@@ -119,7 +119,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
                 onBlur={e => {
                   let val = parseInt(e.target.value, 10);
                   if (isNaN(val)) val = Math.round(cardSize * 100);
-                  val = Math.max(75, Math.min(175, val));
+                  val = Math.max(50, Math.min(175, val));
                   setCardSize(val / 100);
                   setCardSizeInputValue(undefined);
                 }}
@@ -175,6 +175,11 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 175 * cardSize)}px, 1fr))`,
+            columnGap: `${0.25 + (cardSize - 0.75) * 0.3}rem`,
+            rowGap: `${1.5 + (cardSize - 0.75) * 0.3}rem`
+          }}
         >
           {filteredAndSortedGroups.map((group, index) => (
             <motion.div
