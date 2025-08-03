@@ -25,7 +25,7 @@ class Profiles(BaseModel):
             for image_id in image_ids if image_id not in existing_ids
         ]
         if to_insert:
-            self.add_many(to_insert)
+            self.db.insert_many('profile_images', to_insert)
 
     def add(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_photos: bool = False, can_edit_moments: bool = False) -> Dict:
         profile_data = super().add(label, all_images, accessible_image_IDs, can_edit_groups, can_upload_photos, can_edit_moments)
@@ -35,6 +35,8 @@ class Profiles(BaseModel):
         return profile_data
 
     def remove_accessible_image(self, profile_id: str, image_id: str) -> None:
+        if self.is_all_images(profile_id):
+            return
         self.db.delete('profile_images', {'profileID': profile_id, 'imageID': image_id})
 
     def is_all_images(self, profile_id: str) -> bool:
@@ -69,7 +71,8 @@ class Profiles(BaseModel):
     def list(self) -> List[Dict]:
         profiles = super().list()
         for profile in profiles:
-            profile['accessible_image_IDs'] = self.get_accessible_images(profile['profileID'])
+            profile_id = profile['profileID']
+            profile['accessible_image_IDs'] = self.get_accessible_images(profile_id)
             profile['can_edit_groups'] = profile.get('can_edit_groups', False)
             profile['can_upload_photos'] = profile.get('can_upload_photos', False)
             profile['can_edit_moments'] = profile.get('can_edit_moments', False)

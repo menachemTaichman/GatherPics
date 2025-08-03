@@ -1,6 +1,14 @@
 import sqlite3
-from typing import List, Dict
+from typing import List, Dict, Optional
 from contextlib import contextmanager
+
+# Define which tables are restricted by profile access
+RESTRICTED_TABLES = {
+    'images': 'imageID',
+    'faces': 'imageID',  # Faces are restricted via their associated images
+    'groups': 'groupID',  # Groups are restricted if they have no accessible images
+    'moments': 'momentID'  # Moments are restricted if they have no accessible images
+}
 
 TABLES = {
     'faces': '''
@@ -56,6 +64,123 @@ TABLES = {
 class AppDB:
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self._current_profile_id = None
+
+    def set_profile_id(self, profile_id: Optional[str]):
+        """Set the current profile ID for access control."""
+        self._current_profile_id = profile_id
+
+    def get_profile_id(self) -> Optional[str]:
+        """Get the current profile ID."""
+        return self._current_profile_id
+
+    def _get_accessible_images_condition(self, profile_id: str) -> tuple:
+        """
+        Get SQL condition and parameters for accessible images based on profile.
+        Returns (condition, params) where condition is a WHERE clause fragment.
+        """
+        if not profile_id:
+            return ("1=1", ())  # No restriction if no profile
+        
+        # Check if profile has all_images access
+        profile_query = "SELECT all_images FROM profiles WHERE profileID = ?"
+        result = self.execute_query(profile_query, (profile_id,))
+        if not result:
+            return ("1=0", ())  # Profile doesn't exist, no access
+        
+        has_all_images = bool(result[0][0])
+        
+        if has_all_images:
+            # Profile has access to all images except those explicitly excluded
+            condition = """
+                imageID NOT IN (
+                    SELECT imageID FROM profile_images 
+                    WHERE profileID = ? AND accessible = 0
+                )
+            """
+            return (condition, (profile_id,))
+        else:
+            # Profile only has access to explicitly allowed images
+            condition = """
+                imageID IN (
+                    SELECT imageID FROM profile_images 
+                    WHERE profileID = ? AND accessible = 1
+                )
+            """
+            return (condition, (profile_id,))
+
+    def _get_accessible_groups_condition(self, profile_id: str) -> tuple:
+        """
+        Get SQL condition for accessible groups (groups with at least one accessible image).
+        """
+        if not profile_id:
+            return ("1=1", ())  # No restriction if no profile
+        
+        accessible_images_condition, params = self._get_accessible_images_condition(profile_id)
+        condition = f"""
+            groupID IN (
+                SELECT DISTINCT groupID FROM faces 
+                WHERE groupID IS NOT NULL 
+                AND imageID IN (
+                    SELECT imageID FROM images WHERE {accessible_images_condition}
+                )
+            )
+        """
+        return (condition, params)
+
+    def _get_accessible_moments_condition(self, profile_id: str) -> tuple:
+        """
+        Get SQL condition for accessible moments (moments with at least one accessible image).
+        """
+        if not profile_id:
+            return ("1=1", ())  # No restriction if no profile
+        
+        accessible_images_condition, params = self._get_accessible_images_condition(profile_id)
+        condition = f"""
+            momentID IN (
+                SELECT DISTINCT momentID FROM images 
+                WHERE momentID IS NOT NULL 
+                AND {accessible_images_condition}
+            )
+        """
+        return (condition, params)
+
+    def _apply_profile_filter(self, table: str, where_clause: str = "", where_params: tuple = ()) -> tuple:
+        """
+        Apply profile-based filtering to queries.
+        Returns (final_where_clause, final_params)
+        """
+        if not self._current_profile_id or table not in RESTRICTED_TABLES:
+            return (where_clause, where_params)
+        
+        profile_conditions = {
+            'images': self._get_accessible_images_condition,
+            'faces': self._get_accessible_images_condition,  # Filter via imageID
+            'groups': self._get_accessible_groups_condition,
+            'moments': self._get_accessible_moments_condition
+        }
+        
+        if table not in profile_conditions:
+            return (where_clause, where_params)
+        
+        profile_condition, profile_params = profile_conditions[table](self._current_profile_id)
+        
+        if table == 'faces':
+            # For faces, we need to join with images to apply the filter
+            profile_condition = f"""
+                imageID IN (
+                    SELECT imageID FROM images WHERE {profile_condition}
+                )
+            """
+        
+        if where_clause:
+            final_where = f"({where_clause}) AND ({profile_condition})"
+            final_params = where_params + profile_params
+        else:
+            final_where = profile_condition
+            final_params = profile_params
+        
+        return (final_where, final_params)
 
     @contextmanager
     def get_connection(self):
@@ -95,16 +220,24 @@ class AppDB:
             conn.commit()
 
     def get_all(self, table: str) -> List[Dict]:
+        where_clause, params = self._apply_profile_filter(table)
         with self.get_connection() as conn:
-            cursor = conn.execute(f'SELECT * FROM {table}')
+            if where_clause:
+                cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause}', params)
+            else:
+                cursor = conn.execute(f'SELECT * FROM {table}')
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def get_one(self, table: str, where: Dict) -> Dict | None:
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        where_params = tuple(where.values())
+        
+        # Apply profile filtering
+        final_where, final_params = self._apply_profile_filter(table, where_clause, where_params)
+        
         with self.get_connection() as conn:
-            clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-            values = tuple(where.values())
-            cursor = conn.execute(f'SELECT * FROM {table} WHERE {clause}', values)
+            cursor = conn.execute(f'SELECT * FROM {table} WHERE {final_where}', final_params)
             row = cursor.fetchone()
             if row:
                 columns = [desc[0] for desc in cursor.description]
@@ -112,10 +245,14 @@ class AppDB:
             return None
 
     def delete(self, table: str, where: Dict):
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        where_params = tuple(where.values())
+        
+        # Apply profile filtering for restricted tables
+        final_where, final_params = self._apply_profile_filter(table, where_clause, where_params)
+        
         with self.get_connection() as conn:
-            clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-            values = tuple(where.values())
-            conn.execute(f'DELETE FROM {table} WHERE {clause}', values)
+            conn.execute(f'DELETE FROM {table} WHERE {final_where}', final_params)
             conn.commit()
 
     def execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
@@ -130,11 +267,16 @@ class AppDB:
             return []
 
     def update(self, table: str, where: Dict, fields: Dict):
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        where_params = tuple(where.values())
+        
+        # Apply profile filtering for restricted tables
+        final_where, final_params = self._apply_profile_filter(table, where_clause, where_params)
+        
         with self.get_connection() as conn:
             set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
-            where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-            values = tuple(fields.values()) + tuple(where.values())
-            conn.execute(f'UPDATE {table} SET {set_clause} WHERE {where_clause}', values)
+            values = tuple(fields.values()) + final_params
+            conn.execute(f'UPDATE {table} SET {set_clause} WHERE {final_where}', values)
             conn.commit()
 
     def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):

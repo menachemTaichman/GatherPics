@@ -7,7 +7,7 @@ from .moment import Moments
 from .profile import Profiles
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
 
@@ -15,11 +15,16 @@ class Event(JsonModel):
     DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
     ID_FIELD = 'id'
 
-    def __init__(self, event_id: str, load: bool = True):
+    def __init__(self, event_id: str, load: bool = True, profile_id: Optional[str] = None):
         super().__init__(event_id, load=load)
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
         self.db = AppDB(self.DB_PATH)
+        
+        # Set profile ID for access control
+        if profile_id:
+            self.db.set_profile_id(profile_id)
+        
         self.images_model = Images(self.db)
         self.groups_model = Groups(self.db)
         self.faces_model = Faces(self.db)
@@ -33,6 +38,14 @@ class Event(JsonModel):
         self.faces_dir = os.path.join(self.event_dir, 'faces')
         self.high_quality_dir = os.path.join(self.event_dir, 'high_quality')
         self._ensure_event_dirs()
+
+    def set_profile_id(self, profile_id: Optional[str]):
+        """Set the profile ID for access control across all models."""
+        self.db.set_profile_id(profile_id)
+
+    def get_profile_id(self) -> Optional[str]:
+        """Get the current profile ID."""
+        return self.db.get_profile_id()
 
     def _init_fields(self):
         self.name = ''
@@ -306,7 +319,7 @@ class Event(JsonModel):
             return photo_data
         except Exception as e:
             return None
-    
+
     def add(self, **fields) -> 'Event':
         super().add(**fields)
         self.last_group_id = 0
@@ -685,5 +698,5 @@ def delete_event(event_id: str) -> None:
     if os.path.exists(event_dir):
         import shutil
         shutil.rmtree(event_dir)
-get_event = lambda event_id: Event(event_id)
+get_event = lambda event_id, profile_id=None: Event(event_id, profile_id=profile_id)
 list_events = Event.list_all 
