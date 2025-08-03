@@ -20,6 +20,24 @@ export default function MergeConflictModal({
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore();
 
+  // Handle keyboard events
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        handleCancel();
+      } else if (event.key === 'Enter' && !loading) {
+        handleMerge();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, loading]);
+
   const handleMerge = async () => {
     setLoading(true);
     try {

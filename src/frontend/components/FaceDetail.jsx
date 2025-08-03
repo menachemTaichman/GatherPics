@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -81,6 +81,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [editingTitle, setEditingTitle] = useState('');
   const [selectionMode, setSelectionMode] = useSetting('faceDetail_selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  // No complex flag checking needed - the data store handles everything
 
   // Use the data store for groups
   const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup } = useDataStore();
@@ -120,17 +121,76 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   }, [group_name, currentGroups, navigate, group]);
 
-  // Fetch sorted photos from backend
+  // Fetch sorted photos from backend - only on initial load or manual refresh
   useEffect(() => {
     if (group && group.groupID !== undefined && group.groupID !== null) {
+      // Check if we have merged data for this group in the store
+      const store = useDataStore.getState();
+      const mergeResult = store.lastMergeResult;
+      
+      if (mergeResult && mergeResult.target_group_id === group.groupID && mergeResult.merged_photos_data) {
+        // We have merged data, use it instead of fetching
+        setSortedPhotos(sortPhotos(mergeResult.merged_photos_data, sortBy, sortOrder));
+        if (mergeResult.crop_mapping) {
+          setImageCrops(mergeResult.crop_mapping);
+        }
+        return;
+      }
+      
+      // No merged data, fetch normally
       fetchSortedPhotos();
     }
-  }, [group?.groupID]); // Only refetch when groupID changes, not when group object updates
+  }, [group?.groupID]); // Only when group changes (initial load or navigation)
 
   // Subscribe to global groups state changes to keep local photos in sync
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
+        // Handle merge results first
+        const mergeResult = state.lastMergeResult;
+        if (mergeResult) {
+          const deletedGroupIds = mergeResult.deleted_group_ids || mergeResult.source_group_ids || [];
+          const targetGroupId = mergeResult.target_group_id;
+          
+          // If current group was deleted in merge, navigate away
+          if (deletedGroupIds.includes(group?.groupID)) {
+            const targetGroupName = mergeResult.target_group_name || 
+                                  state.groups.find(g => g.groupID === targetGroupId)?.label ||
+                                  targetGroupId;
+            navigate(`/group/${encodeURIComponent(targetGroupName)}`);
+            return;
+          }
+          
+          // If current group is the target, update it with merged data
+          if (group?.groupID === targetGroupId && mergeResult.target_group_updated) {
+            const updatedGroup = state.groups.find(g => g.groupID === targetGroupId);
+            if (updatedGroup) {
+              setGroup(updatedGroup);
+              // Use the merged photos data from the backend
+              if (mergeResult.merged_photos_data && mergeResult.merged_photos_data.length > 0) {
+                setSortedPhotos(sortPhotos(
+                  mergeResult.merged_photos_data,
+                  sortBy,
+                  sortOrder
+                ));
+              } else if (mergeResult.transferred_photos_data && mergeResult.transferred_photos_data.length > 0) {
+                // Fallback to transferred_photos_data if merged_photos_data not available
+                setSortedPhotos(sortPhotos(
+                  mergeResult.transferred_photos_data,
+                  sortBy,
+                  sortOrder
+                ));
+              } else if (updatedGroup.photos) {
+                setSortedPhotos(sortPhotos(updatedGroup.photos, sortBy, sortOrder));
+              }
+              // Update crop data if available in merge result
+              if (mergeResult.crop_mapping) {
+                setImageCrops(mergeResult.crop_mapping);
+              }
+            }
+          }
+        }
+        
         // Handle transfer results
         const transferResult = state.lastTransferResult;
         if (transferResult) {
@@ -139,8 +199,14 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             setSortedPhotos(prevPhotos => 
               prevPhotos.filter(photo => !transferResult.photos_to_remove_from_source.includes(photo.id))
             );
-            // Refresh crop data since faces were removed
-            fetchGroupCrops();
+            // Update crop data by removing crops for transferred photos
+            setImageCrops(prevCrops => {
+              const newCrops = { ...prevCrops };
+              transferResult.photos_to_remove_from_source.forEach(photoId => {
+                delete newCrops[photoId];
+              });
+              return newCrops;
+            });
           }
           // If this is the target group, add photos that should be added
           else if (transferResult.target_group_id === group?.groupID && transferResult.photos_to_add_to_target) {
@@ -155,14 +221,19 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   photo => !existingPhotoIds.has(photo.id) && transferResult.photos_to_add_to_target.includes(photo.id)
                 );
                 
-                // Add only new photos and sort them
-                const updatedPhotos = [...prevPhotos, ...newPhotos];
-                return sortPhotos(updatedPhotos, sortBy, sortOrder);
-              });
-            }
-            // Refresh crop data since faces were added
-            fetchGroupCrops();
-          }
+                            // Add only new photos and sort them
+            const updatedPhotos = [...prevPhotos, ...newPhotos];
+            return sortPhotos(updatedPhotos, sortBy, sortOrder);
+          });
+        }
+        // Update crop data by adding crops for new photos if available in transfer result
+        if (transferResult.crop_mapping) {
+          setImageCrops(prevCrops => ({
+            ...prevCrops,
+            ...transferResult.crop_mapping
+          }));
+        }
+      }
         }
         
         // Handle group updates (including name and representative changes)
@@ -185,16 +256,31 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder]); // Removed sortedPhotos.length to prevent unnecessary re-subscriptions
+  }, [group?.groupID, sortBy, sortOrder, navigate]); // Added navigate to dependencies
 
-  // Fetch crop data when group changes
+  // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
     if (group && group.groupID !== undefined && group.groupID !== null) {
+      // Check if we have merged data for this group in the store
+      const store = useDataStore.getState();
+      const mergeResult = store.lastMergeResult;
+      
+      if (mergeResult && mergeResult.target_group_id === group.groupID && mergeResult.crop_mapping) {
+        // We have merged data, use it instead of fetching
+        setImageCrops(mergeResult.crop_mapping);
+        return;
+      }
+      
+      // No merged data, fetch normally
       fetchGroupCrops();
     }
-  }, [group?.groupID]);
+  }, [group?.groupID]); // Only when group changes (initial load or navigation)
 
   const fetchGroupCrops = async () => {
+    if (!group?.groupID) {
+      return;
+    }
+    
     try {
       const response = await groupsAPI.getCrops(group.groupID);
       setImageCrops(response.crop_mapping || {});
@@ -205,6 +291,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const fetchSortedPhotos = async () => {
+    if (!group?.groupID) {
+      return;
+    }
+    
     try {
       setLoading(true);
       const response = await groupsAPI.getPhotosComplete(group.groupID);
@@ -220,6 +310,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       setLoading(false);
     }
   };
+
+
 
   const getSortedPhotos = () => {
     return sortedPhotos;
@@ -448,29 +540,55 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const handleTitleSave = async () => {
+    // Check if the current group still exists in the store
+    const currentGroups = useDataStore.getState().groups;
+    const groupExists = currentGroups.some(g => g.groupID === group?.groupID);
+    
+    if (!groupExists) {
+      setIsEditingTitle(false);
+      clearConflict();
+      return;
+    }
+    
     if (editingTitle.trim() && editingTitle !== group.label) {
-      // Check for conflicts before saving
-      await checkNameConflict(editingTitle.trim());
-      
-      if (nameConflict) {
-        // Show merge conflict modal
-        showMergeConflictModal(editingTitle.trim());
-        setIsEditingTitle(false);
-        return;
-      }
-      
       try {
+        // Check for conflicts first - call the API directly to avoid state timing issues
+        const conflictResult = await groupsAPI.checkName(editingTitle.trim(), group.groupID);
+        
+        if (conflictResult.conflict) {
+          // Show merge conflict modal with the conflicting group
+          showMergeConflictModal(editingTitle.trim(), conflictResult.conflicting_group);
+          setIsEditingTitle(false);
+          return;
+        }
+        
+        // No conflict, proceed with update
         await optimisticUpdates.updateGroup(group.groupID, { label: editingTitle.trim() });
         
         // Update the URL to reflect the new group name
         const newUrl = `/group/${encodeURIComponent(editingTitle.trim())}`;
         window.history.replaceState(null, '', newUrl);
+        
+        setIsEditingTitle(false);
+        clearConflict();
       } catch (error) {
         console.error('Error updating group name:', error);
+        
+        // Show user-friendly error message
+        if (error.response?.status === 400 && error.response?.data?.error) {
+          // Backend returned a specific error message
+          alert(`Failed to update group name: ${error.response.data.error}`);
+        } else {
+          alert('Failed to update group name. Please try again.');
+        }
+        
+        setIsEditingTitle(false);
+        clearConflict();
       }
+    } else {
+      setIsEditingTitle(false);
+      clearConflict();
     }
-    setIsEditingTitle(false);
-    clearConflict(); // Clear conflict after saving
   };
 
   const handleTitleCancel = () => {
@@ -563,6 +681,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     >
                       <X className="w-4 h-4 text-red-600" />
                     </button>
+
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
@@ -653,6 +772,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               >
                 <List className="w-4 h-4" />
               </button>
+              
+
             </div>
 
             {/* Size Control - Only show in grid mode */}
@@ -947,6 +1068,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             setShowEditModal(false);
           }}
           onRefreshGroups={onRefreshGroups}
+          onNameConflict={(newName, conflictingGroup) => {
+            // Use FaceDetail's merge logic
+            showMergeConflictModal(newName, conflictingGroup);
+          }}
         />
       )}
 

@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
-import MergeConflictModal from './MergeConflictModal';
-import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 
-export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups }) {
+export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups, onNameConflict }) {
   const [formData, setFormData] = useState({
     label: group.label || '',
     face_representive: group.face_representive
@@ -21,18 +19,8 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     face_representive: group.face_representive
   });
 
-  // Use the custom hook for conflict handling
-  const {
-    nameConflict,
-    showMergeModal,
-    conflictData,
-    checkNameConflict,
-    handleMergeGroups,
-    handleMergeCancel,
-    showMergeConflictModal,
-    clearConflict,
-    setShowMergeModal
-  } = useGroupNameConflict(group, onRefreshGroups);
+  // Simple conflict state for inline validation
+  const [nameConflict, setNameConflict] = useState(null);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -111,37 +99,48 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   const handleNameEdit = () => {
     setEditingName(displayData.label);
     setIsEditingName(true);
-    clearConflict(); // Clear any previous conflict
+    setNameConflict(null); // Clear any previous conflict
   };
 
   const handleNameSave = async () => {
     if (editingName.trim()) {
-      // Check for conflicts before saving
-      await checkNameConflict(editingName.trim());
-      
-      if (nameConflict) {
-        // Show merge conflict modal
-        showMergeConflictModal(editingName.trim());
+      try {
+        // Check for conflicts first - call the API directly to avoid state timing issues
+        const conflictResult = await groupsAPI.checkName(editingName.trim(), group.groupID);
+        
+        if (conflictResult.conflict) {
+          // Close this modal and pass conflict data to parent (FaceDetail)
+          onClose();
+          if (onNameConflict) {
+            onNameConflict(editingName.trim(), conflictResult.conflicting_group);
+          }
+          return;
+        }
+        
+        // No conflict, proceed with update
+        setFormData(prev => ({ ...prev, label: editingName.trim() }));
+        // Update display data immediately for name changes since they're saved immediately
+        setDisplayData(prev => ({ ...prev, label: editingName.trim() }));
+        
         setIsEditingName(false);
-        return;
+        setNameConflict(null);
+      } catch (error) {
+        console.error('Error checking name conflict:', error);
+        // On error, just save the name and let the backend handle validation
+        setFormData(prev => ({ ...prev, label: editingName.trim() }));
+        setDisplayData(prev => ({ ...prev, label: editingName.trim() }));
+        setIsEditingName(false);
+        setNameConflict(null);
       }
-      
-      setFormData(prev => ({ ...prev, label: editingName.trim() }));
-      // Update display data immediately for name changes since they're saved immediately
-      setDisplayData(prev => ({ ...prev, label: editingName.trim() }));
+    } else {
+      setIsEditingName(false);
+      setNameConflict(null);
     }
-    setIsEditingName(false);
-    clearConflict(); // Clear conflict after saving
   };
 
   const handleNameCancel = () => {
     setIsEditingName(false);
-    clearConflict(); // Clear conflict on cancel
-  };
-
-  const handleMergeCancelLocal = () => {
-    handleMergeCancel(); // Use the hook's function
-    setIsEditingName(true); // Restore editing mode
+    setNameConflict(null); // Clear conflict on cancel
   };
 
   const getRepresentativeImageSrc = () => {
@@ -191,7 +190,16 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                           value={editingName}
                           onChange={(e) => {
                             setEditingName(e.target.value);
-                            checkNameConflict(e.target.value);
+                            // Simple inline conflict check
+                            if (e.target.value.trim()) {
+                              groupsAPI.checkName(e.target.value.trim(), group.groupID)
+                                .then(result => {
+                                  setNameConflict(result.conflict ? result.conflicting_group : null);
+                                })
+                                .catch(() => setNameConflict(null));
+                            } else {
+                              setNameConflict(null);
+                            }
                           }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -333,18 +341,6 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
         </div>
       </AnimatePresence>
 
-      {/* Merge Conflict Modal */}
-      {showMergeModal && conflictData && (
-        <MergeConflictModal
-          isOpen={showMergeModal}
-          onClose={() => setShowMergeModal(false)}
-          newName={conflictData.newName}
-          currentGroup={conflictData.currentGroup}
-          conflictingGroup={conflictData.conflictingGroup}
-          onMerge={handleMergeGroups}
-          onCancel={handleMergeCancelLocal}
-        />
-      )}
     </>
   );
 } 

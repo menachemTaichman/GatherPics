@@ -15,6 +15,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
 
     try {
       const result = await groupsAPI.checkName(name.trim(), currentGroup?.groupID);
+      
       if (result.conflict) {
         setNameConflict(result.conflicting_group);
       } else {
@@ -24,6 +25,8 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
       console.error('Error checking name conflict:', error);
       const errorInfo = handleAPIError(error, 'Failed to check name conflict');
       console.error(errorInfo.message);
+      // Don't set conflict state on error, let the user try again
+      setNameConflict(null);
     }
   };
 
@@ -39,6 +42,9 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
       setShowMergeModal(false);
       setConflictData(null);
       
+      // Clear any name conflict state to prevent further name updates
+      setNameConflict(null);
+      
       // No need to call onRefreshGroups since dataManager handles all updates automatically
     } catch (error) {
       console.error('Error merging groups:', error);
@@ -52,11 +58,11 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
     setConflictData(null);
   };
 
-  const showMergeConflictModal = (newName, editingName) => {
+  const showMergeConflictModal = (newName, conflictingGroup = null) => {
     setConflictData({
       newName,
       currentGroup,
-      conflictingGroup: nameConflict
+      conflictingGroup: conflictingGroup || nameConflict
     });
     setShowMergeModal(true);
   };

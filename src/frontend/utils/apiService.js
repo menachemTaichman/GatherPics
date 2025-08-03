@@ -81,6 +81,9 @@ export const groupsAPI = {
       source_group_ids: sourceGroupIds,
       target_group_id: targetGroupId
     });
+    
+    // The response should include the updated target group data
+    // This allows the frontend to update state correctly without additional API calls
     return response.data;
   },
 
