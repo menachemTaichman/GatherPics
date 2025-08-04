@@ -38,7 +38,7 @@ TABLES = {
     ''',
     'moments': '''
         momentID TEXT PRIMARY KEY,
-        label TEXT,
+        label TEXT UNIQUE,
         description TEXT,
         start TEXT,
         end TEXT
@@ -252,8 +252,8 @@ class AppDB:
                 return dict(zip(columns, row))
             return None
 
-    def get_one_unfiltered(self, table: str, where: Dict) -> Dict | None:
-        """Get one record without applying profile filtering (for conflict checking)."""
+    def is_exists(self, table: str, where: Dict) -> str | None:
+        """Check if a record exists and return its ID for conflict checking."""
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
@@ -262,7 +262,10 @@ class AppDB:
             row = cursor.fetchone()
             if row:
                 columns = [desc[0] for desc in cursor.description]
-                return dict(zip(columns, row))
+                record = dict(zip(columns, row))
+                # Return the ID field (assuming it's the first field or named 'id')
+                id_field = [col for col in columns if col.endswith('ID') or col == 'id'][0]
+                return record[id_field]
             return None
 
     def delete(self, table: str, where: Dict):

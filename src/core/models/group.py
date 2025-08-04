@@ -28,7 +28,7 @@ class Groups(BaseModel):
         original_label = label
         counter = 1
         for _ in range(100):
-            existing = self.db.get_one(self.table_name, {'label': label})
+            existing = self.db.is_exists(self.table_name, {'label': label})
             if not existing:
                 return label
             label = f"{original_label} ({counter})"
@@ -40,10 +40,10 @@ class Groups(BaseModel):
         """Edit a group with validation for unique labels."""
         
         if 'label' in fields and fields['label']:
-            # Check for duplicate labels (excluding current group) - use unfiltered method
-            existing = self.db.get_one_unfiltered(self.table_name, {'label': fields['label']})
+            # Check for duplicate labels (excluding current group) - use is_exists method
+            existing_id = self.db.is_exists(self.table_name, {'label': fields['label']})
             
-            if existing and existing[self.id_field] != entity_id:
+            if existing_id and existing_id != entity_id:
                 raise ValueError(f"Group with label '{fields['label']}' already exists")
         
         try:
@@ -87,12 +87,12 @@ class Groups(BaseModel):
     
     def check_name_conflict(self, label: str, exclude_group_id: str = '') -> Dict:
         """Check if a group name already exists and return conflict info."""
-        existing = self.db.get_one_unfiltered(self.table_name, {'label': label})
-        if not existing or existing[self.id_field] == exclude_group_id:
+        existing_id = self.db.is_exists(self.table_name, {'label': label})
+        if not existing_id or existing_id == exclude_group_id:
             return {'conflict': False}
         
         # Get the conflicting group details
-        conflicting_group = self.get(existing[self.id_field])
+        conflicting_group = self.get(existing_id)
         return {
             'conflict': True,
             'conflicting_group': conflicting_group
