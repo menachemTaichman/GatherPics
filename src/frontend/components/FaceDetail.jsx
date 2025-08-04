@@ -1226,7 +1226,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           onRefreshGroups={onRefreshGroups}
           onNameConflict={(newName, conflictingGroup) => {
             // Use FaceDetail's merge logic
-            showMergeConflictModal(newName, conflictingGroup);
+            showMergeConflictModal(newName, group, conflictingGroup);
           }}
         />
       )}

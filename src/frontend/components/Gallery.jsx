@@ -59,30 +59,6 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
     alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
   };
 
-  // Custom merge handler that preserves the group data
-  const handleMergeGroupsWithData = async () => {
-    if (!conflictData || !conflictData.currentGroup) {
-      console.error('No conflict data or current group available');
-      return;
-    }
-    
-    try {
-      // Use the API service for merging groups
-      await groupsAPI.merge([conflictData.currentGroup.groupID], conflictData.conflictingGroup.groupID);
-      
-      // Close modal and clear data
-      setShowMergeModal(false);
-      setConflictData(null);
-      
-      // Clear any name conflict state
-      clearConflict();
-    } catch (error) {
-      console.error('Error merging groups:', error);
-      const errorInfo = handleAPIError(error, 'Failed to merge groups');
-      alert(errorInfo.message);
-    }
-  };
-
   return (
     <div className="w-full px-8 py-8">
       {/* Header */}
@@ -260,8 +236,8 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
           }}
           onRefreshGroups={onRefreshGroups}
           onNameConflict={(newName, conflictingGroup) => {
-            // Use Gallery's merge logic
-            showMergeConflictModal(newName, conflictingGroup);
+            // Pass the current group being edited (selectedGroup) to the merge conflict modal
+            showMergeConflictModal(newName, selectedGroup, conflictingGroup);
           }}
         />
       )}
@@ -274,7 +250,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}
           conflictingGroup={conflictData.conflictingGroup}
-          onMerge={handleMergeGroupsWithData}
+          onMerge={handleMergeGroups}
           onCancel={handleMergeCancel}
           onNavigateToGroup={() => {
             // No navigation needed - just close the modal
@@ -282,7 +258,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
           }}
         />
       )}
-
+      
 
     </div>
   );

@@ -204,14 +204,25 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     
     // Handle navigation after transfer if we're in a group context
     let shouldCallParent = true;
-    if (currentGroupId && transferData && transferData.photos_to_remove_from_source && transferData.photos_to_remove_from_source.length > 0) {
+    if (currentGroupId && transferData) {
       // Get the current photo ID - it could be a string or an object with id/name
       const currentPhotoId = typeof photo === 'string' ? photo : (photoMeta.id || photoMeta.name);
-      const wasCurrentPhotoRemoved = transferData.photos_to_remove_from_source.includes(currentPhotoId);
+      const wasCurrentPhotoRemoved = transferData.photos_to_remove_from_source && transferData.photos_to_remove_from_source.includes(currentPhotoId);
       
-      // Only navigate away if the current photo was actually removed from the source group
-      // AND if we're the source group (not the target group)
-      if (wasCurrentPhotoRemoved && transferData.old_group_id === currentGroupId) {
+      // Check if the source group was deleted (when it becomes empty)
+      if (transferData.old_group_deleted && transferData.old_group_id === currentGroupId) {
+        // Source group was deleted, navigate to target group
+        const targetGroup = groups.find(g => g.groupID === transferData.target_group_id);
+        if (targetGroup) {
+          navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+        } else {
+          navigate('/');
+        }
+        // Don't call parent's onTransferComplete since we handled the navigation
+        shouldCallParent = false;
+      }
+      // Check if current photo was removed from source group (but group still exists)
+      else if (wasCurrentPhotoRemoved && transferData.old_group_id === currentGroupId) {
         // Current photo was removed from source group, need to navigate to next photo or close
         if (totalPhotos > 1) {
           // Navigate to next photo

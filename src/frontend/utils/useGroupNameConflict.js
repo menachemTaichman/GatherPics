@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { groupsAPI, handleAPIError } from './apiService';
+import { useDataStore } from './dataManager';
 
 export function useGroupNameConflict(currentGroup, onRefreshGroups) {
   const [nameConflict, setNameConflict] = useState(null);
@@ -32,17 +33,8 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
 
   const handleMergeGroups = async () => {
     try {
-      // Check if currentGroup exists before accessing its groupID
-      if (!currentGroup || !currentGroup.groupID) {
-        console.error('Current group is null or missing groupID');
-        return;
-      }
-      
-      // Use the API service for merging groups
-      await groupsAPI.merge([currentGroup.groupID], conflictData.conflictingGroup.groupID);
-      
-      // The API service interceptor will automatically handle the state updates
-      // No need for manual refresh or window.location.href
+      // The MergeConflictModal is already handling the transfer logic
+      // We just need to close the modal and clear the state
       
       // Close modal and let the parent component handle navigation
       setShowMergeModal(false);
@@ -53,8 +45,8 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
       
       // No need to call onRefreshGroups since dataManager handles all updates automatically
     } catch (error) {
-      console.error('Error merging groups:', error);
-      const errorInfo = handleAPIError(error, 'Failed to merge groups');
+      console.error('Error in handleMergeGroups:', error);
+      const errorInfo = handleAPIError(error, 'Failed to handle merge');
       alert(errorInfo.message);
     }
   };
@@ -64,11 +56,25 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
     setConflictData(null);
   };
 
-  const showMergeConflictModal = (newName, conflictingGroup = null) => {
+  const showMergeConflictModal = (newName, currentGroupOverride = null, conflictingGroup = null) => {
+    // Ensure we have a valid conflicting group
+    let validConflictingGroup = conflictingGroup || nameConflict;
+    
+    // If still no valid conflicting group, try to find it by name in the data store
+    if (!validConflictingGroup && newName) {
+      const groups = useDataStore.getState().groups;
+      validConflictingGroup = groups.find(g => g.label === newName);
+    }
+    
+    if (!validConflictingGroup) {
+      console.error('No valid conflicting group found');
+      return;
+    }
+    
     setConflictData({
       newName,
-      currentGroup,
-      conflictingGroup: conflictingGroup || nameConflict
+      currentGroup: currentGroupOverride || currentGroup,
+      conflictingGroup: validConflictingGroup
     });
     setShowMergeModal(true);
   };
