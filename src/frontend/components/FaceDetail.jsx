@@ -614,16 +614,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     const currentGroups = useDataStore.getState().groups;
     const groupExists = currentGroups.some(g => g.groupID === group?.groupID);
     
-    console.log('handleTitleSave debug:', {
-      groupId: group?.groupID,
-      groupExists,
-      currentGroupsCount: currentGroups.length,
-      editingTitle,
-      groupLabel: group?.label
-    });
-    
     if (!groupExists) {
-      console.log('Group does not exist in store, aborting');
       setIsEditingTitle(false);
       clearConflict();
       return;
@@ -646,14 +637,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
     
     try {
-      // Debug: Log what we're about to send
-      console.log('About to update group:', {
-        groupId: group.groupID,
-        currentLabel: group.label,
-        newLabel: trimmedTitle,
-        updates: { label: trimmedTitle }
-      });
-      
       // Check for conflicts first - call the API directly to avoid state timing issues
       const conflictResult = await groupsAPI.checkName(trimmedTitle, group.groupID);
       
@@ -665,7 +648,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       }
       
       // No conflict, proceed with update
-      console.log('No conflict found, proceeding with update...');
       await optimisticUpdates.updateGroup(group.groupID, { label: trimmedTitle });
       
       // Update the URL to reflect the new group name
@@ -675,13 +657,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       setIsEditingTitle(false);
       clearConflict();
     } catch (error) {
-      console.error('Error updating group name:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      
       // Show user-friendly error message
       if (error.response?.status === 400 && error.response?.data?.error) {
         // Backend returned a specific error message

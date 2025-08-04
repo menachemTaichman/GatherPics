@@ -12,16 +12,9 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to log requests
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    console.log('API Request:', {
-      method: config.method?.toUpperCase(),
-      url: config.url,
-      data: config.data,
-      dataString: JSON.stringify(config.data),
-      headers: config.headers
-    });
     return config;
   },
   (error) => {
@@ -32,11 +25,6 @@ api.interceptors.request.use(
 // Response interceptor to handle change instructions
 api.interceptors.response.use(
   (response) => {
-    console.log('API Response:', {
-      status: response.status,
-      url: response.config.url,
-      data: response.data
-    });
     // Process change instructions from backend
     if (response.data && response.data.changes) {
       response.data.changes.forEach(change => {
@@ -46,13 +34,6 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Error:', error);
-    console.error('API Error Details:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-      url: error.config?.url
-    });
     return Promise.reject(error);
   }
 );
@@ -73,9 +54,7 @@ export const groupsAPI = {
 
   // Update group
   update: async (groupId, updates) => {
-    console.log('groupsAPI.update called with:', { groupId, updates });
     const response = await api.put(`/api/groups/${groupId}`, updates);
-    console.log('groupsAPI.update response:', response.data);
     return response.data;
   },
 
@@ -249,7 +228,6 @@ export const imagesAPI = {
 export const optimisticUpdates = {
   // Optimistic group update
   updateGroup: async (groupId, updates, rollbackFn) => {
-    console.log('optimisticUpdates.updateGroup called with:', { groupId, updates });
     const store = useDataStore.getState();
     const previousState = store.groups.find(g => g.groupID === groupId);
     
@@ -257,9 +235,7 @@ export const optimisticUpdates = {
     store.updateGroup(groupId, updates);
     
     try {
-      console.log('Calling groupsAPI.update...');
       const result = await groupsAPI.update(groupId, updates);
-      console.log('groupsAPI.update result:', result);
       
       // Process any change instructions from the backend
       if (result.changes) {
@@ -270,7 +246,6 @@ export const optimisticUpdates = {
       
       return result;
     } catch (error) {
-      console.error('optimisticUpdates.updateGroup error:', error);
       // Rollback on error
       if (rollbackFn && previousState) {
         rollbackFn(previousState);

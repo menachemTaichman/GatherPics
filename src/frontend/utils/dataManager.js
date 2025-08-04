@@ -432,14 +432,4 @@ export const optimisticUpdate = async (updateFn, apiCall, rollbackFn) => {
   }
 };
 
-// Global debug function - can be called from browser console
-export const debugStoreState = () => {
-  const state = useDataStore.getState();
-  return state;
-};
-
-// Make it available globally for browser console access
-if (typeof window !== 'undefined') {
-  window.debugStoreState = debugStoreState;
-  window.useDataStore = useDataStore;
-} 
+ 

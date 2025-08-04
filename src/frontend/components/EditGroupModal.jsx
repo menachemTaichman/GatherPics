@@ -292,7 +292,8 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                             key={imageId}
                             type="button"
                             onClick={() => {
-                              const newRepresentative = faceId || imageId;
+                              // Only use faceId if it exists, otherwise don't set a representative
+                              const newRepresentative = faceId || null;
                               currentSelectionRef.current = newRepresentative;
                               setFormData(prev => ({
                                 ...prev,
@@ -300,7 +301,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                               }));
                             }}
                             className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
-                              formData.face_representive === (faceId || imageId)
+                              formData.face_representive === faceId
                                 ? 'border-primary-500'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
@@ -315,7 +316,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                                 e.target.src = PLACEHOLDER_DATA_URL;
                               }}
                             />
-                            {formData.face_representive === (faceId || imageId) && (
+                            {formData.face_representive === faceId && (
                               <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
                                 <div className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
                                   <Image className="w-2 h-2 text-white" />

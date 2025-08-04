@@ -111,7 +111,7 @@ class AppDB:
 
     def _get_accessible_groups_condition(self, profile_id: str) -> tuple:
         """
-        Get SQL condition for accessible groups (groups with at least one accessible image).
+        Get SQL condition for accessible groups (groups with at least one accessible image or empty groups).
         """
         if not profile_id:
             return ("1=1", ())  # No restriction if no profile
@@ -125,12 +125,16 @@ class AppDB:
                     SELECT imageID FROM images WHERE {accessible_images_condition}
                 )
             )
+            OR groupID NOT IN (
+                SELECT DISTINCT groupID FROM faces 
+                WHERE groupID IS NOT NULL
+            )
         """
         return (condition, params)
 
     def _get_accessible_moments_condition(self, profile_id: str) -> tuple:
         """
-        Get SQL condition for accessible moments (moments with at least one accessible image).
+        Get SQL condition for accessible moments (moments with at least one accessible image or empty moments).
         """
         if not profile_id:
             return ("1=1", ())  # No restriction if no profile
@@ -141,6 +145,10 @@ class AppDB:
                 SELECT DISTINCT momentID FROM images 
                 WHERE momentID IS NOT NULL 
                 AND {accessible_images_condition}
+            )
+            OR momentID NOT IN (
+                SELECT DISTINCT momentID FROM images 
+                WHERE momentID IS NOT NULL
             )
         """
         return (condition, params)
@@ -280,7 +288,6 @@ class AppDB:
             return []
 
     def update(self, table: str, where: Dict, fields: Dict):
-        print(f"AppDB.update called with table: {table}, where: {where}, fields: {fields}")
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
@@ -289,32 +296,14 @@ class AppDB:
         final_where = where_clause
         final_params = where_params
         
-        print(f"Final where clause: {final_where}")
-        print(f"Final where params: {final_params}")
-        print(f"Fields: {fields}")
-        
         with self.get_connection() as conn:
             try:
                 set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
                 values = tuple(fields.values()) + final_params
                 query = f'UPDATE {table} SET {set_clause} WHERE {final_where}'
-                print(f"SQL Query: {query}")
-                print(f"SQL Values: {values}")
                 result = conn.execute(query, values)
                 conn.commit()
-                print(f"Database update completed. Rows affected: {result.rowcount}")
-                if result.rowcount == 0:
-                    print("WARNING: No rows were updated!")
-                    # Check if the group exists
-                    check_query = f'SELECT groupID FROM {table} WHERE {final_where}'
-                    check_result = conn.execute(check_query, final_params)
-                    existing = check_result.fetchone()
-                    if existing:
-                        print(f"Group exists but update failed. Existing: {existing}")
-                    else:
-                        print("Group does not exist!")
             except Exception as e:
-                print(f"Database update failed with error: {e}")
                 raise
 
     def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):
