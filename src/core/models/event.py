@@ -98,6 +98,23 @@ class Event(JsonModel):
         results = self.db.execute_query(query, (image_id, group_id))
         return [row[0] for row in results]
     
+    def is_group_empty(self, group_id: str) -> bool:
+        """
+        Check if a group is empty by counting faces, bypassing profile access.
+        This method is used for internal operations like transfer_faces where
+        we need to determine if a group should be deleted regardless of profile access.
+        
+        Args:
+            group_id: The group ID to check
+            
+        Returns:
+            True if the group has no faces, False otherwise
+        """
+        query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
+        results = self.db.execute_query(query, (group_id,))
+        count = results[0][0] if results else 0
+        return count == 0
+    
     def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
         """
         Get filtered image IDs based on filter criteria.
@@ -456,13 +473,13 @@ class Event(JsonModel):
         representative_transferred = old_representative in face_ids
         
         # Check if old group is now empty and delete it if so
-        old_group_faces = self.groups_model.get_faces(old_group_id)
         old_group_deleted = False
-        if not old_group_faces:
+        if self.is_group_empty(old_group_id):
             self.groups_model.delete(old_group_id)
             old_group_deleted = True
         elif representative_transferred:
             # If the representative was transferred, choose a new representative with highest resolution
+            old_group_faces = self.groups_model.get_faces(old_group_id)
             new_representative = self.faces_model.get_biggest_face(old_group_faces)
             if new_representative:
                 self.groups_model.edit(old_group_id, {'face_representive': new_representative})
