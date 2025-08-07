@@ -38,6 +38,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const { group_name } = useParams();
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
+  const skipNextFetch = useRef(false);
   const [viewMode, setViewMode] = useSetting('faceDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -96,7 +97,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   // No complex flag checking needed - the data store handles everything
 
   // Use the data store for groups
-  const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup } = useDataStore();
+  const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup, replaceGroup } = useDataStore();
 
   // Use the custom hook for conflict handling
   const {
@@ -122,7 +123,17 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   useEffect(() => {
     const foundGroup = currentGroups.find(g => g.label === group_name);
     if (foundGroup) {
+      console.debug('[DEBUG] FaceDetail: group received from API', {
+        groupID: foundGroup.groupID,
+        label: foundGroup.label,
+        face_representive: foundGroup.face_representive
+      });
       setGroup(foundGroup);
+      console.debug('[DEBUG] FaceDetail: setGroup called', {
+        groupID: foundGroup.groupID,
+        label: foundGroup.label,
+        face_representive: foundGroup.face_representive
+      });
     } else if (group && group.groupID) {
       // If we have a group but the label doesn't match the URL, 
       // it might be because we just updated the group name
@@ -133,11 +144,27 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   }, [group_name, currentGroups, navigate, group]);
 
+  useEffect(() => {
+    if (group) {
+      console.debug('[DEBUG] FaceDetail: group used in UI', {
+        groupID: group.groupID,
+        label: group.label,
+        face_representive: group.face_representive
+      });
+    }
+  }, [group]);
+
   // Fetch sorted photos from backend - only on initial load or manual refresh
   useEffect(() => {
+    if (skipNextFetch.current) {
+      skipNextFetch.current = false;
+      return;
+    }
     if (group && group.groupID !== undefined && group.groupID !== null) {
-      // Fetch normally - no merge logic needed since we only use transfer
-      fetchSortedPhotos();
+      // Only fetch if no filters are active
+      if (filterGroups.length === 0 && !onlySelected) {
+        fetchSortedPhotos();
+      }
     }
   }, [group?.groupID]); // Only when group changes (initial load or navigation)
 
@@ -239,6 +266,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       return;
     }
     
+    if (skipNextFetch.current) {
+      return;
+    }
+    
     try {
       setLoading(true);
       const response = await groupsAPI.getPhotosComplete(group.groupID);
@@ -329,13 +360,18 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
   // Fetch filtered photos when filter changes
   useEffect(() => {
-    if (group?.groupID && (filterGroups.length > 0 || onlySelected)) {
+    if (!group?.groupID) return;
+
+    if (filterGroups.length > 0 || onlySelected) {
       fetchFilteredPhotos();
-    } else if (group?.groupID && filterGroups.length === 0 && !onlySelected) {
-      // No filter active, fetch normal photos
-      fetchSortedPhotos();
+    } else {
+      // No filter active, fetch normal photos, but only if not initial load
+      // (initial load is handled by the group change effect)
+      if (sortedPhotos.length > 0) {
+        fetchSortedPhotos();
+      }
     }
-  }, [group?.groupID, filterGroups, filterMode, onlySelected]);
+  }, [filterGroups, filterMode, onlySelected]); // Removed group?.groupID from dependencies
 
   const getSortedPhotos = () => {
     return sortedPhotos;
@@ -410,31 +446,58 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const handleTransferComplete = async (result) => {
     // Clear selection
     setSelectedPhotos(new Set());
+
+    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
+    const isCompleteTransfer = transferData?.old_group_deleted;
+
+    if (isCompleteTransfer) {
+      skipNextFetch.current = true; // Prevent fetch on next group change
+      // 1. Remove source group from store
+      if (transferData.old_group_id) {
+        useDataStore.getState().deleteGroup(transferData.old_group_id);
+      }
+      // 2. Add/update target group in store
+      if (transferData.updated_target_group) {
+        console.debug('[DEBUG] FaceDetail: replaceGroup called', {
+          groupID: transferData.updated_target_group.groupID,
+          label: transferData.updated_target_group.label,
+          face_representive: transferData.updated_target_group.face_representive
+        });
+        useDataStore.getState().replaceGroup(transferData.target_group_id, transferData.updated_target_group);
+      }
+      // 3. Update UI to show target group
+      const newGroup = transferData.updated_target_group;
+      setGroup(newGroup);
+      console.debug('[DEBUG] FaceDetail: setGroup called after transfer', {
+        groupID: newGroup.groupID,
+        label: newGroup.label,
+        face_representive: newGroup.face_representive
+      });
+      // 4. Set grid to union of target group’s images (before transfer) and transferred images
+      let gridPhotos = [];
+      if (transferData.photos_to_add_to_grid) {
+        // Use the new backend-provided array for the grid
+        const photoMap = {};
+        transferData.photos_to_add_to_grid.forEach(photo => { photoMap[photo.id] = photo; });
+        gridPhotos = newGroup && newGroup.image_ids ? newGroup.image_ids.map(id => photoMap[id]).filter(Boolean) : transferData.photos_to_add_to_grid;
+      } else {
+        const transferredPhotos = (transferData.transferred_photos_data || []);
+        const photoMap = {};
+        transferredPhotos.forEach(photo => { photoMap[photo.id] = photo; });
+        gridPhotos = newGroup && newGroup.image_ids ? newGroup.image_ids.map(id => photoMap[id]).filter(Boolean) : transferredPhotos;
+      }
+      setSortedPhotos(sortPhotos(gridPhotos, sortBy, sortOrder));
+      setLoading(false); // Ensure spinner is not shown
+      if (newGroup && newGroup.label) {
+        window.history.replaceState(null, '', `/group/${encodeURIComponent(newGroup.label)}`);
+      }
+      showToast('All faces transferred. Now viewing the merged group.', 'success');
+      return;
+    }
     
     // The change instruction system will handle all updates automatically
     // No need for manual updates here - the API service interceptor
     // will process the GROUP_FACES_TRANSFERRED change instruction
-    
-    // Success message is now handled in TransferFacesModal
-    
-    // If old group was deleted, redirect to the new group
-    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
-    if (transferData && transferData.old_group_deleted) {
-      showToast('Group was empty and has been deleted', 'success');
-      // Find the target group and redirect to it
-      const targetGroup = currentGroups.find(g => g.groupID === transferData.target_group_id);
-      if (targetGroup) {
-        navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
-      } else {
-        navigate('/');
-      }
-      return; // Exit early since we're navigating away
-    }
-    
-    // PhotoViewer navigation is now handled within PhotoViewer itself
-    // The data store subscription already handles the surgical updates
-    // No need to refetch photos - the API interceptor and data store
-    // will handle all the updates automatically
   };
 
   const togglePhotoSelection = (photoId, event) => {
@@ -1157,9 +1220,31 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             return result;
           }}
           onRefreshGroups={onRefreshGroups}
-          onNameConflict={(newName, conflictingGroup) => {
-            // Use FaceDetail's merge logic
-            showMergeConflictModal(newName, group, conflictingGroup);
+          onNameConflict={async (newName, conflictingGroup) => {
+            if (conflictingGroup && group) {
+              // Only perform the transfer, do not update the group label, group object, or URL
+              const allFaceIds = [];
+              sortedPhotos.forEach(photo => {
+                if (photo.faces) {
+                  photo.faces.forEach(face => {
+                    if (face.group_id === group.groupID) {
+                      allFaceIds.push(face.face_id);
+                    }
+                  });
+                }
+              });
+              if (allFaceIds.length > 0) {
+                setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
+                skipNextFetch.current = true;
+                const result = await groupsAPI.transferFaces(
+                  group.groupID,
+                  allFaceIds,
+                  conflictingGroup.groupID,
+                  null
+                );
+                await handleTransferComplete(result);
+              }
+            }
           }}
         />
       )}

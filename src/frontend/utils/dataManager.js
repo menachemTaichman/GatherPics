@@ -160,7 +160,10 @@ export const useDataStore = create((set, get) => ({
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
-          newGroups.push(newGroup);
+          // Double-check we're not adding a duplicate
+          if (!newGroups.some(g => g.groupID === result.target_group_id)) {
+            newGroups.push(newGroup);
+          }
         } else if (result.updated_target_group) {
           // Existing group that wasn't in store - add it with complete data
           const newGroup = {
@@ -173,12 +176,23 @@ export const useDataStore = create((set, get) => ({
             created_at: result.updated_target_group.created_at || new Date().toISOString(),
             updated_at: result.updated_target_group.updated_at || new Date().toISOString()
           };
-          newGroups.push(newGroup);
+          // Double-check we're not adding a duplicate
+          if (!newGroups.some(g => g.groupID === result.updated_target_group.groupID)) {
+            newGroups.push(newGroup);
+          }
         }
       }
       
+      // Ensure no duplicate groups in the final array
+      const uniqueGroups = newGroups.reduce((unique, group) => {
+        if (!unique.some(g => g.groupID === group.groupID)) {
+          unique.push(group);
+        }
+        return unique;
+      }, []);
+      
       return { 
-        groups: newGroups,
+        groups: uniqueGroups,
         lastTransferResult: {
           ...result,
           transferred_photos_data: result.transferred_photos_data || [] // Include full photo data

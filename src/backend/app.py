@@ -255,16 +255,21 @@ def transfer_faces():
             'photos_to_add_to_target': result.get('photos_to_add_to_target', []),
             'transferred_photos_data': [],  # Will be populated with full photo data
             'updated_source_group': result.get('updated_source_group'),  # Include updated source group with new representative
-            'updated_target_group': result.get('updated_target_group')  # Include updated target group
+            'updated_target_group': result.get('updated_target_group'),  # Include updated target group
+            'photos_to_add_to_grid': result.get('photos_to_add_to_grid'),  # New field for full transfer
         }
+        # Debug: print the face representative of the updated target group being sent to frontend
+        if result.get('updated_target_group'):
+            print(f"[DEBUG] /api/groups/transfer-faces: updated_target_group face_representive: {result['updated_target_group'].get('face_representive')}")
         
         # Include new group name if a new group was created
         if 'new_group_name' in result:
             change_data['new_group_name'] = result['new_group_name']
         
-        # Get full photo data for photos that were moved
-        moved_photos = set(result.get('photos_to_remove_from_source', []) + result.get('photos_to_add_to_target', []))
-        for photo_id in moved_photos:
+        # Only include photo data for images that are actually being added to the target group
+        moved_photos = set(result.get('photos_to_remove_from_source', []))
+        photos_to_add_to_target = set(result.get('photos_to_add_to_target', []))
+        for photo_id in moved_photos.union(photos_to_add_to_target):
             photo_data = build_complete_photo_data(event, photo_id)
             if photo_data:
                 change_data['transferred_photos_data'].append(photo_data)

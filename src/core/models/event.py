@@ -456,9 +456,30 @@ class Event(JsonModel):
         results = self.db.execute_query(query, (*face_ids, old_group_id))
         for row in results:
             photos_to_add_to_target.add(row[0])
-        
+
+        # Remove any images already in the target group before the transfer
+        target_group = self.groups_model.get(target_group_id)
+        if target_group and 'image_ids' in target_group:
+            existing_target_images = set(target_group['image_ids'])
+            photos_to_add_to_target = photos_to_add_to_target - existing_target_images
+
         # Transfer faces to target group
         self.groups_model.add_faces(target_group_id, face_ids)
+        
+        # Debug: print current face representative before update
+        target_group_before = self.groups_model.get(target_group_id)
+        print(f"[DEBUG] Target group {target_group_id} face rep BEFORE update: {target_group_before.get('face_representive')}")
+        
+        # After transferring, update the target group's representative to the biggest face
+        target_group_faces = self.groups_model.get_faces(target_group_id)
+        new_representative = self.faces_model.get_biggest_face(target_group_faces)
+        print(f"[DEBUG] Biggest face for group {target_group_id} after transfer: {new_representative}")
+        if new_representative:
+            self.groups_model.edit(target_group_id, {'face_representive': new_representative})
+        
+        # Debug: print face representative after update
+        target_group_after = self.groups_model.get(target_group_id)
+        print(f"[DEBUG] Target group {target_group_id} face rep AFTER update: {target_group_after.get('face_representive')}")
         
         # Check which photos no longer belong to source group after transfer
         photos_to_remove_from_source = set()
@@ -491,7 +512,16 @@ class Event(JsonModel):
         
         # Get updated target group data
         updated_target_group = self.groups_model.get(target_group_id)
-        
+
+        # Prepare photos_to_add_to_grid for frontend grid update
+        photos_to_add_to_grid = None
+        if old_group_deleted and updated_target_group and 'image_ids' in updated_target_group:
+            photos_to_add_to_grid = []
+            for img_id in updated_target_group['image_ids']:
+                photo_data = self._build_complete_photo_data(img_id)
+                if photo_data:
+                    photos_to_add_to_grid.append(photo_data)
+
         result = {
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
@@ -499,7 +529,8 @@ class Event(JsonModel):
             'photos_to_remove_from_source': list(photos_to_remove_from_source),
             'photos_to_add_to_target': list(photos_to_add_to_target),
             'updated_source_group': updated_source_group,
-            'updated_target_group': updated_target_group
+            'updated_target_group': updated_target_group,
+            'photos_to_add_to_grid': photos_to_add_to_grid
         }
         
         # Include new group name if a new group was created

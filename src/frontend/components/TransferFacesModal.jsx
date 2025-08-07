@@ -52,7 +52,14 @@ export default function TransferFacesModal({
       } else {
         return aValue < bValue ? 1 : -1;
       }
-    });
+    })
+    // Remove duplicate groups by groupID to prevent React key conflicts
+    .reduce((unique, group) => {
+      if (!unique.some(g => g.groupID === group.groupID)) {
+        unique.push(group);
+      }
+      return unique;
+    }, []);
 
   useEffect(() => {
     if (isOpen) {

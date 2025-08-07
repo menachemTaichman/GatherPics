@@ -242,6 +242,13 @@ def recrop_faces(image_ids: list):
             face_pil = crop_image(original_pil, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
             face_pil.save(face_path)
 
+def print_group_face_representative(group_id):
+    group = event.groups_model.get(group_id)
+    if group:
+        print(f"Group {group_id} face_representive: {group.get('face_representive')}")
+    else:
+        print(f"Group {group_id} not found.")
+
 # event.process_new_images(verbose=True)
 
 # reset_event(event)
@@ -264,10 +271,6 @@ def update_date_taken(image_ids: list):
         date_taken = extract_all_metadata(image_path)['date_taken'] 
         event.images_model.edit(image_id, {'date_taken': date_taken})
 
-"""
-face = event.faces_model.get('57b76b0d-db5f-49e3-87d2-8190cf484e89')
-print(face)
-"""
 # create function to show in matplotlib a frop from image, with the face bbox
 def show_face_from_image(image_path, face_bbox):
     import matplotlib.pyplot as plt
@@ -276,18 +279,6 @@ def show_face_from_image(image_path, face_bbox):
     plt.imshow(face_pil)
     plt.show()
 
-"""
-image_id = 'da2446df-b5c9-4fdc-b320-8a3871f48366'
-face_id = '57b76b0d-db5f-49e3-87d2-8190cf484e89'
-face = event.faces_model.get(face_id)
-face_bbox = {
-    'left': face['left'],
-    'top': face['top'],
-    'width': face['width'],
-    'height': face['height']
-}
+# event.process_new_images(verbose=True)
 
-show_face_from_image(os.path.join(event.original_dir, f'{image_id}.jpg'), face_bbox)
-"""
-
-event.process_new_images(verbose=True)
+print_group_face_representative('b3d862f2-1f01-4868-bca7-4b30cc759b38')
