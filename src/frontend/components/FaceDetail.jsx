@@ -1213,7 +1213,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           group={group}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            await optimisticUpdates.updateGroup(group.groupID, updates);
+            const result = await optimisticUpdates.updateGroup(group.groupID, updates);
             
             // Update the URL if the group name changed
             if (updates.label && updates.label !== group.label) {
@@ -1222,6 +1222,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             }
             
             setShowEditModal(false);
+            return result;
           }}
           onRefreshGroups={onRefreshGroups}
           onNameConflict={(newName, conflictingGroup) => {

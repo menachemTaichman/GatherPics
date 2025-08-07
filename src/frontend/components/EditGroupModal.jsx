@@ -22,8 +22,14 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   // Simple conflict state for inline validation
   const [nameConflict, setNameConflict] = useState(null);
   
-  // Use ref to track current selection for save
+  // Track current selection state for visual feedback
   const currentSelectionRef = useRef(group.face_representive);
+  const [currentSelection, setCurrentSelection] = useState(currentSelectionRef.current);
+  
+  // Update the ref when currentSelection changes
+  useEffect(() => {
+    currentSelectionRef.current = currentSelection;
+  }, [currentSelection]);
 
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -42,7 +48,18 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
       try {
         setCropsLoading(true);
         const response = await groupsAPI.getCrops(group.groupID);
-        setCropMappings(response.crop_mapping || {});
+        setCropMappings(response.crops || {});
+        
+        // After loading crop mappings, check if we need to set a default representative
+        // if none is currently selected
+        if (!currentSelection && response.crops) {
+          // Find the first image that has a face ID
+          const firstFaceId = Object.values(response.crops).find(faceId => faceId);
+          if (firstFaceId) {
+            setCurrentSelection(firstFaceId);
+            setFormData(prev => ({ ...prev, face_representive: firstFaceId }));
+          }
+        }
       } catch (error) {
         console.error('Error fetching crop mappings:', error);
         const errorInfo = handleAPIError(error, 'Failed to fetch crop mappings');
@@ -87,7 +104,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     };
     
     try {
-      await onSave(dataToSave);
+      const result = await onSave(dataToSave);
       
       // Update display data only after successful save
       setDisplayData({
@@ -155,7 +172,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   const getRepresentativeImageSrc = () => {
     // Use displayData for header image - only changes after saving
     const representativeId = displayData.face_representive;
-    const imageUrl = representativeId ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${representativeId}.webp?t=${Date.now()}` : PLACEHOLDER_DATA_URL;
+    const imageUrl = representativeId ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${representativeId}.webp` : PLACEHOLDER_DATA_URL;
     return imageUrl;
   };
 
@@ -292,19 +309,23 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                             key={imageId}
                             type="button"
                             onClick={() => {
-                              // Only use faceId if it exists, otherwise don't set a representative
-                              const newRepresentative = faceId || null;
-                              currentSelectionRef.current = newRepresentative;
-                              setFormData(prev => ({
-                                ...prev,
-                                face_representive: newRepresentative
-                              }));
+                              // Only set representative if faceId exists
+                              if (faceId) {
+                                setCurrentSelection(faceId);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  face_representive: faceId
+                                }));
+                              }
                             }}
                             className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
-                              formData.face_representive === faceId
+                              currentSelection === faceId
                                 ? 'border-primary-500'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
+                            data-selected={currentSelection === faceId}
+                            data-faceid={faceId}
+                            data-currentselection={currentSelection}
                           >
                             <img
                               src={imageSrc}
@@ -316,7 +337,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                                 e.target.src = PLACEHOLDER_DATA_URL;
                               }}
                             />
-                            {formData.face_representive === faceId && (
+                            {currentSelection === faceId && faceId && (
                               <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
                                 <div className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
                                   <Image className="w-2 h-2 text-white" />

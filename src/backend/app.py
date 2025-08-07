@@ -163,8 +163,11 @@ def update_group(group_id):
         return not_found(f"Group {group_id} not found or not accessible")
     
     data = request.json or {}
+    
     try:
         event.groups_model.edit(group_id, data)
+        
+        # Get the group after update
         updated = event.groups_model.get(group_id)
         
         if updated is None:
