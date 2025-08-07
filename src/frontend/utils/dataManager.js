@@ -7,7 +7,7 @@ export const CHANGE_TYPES = {
   GROUP_DELETED: 'GROUP_DELETED',
   GROUP_CREATED: 'GROUP_CREATED',
   GROUP_FACES_TRANSFERRED: 'GROUP_FACES_TRANSFERRED',
-  GROUP_MERGED: 'GROUP_MERGED',
+
   
   // Moment changes
   MOMENT_CREATED: 'MOMENT_CREATED',
@@ -187,107 +187,7 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  // Merge groups
-  mergeGroups: (result) => {
-    set((state) => {
-      const newGroups = [...state.groups];
-      
-      // Find source and target groups
-      const sourceGroupIds = result.source_group_ids || [];
-      const targetGroupId = result.target_group_id;
-      
-      // Use backend response data if available, otherwise calculate manually
-      // Expected backend response format:
-      // {
-      //   source_group_ids: ['id1', 'id2'],
-      //   target_group_id: 'target_id',
-      //   updated_target_group: { /* complete target group data */ },
-      //   target_group_name: 'New Group Name' // optional
-      // }
-      if (result.updated_target_group) {
-        // Backend provided the updated target group - use it directly
-        const filteredGroups = newGroups.filter(group => 
-          !sourceGroupIds.includes(group.groupID)
-        );
-        
-        // Replace or add the updated target group
-        const targetIndex = filteredGroups.findIndex(g => g.groupID === targetGroupId);
-        if (targetIndex !== -1) {
-          filteredGroups[targetIndex] = result.updated_target_group;
-        } else {
-          filteredGroups.push(result.updated_target_group);
-        }
-        
-        return { 
-          groups: filteredGroups,
-          lastMergeResult: {
-            ...result,
-            deleted_group_ids: sourceGroupIds,
-            target_group_updated: true
-          }
-        };
-      } else {
-        // Fallback to manual calculation (existing logic)
-        const filteredGroups = newGroups.filter(group => 
-          !sourceGroupIds.includes(group.groupID)
-        );
-        
-        // Find the target group and update it with merged data
-        const targetGroupIndex = filteredGroups.findIndex(g => g.groupID === targetGroupId);
-        
-        if (targetGroupIndex !== -1) {
-          // Get all source groups that were merged
-          const sourceGroups = newGroups.filter(group => 
-            sourceGroupIds.includes(group.groupID)
-          );
-          
-          // Calculate total photos from all source groups
-          const totalPhotos = sourceGroups.reduce((total, group) => {
-            const photoCount = group.photo_count || group.photoCount || group.image_ids?.length || 0;
-            return total + photoCount;
-          }, 0);
-          
-          // Update target group with merged data
-          const targetGroup = { ...filteredGroups[targetGroupIndex] };
-          targetGroup.photo_count = (targetGroup.photo_count || targetGroup.photoCount || 0) + totalPhotos;
-          if (targetGroup.photoCount !== undefined) {
-            targetGroup.photoCount = targetGroup.photo_count;
-          }
-          
-          // Merge image_ids arrays
-          const allImageIds = new Set(targetGroup.image_ids || []);
-          sourceGroups.forEach(group => {
-            if (group.image_ids) {
-              group.image_ids.forEach(id => allImageIds.add(id));
-            }
-          });
-          targetGroup.image_ids = Array.from(allImageIds);
-          
-          // Update representative face if target doesn't have one
-          if (!targetGroup.face_representive) {
-            for (const sourceGroup of sourceGroups) {
-              if (sourceGroup.face_representive) {
-                targetGroup.face_representive = sourceGroup.face_representive;
-                break;
-              }
-            }
-          }
-          
-          // Update the target group
-          filteredGroups[targetGroupIndex] = targetGroup;
-        }
-        
-        return { 
-          groups: filteredGroups,
-          lastMergeResult: {
-            ...result,
-            deleted_group_ids: sourceGroupIds,
-            target_group_updated: true
-          }
-        };
-      }
-    });
-  },
+
   
   // Moment operations
   updateMoment: (momentId, updates) => {
@@ -346,9 +246,7 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
       store.transferFaces(data);
       break;
       
-    case CHANGE_TYPES.GROUP_MERGED:
-      store.mergeGroups(data);
-      break;
+
       
     case CHANGE_TYPES.MOMENT_UPDATED:
       store.updateMoment(data.id, data);

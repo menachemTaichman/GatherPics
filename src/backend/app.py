@@ -218,40 +218,7 @@ def delete_group(group_id):
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/groups/merge", methods=["POST"])
-@require_auth
-def merge_groups():
-    """Merge multiple groups into a target group."""
-    event = get_event_with_profile()
-    data = request.json or {}
-    try:
-        result = event.merge_groups(data['source_group_ids'], data['target_group_id'])
-        
-        # Get the updated target group data after merge
-        updated_target_group = event.groups_model.get(data['target_group_id'])
-        
-        # Get all photos from the target group after merge
-        merged_photos_data = []
-        target_image_ids = event.groups_model.get_images(data['target_group_id'])
-        
-        for image_id in target_image_ids:
-            photo_data = build_complete_photo_data(event, image_id)
-            if photo_data:
-                merged_photos_data.append(photo_data)
-        
-        # Get crop mapping for the target group
-        crop_mapping = event.get_crop_mapping(data['target_group_id'])
-        
-        response_data = add_change_instruction({"success": True}, 'GROUP_MERGED', {
-            'source_group_ids': data['source_group_ids'],
-            'target_group_id': data['target_group_id'],
-            'updated_target_group': updated_target_group,
-            'merged_photos_data': merged_photos_data,
-            'crop_mapping': crop_mapping
-        })
-        return jsonify(response_data)
-    except Exception as e:
-        return bad_request(e)
+
 
 @app.route("/api/groups/transfer-faces", methods=["POST"])
 @require_auth

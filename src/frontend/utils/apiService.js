@@ -84,17 +84,7 @@ export const groupsAPI = {
     return response.data;
   },
 
-  // Merge groups
-  merge: async (sourceGroupIds, targetGroupId) => {
-    const response = await api.post('/api/groups/merge', {
-      source_group_ids: sourceGroupIds,
-      target_group_id: targetGroupId
-    });
-    
-    // The response should include the updated target group data
-    // This allows the frontend to update state correctly without additional API calls
-    return response.data;
-  },
+
 
   // Get group photos
   getPhotos: async (groupId) => {

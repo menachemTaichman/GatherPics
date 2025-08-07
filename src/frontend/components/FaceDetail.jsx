@@ -136,20 +136,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   // Fetch sorted photos from backend - only on initial load or manual refresh
   useEffect(() => {
     if (group && group.groupID !== undefined && group.groupID !== null) {
-      // Check if we have merged data for this group in the store
-      const store = useDataStore.getState();
-      const mergeResult = store.lastMergeResult;
-      
-      if (mergeResult && mergeResult.target_group_id === group.groupID && mergeResult.merged_photos_data) {
-        // We have merged data, use it instead of fetching
-        setSortedPhotos(sortPhotos(mergeResult.merged_photos_data, sortBy, sortOrder));
-        if (mergeResult.crop_mapping) {
-          setImageCrops(mergeResult.crop_mapping);
-        }
-        return;
-      }
-      
-      // No merged data, fetch normally
+      // Fetch normally - no merge logic needed since we only use transfer
       fetchSortedPhotos();
     }
   }, [group?.groupID]); // Only when group changes (initial load or navigation)
@@ -158,51 +145,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
-        // Handle merge results first
-        const mergeResult = state.lastMergeResult;
-        if (mergeResult) {
-          const deletedGroupIds = mergeResult.deleted_group_ids || mergeResult.source_group_ids || [];
-          const targetGroupId = mergeResult.target_group_id;
-          
-          // If current group was deleted in merge, navigate away
-          if (deletedGroupIds.includes(group?.groupID)) {
-            const targetGroupName = mergeResult.target_group_name || 
-                                  state.groups.find(g => g.groupID === targetGroupId)?.label ||
-                                  targetGroupId;
-            navigate(`/group/${encodeURIComponent(targetGroupName)}`);
-            return;
-          }
-          
-          // If current group is the target, update it with merged data
-          if (group?.groupID === targetGroupId && mergeResult.target_group_updated) {
-            const updatedGroup = state.groups.find(g => g.groupID === targetGroupId);
-            if (updatedGroup) {
-              setGroup(updatedGroup);
-              // Use the merged photos data from the backend
-              if (mergeResult.merged_photos_data && mergeResult.merged_photos_data.length > 0) {
-                setSortedPhotos(sortPhotos(
-                  mergeResult.merged_photos_data,
-                  sortBy,
-                  sortOrder
-                ));
-              } else if (mergeResult.transferred_photos_data && mergeResult.transferred_photos_data.length > 0) {
-                // Fallback to transferred_photos_data if merged_photos_data not available
-                setSortedPhotos(sortPhotos(
-                  mergeResult.transferred_photos_data,
-                  sortBy,
-                  sortOrder
-                ));
-              } else if (updatedGroup.photos) {
-                setSortedPhotos(sortPhotos(updatedGroup.photos, sortBy, sortOrder));
-              }
-              // Update crop data if available in merge result
-              if (mergeResult.crop_mapping) {
-                setImageCrops(mergeResult.crop_mapping);
-              }
-            }
-          }
-        }
-        
         // Handle transfer results
         const transferResult = state.lastTransferResult;
         if (transferResult) {
@@ -273,17 +215,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
     if (group && group.groupID !== undefined && group.groupID !== null) {
-      // Check if we have merged data for this group in the store
-      const store = useDataStore.getState();
-      const mergeResult = store.lastMergeResult;
-      
-      if (mergeResult && mergeResult.target_group_id === group.groupID && mergeResult.crop_mapping) {
-        // We have merged data, use it instead of fetching
-        setImageCrops(mergeResult.crop_mapping);
-        return;
-      }
-      
-      // No merged data, fetch normally
+      // Fetch normally - no merge logic needed since we only use transfer
       fetchGroupCrops();
     }
   }, [group?.groupID]); // Only when group changes (initial load or navigation)
@@ -642,7 +574,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       
       if (conflictResult.conflict) {
         // Show merge conflict modal with the conflicting group
-        showMergeConflictModal(trimmedTitle, conflictResult.conflicting_group);
+        showMergeConflictModal(trimmedTitle, group, conflictResult.conflicting_group);
         setIsEditingTitle(false);
         return;
       }

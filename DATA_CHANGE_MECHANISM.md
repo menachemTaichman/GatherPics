@@ -54,7 +54,7 @@ A comprehensive API service (`src/frontend/utils/apiService.js`) provides:
 - `GROUP_DELETED` - Group was deleted
 - `GROUP_CREATED` - New group was created
 - `GROUP_FACES_TRANSFERRED` - Faces moved between groups
-- `GROUP_MERGED` - Groups were merged
+
 
 ### Moment Changes
 - `MOMENT_CREATED` - New moment created

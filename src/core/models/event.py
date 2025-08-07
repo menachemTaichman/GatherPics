@@ -508,42 +508,7 @@ class Event(JsonModel):
             
         return result
 
-    def merge_groups(self, group_ids: list, main_group_id: str = '') -> str:
-        """
-        Merge multiple groups into one main group.
-        
-        Args:
-            group_ids: List of group IDs to merge
-            main_group_id: ID of the main group (if not provided, will be determined by resolution)
-            
-        Returns:
-            The ID of the main group after merging
-        """
-        if not group_ids:
-            return ''
-        
-        # If no main group specified, determine it based on face representative resolution
-        if not main_group_id:
-            faces = []
-            for group_id in group_ids:
-                faces.extend(self.groups_model.get_faces(group_id))
-            biggest_face = self.faces_model.get_biggest_face(faces)
-            main_group_id = self.faces_model.get(biggest_face)['groupID']
-        
-        # Get all groups to merge
-        groups_to_merge = [self.groups_model.get(gid) for gid in group_ids if gid != main_group_id]
-        
-        # Update all faces to point to the main group
-        placeholders = ','.join(['?'] * len(group_ids))
-        query = f"UPDATE faces SET groupID=? WHERE groupID IN ({placeholders})"
-        self.db.execute_query(query, (main_group_id, *group_ids))
-        
-        # Delete the other groups
-        for group in groups_to_merge:
-            if group:
-                self.groups_model.delete(group['groupID'])
-        
-        return main_group_id
+
 
     def process_new_images(self, 
                           display_size: int = 2048, 
