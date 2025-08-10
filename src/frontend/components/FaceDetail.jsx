@@ -32,7 +32,7 @@ import { useSetting } from '../utils/useSettings';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
-import { groupsAPI, handleAPIError, showToast, optimisticUpdates } from '../utils/apiService';
+import { groupsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 
 export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
@@ -503,21 +503,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       }
       // 2. Add/update target group in store
       if (transferData.updated_target_group) {
-        console.debug('[DEBUG] FaceDetail: replaceGroup called', {
-          groupID: transferData.updated_target_group.groupID,
-          label: transferData.updated_target_group.label,
-          face_representative: transferData.updated_target_group.face_representative
-        });
         useDataStore.getState().replaceGroup(transferData.target_group_id, transferData.updated_target_group);
       }
       // 3. Update UI to show target group
       const newGroup = transferData.updated_target_group;
       setGroup(newGroup);
-      console.debug('[DEBUG] FaceDetail: setGroup called after transfer', {
-        groupID: newGroup.groupID,
-        label: newGroup.label,
-        face_representative: newGroup.face_representative
-      });
       // 4. Fetch full, authoritative data for the target group to avoid client-side drift
       try {
         const response = await groupsAPI.getPhotosComplete(newGroup.groupID);
@@ -538,6 +528,33 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       }
       showToast('All faces transferred. Now viewing the merged group.', 'success');
       return;
+    }
+    
+    // For partial transfers, just show success message
+    if (transferData?.target_group_id) {
+      // For new groups, construct the target group info from the transfer data
+      let targetGroup = currentGroups.find(g => g.groupID === transferData.target_group_id);
+      if (!targetGroup && transferData.new_group_name) {
+        targetGroup = {
+          groupID: transferData.target_group_id,
+          label: transferData.new_group_name
+        };
+      }
+      
+      if (targetGroup) {
+        const link = `/group/${encodeURIComponent(targetGroup.label)}`;
+        const isNewGroup = transferData.new_group_name;
+        showToast(
+          <span>
+            Transferred {transferData.photos_to_remove_from_source?.length || 0} faces to{' '}
+            {isNewGroup && 'a new group '}
+            <Link to={link} className="underline hover:text-gray-100">
+              {targetGroup.label}
+            </Link>
+          </span>,
+          'success'
+        );
+      }
     }
     
     // The change instruction system will handle all updates automatically

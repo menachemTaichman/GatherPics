@@ -5,6 +5,7 @@ import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useNavigate } from 'react-router-dom';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -14,6 +15,7 @@ export default function TransferFacesModal({
   onTransferComplete,
   showToast
 }) {
+  const navigate = useNavigate();
   const groups = useDataStore(state => state.groups);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -149,21 +151,30 @@ export default function TransferFacesModal({
     try {
       const result = await groupsAPI.transferFaces(
         currentGroup.groupID,
-        selectedFaces, // Already an array from getSelectedFaceIds()
+        selectedFaces,
         selectedGroupId || null,
         newGroupName.trim() || null
       );
 
-      // Show success notification with proper group name
-      if (result.target_group_id && showToast) {
-        const targetGroup = groups.find(g => g.groupID === result.target_group_id);
-        const isNewGroup = !selectedGroupId && newGroupName.trim();
-        const groupName = isNewGroup ? newGroupName.trim() : (targetGroup?.label || `Group ${result.target_group_id}`);
-        const groupLabel = isNewGroup ? `new group "${groupName}"` : `"${groupName}"`;
-        showToast(`Successfully transferred ${selectedFaces.length} face${selectedFaces.length !== 1 ? 's' : ''} to ${groupLabel}`, 'success');
-      }
+      // Determine if this is a new group
+      const isNewGroup = !selectedGroupId && !!newGroupName.trim();
+      const newGroupNameValue = isNewGroup ? newGroupName.trim() : null;
 
-      onTransferComplete(result);
+      // Add new_group_name to the transfer data
+      const modifiedResult = {
+        ...result,
+        changes: result.changes?.map(change => ({
+          ...change,
+          data: {
+            ...change.data,
+            new_group_name: newGroupNameValue
+          }
+        }))
+      };
+
+      if (onTransferComplete) {
+        onTransferComplete(modifiedResult);
+      }
       onClose();
     } catch (error) {
       const errorInfo = handleAPIError(error, 'Failed to transfer faces');
