@@ -33,6 +33,7 @@ import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { clearTransferredPhotosFromCache } from '../utils/selection';
 
 export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
@@ -472,27 +473,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setSelectedPhotos(new Set());
     
     // If photos were transferred away from this group, remove them from the cached selection
-    if (transferData && transferData.photos_to_remove_from_source && group?.groupID) {
-      const removedPhotoIds = new Set(transferData.photos_to_remove_from_source);
-      
-      // Get current cached selection
-      const cachedSelection = getSetting(`faceDetail_selection_${group.groupID}`);
-      if (cachedSelection && Array.isArray(cachedSelection)) {
-        // Remove transferred photos from cached selection
-        const updatedCachedSelection = cachedSelection.filter(photoId => !removedPhotoIds.has(photoId));
-        
-        // Update cache with filtered selection
-        if (updatedCachedSelection.length > 0) {
-          setSetting(`faceDetail_selection_${group.groupID}`, updatedCachedSelection);
-        } else {
-          // Clear cache if no photos remain selected
-          try {
-            localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${group.groupID}`);
-          } catch (error) {
-            console.warn('Failed to clear selection cache after transfer:', error);
-          }
-        }
-      }
+    if (transferData) {
+      clearTransferredPhotosFromCache(transferData.old_group_id, transferData.photos_to_remove_from_source);
     }
 
     if (isCompleteTransfer) {

@@ -7,6 +7,7 @@ import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
+import { clearTransferredPhotosFromCache } from '../utils/selection';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
@@ -237,72 +238,17 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   };
 
   const handleTransferComplete = async (result) => {
-    // Extract transfer data from the changes array
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
-    
-    // Clear transferred photos from cached selection if we're in a group context
-    if (currentGroupId && transferData && transferData.photos_to_remove_from_source) {
-      const removedPhotoIds = new Set(transferData.photos_to_remove_from_source);
-      
-      // Get current cached selection
-      const cachedSelection = getSetting(`faceDetail_selection_${currentGroupId}`);
-      if (cachedSelection && Array.isArray(cachedSelection)) {
-        // Remove transferred photos from cached selection
-        const updatedCachedSelection = cachedSelection.filter(photoId => !removedPhotoIds.has(photoId));
-        
-        // Update cache with filtered selection
-        if (updatedCachedSelection.length > 0) {
-          setSetting(`faceDetail_selection_${currentGroupId}`, updatedCachedSelection);
-        } else {
-          // Clear cache if no photos remain selected
-          try {
-            localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${currentGroupId}`);
-          } catch (error) {
-            console.warn('Failed to clear selection cache after transfer:', error);
-          }
-        }
-      }
+
+    if (transferData) {
+      clearTransferredPhotosFromCache(transferData.old_group_id, transferData.photos_to_remove_from_source);
     }
     
-    // Handle navigation after transfer if we're in a group context
-    let shouldCallParent = true;
-    if (currentGroupId && transferData) {
-      // Get the current photo ID - it could be a string or an object with id/name
-      const currentPhotoId = typeof photo === 'string' ? photo : (photoMeta.id || photoMeta.name);
-      const wasCurrentPhotoRemoved = transferData.photos_to_remove_from_source && transferData.photos_to_remove_from_source.includes(currentPhotoId);
-      
-      // Check if the source group was deleted (when it becomes empty)
-      if (transferData.old_group_deleted && transferData.old_group_id === currentGroupId) {
-        // Source group was deleted, navigate to target group
-        const targetGroup = groups.find(g => g.groupID === transferData.target_group_id);
-        if (targetGroup) {
-          navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
-        } else {
-          navigate('/');
-        }
-        // Don't call parent's onTransferComplete since we handled the navigation
-        shouldCallParent = false;
-      }
-      // Check if current photo was removed from source group (but group still exists)
-      else if (wasCurrentPhotoRemoved && transferData.old_group_id === currentGroupId) {
-        // Current photo was removed from source group, need to navigate to next photo or close
-        if (totalPhotos > 1) {
-          // Navigate to next photo
-          handleNavigate('next');
-        } else {
-          // No more photos in this group, close the viewer
-          onClose();
-        }
-        // Don't call parent's onTransferComplete since we handled the navigation
-        shouldCallParent = false;
-      }
-    }
-    
-    // The API service interceptor will automatically handle the state updates
-    if (onTransferComplete && shouldCallParent) {
+    // The parent component (FaceDetail) is responsible for all state and cache updates.
+    if (onTransferComplete) {
       onTransferComplete(result);
     }
-    
+
     setShowTransferModal(false);
     setSelectedFaceForTransfer(null);
   };
