@@ -15,7 +15,8 @@ export default function MergeConflictModal({
   conflictingGroup, 
   onMerge, 
   onCancel,
-  onNavigateToGroup
+  onNavigateToGroup,
+  onTransferComplete
 }) {
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore();
@@ -53,20 +54,36 @@ export default function MergeConflictModal({
         return;
       }
       
-      // Get all images from the current group using the data store
-      const groups = useDataStore.getState().groups;
-      const sourceGroup = groups.find(g => g.groupID === currentGroup.groupID);
-      
-      if (!sourceGroup) {
-        console.error('Source group not found in data store');
-        return;
+      // Collect all face IDs belonging to current group (robust approach)
+      let allFaceIds = [];
+      try {
+        const cropsResp = await groupsAPI.getCrops(currentGroup.groupID);
+        const cropMapping = cropsResp?.crop_mapping || {};
+        allFaceIds = Object.values(cropMapping).filter(Boolean);
+      } catch (e) {
+        // ignore and try fallback
+      }
+      if (!allFaceIds || allFaceIds.length === 0) {
+        try {
+          const photosResp = await groupsAPI.getPhotosComplete(currentGroup.groupID);
+          const photos = photosResp?.photos || [];
+          const ids = new Set();
+          photos.forEach((p) => {
+            (p.faces || []).forEach((f) => {
+              if (f.group_id === currentGroup.groupID && f.face_id) ids.add(f.face_id);
+            });
+          });
+          allFaceIds = Array.from(ids);
+        } catch (e) {
+          // fall through
+        }
+      }
+      if (!allFaceIds || allFaceIds.length === 0) {
+        throw new Error('No faces found to transfer for this group.');
       }
       
-      // Use face_IDs instead of image_ids for transfer
-      const allFaceIds = sourceGroup.face_IDs || [];
-      
       // Use transfer logic instead of merge
-      await groupsAPI.transferFaces(
+      const result = await groupsAPI.transferFaces(
         currentGroup.groupID,
         allFaceIds,
         conflictingGroup.groupID,
@@ -81,8 +98,10 @@ export default function MergeConflictModal({
         await onMerge();
       }
       
-      // Navigate to the target group if callback provided
-      if (onNavigateToGroup) {
+      // Prefer centralized completion handler for consistent UI updates
+      if (onTransferComplete) {
+        await onTransferComplete(result);
+      } else if (onNavigateToGroup) {
         onNavigateToGroup(conflictingGroup.groupID);
       }
       

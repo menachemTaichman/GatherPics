@@ -41,6 +41,7 @@ export const useDataStore = create((set, get) => ({
   setMoments: (moments) => set({ moments }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+  clearLastTransferResult: () => set({ lastTransferResult: null }),
   
   // Group operations
   updateGroup: (groupId, updates) => {
@@ -136,10 +137,9 @@ export const useDataStore = create((set, get) => ({
             }
           }
           
-          // Update representative face if the target group didn't have one
-          if (!targetGroup.face_representive && result.transferred_faces && result.transferred_faces.length > 0) {
-            targetGroup.face_representive = result.transferred_faces[0];
-          }
+          // Do not heuristically set representative face on client.
+          // The backend is the source of truth and should provide
+          // updated_target_group when representative changes.
           
           newGroups[targetGroupIndex] = targetGroup;
         }
@@ -147,25 +147,8 @@ export const useDataStore = create((set, get) => ({
       
       // Add new group if it was created or if target group doesn't exist in store
       if (targetGroupIndex === -1) {
-        // Target group doesn't exist in store - add it
-        if (result.new_group_name) {
-          // New group created
-          const newGroup = {
-            groupID: result.target_group_id,
-            label: result.new_group_name,
-            photo_count: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
-            photoCount: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
-            image_ids: result.photos_to_add_to_target || [],
-            face_representive: result.transferred_faces && result.transferred_faces.length > 0 ? result.transferred_faces[0] : '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-          // Double-check we're not adding a duplicate
-          if (!newGroups.some(g => g.groupID === result.target_group_id)) {
-            newGroups.push(newGroup);
-          }
-        } else if (result.updated_target_group) {
-          // Existing group that wasn't in store - add it with complete data
+        // Prefer complete backend data when available
+        if (result.updated_target_group) {
           const newGroup = {
             groupID: result.updated_target_group.groupID,
             label: result.updated_target_group.label,
@@ -176,8 +159,24 @@ export const useDataStore = create((set, get) => ({
             created_at: result.updated_target_group.created_at || new Date().toISOString(),
             updated_at: result.updated_target_group.updated_at || new Date().toISOString()
           };
+          if (!newGroups.some(g => g.groupID === newGroup.groupID)) {
+            newGroups.push(newGroup);
+          }
+        } else if (result.new_group_name) {
+          // New group created
+          const newGroup = {
+            groupID: result.target_group_id,
+            label: result.new_group_name,
+            photo_count: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
+            photoCount: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
+            image_ids: result.photos_to_add_to_target || [],
+            // Do not set face_representive heuristically; wait for backend-provided value
+            face_representive: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
           // Double-check we're not adding a duplicate
-          if (!newGroups.some(g => g.groupID === result.updated_target_group.groupID)) {
+          if (!newGroups.some(g => g.groupID === result.target_group_id)) {
             newGroups.push(newGroup);
           }
         }
@@ -243,9 +242,8 @@ export const useDataStore = create((set, get) => ({
 export const handleDataChange = (changeType, data, store = useDataStore.getState()) => {
   switch (changeType) {
     case CHANGE_TYPES.GROUP_UPDATED:
-      // For GROUP_UPDATED, data contains the complete updated group object
-      // We need to replace the entire group instead of merging updates
-      store.replaceGroup(data.groupID, data);
+      // Merge updates to avoid losing fields when backend sends partial payloads
+      store.updateGroup(data.groupID, data);
       break;
       
     case CHANGE_TYPES.GROUP_DELETED:

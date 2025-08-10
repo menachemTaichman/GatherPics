@@ -175,11 +175,31 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         // Handle transfer results
         const transferResult = state.lastTransferResult;
         if (transferResult) {
+          // If the source group was deleted (complete transfer/merge),
+          // ignore local remove/add to prevent flicker; the complete
+          // transfer handler will load authoritative target data.
+          if (transferResult.old_group_deleted) {
+            // No-op here; handled in handleTransferComplete
+          } else {
           // If this is the source group, remove photos that should be removed
           if (transferResult.old_group_id === group?.groupID && transferResult.photos_to_remove_from_source) {
-            setSortedPhotos(prevPhotos => 
-              prevPhotos.filter(photo => !transferResult.photos_to_remove_from_source.includes(photo.id))
-            );
+            setSortedPhotos(prevPhotos => {
+              const removedSet = new Set(transferResult.photos_to_remove_from_source);
+              const updatedPhotos = prevPhotos.filter(photo => !removedSet.has(photo.id));
+
+              // If viewer is open and current photo was removed, move to the next logical photo
+              if (photoViewer.show && removedSet.has(photoViewer.photo)) {
+                if (updatedPhotos.length === 0) {
+                  setPhotoViewer({ show: false, photo: null, index: 0 });
+                } else {
+                  const newIndex = Math.min(photoViewer.index, updatedPhotos.length - 1);
+                  const newPhotoId = updatedPhotos[newIndex].id;
+                  setPhotoViewer({ show: true, photo: newPhotoId, index: newIndex });
+                }
+              }
+
+              return updatedPhotos;
+            });
             // Update crop data by removing crops for transferred photos
             setImageCrops(prevCrops => {
               const newCrops = { ...prevCrops };
@@ -215,6 +235,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           }));
         }
       }
+          }
         }
         
         // Handle group updates (including name and representative changes)
@@ -237,7 +258,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate]); // Added navigate to dependencies
+  }, [group?.groupID, sortBy, sortOrder, navigate, photoViewer]); // include photoViewer for accurate updates
 
   // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
@@ -473,23 +494,23 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         label: newGroup.label,
         face_representive: newGroup.face_representive
       });
-      // 4. Set grid to union of target group’s images (before transfer) and transferred images
-      let gridPhotos = [];
-      if (transferData.photos_to_add_to_grid) {
-        // Use the new backend-provided array for the grid
-        const photoMap = {};
-        transferData.photos_to_add_to_grid.forEach(photo => { photoMap[photo.id] = photo; });
-        gridPhotos = newGroup && newGroup.image_ids ? newGroup.image_ids.map(id => photoMap[id]).filter(Boolean) : transferData.photos_to_add_to_grid;
-      } else {
-        const transferredPhotos = (transferData.transferred_photos_data || []);
-        const photoMap = {};
-        transferredPhotos.forEach(photo => { photoMap[photo.id] = photo; });
-        gridPhotos = newGroup && newGroup.image_ids ? newGroup.image_ids.map(id => photoMap[id]).filter(Boolean) : transferredPhotos;
+      // 4. Fetch full, authoritative data for the target group to avoid client-side drift
+      try {
+        const response = await groupsAPI.getPhotosComplete(newGroup.groupID);
+        const photos = response.photos || [];
+        setSortedPhotos(sortPhotos(photos, sortBy, sortOrder));
+      } catch (err) {
+        console.error('Error fetching target group photos after merge:', err);
       }
-      setSortedPhotos(sortPhotos(gridPhotos, sortBy, sortOrder));
+      try {
+        const cropsResp = await groupsAPI.getCrops(newGroup.groupID);
+        setImageCrops(cropsResp.crop_mapping || {});
+      } catch (err) {
+        console.error('Error fetching target group crops after merge:', err);
+      }
       setLoading(false); // Ensure spinner is not shown
       if (newGroup && newGroup.label) {
-        window.history.replaceState(null, '', `/group/${encodeURIComponent(newGroup.label)}`);
+        navigate(`/group/${encodeURIComponent(newGroup.label)}`, { replace: true });
       }
       showToast('All faces transferred. Now viewing the merged group.', 'success');
       return;
@@ -1223,26 +1244,45 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           onNameConflict={async (newName, conflictingGroup) => {
             if (conflictingGroup && group) {
               // Only perform the transfer, do not update the group label, group object, or URL
-              const allFaceIds = [];
-              sortedPhotos.forEach(photo => {
-                if (photo.faces) {
-                  photo.faces.forEach(face => {
-                    if (face.group_id === group.groupID) {
-                      allFaceIds.push(face.face_id);
-                    }
-                  });
+              // Always transfer ALL faces of the source group, regardless of current filters
+              try {
+                // First try crops mapping
+                let allFaceIds = [];
+                try {
+                  const cropsResp = await groupsAPI.getCrops(group.groupID);
+                  const cropMapping = cropsResp?.crop_mapping || {};
+                  allFaceIds = Object.values(cropMapping).filter(Boolean);
+                } catch (e) {
+                  // ignore and try fallback
                 }
-              });
-              if (allFaceIds.length > 0) {
-                setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
-                skipNextFetch.current = true;
-                const result = await groupsAPI.transferFaces(
-                  group.groupID,
-                  allFaceIds,
-                  conflictingGroup.groupID,
-                  null
-                );
-                await handleTransferComplete(result);
+                // Fallback: derive from full photos data if crops have no mapping
+                if (!allFaceIds || allFaceIds.length === 0) {
+                  const photosResp = await groupsAPI.getPhotosComplete(group.groupID);
+                  const photos = photosResp?.photos || [];
+                  const ids = new Set();
+                  photos.forEach((p) => {
+                    (p.faces || []).forEach((f) => {
+                      if (f.group_id === group.groupID && f.face_id) ids.add(f.face_id);
+                    });
+                  });
+                  allFaceIds = Array.from(ids);
+                }
+                if (!allFaceIds || allFaceIds.length === 0) {
+                  throw new Error('No faces found to transfer for this group.');
+                }
+                if (allFaceIds.length > 0) {
+                  setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
+                  skipNextFetch.current = true;
+                  const result = await groupsAPI.transferFaces(
+                    group.groupID,
+                    allFaceIds,
+                    conflictingGroup.groupID,
+                    null
+                  );
+                  await handleTransferComplete(result);
+                }
+              } catch (err) {
+                console.error('Error preparing faces for transfer during name conflict:', err);
               }
             }
           }}
@@ -1275,6 +1315,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           conflictingGroup={conflictData.conflictingGroup}
           onMerge={handleMergeGroups}
           onCancel={handleMergeCancelLocal}
+          onTransferComplete={handleTransferComplete}
           onNavigateToGroup={(targetGroupId) => {
             // Find the target group and navigate to it
             const targetGroup = currentGroups.find(g => g.groupID === targetGroupId);
