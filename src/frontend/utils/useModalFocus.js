@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { useModalManager } from './modalManager';
 
 /**
  * Custom hook for modal focus management
@@ -12,6 +13,9 @@ import { useEffect, useRef, useCallback } from 'react';
 export function useModalFocus(isOpen, onClose, options = {}) {
   const modalRef = useRef(null);
   const lastActiveElement = useRef(null);
+  const [modalId] = useState(() => `modal-${Math.random().toString(36).substr(2, 9)}`);
+  const { register, unregister, isTopModal } = useModalManager();
+
   const {
     enableFocusTrapping = true,
     preventBackgroundScroll = true,
@@ -19,15 +23,52 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     customKeyHandler = null
   } = options;
 
+  // Register and unregister the modal from the global manager
+  useEffect(() => {
+    if (isOpen) {
+      register(modalId);
+    }
+    
+    return () => {
+      // Unregister when the component unmounts or isOpen becomes false
+      unregister(modalId);
+    };
+  }, [isOpen, modalId, register, unregister]);
+
+
   // Store the last active element when modal opens
   useEffect(() => {
     if (isOpen) {
       lastActiveElement.current = document.activeElement;
       
-      // Focus the modal container after a small delay to ensure it's rendered
+      // After a delay to ensure the modal has rendered, set the initial focus.
       if (enableFocusTrapping && modalRef.current) {
         setTimeout(() => {
-          if (modalRef.current) {
+          if (!modalRef.current) return;
+
+          // If focus is already within the modal, don't hijack it.
+          // This prevents focus from being stolen from an input during re-renders.
+          if (modalRef.current.contains(document.activeElement)) {
+            return;
+          }
+
+          // If an element within the modal has `autofocus`, let the browser handle it.
+          const autoFocusElement = modalRef.current.querySelector('[autofocus]');
+          if (autoFocusElement) {
+            // The browser should handle this automatically, but we can give it a nudge
+            // if it hasn't happened yet.
+            autoFocusElement.focus();
+            return;
+          }
+
+          // Otherwise, find the first focusable element and focus it.
+          const focusableElements = modalRef.current.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusableElements.length > 0) {
+            focusableElements[0].focus();
+          } else {
+            // As a fallback, focus the modal container itself.
             modalRef.current.focus();
           }
         }, 100);
@@ -37,29 +78,36 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     return () => {
       // Restore focus when modal closes
       if (!isOpen && lastActiveElement.current && enableFocusTrapping) {
-        try {
-          lastActiveElement.current.focus();
-        } catch (e) {
-          // Fallback if element is no longer in DOM
-          document.body.focus();
+        // Only restore focus if this was the top modal closing
+        if (isTopModal(modalId) || document.activeElement === document.body) {
+          try {
+            lastActiveElement.current.focus();
+          } catch (e) {
+            // Fallback if element is no longer in DOM
+            document.body.focus();
+          }
         }
       }
     };
-  }, [isOpen, enableFocusTrapping]);
+  }, [isOpen, enableFocusTrapping, modalId, isTopModal]);
 
   // Prevent background scroll
   useEffect(() => {
     if (!preventBackgroundScroll) return;
     
-    if (isOpen) {
+    // Only apply scroll lock if this is the only modal open
+    if (isOpen && isTopModal(modalId) && document.body.style.overflow !== 'hidden') {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       
       return () => {
-        document.body.style.overflow = originalOverflow;
+        // Only restore scroll if no other modals are open
+        if (!document.querySelector('.modal-overlay')) {
+           document.body.style.overflow = originalOverflow;
+        }
       };
     }
-  }, [isOpen, preventBackgroundScroll]);
+  }, [isOpen, preventBackgroundScroll, modalId, isTopModal]);
 
   // Handle mouse position tracking for outside scroll detection
   const mousePosition = useRef({ x: 0, y: 0 });
@@ -84,7 +132,7 @@ export function useModalFocus(isOpen, onClose, options = {}) {
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e) => {
-    if (!isOpen) return;
+    if (!isOpen || !isTopModal(modalId)) return;
 
     // --- Custom Key Handler ---
     // The custom handler should be respected first. If it handles the key,
@@ -160,11 +208,11 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // For all other keys originating outside the modal, block them completely.
     e.preventDefault();
     e.stopPropagation();
-  }, [isOpen, onClose, customKeyHandler, enableFocusTrapping, allowOutsideScroll]);
+  }, [isOpen, onClose, customKeyHandler, enableFocusTrapping, allowOutsideScroll, modalId, isTopModal]);
 
   // Handle wheel events (scrolling)
   const handleWheel = useCallback((e) => {
-    if (!isOpen) return;
+    if (!isOpen || !isTopModal(modalId)) return;
 
     // Check if the scroll is happening inside the modal first
     if (modalRef.current && modalRef.current.contains(e.target)) {
@@ -188,17 +236,17 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // Only prevent background scrolling when mouse is over modal area or when outside scroll is disabled
     e.preventDefault();
     e.stopPropagation();
-  }, [isOpen, allowOutsideScroll]);
+  }, [isOpen, allowOutsideScroll, modalId, isTopModal]);
 
   // Handle click outside
   const handleClick = useCallback((e) => {
-    if (!isOpen || !modalRef.current) return;
+    if (!isOpen || !isTopModal(modalId) || !modalRef.current) return;
 
     // If click is outside modal, close it
     if (!modalRef.current.contains(e.target)) {
       onClose();
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, modalId, isTopModal]);
 
   // Add event listeners
   useEffect(() => {
