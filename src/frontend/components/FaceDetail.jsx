@@ -3,10 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
-  Download, 
   Edit, 
   User, 
-  Image, 
+  Image as ImageIcon, 
   Grid, 
   List,
   Search,
@@ -18,9 +17,13 @@ import {
   Plus,
   Crop,
   Check,
+  CheckCheck,
   X,
   AlertTriangle,
-  Users
+  Users,
+  Square,
+  CheckSquare,
+  ShoppingBag
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import PhotoViewer from './PhotoViewer';
@@ -168,6 +171,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       }
     }
   }, [group?.groupID]); // Only when group changes (initial load or navigation)
+
+  // Re-sort photos when sort settings change
+  useEffect(() => {
+    setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, sortBy, sortOrder));
+  }, [sortBy, sortOrder]);
 
   // Subscribe to global groups state changes to keep local photos in sync
   useEffect(() => {
@@ -419,6 +427,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const handleToggleSortOrder = () => {
     const newOrder = toggleSortOrder(sortOrder);
     setSortOrder(newOrder);
+    // Re-sort current photos with new order
+    setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, sortBy, newOrder));
   };
 
   const formatDate = (dateString) => {
@@ -840,34 +850,42 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         {/* Controls Row */}
         <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                id="search-photos"
-                name="search-photos"
-                placeholder="Search photos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
-              />
-            </div>
-            
-            {/* Sort Controls */}
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center divide-x divide-gray-200">
+            {/* Group 1: Sort and Filter */}
+            <div className="flex items-center space-x-3 px-4">
+              {/* Search field - temporarily hidden
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  id="search-photos"
+                  name="search-photos"
+                  placeholder="Search photos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                />
+              </div>
+              */}
+
+              {/* Sort controls */}
+              {/* Sort by field - temporarily hidden
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, e.target.value, sortOrder));
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
               >
                 <option value="date">Sort by Date</option>
                 <option value="name">Sort by Name</option>
               </select>
-              
+              */}
+
               <button
                 onClick={handleToggleSortOrder}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
+                className="w-8 h-8 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
                 {sortOrder === 'asc' ? (
@@ -876,213 +894,224 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   <ArrowDown className="w-4 h-4" />
                 )}
               </button>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'grid' ? 'bg-gray-100' : 'hover:bg-gray-100'
-                }`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'list' ? 'bg-gray-100' : 'hover:bg-gray-100'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-              
+
               {/* Filter Toggle */}
               <button
                 onClick={handleFilterVisibilityToggle}
-                className={`p-2 rounded-md transition-colors ${
+                className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
                 }`}
                 title={filterVisible ? 'Hide group filter' : 'Show group filter'}
               >
                 <Filter className="w-4 h-4" />
-                {filterVisible && (
-                  <span className="ml-1 text-xs">ON</span>
-                )}
               </button>
             </div>
-
-            {/* Size Control - Only show in grid mode */}
-            {viewMode === 'grid' && (
-              <div className="flex items-center space-x-2 px-3 py-2">
-                <button
-                  onClick={() => {
-                    const currentPercent = Math.round(photoSize * 100);
-                    const next25 = Math.ceil(currentPercent / 25) * 25;
-                    const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
-                    const subtract25 = currentPercent - 25;
-                    const newPercent = Math.max(50, Math.max(subtract25, prev25));
-                    setPhotoSize(newPercent / 100);
-                  }}
-                  disabled={photoSize <= 0.5}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <input
-                  type="text"
-                  id="face-detail-photo-size"
-                  name="face-detail-photo-size"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
-                  onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                  onBlur={e => {
-                    let val = parseInt(e.target.value, 10);
-                    if (isNaN(val)) val = Math.round(photoSize * 100);
-                    val = Math.max(50, Math.min(300, val));
-                    setPhotoSize(val / 100);
-                    setPhotoSizeInputValue(undefined);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.target.blur();
-                    } else if (e.key === 'Escape') {
+            
+            {/* Group 2: Zoom, List/Grid, Crops */}
+            <div className="flex items-center space-x-3 px-4">
+              {viewMode === 'grid' && (
+                <>
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(photoSize * 100);
+                      const next25 = Math.ceil(currentPercent / 25) * 25;
+                      const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                      const subtract25 = currentPercent - 25;
+                      const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                      setPhotoSize(newPercent / 100);
+                    }}
+                    disabled={photoSize <= 0.5}
+                    className="w-8 h-8 rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Decrease size"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="text"
+                    id="face-detail-photo-size"
+                    name="face-detail-photo-size"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
+                    onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    onBlur={e => {
+                      let val = parseInt(e.target.value, 10);
+                      if (isNaN(val)) val = Math.round(photoSize * 100);
+                      val = Math.max(50, Math.min(300, val));
+                      setPhotoSize(val / 100);
                       setPhotoSizeInputValue(undefined);
-                    }
-                  }}
-                  className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                  style={{width: '3rem'}}
-                />
-                <button
-                  onClick={() => {
-                    const currentPercent = Math.round(photoSize * 100);
-                    const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
-                    const add25 = currentPercent + 25;
-                    const newPercent = Math.min(300, Math.min(add25, next25));
-                    setPhotoSize(newPercent / 100);
-                  }}
-                  disabled={photoSize >= 3}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.target.blur();
+                      } else if (e.key === 'Escape') {
+                        setPhotoSizeInputValue(undefined);
+                      }
+                    }}
+                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '3rem'}}
+                  />
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(photoSize * 100);
+                      const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                      const add25 = currentPercent + 25;
+                      const newPercent = Math.min(300, Math.min(add25, next25));
+                      setPhotoSize(newPercent / 100);
+                    }}
+                    disabled={photoSize >= 3}
+                    className="w-8 h-8 rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Increase size"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </>
+              )}
 
-            {/* Crop Toggle */}
-            <div className="flex items-center space-x-2 px-3 py-2">
+              <button
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="w-8 h-8 rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+              >
+                {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+              </button>
+
               <button
                 onClick={() => setShowCrops(!showCrops)}
-                className={`flex items-center space-x-2 px-3 py-1 rounded-md transition-colors ${
+                className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   showCrops 
-                    ? 'bg-primary-100 text-primary-700 border border-primary-200' 
-                    : 'hover:bg-gray-200 text-gray-700'
+                    ? 'bg-primary-100 text-primary-700' 
+                    : 'hover:bg-gray-100 text-gray-700'
                 }`}
                 title={showCrops ? 'Show full images' : 'Show face crops'}
               >
-                <Crop className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {showCrops ? 'Crops' : 'Full'}
-                </span>
+                {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
-              {showCrops && (
-                <span className="text-xs text-gray-500 ml-1">
-                  (face only)
-                </span>
-              )}
             </div>
 
-            {/* Compact Selection Controls */}
+                        {/* Group 3: Selection Controls */}
             {sortedPhotos.length > 0 && viewMode === 'grid' && (
-              <div className="flex items-center space-x-2 px-3 py-2">
+              <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
-                  className={`text-sm font-medium px-2 py-1 rounded transition-colors ${
+                  className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                     selectionMode 
-                      ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
-                      : 'text-primary-600 hover:text-primary-700 hover:bg-primary-50'
+                      ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                      : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={selectionMode ? 'Cancel selection mode' : 'Enter selection mode (Ctrl+A to select all, Shift+click for range selection)'}
+                  title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
                 >
-                  {selectionMode ? 'Cancel' : 'Select'}
+                  {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
                 {selectionMode && (
                   <button
-                    onClick={selectAllPhotos}
-                    disabled={selectedPhotos.size === sortedPhotos.length}
-                    className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                    title="Select all photos (Ctrl+A)"
+                    onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
+                    className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                      selectedPhotos.size === sortedPhotos.length
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                    title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
                   >
-                    All
+                    <CheckCheck className="w-4 h-4" />
                   </button>
                 )}
-                                    {selectedPhotos.size > 0 && (
-                  <>
-                    <button
-                      onClick={clearSelection}
-                      className="text-sm text-gray-600 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded transition-colors"
-                    >
-                      Clear
-                    </button>
-                    {filterMode !== 'or' && (
-                      <button
-                        onClick={handleTransferFaces}
-                        className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
-                      >
-                        <Users className="w-3 h-3" />
-                        <span>Change Group</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={handleAddSelectedToBucket}
-                      className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
-                    >
-                      <Download className="w-3 h-3" />
-                      <span>Add to Bucket</span>
-                    </button>
-                  </>
+                {selectedPhotos.size > 0 && (
+                  <button
+                    onClick={clearSelection}
+                    className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                    title="Clear selection"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 )}
+              </div>
+            )}
+
+            {/* Group 4: Actions on Selection */}
+            {sortedPhotos.length > 0 && viewMode === 'grid' && selectedPhotos.size > 0 && (
+              <div className="flex items-center space-x-3 px-4">
+                {filterMode !== 'or' && (
+                  <button
+                    onClick={handleTransferFaces}
+                    className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
+                    title="Change group for selected faces"
+                  >
+                    <Users className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={handleAddSelectedToBucket}
+                  className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                  title="Add selected photos to bucket"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                </button>
               </div>
             )}
             
             {/* List View Selection Controls - Always show when in list mode */}
             {sortedPhotos.length > 0 && viewMode === 'list' && (
-              <div className="flex items-center space-x-2 px-3 py-2">
-                <button
-                  onClick={selectAllPhotos}
-                  disabled={selectedPhotos.size === sortedPhotos.length}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                  title="Select all photos (Ctrl+A)"
-                >
-                  All
-                </button>
-                {selectedPhotos.size > 0 && (
-                  <>
+              <>
+                {/* Group 3: Selection Controls */}
+                <div className="flex items-center space-x-3 px-4">
+                  <button
+                    onClick={() => setSelectionMode(!selectionMode)}
+                    className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                      selectionMode 
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                    title={selectionMode ? 'Cancel selection mode' : 'Enter selection mode (Ctrl+A to select all, Shift+click for range selection)'}
+                  >
+                    {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  </button>
+                  {selectionMode && (
+                    <button
+                      onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
+                      className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                        selectedPhotos.size === sortedPhotos.length
+                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                    </button>
+                  )}
+                  {selectedPhotos.size > 0 && (
                     <button
                       onClick={clearSelection}
-                      className="text-sm text-gray-600 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                      className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                      title="Clear selection"
                     >
-                      Clear
+                      <X className="w-4 h-4" />
                     </button>
+                  )}
+                </div>
+
+                {/* Group 4: Actions on Selection */}
+                {selectedPhotos.size > 0 && (
+                  <div className="flex items-center space-x-3 px-4">
                     {filterMode !== 'or' && (
                       <button
                         onClick={handleTransferFaces}
-                        className="text-sm text-orange-600 hover:text-orange-700 font-medium px-2 py-1 hover:bg-orange-50 rounded transition-colors flex items-center space-x-1"
+                        className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
+                        title="Change group for selected faces"
                       >
-                        <Users className="w-3 h-3" />
-                        <span>Change Group</span>
+                        <Users className="w-4 h-4" />
                       </button>
                     )}
                     <button
                       onClick={handleAddSelectedToBucket}
-                      className="text-sm text-primary-600 hover:text-primary-700 font-medium px-2 py-1 hover:bg-primary-50 rounded transition-colors flex items-center space-x-1"
+                      className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                      title="Add selected photos to bucket"
                     >
-                      <Download className="w-3 h-3" />
-                      <span>Add to Bucket</span>
+                      <ShoppingBag className="w-4 h-4" />
                     </button>
-                  </>
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -1116,7 +1145,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             animate={{ opacity: 1 }}
             className="text-center py-12"
           >
-            <Image className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchTerm ? 'No photos found' : 'No photos in this group'}
             </h3>
@@ -1180,7 +1209,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     />
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-                        <Image className="w-8 h-8 mx-auto mb-1" />
+                        <ImageIcon className="w-8 h-8 mx-auto mb-1" />
                         <span className="text-sm">Click to view</span>
                       </div>
                     </div>

@@ -20,7 +20,7 @@ export const sortPhotos = (photos, sortBy = 'date', sortOrder = 'asc') => {
       const dateB = b.date_taken ? new Date(b.date_taken).getTime() : 0;
       comparison = dateA - dateB;
     } else if (sortBy === 'name') {
-      comparison = (a.photo_id || a.name || '').localeCompare(b.photo_id || b.name || '');
+      comparison = (a.id || a.name || '').localeCompare(b.id || b.name || '');
     }
     
     return sortOrder === 'asc' ? comparison : -comparison;
