@@ -6,16 +6,16 @@ class Groups(BaseModel):
     def __init__(self, db: AppDB):
         super().__init__(db, table_name='groups', id_field='groupID')
 
-    def get_add_data(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
+    def get_add_data(self, label: str = '', face_representative: str = '', face_IDs: List[str] = []) -> Dict:
         return {
             'label': label,
-            'face_representive': face_representive
+            'face_representative': face_representative
         }
 
-    def add(self, label: str = '', face_representive: str = '', face_IDs: List[str] = []) -> Dict:
+    def add(self, label: str = '', face_representative: str = '', face_IDs: List[str] = []) -> Dict:
         # Handle duplicate labels by appending a number
         final_label = self._ensure_unique_label(label)
-        group_data = super().add(final_label, face_representive, face_IDs)
+        group_data = super().add(final_label, face_representative, face_IDs)
         group_id = group_data['groupID']
         self.add_faces(group_id, face_IDs)
         return group_data

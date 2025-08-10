@@ -6,7 +6,7 @@ import { groupsAPI, handleAPIError } from '../utils/apiService';
 export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups, onNameConflict }) {
   const [formData, setFormData] = useState({
     label: group.label || '',
-    face_representive: group.face_representive
+    face_representative: group.face_representative
   });
   const [loading, setLoading] = useState(false);
   const [cropMappings, setCropMappings] = useState({});
@@ -16,14 +16,14 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   // Use original group data for header display until saved
   const [displayData, setDisplayData] = useState({
     label: group.label || '',
-    face_representive: group.face_representive
+    face_representative: group.face_representative
   });
 
   // Simple conflict state for inline validation
   const [nameConflict, setNameConflict] = useState(null);
   
   // Track current selection state for visual feedback
-  const currentSelectionRef = useRef(group.face_representive);
+  const currentSelectionRef = useRef(group.face_representative);
   const [currentSelection, setCurrentSelection] = useState(currentSelectionRef.current);
   
   // Update the ref when currentSelection changes
@@ -57,7 +57,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
           const firstFaceId = Object.values(response.crops).find(faceId => faceId);
           if (firstFaceId) {
             setCurrentSelection(firstFaceId);
-            setFormData(prev => ({ ...prev, face_representive: firstFaceId }));
+            setFormData(prev => ({ ...prev, face_representative: firstFaceId }));
           }
         }
       } catch (error) {
@@ -100,7 +100,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     // Use the ref value to ensure we have the latest selection
     const dataToSave = {
       ...formData,
-      face_representive: currentSelectionRef.current
+      face_representative: currentSelectionRef.current
     };
     
     try {
@@ -109,7 +109,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
       // Update display data only after successful save
       setDisplayData({
         label: formData.label,
-        face_representive: currentSelectionRef.current
+        face_representative: currentSelectionRef.current
       });
       
       onClose();
@@ -171,7 +171,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
 
   const getRepresentativeImageSrc = () => {
     // Use displayData for header image - only changes after saving
-    const representativeId = displayData.face_representive;
+    const representativeId = displayData.face_representative;
     const imageUrl = representativeId ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${representativeId}.webp` : PLACEHOLDER_DATA_URL;
     return imageUrl;
   };
@@ -195,7 +195,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200 shadow-lg">
                   <img
-                    key={displayData.face_representive}
+                    key={displayData.face_representative}
                     src={getRepresentativeImageSrc()}
                     alt="Representative"
                     className="w-full h-full object-cover"
@@ -314,7 +314,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                                 setCurrentSelection(faceId);
                                 setFormData(prev => ({
                                   ...prev,
-                                  face_representive: faceId
+                                  face_representative: faceId
                                 }));
                               }
                             }}

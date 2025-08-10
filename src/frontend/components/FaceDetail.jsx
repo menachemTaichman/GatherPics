@@ -126,13 +126,13 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       console.debug('[DEBUG] FaceDetail: group received from API', {
         groupID: foundGroup.groupID,
         label: foundGroup.label,
-        face_representive: foundGroup.face_representive
+        face_representative: foundGroup.face_representative
       });
       setGroup(foundGroup);
       console.debug('[DEBUG] FaceDetail: setGroup called', {
         groupID: foundGroup.groupID,
         label: foundGroup.label,
-        face_representive: foundGroup.face_representive
+        face_representative: foundGroup.face_representative
       });
     } else if (group && group.groupID) {
       // If we have a group but the label doesn't match the URL, 
@@ -149,7 +149,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       console.debug('[DEBUG] FaceDetail: group used in UI', {
         groupID: group.groupID,
         label: group.label,
-        face_representive: group.face_representive
+        face_representative: group.face_representative
       });
     }
   }, [group]);
@@ -243,7 +243,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         if (updatedGroup && group) {
           const hasChanges = 
             updatedGroup.label !== group.label ||
-            updatedGroup.face_representive !== group.face_representive;
+            updatedGroup.face_representative !== group.face_representative;
           
           if (hasChanges) {
             setGroup(updatedGroup);
@@ -482,7 +482,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         console.debug('[DEBUG] FaceDetail: replaceGroup called', {
           groupID: transferData.updated_target_group.groupID,
           label: transferData.updated_target_group.label,
-          face_representive: transferData.updated_target_group.face_representive
+          face_representative: transferData.updated_target_group.face_representative
         });
         useDataStore.getState().replaceGroup(transferData.target_group_id, transferData.updated_target_group);
       }
@@ -492,7 +492,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       console.debug('[DEBUG] FaceDetail: setGroup called after transfer', {
         groupID: newGroup.groupID,
         label: newGroup.label,
-        face_representive: newGroup.face_representive
+        face_representative: newGroup.face_representative
       });
       // 4. Fetch full, authoritative data for the target group to avoid client-side drift
       try {
@@ -719,9 +719,9 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 title="Edit group details"
               >
                 <img
-                  key={group.face_representive || 'no-representative'}
-                  src={group.face_representive && group.face_representive.trim() !== ''
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
+                  key={group.face_representative || 'no-representative'}
+                  src={group.face_representative && group.face_representative.trim() !== ''
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"

@@ -219,13 +219,13 @@ class Event(JsonModel):
         if mode == 'or':
             # Return all groups
             query = '''
-                SELECT g.groupID, g.label, g.face_representive, 
+                SELECT g.groupID, g.label, g.face_representative, 
                        COUNT(DISTINCT CASE WHEN f2.groupID IN ({}) THEN f.imageID END) as common_images
                 FROM groups g
                 LEFT JOIN faces f ON g.groupID = f.groupID
                 LEFT JOIN faces f2 ON f.imageID = f2.imageID
                 WHERE g.groupID NOT IN ({})
-                GROUP BY g.groupID, g.label, g.face_representive
+                GROUP BY g.groupID, g.label, g.face_representative
                 HAVING common_images > 0
                 ORDER BY common_images DESC
             '''
@@ -237,12 +237,12 @@ class Event(JsonModel):
             image_placeholders = ','.join(['?'] * len(filtered_images))
             placeholders = ','.join(['?'] * len(groups_id))
             query = f'''
-                SELECT g.groupID, g.label, g.face_representive, COUNT(DISTINCT f.imageID) as shared_images
+                SELECT g.groupID, g.label, g.face_representative, COUNT(DISTINCT f.imageID) as shared_images
                 FROM groups g
                 JOIN faces f ON g.groupID = f.groupID
                 WHERE f.imageID IN ({image_placeholders})
                 AND g.groupID NOT IN ({placeholders})
-                GROUP BY g.groupID, g.label, g.face_representive
+                GROUP BY g.groupID, g.label, g.face_representative
                 ORDER BY shared_images DESC
             '''
             results = self.db.execute_query(query, filtered_images + groups_id)
@@ -298,7 +298,7 @@ class Event(JsonModel):
                         },
                         'group_id': face.get('groupID'),
                         'group_label': group['label'] if group else 'Unknown',
-                        'group_representative': group.get('face_representive') if group else None
+                        'group_representative': group.get('face_representative') if group else None
                     }
                     faces_data.append(face_data)
             
@@ -441,7 +441,7 @@ class Event(JsonModel):
             representative_face = self.faces_model.get_biggest_face(face_ids) if face_ids else ''
             target_group_data = self.groups_model.add(
                 label=new_group_name,
-                face_representive=representative_face
+                face_representative=representative_face
             )
             target_group_id = target_group_data['groupID']
         
@@ -468,18 +468,18 @@ class Event(JsonModel):
         
         # Debug: print current face representative before update
         target_group_before = self.groups_model.get(target_group_id)
-        print(f"[DEBUG] Target group {target_group_id} face rep BEFORE update: {target_group_before.get('face_representive')}")
+        print(f"[DEBUG] Target group {target_group_id} face rep BEFORE update: {target_group_before.get('face_representative')}")
         
         # After transferring, update the target group's representative to the biggest face
         target_group_faces = self.groups_model.get_faces(target_group_id)
         new_representative = self.faces_model.get_biggest_face(target_group_faces)
         print(f"[DEBUG] Biggest face for group {target_group_id} after transfer: {new_representative}")
         if new_representative:
-            self.groups_model.edit(target_group_id, {'face_representive': new_representative})
+            self.groups_model.edit(target_group_id, {'face_representative': new_representative})
         
         # Debug: print face representative after update
         target_group_after = self.groups_model.get(target_group_id)
-        print(f"[DEBUG] Target group {target_group_id} face rep AFTER update: {target_group_after.get('face_representive')}")
+        print(f"[DEBUG] Target group {target_group_id} face rep AFTER update: {target_group_after.get('face_representative')}")
         
         # Check which photos no longer belong to source group after transfer
         photos_to_remove_from_source = set()
@@ -490,7 +490,7 @@ class Event(JsonModel):
                 photos_to_remove_from_source.add(photo_id)
         
         # Check if any transferred face was the representative of the old group
-        old_representative = old_group.get('face_representive', '')
+        old_representative = old_group.get('face_representative', '')
         representative_transferred = old_representative in face_ids
         
         # Check if old group is now empty and delete it if so
@@ -503,7 +503,7 @@ class Event(JsonModel):
             old_group_faces = self.groups_model.get_faces(old_group_id)
             new_representative = self.faces_model.get_biggest_face(old_group_faces)
             if new_representative:
-                self.groups_model.edit(old_group_id, {'face_representive': new_representative})
+                self.groups_model.edit(old_group_id, {'face_representative': new_representative})
         
         # Get updated source group data if it wasn't deleted
         updated_source_group = None
@@ -591,7 +591,7 @@ class Event(JsonModel):
                 representative_face_id = self.faces_model.get_biggest_face(cluster)
                 group_data = self.groups_model.add(
                     label=f"Person {group_num}",
-                    face_representive=representative_face_id
+                    face_representative=representative_face_id
                 )
                 group_id = group_data['groupID']
                 self.groups_model.add_faces(group_id, cluster)

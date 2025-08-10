@@ -123,9 +123,9 @@ export default function GroupsFilter({
         <div className="flex-shrink-0">
           <div className="relative group">
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-              {group.face_representive ? (
+                                    {group.face_representative ? (
                 <img
-                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${group.face_representive}.webp`}
+                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${group.face_representative}.webp`}
                   alt={getGroupDisplayName(group)}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -169,9 +169,9 @@ export default function GroupsFilter({
                     ? 'border-primary-500 bg-primary-100'
                     : 'border-gray-300 bg-gray-100'
                 } flex items-center justify-center`}>
-                  {relatedGroup.face_representive ? (
+                                        {relatedGroup.face_representative ? (
                     <img
-                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${relatedGroup.face_representive}.webp`}
+                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${relatedGroup.face_representative}.webp`}
                       alt={getGroupDisplayName(relatedGroup)}
                       className="w-full h-full object-cover"
                       onError={(e) => {

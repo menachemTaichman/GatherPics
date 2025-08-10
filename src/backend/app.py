@@ -50,7 +50,7 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
                     },
                     'group_id': face.get('groupID'),
                     'group_label': group['label'] if group else 'Unknown',
-                    'group_representative': group.get('face_representive') if group else None
+                    'group_representative': group.get('face_representative') if group else None
                 }
                 faces_data.append(face_data)
         
@@ -260,7 +260,7 @@ def transfer_faces():
         }
         # Debug: print the face representative of the updated target group being sent to frontend
         if result.get('updated_target_group'):
-            print(f"[DEBUG] /api/groups/transfer-faces: updated_target_group face_representive: {result['updated_target_group'].get('face_representive')}")
+            print(f"[DEBUG] /api/groups/transfer-faces: updated_target_group face_representative: {result['updated_target_group'].get('face_representative')}")
         
         # Include new group name if a new group was created
         if 'new_group_name' in result:
@@ -509,7 +509,7 @@ def get_photo_faces(image_id):
                 },
                 'group_id': face.get('groupID'),
                 'group_label': group['label'] if group else 'Unknown',
-                'group_representative': group.get('face_representive') if group else None
+                'group_representative': group.get('face_representative') if group else None
             }
             faces_data.append(face_data)
     

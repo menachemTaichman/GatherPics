@@ -245,7 +245,7 @@ def recrop_faces(image_ids: list):
 def print_group_face_representative(group_id):
     group = event.groups_model.get(group_id)
     if group:
-        print(f"Group {group_id} face_representive: {group.get('face_representive')}")
+        print(f"Group {group_id} face_representative: {group.get('face_representative')}")
     else:
         print(f"Group {group_id} not found.")
 

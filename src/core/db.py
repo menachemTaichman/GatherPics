@@ -34,7 +34,7 @@ TABLES = {
     'groups': '''
         groupID TEXT PRIMARY KEY,
         label TEXT UNIQUE,
-        face_representive TEXT
+        face_representative TEXT
     ''',
     'moments': '''
         momentID TEXT PRIMARY KEY,

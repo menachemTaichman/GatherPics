@@ -22,7 +22,7 @@ The backend API endpoints now include change instructions in their responses. Wh
       "data": {
         "groupID": "123",
         "label": "Updated Name",
-        "face_representive": "face_456"
+        "face_representative": "face_456"
       }
     }
   ]

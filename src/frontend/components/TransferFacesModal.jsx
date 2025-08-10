@@ -287,8 +287,8 @@ export default function TransferFacesModal({
                     {/* Representative Photo - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                       <img
-                        src={group.face_representive
-                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
+                                        src={group.face_representative
+                  ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`
                           : PLACEHOLDER_DATA_URL}
                         alt={group.label || `Person ${group.groupID}`}
                         className="w-full h-full object-cover"

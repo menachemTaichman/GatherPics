@@ -36,9 +36,9 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
     }
     setShowActions(!showActions);
   };
-  // Use face_representive for the group representative image
-  const imageSrc = group.face_representive
-    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representive}.webp`
+          // Use face_representative for the group representative image
+        const imageSrc = group.face_representative
+            ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`
     : PLACEHOLDER_DATA_URL;
 
   return (
