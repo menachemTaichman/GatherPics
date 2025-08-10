@@ -4,6 +4,7 @@ import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore } from '../utils/dataManager';
+import { useModalFocus } from '../utils/useModalFocus';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -26,6 +27,20 @@ export default function TransferFacesModal({
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+  
+  // Custom keyboard handler for TransferFacesModal
+  const handleTransferModalKeys = (e) => {
+    if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedGroupId || newGroupName.trim())) {
+      handleTransfer();
+      return true; // Mark as handled
+    }
+    return false; // Not handled
+  };
+  
+  // Use modal focus hook
+  const { modalRef } = useModalFocus(isOpen, onClose, {
+    customKeyHandler: handleTransferModalKeys
+  });
 
   // Filter out current group from available groups
   const availableGroups = groups.filter(g => g.groupID !== currentGroup?.groupID);
@@ -158,30 +173,7 @@ export default function TransferFacesModal({
     }
   };
 
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!isOpen) return;
-      
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      } else if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedGroupId || newGroupName.trim())) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleTransfer();
-      }
-    };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, isLoading, nameConflict, selectedGroupId, newGroupName, onClose]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -202,7 +194,7 @@ export default function TransferFacesModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" tabIndex={-1}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -330,16 +322,6 @@ export default function TransferFacesModal({
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
                   nameConflict ? 'border-red-500' : 'border-gray-300'
                 }`}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === 'Enter' &&
-                    !isLoading &&
-                    !nameConflict &&
-                    (selectedGroupId || newGroupName.trim())
-                  ) {
-                    handleTransfer();
-                  }
-                }}
               />
               {nameConflict && (
                 <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">

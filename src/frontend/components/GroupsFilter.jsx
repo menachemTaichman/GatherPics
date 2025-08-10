@@ -1,3 +1,5 @@
+const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -125,7 +127,7 @@ export default function GroupsFilter({
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
                                     {group.face_representative ? (
                 <img
-                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${group.face_representative}.webp`}
+                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`}
                   alt={getGroupDisplayName(group)}
                   className="w-full h-full object-cover"
                   onError={(e) => {

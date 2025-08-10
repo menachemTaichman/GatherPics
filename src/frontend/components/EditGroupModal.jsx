@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { useModalFocus } from '../utils/useModalFocus';
 
 export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups, onNameConflict }) {
   const [formData, setFormData] = useState({
@@ -25,6 +26,37 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   // Track current selection state for visual feedback
   const currentSelectionRef = useRef(group.face_representative);
   const [currentSelection, setCurrentSelection] = useState(currentSelectionRef.current);
+  
+  // Custom keyboard handler for EditGroupModal
+  const handleEditModalKeys = (e) => {
+    if (isEditingName) {
+      // When editing name, handle Enter/Escape in name input
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleNameCancel();
+        return true; // Mark as handled
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleNameSave();
+        return true; // Mark as handled
+      }
+    } else {
+      // When not editing name, Enter should submit the form
+      if (e.key === 'Enter') {
+        handleSubmit(e);
+        return true; // Mark as handled
+      }
+    }
+    return false; // Not handled
+  };
+  
+  // Use modal focus hook
+  const { modalRef } = useModalFocus(true, onClose, {
+    customKeyHandler: handleEditModalKeys
+  });
   
   // Update the ref when currentSelection changes
   useEffect(() => {
@@ -72,26 +104,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     fetchCropMappings();
   }, [group.groupID]);
 
-  // Add keyboard event listeners for modal shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (isEditingName) {
-        // When editing name, don't handle ESC/Enter at document level
-        // Let the input field handle them
-        return;
-      } else {
-        // When not editing name, ESC and Enter should behave like modal shortcuts
-        if (e.key === 'Escape') {
-          onClose();
-        } else if (e.key === 'Enter') {
-          handleSubmit(e);
-        }
-      }
-    };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isEditingName, onClose]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -179,16 +192,14 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   return (
     <>
       <AnimatePresence>
-        <div 
-          className="modal-overlay" 
-          onClick={onClose}
-        >
+        <div className="modal-overlay">
           <motion.div
+            ref={modalRef}
             className="modal-content"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            onClick={(e) => e.stopPropagation()}
+            tabIndex={-1}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -208,7 +219,11 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                 </div>
                 <div className="flex items-center space-x-2">
                   {isEditingName ? (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2" onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                          handleNameCancel();
+                        }
+                      }}>
                       <div className="relative">
                         <input
                           type="text"
@@ -229,13 +244,10 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                             }
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.stopPropagation();
-                              handleNameSave();
-                            } else if (e.key === 'Escape') {
-                              e.stopPropagation();
-                              handleNameCancel();
-                            }
+                            // Stop propagation to prevent modal's global key handler
+                            // from closing the modal on Escape. The custom key
+                            // handler will manage it.
+                            e.stopPropagation();
                           }}
                           className={`text-xl font-semibold text-gray-900 bg-transparent border-b-2 focus:outline-none w-[150px] ${
                             nameConflict ? 'border-red-500' : 'border-primary-500'

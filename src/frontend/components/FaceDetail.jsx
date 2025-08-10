@@ -465,11 +465,35 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const handleTransferComplete = async (result) => {
-    // Clear selection
-    setSelectedPhotos(new Set());
-
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
     const isCompleteTransfer = transferData?.old_group_deleted;
+
+    // Clear selection and remove transferred photos from cache
+    setSelectedPhotos(new Set());
+    
+    // If photos were transferred away from this group, remove them from the cached selection
+    if (transferData && transferData.photos_to_remove_from_source && group?.groupID) {
+      const removedPhotoIds = new Set(transferData.photos_to_remove_from_source);
+      
+      // Get current cached selection
+      const cachedSelection = getSetting(`faceDetail_selection_${group.groupID}`);
+      if (cachedSelection && Array.isArray(cachedSelection)) {
+        // Remove transferred photos from cached selection
+        const updatedCachedSelection = cachedSelection.filter(photoId => !removedPhotoIds.has(photoId));
+        
+        // Update cache with filtered selection
+        if (updatedCachedSelection.length > 0) {
+          setSetting(`faceDetail_selection_${group.groupID}`, updatedCachedSelection);
+        } else {
+          // Clear cache if no photos remain selected
+          try {
+            localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${group.groupID}`);
+          } catch (error) {
+            console.warn('Failed to clear selection cache after transfer:', error);
+          }
+        }
+      }
+    }
 
     if (isCompleteTransfer) {
       skipNextFetch.current = true; // Prevent fetch on next group change
@@ -734,7 +758,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               </div>
               <div className="flex items-center space-x-3">
                 {isEditingTitle ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2" onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                      handleTitleCancel();
+                    }
+                  }}>
                     <div className="relative">
                       <input
                         type="text"

@@ -5,9 +5,52 @@ import { useNavigate } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
+import { getSetting, setSetting } from '../utils/settings';
+import { useModalFocus } from '../utils/useModalFocus';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
+  
+  // Custom keyboard handler for PhotoViewer-specific shortcuts
+  const handlePhotoViewerKeys = (e) => {
+    // If the event is coming from one of our specific inputs, let it be handled locally.
+    const targetId = e.target.id;
+    if ((targetId === 'photo-viewer-index' || targetId === 'photo-viewer-zoom') && e.key === 'Enter') {
+        return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
+    }
+      
+    switch (e.key) {
+      case 'ArrowLeft':
+        if (totalPhotos > 1 && currentIndex > 0) {
+          handleNavigate('prev');
+          return true; // Mark as handled
+        }
+        break;
+      case 'ArrowRight':
+        if (totalPhotos > 1 && currentIndex < totalPhotos - 1) {
+          handleNavigate('next');
+          return true; // Mark as handled
+        }
+        break;
+      case '+':
+      case '=':
+        handleZoomIn();
+        return true; // Mark as handled
+      case '-':
+        handleZoomOut();
+        return true; // Mark as handled
+      case '0':
+        handleReset();
+        return true; // Mark as handled
+    }
+    return false; // Not handled
+  };
+  
+  // Use modal focus hook
+  const { modalRef } = useModalFocus(true, onClose, {
+    customKeyHandler: handlePhotoViewerKeys,
+    allowOutsideScroll: true
+  });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [faces, setFaces] = useState([]);
@@ -41,12 +84,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   }, [zoom, rotation, pan, imageLoaded, showRectangles]);
 
-  // Prevent background scroll when modal is open
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = original; };
-  }, []);
+
 
   // Circular navigation
   const handleNavigate = (direction, index) => {
@@ -202,6 +240,30 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     // Extract transfer data from the changes array
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
     
+    // Clear transferred photos from cached selection if we're in a group context
+    if (currentGroupId && transferData && transferData.photos_to_remove_from_source) {
+      const removedPhotoIds = new Set(transferData.photos_to_remove_from_source);
+      
+      // Get current cached selection
+      const cachedSelection = getSetting(`faceDetail_selection_${currentGroupId}`);
+      if (cachedSelection && Array.isArray(cachedSelection)) {
+        // Remove transferred photos from cached selection
+        const updatedCachedSelection = cachedSelection.filter(photoId => !removedPhotoIds.has(photoId));
+        
+        // Update cache with filtered selection
+        if (updatedCachedSelection.length > 0) {
+          setSetting(`faceDetail_selection_${currentGroupId}`, updatedCachedSelection);
+        } else {
+          // Clear cache if no photos remain selected
+          try {
+            localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${currentGroupId}`);
+          } catch (error) {
+            console.warn('Failed to clear selection cache after transfer:', error);
+          }
+        }
+      }
+    }
+    
     // Handle navigation after transfer if we're in a group context
     let shouldCallParent = true;
     if (currentGroupId && transferData) {
@@ -249,7 +311,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   // Mouse wheel handler for zoom
   const handleWheel = (e) => {
-    e.preventDefault();
+    // Note: preventDefault() removed - modal focus system handles scroll prevention
     if (e.ctrlKey || e.metaKey) {
       // Zoom with Ctrl/Cmd + wheel
       const delta = e.deltaY > 0 ? -0.2 : 0.2;
@@ -286,39 +348,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     setIsDragging(false);
   };
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      switch (e.key) {
-        case 'ArrowLeft':
-          if (totalPhotos > 1 && currentIndex > 0) {
-            handleNavigate('prev');
-          }
-          break;
-        case 'ArrowRight':
-          if (totalPhotos > 1 && currentIndex < totalPhotos - 1) {
-            handleNavigate('next');
-          }
-          break;
-        case 'Escape':
-          onClose();
-          break;
-        case '+':
-        case '=':
-          handleZoomIn();
-          break;
-        case '-':
-          handleZoomOut();
-          break;
-        case '0':
-          handleReset();
-          break;
-      }
-    };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [totalPhotos, currentIndex, onClose, handleNavigate]);
 
   // Fixed face rectangle style calculation - accounts for object-contain image scaling
   const getFaceRectangleStyle = (face) => {
@@ -364,8 +394,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   return (
     <AnimatePresence>
-      <div key="photo-viewer-modal" className="modal-overlay" onClick={onClose}>
+      <div key="photo-viewer-modal" className="modal-overlay">
         <motion.div
+          ref={modalRef}
           className="modal-content max-w-7xl w-full photo-viewer-modal"
           style={{ 
             maxHeight: '92vh',
@@ -374,7 +405,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
+          tabIndex={-1}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white photo-viewer-header">

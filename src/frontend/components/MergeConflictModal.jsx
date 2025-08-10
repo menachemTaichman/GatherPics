@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
+import { useModalFocus } from '../utils/useModalFocus';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
@@ -20,24 +21,22 @@ export default function MergeConflictModal({
 }) {
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore();
+  
+  // Custom keyboard handler for MergeConflictModal
+  const handleMergeModalKeys = (e) => {
+    if (e.key === 'Enter' && !loading) {
+      handleTransfer();
+      return true; // Mark as handled
+    }
+    return false; // Not handled
+  };
+  
+  // Use modal focus hook
+  const { modalRef } = useModalFocus(isOpen, onClose, {
+    customKeyHandler: handleMergeModalKeys
+  });
 
-  // Handle keyboard events
-  useEffect(() => {
-    if (!isOpen) return;
 
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        handleCancel();
-      } else if (event.key === 'Enter' && !loading) {
-        handleTransfer();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, loading]);
 
   const handleTransfer = async () => {
     setLoading(true);
@@ -133,13 +132,14 @@ export default function MergeConflictModal({
 
   return (
     <AnimatePresence>
-      <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-overlay">
         <motion.div
+          ref={modalRef}
           className="modal-content max-w-md"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
+          tabIndex={-1}
         >
           <div className="p-6">
             <div className="text-center mb-4">
