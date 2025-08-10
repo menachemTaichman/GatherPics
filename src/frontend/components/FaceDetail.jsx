@@ -275,7 +275,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     
     try {
       const response = await groupsAPI.getCrops(group.groupID);
-      setImageCrops(response.crop_mapping || {});
+      setImageCrops(response.crops || {});
     } catch (error) {
       console.error('Error fetching group crops:', error);
       setImageCrops({});
