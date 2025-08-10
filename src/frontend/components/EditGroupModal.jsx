@@ -22,7 +22,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
 
   // Simple conflict state for inline validation
   const [nameConflict, setNameConflict] = useState(null);
-  
+
   // Track current selection state for visual feedback
   const currentSelectionRef = useRef(group.face_representative);
   const [currentSelection, setCurrentSelection] = useState(currentSelectionRef.current);
@@ -149,16 +149,16 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
         
         if (conflictResult.conflict) {
           // Close this modal and pass conflict data to parent (FaceDetail)
-          onClose();
           if (onNameConflict) {
             onNameConflict(editingName.trim(), conflictResult.conflicting_group);
           }
+          onClose();
           return;
         }
         
         // No conflict, proceed with update
         setFormData(prev => ({ ...prev, label: editingName.trim() }));
-        // Update display data immediately for name changes since they're saved immediately
+        // Update display data immediately for name changes
         setDisplayData(prev => ({ ...prev, label: editingName.trim() }));
         
         setIsEditingName(false);
@@ -391,7 +391,6 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
           </motion.div>
         </div>
       </AnimatePresence>
-
     </>
   );
 } 

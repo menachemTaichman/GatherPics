@@ -1268,50 +1268,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             return result;
           }}
           onRefreshGroups={onRefreshGroups}
-          onNameConflict={async (newName, conflictingGroup) => {
-            if (conflictingGroup && group) {
-              // Only perform the transfer, do not update the group label, group object, or URL
-              // Always transfer ALL faces of the source group, regardless of current filters
-              try {
-                // First try crops mapping
-                let allFaceIds = [];
-                try {
-                  const cropsResp = await groupsAPI.getCrops(group.groupID);
-                  const cropMapping = cropsResp?.crop_mapping || {};
-                  allFaceIds = Object.values(cropMapping).filter(Boolean);
-                } catch (e) {
-                  // ignore and try fallback
-                }
-                // Fallback: derive from full photos data if crops have no mapping
-                if (!allFaceIds || allFaceIds.length === 0) {
-                  const photosResp = await groupsAPI.getPhotosComplete(group.groupID);
-                  const photos = photosResp?.photos || [];
-                  const ids = new Set();
-                  photos.forEach((p) => {
-                    (p.faces || []).forEach((f) => {
-                      if (f.group_id === group.groupID && f.face_id) ids.add(f.face_id);
-                    });
-                  });
-                  allFaceIds = Array.from(ids);
-                }
-                if (!allFaceIds || allFaceIds.length === 0) {
-                  throw new Error('No faces found to transfer for this group.');
-                }
-                if (allFaceIds.length > 0) {
-                  setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
-                  skipNextFetch.current = true;
-                  const result = await groupsAPI.transferFaces(
-                    group.groupID,
-                    allFaceIds,
-                    conflictingGroup.groupID,
-                    null
-                  );
-                  await handleTransferComplete(result);
-                }
-              } catch (err) {
-                console.error('Error preparing faces for transfer during name conflict:', err);
-              }
-            }
+          onNameConflict={(newName, conflictingGroup) => {
+            // The modal detected a conflict, so we use the parent's handler
+            // to show the merge modal, ensuring consistent behavior.
+            showMergeConflictModal(newName, group, conflictingGroup);
           }}
         />
       )}
