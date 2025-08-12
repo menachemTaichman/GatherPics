@@ -111,16 +111,19 @@ export const groupsAPI = {
   },
 
   // Get filtered photos
-  getFilteredPhotos: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false) => {
+  getFilteredPhotos: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentPhotoIds = []) => {
     const params = new URLSearchParams();
     
-    // Add filter groups as multiple parameters
-    filterGroups.forEach(groupId => {
-      params.append('filter_groups', groupId);
-    });
+    params.append('mode', filterMode);
+    params.append('only', onlySelected.toString());
     
-    params.append('filter_mode', filterMode);
-    params.append('only_selected', onlySelected.toString());
+    if (filterGroups.length > 0) {
+      params.append('related_groups', filterGroups.join(','));
+    }
+
+    if (currentPhotoIds.length > 0) {
+      params.append('current_photo_ids', currentPhotoIds.join(','));
+    }
     
     const response = await api.get(`/api/groups/${groupId}/filtered-photos?${params.toString()}`);
     return response.data;

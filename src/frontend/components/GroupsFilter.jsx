@@ -10,7 +10,9 @@ import {
   RefreshCw,
   Users,
   UserCheck,
-  UserX
+  UserX,
+  Plus,
+  Minus
 } from 'lucide-react';
 
 export default function GroupsFilter({ 
@@ -28,26 +30,19 @@ export default function GroupsFilter({
   const [hoveredGroup, setHoveredGroup] = useState(null);
 
   const handleGroupClick = (groupId) => {
-    if (selectedGroups.includes(groupId)) {
-      // Remove from filter
-      const newSelected = selectedGroups.filter(id => id !== groupId);
-      onFilterChange(newSelected);
-    } else {
-      // Add to filter
-      const newSelected = [...selectedGroups, groupId];
-      onFilterChange(newSelected);
-    }
+    onFilterChange(
+      selectedGroups.includes(groupId)
+        ? selectedGroups.filter((id) => id !== groupId)
+        
+        : [...selectedGroups, groupId]
+    );
   };
 
   const getGroupDisplayName = (group) => {
     return group.label || `Person ${group.groupID}`;
   };
 
-  const getGroupTooltip = (group) => {
-    const name = getGroupDisplayName(group);
-    const sharedImages = group.shared_images || 0;
-    return `${name} (${sharedImages} shared images)`;
-  };
+  const showResetButton = selectedGroups.length > 0 || onlySelected || filterMode !== 'and';
 
   return (
     <motion.div
@@ -95,11 +90,11 @@ export default function GroupsFilter({
         </div>
 
         <div className="flex items-center space-x-2">
-          {selectedGroups.length > 0 && (
+          {showResetButton && (
             <button
               onClick={onReset}
               className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
-              title="Clear filter"
+              title="Reset all filters"
             >
               <RefreshCw className="w-4 h-4 text-gray-700" />
             </button>
@@ -110,78 +105,78 @@ export default function GroupsFilter({
       {/* Groups Row */}
       <div className="flex items-center space-x-3 overflow-x-auto pb-2">
         {/* Main Group (always selected) */}
-        <div className="flex-shrink-0">
-          <div className="relative group">
-            <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-              {group.face_representative ? (
-                <img
-                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`}
-                  alt={getGroupDisplayName(group)}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
-                  }}
-                />
-              ) : (
-                <span className="text-xs text-primary-600 font-medium">?</span>
-              )}
-            </div>
-            {/* Tooltip */}
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-              {getGroupDisplayName(group)} (main)
-            </div>
+        <div 
+          className="flex-shrink-0 relative group"
+        >
+          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
+            {group.face_representative ? (
+              <img
+                src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`}
+                alt={getGroupDisplayName(group)}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
+                }}
+              />
+            ) : (
+              <span className="text-xs text-primary-600 font-medium">?</span>
+            )}
+          </div>
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+            {getGroupDisplayName(group)} (main)
           </div>
         </div>
 
         {/* Related Groups */}
-        <AnimatePresence>
-          {relatedGroups.map((relatedGroup) => (
-            <motion.div
-              key={relatedGroup.groupID}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="flex-shrink-0"
+        {relatedGroups.map((relatedGroup) => (
+          <div
+            key={relatedGroup.groupID}
+            className="flex-shrink-0 relative group"
+          >
+            <div 
+              className="cursor-pointer"
+              onClick={() => handleGroupClick(relatedGroup.groupID)}
             >
-              <div 
-                className={`relative group cursor-pointer transition-all duration-200 ${
-                  selectedGroups.includes(relatedGroup.groupID) 
-                    ? 'ring-2 ring-primary-500 ring-offset-2' 
-                    : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-2'
-                }`}
-                onClick={() => handleGroupClick(relatedGroup.groupID)}
-                onMouseEnter={() => setHoveredGroup(relatedGroup.groupID)}
-                onMouseLeave={() => setHoveredGroup(null)}
-              >
-                <div className={`w-8 h-8 rounded-full overflow-hidden border-2 ${
-                  selectedGroups.includes(relatedGroup.groupID)
-                    ? 'border-primary-500 bg-primary-100'
-                    : 'border-gray-300 bg-gray-100'
-                } flex items-center justify-center`}>
-                  {relatedGroup.face_representative ? (
-                    <img
-                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${relatedGroup.face_representative}.webp`}
-                      alt={getGroupDisplayName(relatedGroup)}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
-                      }}
-                    />
-                  ) : (
-                    <span className="text-xs text-gray-600 font-medium">?</span>
-                  )}
-                </div>
-                
-                {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                  {getGroupTooltip(relatedGroup)}
-                </div>
+              <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
+                selectedGroups.includes(relatedGroup.groupID)
+                  ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
+                  : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
+              }`}>
+                {relatedGroup.face_representative ? (
+                  <img
+                    src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${relatedGroup.face_representative}.webp`}
+                    alt={getGroupDisplayName(relatedGroup)}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
+                    }}
+                  />
+                ) : (
+                  <span className="text-xs text-gray-600 font-medium">?</span>
+                )}
               </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              
+              {/* Add/Remove Icon on Hover */}
+              <div 
+                className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
+              >
+                {selectedGroups.includes(relatedGroup.groupID) ? (
+                  <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                ) : (
+                  <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                )}
+              </div>
+            </div>
+
+            {/* Group Name Tooltip */}
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+              {getGroupDisplayName(relatedGroup)}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Filter Status */}

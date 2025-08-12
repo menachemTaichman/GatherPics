@@ -129,138 +129,110 @@ class Event(JsonModel):
         """
         if not groups_ids:
             return []
-        
+
+        group_placeholders = ','.join(['?'] * len(groups_ids))
+
         if mode == 'and':
             # Images must contain faces from ALL groups in the list
-            placeholders = ','.join(['?'] * len(groups_ids))
-            query = f'''
-                SELECT f.imageID
-                FROM faces f
-                WHERE f.groupID IN ({placeholders})
-                GROUP BY f.imageID
-                HAVING COUNT(DISTINCT f.groupID) = ?
+            base_query = f'''
+                SELECT imageID
+                FROM faces
+                WHERE groupID IN ({group_placeholders})
+                GROUP BY imageID
+                HAVING COUNT(DISTINCT groupID) = ?
             '''
-            results = self.db.execute_query(query, groups_ids + [len(groups_ids)])
-            image_ids = [row[0] for row in results]
-            
-            if only:
-                # Any image shouldn't belong to any groups that aren't in groups list
-                if image_ids:
-                    image_placeholders = ','.join(['?'] * len(image_ids))
-                    query = f'''
-                        SELECT f.imageID
-                        FROM faces f
-                        WHERE f.imageID IN ({image_placeholders})
-                        GROUP BY f.imageID
-                        HAVING COUNT(DISTINCT f.groupID) = (
-                            SELECT COUNT(DISTINCT f2.groupID)
-                            FROM faces f2
-                            WHERE f2.imageID = f.imageID
-                            AND f2.groupID IN ({placeholders})
-                        )
-                    '''
-                    results = self.db.execute_query(query, image_ids + groups_ids)
-                    return [row[0] for row in results]
-                return []
-            
-            return image_ids
-        
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)])]
         else:  # mode == 'or'
             # Images must contain faces from AT LEAST ONE of the groups in the list
-            placeholders = ','.join(['?'] * len(groups_ids))
-            query = f'''
-                SELECT DISTINCT f.imageID
-                FROM faces f
-                WHERE f.groupID IN ({placeholders})
+            base_query = f'''
+                SELECT DISTINCT imageID
+                FROM faces
+                WHERE groupID IN ({group_placeholders})
             '''
-            results = self.db.execute_query(query, groups_ids)
-            image_ids = [row[0] for row in results]
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids)]
+
+        if only and image_ids:
+            # Filter out images that contain faces from other groups
+            image_placeholders = ','.join(['?'] * len(image_ids))
             
-            if only:
-                # Any image shouldn't belong to any groups that aren't in groups list
-                if image_ids:
-                    image_placeholders = ','.join(['?'] * len(image_ids))
-                    query = f'''
-                        SELECT f.imageID
-                        FROM faces f
-                        WHERE f.imageID IN ({image_placeholders})
-                        GROUP BY f.imageID
-                        HAVING COUNT(DISTINCT f.groupID) = (
-                            SELECT COUNT(DISTINCT f2.groupID)
-                            FROM faces f2
-                            WHERE f2.imageID = f.imageID
-                            AND f2.groupID IN ({placeholders})
-                        )
-                    '''
-                    results = self.db.execute_query(query, image_ids + groups_ids)
-                    return [row[0] for row in results]
-                return []
+            # Find all images from the current set that ALSO have faces from other groups
+            images_with_other_groups_query = f'''
+                SELECT DISTINCT imageID
+                FROM faces
+                WHERE imageID IN ({image_placeholders})
+                AND groupID NOT IN ({group_placeholders})
+            '''
             
-            return image_ids
+            images_to_exclude = {row[0] for row in self.db.execute_query(
+                images_with_other_groups_query, image_ids + groups_ids
+            )}
+
+            # Return only the images that are not in the exclusion list
+            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
+
+        return image_ids
     
-    def get_related_groups(self, groups_id: List[str], mode: str = 'and', only: bool = False) -> List[str]:
+    def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
         """
-        Get related groups based on filtered images.
+        Get related groups based on filtered images and co-occurrence frequency.
         
         Args:
-            groups_id: List of group IDs
+            group_ids: List of group IDs
             mode: 'and' or 'or'
             only: If True, any image shouldn't belong to any groups that aren't in groups list
         
         Returns:
-            List of group IDs ordered by relevance
+            List of group IDs ordered by relevance: selected groups, then by co-occurrence, then by name.
         """
-        # Get filtered images first
-        filtered_images = self.get_filtered_images(groups_id, mode, only)
-        
-        if not filtered_images:
+        if not group_ids:
             return []
+
+        group_id_placeholders = ','.join(['?'] * len(group_ids))
         
         if mode == 'or':
-            # Return all groups
-            query = '''
-                SELECT g.groupID, g.label, g.face_representative, 
-                       COUNT(DISTINCT CASE WHEN f2.groupID IN ({}) THEN f.imageID END) as common_images
+            # OR mode: Get all other groups, ordered by co-occurrence with ANY of the selected groups.
+            query = f'''
+                SELECT 
+                    g.groupID,
+                    g.label,
+                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM faces WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
                 FROM groups g
                 LEFT JOIN faces f ON g.groupID = f.groupID
-                LEFT JOIN faces f2 ON f.imageID = f2.imageID
-                WHERE g.groupID NOT IN ({})
-                GROUP BY g.groupID, g.label, g.face_representative
-                HAVING common_images > 0
-                ORDER BY common_images DESC
+                WHERE g.groupID NOT IN ({group_id_placeholders})
+                GROUP BY g.groupID, g.label
+                ORDER BY common_images_count DESC, g.label ASC
             '''
-            placeholders = ','.join(['?'] * len(groups_id))
-            results = self.db.execute_query(query.format(placeholders, placeholders), groups_id + groups_id)
-        
-        else:  # mode == 'and'
-            # Return groups that have images in any of filtered_images
-            image_placeholders = ','.join(['?'] * len(filtered_images))
-            placeholders = ','.join(['?'] * len(groups_id))
-            query = f'''
-                SELECT g.groupID, g.label, g.face_representative, COUNT(DISTINCT f.imageID) as shared_images
-                FROM groups g
-                JOIN faces f ON g.groupID = f.groupID
-                WHERE f.imageID IN ({image_placeholders})
-                AND g.groupID NOT IN ({placeholders})
-                GROUP BY g.groupID, g.label, g.face_representative
-                ORDER BY shared_images DESC
-            '''
-            results = self.db.execute_query(query, filtered_images + groups_id)
-        
-        # Return group IDs in order: first list of given groups with original order, then by num sharing
-        related_group_ids = []
-        
-        # First add the given groups with original order
-        for group_id in groups_id:
-            related_group_ids.append(group_id)
-        
-        # Then add the related groups ordered by relevance
-        for row in results:
-            group_id = row[0]
-            if group_id not in related_group_ids:
-                related_group_ids.append(group_id)
-        
-        return related_group_ids
+            query_params = group_ids + group_ids
+            related_group_rows = self.db.execute_query(query, query_params)
+        else:  # AND mode
+            # AND mode: Get only groups that appear in images containing ALL of the selected groups.
+            base_image_ids = self.get_filtered_images(group_ids, 'and', False) # Use 'only'=False to find potential candidates
+            
+            if not base_image_ids:
+                related_group_rows = []
+            else:
+                image_placeholders = ','.join(['?'] * len(base_image_ids))
+                query = f'''
+                    SELECT
+                        g.groupID,
+                        g.label,
+                        COUNT(DISTINCT f.imageID) AS common_images_count
+                    FROM groups g
+                    JOIN faces f ON g.groupID = f.groupID
+                    WHERE f.imageID IN ({image_placeholders})
+                    AND g.groupID NOT IN ({group_id_placeholders})
+                    GROUP BY g.groupID, g.label
+                    ORDER BY common_images_count DESC, g.label ASC
+                '''
+                query_params = base_image_ids + group_ids
+                related_group_rows = self.db.execute_query(query, query_params)
+
+        # Construct the final ordered list
+        ordered_group_ids = list(group_ids)
+        for row in related_group_rows:
+            ordered_group_ids.append(row[0])
+            
+        return ordered_group_ids
     
     def _build_complete_photo_data(self, image_id: str, group_filter: str = None) -> Dict:
         """

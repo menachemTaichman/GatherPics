@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -41,6 +41,7 @@ import { clearTransferredPhotosFromCache } from '../utils/selection';
 export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [group, setGroup] = useState(null);
   const skipNextFetch = useRef(false);
   const [viewMode, setViewMode] = useSetting('faceDetail_viewMode', 'grid');
@@ -92,7 +93,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   
   // Filter state
   const [filterGroups, setFilterGroups] = useState([]);
-  const [filterMode, setFilterMode] = useSetting('faceDetail_filterMode', 'and');
+  const [filterMode, setFilterMode] = useState('and');
   const [onlySelected, setOnlySelected] = useState(false);
   const [relatedGroups, setRelatedGroups] = useState([]);
   const [filterVisible, setFilterVisible] = useSetting('faceDetail_filterVisible', true);
@@ -102,6 +103,34 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
   // Use the data store for groups
   const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup, replaceGroup } = useDataStore();
+
+  // Use groups from store if available, otherwise fall back to props
+  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
+
+  // Initialize filter state from URL on first load
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const mode = searchParams.get('filterMode');
+    const groupNames = searchParams.get('filterGroups');
+    const only = searchParams.get('only');
+
+    if (mode) {
+      setFilterMode(mode);
+    }
+    
+    // If we have group names and the list of all groups is available, map names to IDs
+    if (groupNames && relatedGroups.length > 0) {
+      const groupNameArray = groupNames.split(',');
+      const groupIds = groupNameArray
+        .map(name => relatedGroups.find(g => g.label === name)?.groupID)
+        .filter(Boolean); // Filter out any undefineds if a group isn't found
+      setFilterGroups(groupIds);
+    }
+    
+    if (only) {
+      setOnlySelected(only === 'true');
+    }
+  }, [location.search, relatedGroups]); // Re-run when related groups are loaded
 
   // Use the custom hook for conflict handling
   const {
@@ -120,9 +149,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-
-  // Use groups from store if available, otherwise fall back to props
-  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
 
   useEffect(() => {
     const foundGroup = currentGroups.find(g => g.label === group_name);
@@ -157,20 +183,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       });
     }
   }, [group]);
-
-  // Fetch sorted photos from backend - only on initial load or manual refresh
-  useEffect(() => {
-    if (skipNextFetch.current) {
-      skipNextFetch.current = false;
-      return;
-    }
-    if (group && group.groupID !== undefined && group.groupID !== null) {
-      // Only fetch if no filters are active
-      if (filterGroups.length === 0 && !onlySelected) {
-        fetchSortedPhotos();
-      }
-    }
-  }, [group?.groupID]); // Only when group changes (initial load or navigation)
 
   // Re-sort photos when sort settings change
   useEffect(() => {
@@ -291,31 +303,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   };
 
-  const fetchSortedPhotos = async () => {
-    if (!group?.groupID) {
-      return;
-    }
-    
-    if (skipNextFetch.current) {
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      const response = await groupsAPI.getPhotosComplete(group.groupID);
-      const photos = response.photos || [];
-      
-      // Sort photos based on current settings
-      const sorted = sortPhotos(photos, sortBy, sortOrder);
-      setSortedPhotos(sorted);
-    } catch (error) {
-      console.error('Error fetching sorted photos:', error);
-      setSortedPhotos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchFilteredPhotos = async () => {
     if (!group?.groupID) {
       return;
@@ -323,40 +310,43 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     
     try {
       setFilterLoading(true);
+      
+      const currentPhotoIds = sortedPhotos.map(p => p.id);
+
       const response = await groupsAPI.getFilteredPhotos(
         group.groupID, 
         filterGroups, 
-        filterMode, 
-        onlySelected
+        filterMode,
+        onlySelected,
+        currentPhotoIds
       );
       
-      const photos = response.photos || [];
-      const relatedGroupsData = response.related_groups || [];
+      const { photos_to_add = [], photo_ids_to_remove = [], related_groups = [] } = response;
       
-      // Sort photos based on current settings
-      const sorted = sortPhotos(photos, sortBy, sortOrder);
-      setSortedPhotos(sorted);
-      setRelatedGroups(relatedGroupsData);
+      // Update photos incrementally
+      setSortedPhotos(prevPhotos => {
+        // Create a Set for efficient lookup of photos to remove
+        const photosToRemoveSet = new Set(photo_ids_to_remove);
+        // Filter out photos that should be removed
+        const remainingPhotos = prevPhotos.filter(p => !photosToRemoveSet.has(p.id));
+        // Create a Set of remaining photo IDs to prevent duplicates
+        const remainingPhotoIds = new Set(remainingPhotos.map(p => p.id));
+        // Filter photos_to_add to ensure no duplicates are added
+        const newPhotosToAdd = photos_to_add.filter(p => !remainingPhotoIds.has(p.id));
+        // Combine the remaining photos with the new ones
+        const finalPhotos = [...remainingPhotos, ...newPhotosToAdd];
+        return sortPhotos(finalPhotos, sortBy, sortOrder);
+      });
+
+      setRelatedGroups(related_groups);
+
     } catch (error) {
       console.error('Error fetching filtered photos:', error);
-      setSortedPhotos([]);
+      // On error, we might want to revert to a safe state, like fetching all photos
+      fetchSortedPhotos();
       setRelatedGroups([]);
     } finally {
       setFilterLoading(false);
-    }
-  };
-
-  const fetchRelatedGroups = async () => {
-    if (!group?.groupID) {
-      return;
-    }
-    
-    try {
-      const response = await groupsAPI.getRelatedGroups(group.groupID);
-      setRelatedGroups(response.related_groups || []);
-    } catch (error) {
-      console.error('Error fetching related groups:', error);
-      setRelatedGroups([]);
     }
   };
 
@@ -374,6 +364,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
   const handleFilterReset = () => {
     setFilterGroups([]);
+    setFilterMode('and');
     setOnlySelected(false);
   };
 
@@ -381,27 +372,13 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setFilterVisible(!filterVisible);
   };
 
-  // Fetch related groups when group changes
-  useEffect(() => {
-    if (group?.groupID) {
-      fetchRelatedGroups();
-    }
-  }, [group?.groupID]);
-
-  // Fetch filtered photos when filter changes
+  // Centralized effect for fetching all photo and group data
   useEffect(() => {
     if (!group?.groupID) return;
 
-    if (filterGroups.length > 0 || onlySelected) {
-      fetchFilteredPhotos();
-    } else {
-      // No filter active, fetch normal photos, but only if not initial load
-      // (initial load is handled by the group change effect)
-      if (sortedPhotos.length > 0) {
-        fetchSortedPhotos();
-      }
-    }
-  }, [filterGroups, filterMode, onlySelected]); // Removed group?.groupID from dependencies
+    fetchFilteredPhotos();
+
+  }, [filterGroups, filterMode, onlySelected, group?.groupID]); // Re-run whenever filters or the main group changes
 
   const getSortedPhotos = () => {
     return sortedPhotos;
@@ -610,6 +587,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       // Escape to clear selection
       if (event.key === 'Escape') {
         clearSelection();
+        handleFilterReset(); // Also reset filters on Escape
       }
     };
 
@@ -728,6 +706,42 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     handleMergeCancel(); // Use the hook's function
     setIsEditingTitle(true); // Restore editing mode
   };
+
+  // Update URL when filter state changes
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    
+    if (filterGroups.length > 0) {
+      // Find the group objects from the IDs to get their names
+      const selectedGroupNames = filterGroups
+        .map(id => relatedGroups.find(g => g.groupID === id)?.label)
+        .filter(Boolean); // Filter out any undefineds if a group isn't found
+      
+      if (selectedGroupNames.length > 0) {
+        searchParams.set('filterGroups', selectedGroupNames.join(','));
+      } else {
+        searchParams.delete('filterGroups');
+      }
+    } else {
+      searchParams.delete('filterGroups');
+    }
+
+    if (filterMode !== 'and') {
+      searchParams.set('filterMode', filterMode);
+    } else {
+      searchParams.delete('filterMode');
+    }
+
+    if (onlySelected) {
+      searchParams.set('only', 'true');
+    } else {
+      searchParams.delete('only');
+    }
+
+    // Use replace to avoid polluting browser history
+    navigate(`${location.pathname}?${searchParams.toString()}`, { replace: true });
+
+  }, [filterGroups, filterMode, onlySelected, navigate, location.pathname, relatedGroups]);
 
   if (!group) {
     return <div>Loading...</div>;
@@ -1100,7 +1114,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         {filterVisible && (
           <GroupsFilter
             group={group}
-            relatedGroups={relatedGroups}
+            relatedGroups={relatedGroups.filter(g => g.groupID !== group?.groupID)}
             selectedGroups={filterGroups}
             filterMode={filterMode}
             onlySelected={onlySelected}

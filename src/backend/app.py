@@ -358,38 +358,50 @@ def get_filtered_photos(group_id):
         return not_found(f"Group {group_id} not found or not accessible")
     
     # Get query parameters
-    mode = request.args.get('mode', 'and')  # 'and' or 'or'
+    mode = request.args.get('mode', 'and')
     only = request.args.get('only', 'false').lower() == 'true'
-    related_groups = request.args.get('related_groups', '').split(',') if request.args.get('related_groups') else []
+    related_groups_str = request.args.get('related_groups', '')
+    current_photo_ids_str = request.args.get('current_photo_ids', '')
     
-    # Filter out empty strings and the main group
-    related_groups = [g for g in related_groups if g and g != group_id]
+    current_photo_ids = set(current_photo_ids_str.split(',')) if current_photo_ids_str else set()
+
+    # Start with the main group
+    all_groups = [group_id]
     
-    # Combine main group with related groups
-    all_groups = [group_id] + related_groups
+    # Add related groups if any are provided
+    if related_groups_str:
+        related_groups = related_groups_str.split(',')
+        # Filter out empty strings and duplicates, including the main group
+        all_groups.extend([g for g in related_groups if g and g != group_id])
+        
+    # Get filtered image IDs using the new logic
+    filtered_image_ids = set(event.get_filtered_images(all_groups, mode, only))
     
-    # Get filtered image IDs
-    filtered_image_ids = event.get_filtered_images(all_groups, mode, only)
+    # Calculate photos to add and remove
+    photo_ids_to_add = list(filtered_image_ids - current_photo_ids)
+    photo_ids_to_remove = list(current_photo_ids - filtered_image_ids)
+
+    # Get related groups sorted by co-occurrence
+    all_related_groups_ids = event.get_related_groups(all_groups, mode, only)
     
-    # Get the actual group data for related groups
-    related_groups_data = []
-    for related_group_id in related_groups:
-        if related_group_id != group_id:  # Skip main group
-            group_data = event.groups_model.get(related_group_id)
-            if group_data:
-                related_groups_data.append(group_data)
-    
-    # Build complete photo data for filtered images
-    photos_data = []
-    for image_id in filtered_image_ids:
+    # Get full group data for the sorted related groups
+    all_related_groups_data = []
+    for r_group_id in all_related_groups_ids:
+        group_data = event.groups_model.get(r_group_id)
+        if group_data:
+            all_related_groups_data.append(group_data)
+            
+    # Build complete photo data for photos to be added
+    photos_to_add_data = []
+    for image_id in photo_ids_to_add:
         photo_data = build_complete_photo_data(event, image_id)
         if photo_data:
-            photos_data.append(photo_data)
+            photos_to_add_data.append(photo_data)
     
     return jsonify({
-        "photos": photos_data,
-        "filtered_image_ids": filtered_image_ids,
-        "related_groups": related_groups_data
+        "photos_to_add": photos_to_add_data,
+        "photo_ids_to_remove": photo_ids_to_remove,
+        "related_groups": all_related_groups_data,
     })
 
 @app.route("/api/moments", methods=["GET"])
