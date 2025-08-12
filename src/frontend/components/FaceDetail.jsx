@@ -885,7 +885,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
               <button
                 onClick={handleToggleSortOrder}
-                className="w-8 h-8 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
+                className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
                 {sortOrder === 'asc' ? (
@@ -921,7 +921,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       setPhotoSize(newPercent / 100);
                     }}
                     disabled={photoSize <= 0.5}
-                    className="w-8 h-8 rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Decrease size"
                   >
                     <Minus className="w-4 h-4" />
@@ -960,7 +960,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       setPhotoSize(newPercent / 100);
                     }}
                     disabled={photoSize >= 3}
-                    className="w-8 h-8 rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Increase size"
                   >
                     <Plus className="w-4 h-4" />
@@ -970,21 +970,21 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
               <button
                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="w-8 h-8 rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                 title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
               >
                 {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
               </button>
 
-              <button
-                onClick={() => setShowCrops(!showCrops)}
-                className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
-                  showCrops 
-                    ? 'bg-primary-100 text-primary-700' 
-                    : 'hover:bg-gray-100 text-gray-700'
-                }`}
-                title={showCrops ? 'Show full images' : 'Show face crops'}
-              >
+                              <button
+                  onClick={() => setShowCrops(!showCrops)}
+                  className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                    showCrops 
+                      ? 'bg-primary-100 text-primary-700' 
+                      : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                  title={showCrops ? 'Show full images' : 'Show face crops'}
+                >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
             </div>
@@ -994,7 +994,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
-                  className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                  className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                     selectionMode 
                       ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
                       : 'hover:bg-gray-100 text-gray-700'
@@ -1006,7 +1006,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 {selectionMode && (
                   <button
                     onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
-                    className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                       selectedPhotos.size === sortedPhotos.length
                         ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
                         : 'hover:bg-gray-100 text-gray-700'
@@ -1019,7 +1019,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 {selectedPhotos.size > 0 && (
                   <button
                     onClick={clearSelection}
-                    className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
                     title="Clear selection"
                   >
                     <X className="w-4 h-4" />
@@ -1034,7 +1034,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 {filterMode !== 'or' && (
                   <button
                     onClick={handleTransferFaces}
-                    className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
                     title="Change group for selected faces"
                   >
                     <Users className="w-4 h-4" />
@@ -1042,7 +1042,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 )}
                 <button
                   onClick={handleAddSelectedToBucket}
-                  className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
                   title="Add selected photos to bucket"
                 >
                   <ShoppingBag className="w-4 h-4" />
@@ -1056,38 +1056,16 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 {/* Group 3: Selection Controls */}
                 <div className="flex items-center space-x-3 px-4">
                   <button
-                    onClick={() => setSelectionMode(!selectionMode)}
-                    className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
-                      selectionMode 
-                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                    onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                      selectedPhotos.size === sortedPhotos.length
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
-                    title={selectionMode ? 'Cancel selection mode' : 'Enter selection mode (Ctrl+A to select all, Shift+click for range selection)'}
+                    title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
                   >
-                    {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    <CheckCheck className="w-4 h-4" />
                   </button>
-                  {selectionMode && (
-                    <button
-                      onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
-                      className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
-                        selectedPhotos.size === sortedPhotos.length
-                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                          : 'hover:bg-gray-100 text-gray-700'
-                      }`}
-                      title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
-                    >
-                      <CheckCheck className="w-4 h-4" />
-                    </button>
-                  )}
-                  {selectedPhotos.size > 0 && (
-                    <button
-                      onClick={clearSelection}
-                      className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                      title="Clear selection"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
                 </div>
 
                 {/* Group 4: Actions on Selection */}
@@ -1096,7 +1074,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     {filterMode !== 'or' && (
                       <button
                         onClick={handleTransferFaces}
-                        className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
+                        className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
                         title="Change group for selected faces"
                       >
                         <Users className="w-4 h-4" />
@@ -1104,7 +1082,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     )}
                     <button
                       onClick={handleAddSelectedToBucket}
-                      className="w-8 h-8 rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
                       title="Add selected photos to bucket"
                     >
                       <ShoppingBag className="w-4 h-4" />
@@ -1118,18 +1096,22 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       </div>
 
       {/* Groups Filter */}
-      <GroupsFilter
-        group={group}
-        relatedGroups={relatedGroups}
-        selectedGroups={filterGroups}
-        filterMode={filterMode}
-        onlySelected={onlySelected}
-        onFilterChange={handleFilterChange}
-        onModeChange={handleFilterModeChange}
-        onOnlySelectedChange={handleOnlySelectedChange}
-        onReset={handleFilterReset}
-        isVisible={filterVisible}
-      />
+      <AnimatePresence>
+        {filterVisible && (
+          <GroupsFilter
+            group={group}
+            relatedGroups={relatedGroups}
+            selectedGroups={filterGroups}
+            filterMode={filterMode}
+            onlySelected={onlySelected}
+            onFilterChange={handleFilterChange}
+            onModeChange={handleFilterModeChange}
+            onOnlySelectedChange={handleOnlySelectedChange}
+            onReset={handleFilterReset}
+            isVisible={filterVisible}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Content Area */}
       <div className="px-8 py-8">
@@ -1190,7 +1172,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                         togglePhotoSelection(photo.id, e);
                       }}
                       className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        viewMode === 'list' || selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}
                     />
                     <img

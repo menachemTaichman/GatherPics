@@ -49,71 +49,59 @@ export default function GroupsFilter({
     return `${name} (${sharedImages} shared images)`;
   };
 
-  if (!isVisible) {
-    return null;
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      className="bg-gray-50 border-b border-gray-200 px-8 py-4"
+      transition={{ 
+        duration: 0.3, 
+        ease: "easeInOut",
+        height: { duration: 0.3, ease: "easeInOut" },
+        opacity: { duration: 0.2, ease: "easeInOut" }
+      }}
+      className="bg-white border-b border-gray-200 px-8 py-4"
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-3">
           <Filter className="w-4 h-4 text-gray-600" />
           <span className="text-sm font-medium text-gray-700">Filter by Groups</span>
           
-          {/* Filter Mode Toggle */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => onModeChange('and')}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                filterMode === 'and' 
-                  ? 'bg-primary-100 text-primary-700 border border-primary-200' 
-                  : 'hover:bg-gray-200 text-gray-600'
-              }`}
-              title="AND mode - Images must contain faces from ALL selected groups"
-            >
-              <UserCheck className="w-3 h-3" />
-              <span className="ml-1">AND</span>
-            </button>
-            <button
-              onClick={() => onModeChange('or')}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                filterMode === 'or' 
-                  ? 'bg-primary-100 text-primary-700 border border-primary-200' 
-                  : 'hover:bg-gray-200 text-gray-600'
-              }`}
-              title="OR mode - Images must contain faces from AT LEAST ONE selected group"
-            >
-              <Users className="w-3 h-3" />
-              <span className="ml-1">OR</span>
-            </button>
-          </div>
+          {/* Filter Mode Toggle - Single button with icon only */}
+          <button
+            onClick={() => onModeChange(filterMode === 'and' ? 'or' : 'and')}
+            className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
+            title={`${filterMode === 'and' ? 'AND mode' : 'OR mode'} - Click to switch to ${filterMode === 'and' ? 'OR' : 'AND'} mode`}
+          >
+            {filterMode === 'and' ? (
+              <UserCheck className="w-4 h-4 text-gray-700" />
+            ) : (
+              <Users className="w-4 h-4 text-gray-700" />
+            )}
+          </button>
 
-          {/* Only Selected Checkbox */}
-          <label className="flex items-center space-x-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={onlySelected}
-              onChange={(e) => onOnlySelectedChange(e.target.checked)}
-              className="w-3 h-3 text-primary-600 rounded focus:ring-primary-500"
-            />
-            <span className="text-xs text-gray-600">Only selected groups</span>
-          </label>
+          {/* Only Selected Checkbox - Box style button */}
+          <button
+            onClick={() => onOnlySelectedChange(!onlySelected)}
+            className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+              onlySelected 
+                ? 'bg-primary-100 text-primary-700' 
+                : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+            }`}
+            title={onlySelected ? 'Show all groups' : 'Show only selected groups'}
+          >
+            <Eye className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="flex items-center space-x-2">
           {selectedGroups.length > 0 && (
             <button
               onClick={onReset}
-              className="flex items-center space-x-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
+              className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
               title="Clear filter"
             >
-              <RefreshCw className="w-3 h-3" />
-              <span>Reset</span>
+              <RefreshCw className="w-4 h-4 text-gray-700" />
             </button>
           )}
         </div>
@@ -125,7 +113,7 @@ export default function GroupsFilter({
         <div className="flex-shrink-0">
           <div className="relative group">
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-                                    {group.face_representative ? (
+              {group.face_representative ? (
                 <img
                   src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`}
                   alt={getGroupDisplayName(group)}
@@ -171,9 +159,9 @@ export default function GroupsFilter({
                     ? 'border-primary-500 bg-primary-100'
                     : 'border-gray-300 bg-gray-100'
                 } flex items-center justify-center`}>
-                                        {relatedGroup.face_representative ? (
+                  {relatedGroup.face_representative ? (
                     <img
-                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/75cb6635-879d-4386-b023-366444dc0fb2/faces/${relatedGroup.face_representative}.webp`}
+                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${relatedGroup.face_representative}.webp`}
                       alt={getGroupDisplayName(relatedGroup)}
                       className="w-full h-full object-cover"
                       onError={(e) => {
