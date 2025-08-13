@@ -33,7 +33,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
   useEffect(() => {
     if (open && moment) {
       // Get current photos for this moment
-      const currentPhotos = (momentPhotosMap[moment.id] || []).map(p => p.name);
+      const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.name);
       setSelectedPhotos(new Set(currentPhotos));
       fetchPhotosInPeriod();
     }
@@ -62,37 +62,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
   const fetchAllImagesWithTimestamps = async () => {
     try {
       const data = await imagesAPI.getAll();
-      const allImages = data.images || [];
-      const imagesWithTimestamps = [];
-      
-      for (const img of allImages) {
-        let date_taken = null;
-        
-        // First try to get timestamp from momentPhotosMap (assigned photos)
-        for (const momentId in momentPhotosMap) {
-          const momentPhotos = momentPhotosMap[momentId] || [];
-          const foundPhoto = momentPhotos.find(p => p.name === img.name);
-          if (foundPhoto && foundPhoto.date_taken) {
-            date_taken = foundPhoto.date_taken;
-            break;
-          }
-        }
-        
-        // If not found in momentPhotosMap, try to get from photosInPeriod
-        if (!date_taken && photosInPeriod.length > 0) {
-          const periodPhoto = photosInPeriod.find(p => p.name === img.name);
-          if (periodPhoto && periodPhoto.date_taken) {
-            date_taken = periodPhoto.date_taken;
-          }
-        }
-        
-        imagesWithTimestamps.push({
-          name: img.name,
-          date_taken: date_taken
-        });
-      }
-      
-      setAllImagesWithTimestamps(imagesWithTimestamps);
+      setAllImagesWithTimestamps(data.images || []);
     } catch (error) {
       console.error('Error fetching images:', error);
       const errorInfo = handleAPIError(error, 'Failed to fetch images');
@@ -102,13 +72,13 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
   };
 
   const fetchPhotosInPeriod = async () => {
-    if (!moment || !moment.start_datetime || !moment.end_datetime) {
+    if (!moment || !moment.start || !moment.end) {
       setPhotosInPeriod([]);
       return;
     }
 
     try {
-      const result = await momentsAPI.getPhotosInPeriod(moment.id);
+      const result = await momentsAPI.getPhotosInPeriod(moment.momentID);
       setPhotosInPeriod(result.photos || []);
     } catch (error) {
       console.error('Error fetching photos in period:', error);
@@ -128,6 +98,12 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
 
       // The API service interceptor will automatically handle the state updates
       await onSave(updatedMoment);
+      
+      // Manually trigger a refresh of photos for the moments view if needed
+      if (onRefreshPhotos) {
+        onRefreshPhotos();
+      }
+      
       onClose();
     } catch (error) {
       console.error('Error saving photos:', error);
@@ -173,11 +149,11 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
       const momentPhotos = momentPhotosMap[momentId] || [];
       const foundPhoto = momentPhotos.find(p => p.name === photoName);
       if (foundPhoto) {
-        const momentObj = moments.find(m => m.id === momentId);
+        const momentObj = moments.find(m => m.momentID === momentId);
         return {
           momentId: momentId,
-          title: momentObj ? momentObj.title : momentId,
-          isCurrentMoment: moment && momentId === moment.id
+          title: momentObj ? momentObj.label : momentId,
+          isCurrentMoment: moment && momentId === moment.momentID
         };
       }
     }
@@ -192,11 +168,11 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        (momentPhotosMap[moment?.id] || []).some(p => p.name === img.name)
+        (momentPhotosMap[moment?.momentID] || []).some(p => p.name === img.name)
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        !(momentPhotosMap[moment?.id] || []).some(p => p.name === img.name)
+        !(momentPhotosMap[moment?.momentID] || []).some(p => p.name === img.name)
       );
     } else if (filterType === 'in-period') {
       filteredImages = photosInPeriod;
@@ -223,7 +199,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
       >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">Edit Photos: {moment.title}</h3>
+            <h3 className="text-lg font-bold">Edit Photos: {moment.label}</h3>
             <div className="flex space-x-2">
               <button onClick={handleSavePhotos} className="btn-primary">Save Changes</button>
               <button onClick={handleClose} className="btn-secondary">Cancel</button>
@@ -304,7 +280,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
               const isInPeriod = isPhotoInPeriod(photo.name);
               return (
                 <div
-                  key={photo.name}
+                  key={photo.id}
                   onClick={() => togglePhoto(photo.name)}
                   className={`relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors ${
                     isSelected ? 'border-primary-500 ring-2 ring-primary-200' : 
@@ -312,7 +288,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
                   }`}
                 >
                   <img
-                    src={`/images/${photo.name}`}
+                    src={photo.urls.thumbnail}
                     alt={photo.name}
                     className="w-full h-24 object-cover"
                     loading="lazy"

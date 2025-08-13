@@ -158,7 +158,7 @@ export const momentsAPI = {
 
   // Get moment photos
   getPhotos: async (momentId) => {
-    const response = await api.get(`/api/moments/${momentId}/photos`);
+    const response = await api.get(`/api/moments/${momentId}/photos-complete`);
     return response.data;
   },
 

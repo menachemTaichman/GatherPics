@@ -249,21 +249,6 @@ def print_group_face_representative(group_id):
     else:
         print(f"Group {group_id} not found.")
 
-# event.process_new_images(verbose=True)
-
-# reset_event(event)
-
-# onedrive_path = r"C:\Users\metai\OneDrive\Pictures\חתונה\צלם"
-# result = update_image_dates_from_onedrive(event, onedrive_path, verbose=True)
-# print(result)
-
-# images = event.images_model.list()
-# print(images)
-
-# process_images(images)
-
-# reset_event(event)
-
 def update_date_taken(image_ids: list):
     for image in image_ids:
         image_id = image['imageID']
@@ -271,7 +256,6 @@ def update_date_taken(image_ids: list):
         date_taken = extract_all_metadata(image_path)['date_taken'] 
         event.images_model.edit(image_id, {'date_taken': date_taken})
 
-# create function to show in matplotlib a frop from image, with the face bbox
 def show_face_from_image(image_path, face_bbox):
     import matplotlib.pyplot as plt
     image = PILImage.open(image_path)
@@ -279,6 +263,52 @@ def show_face_from_image(image_path, face_bbox):
     plt.imshow(face_pil)
     plt.show()
 
-# event.process_new_images(verbose=True)
+def copy_moments_to_database():
+    import json
+    
+    # Load the old moments data
+    with open('old/core/data/moments.json', 'r', encoding='utf-8') as f:
+        old_moments_data = json.load(f)
+    
+    # Extract the moments array
+    old_moments = old_moments_data.get('moments', [])
+    
+    print(f"Found {len(old_moments)} moments to copy")
+    
+    for old_moment in old_moments:
+        # Map old fields to new format
+        label = old_moment.get('title', '')
+        description = old_moment.get('description', '')
+        start = old_moment.get('start_datetime', '').replace('T', ' ')
+        end = old_moment.get('end_datetime', '').replace('T', ' ')
+        
+        # Map old photo filenames to new image IDs
+        old_photos = old_moment.get('photos', [])
+        image_ids = []
+        
+        for photo_filename in old_photos:
+            image_record = event.db.get_one('images', {'name': photo_filename})
+            if image_record:
+                image_ids.append(image_record['imageID'])
+        
+        # Create the moment in the new database
+        moment_data = event.moments_model.add(
+            label=label,
+            description=description,
+            start=start,
+            end=end,
+            image_IDs=image_ids
+        )
+        
+        print(f"Created moment: {label} with {len(image_ids)} images")
+    
+    print(f"Copy complete! Copied {len(old_moments)} moments")
 
-print_group_face_representative('b3d862f2-1f01-4868-bca7-4b30cc759b38')
+def clear_moments_images():
+    moments = event.moments_model.list()
+    for moment in moments:
+        images = event.moments_model.get_images(moment['momentID'])
+        for image in images:
+            event.moments_model.remove_image_from_moment(moment['momentID'], image)
+
+print(event.moments_model.list())

@@ -49,12 +49,17 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
 
   const fetchPhotos = async () => {
     setLoading(true);
-    try {
-      const result = await momentsAPI.getPhotos(momentId);
-      setPhotos(result.photos || []);
-    } catch {
+    if (momentId && !momentId.startsWith('temp-')) {
+      try {
+        const result = await momentsAPI.getPhotos(momentId);
+        setPhotos(result.photos || []);
+      } catch {
+        setPhotos([]);
+      } finally {
+        setLoading(false);
+      }
+    } else {
       setPhotos([]);
-    } finally {
       setLoading(false);
     }
   };
@@ -80,14 +85,14 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
     onPhotoSelect(photoName, momentId);
   };
 
-  const openPhotoViewer = (photoName, index) => {
-    onOpenPhotoViewer(photos, photoName, index);
+  const openPhotoViewer = (photo, index) => {
+    onOpenPhotoViewer(photos, photo, index);
   };
 
   // Helper to get thumb filename
   const getThumbFilename = (photo) => {
     // Use the photo data directly since it comes from the API
-    return photo.thumb_path || photo.display_path || photo.original_path || photo.name;
+    return photo.urls?.thumbnail || photo.thumb_path || photo.display_path || photo.original_path || photo.name;
   };
 
   if (loading) return <div className="py-4 text-gray-400">Loading photos...</div>;
@@ -106,10 +111,10 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
         >
           {photos.map((photo, index) => (
             <div
-              key={photo.name}
+              key={photo.id}
               className={`photo-card ${photoClasses[photo.name] || 'square'}`}
             >
-              <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo.name, index)}>
+              <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo, index)}>
                 <input
                   type="checkbox"
                   id={`photo-checkbox-${momentId}-${photo.name}`}
@@ -152,7 +157,7 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
       ) : (
         <div className="space-y-4 max-w-3xl mx-auto block">
           {photos.map((photo, index) => (
-            <div key={photo.name} className="flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full">
+            <div key={photo.id} className="flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full">
               <input
                 type="checkbox"
                 id={`photo-checkbox-list-${momentId}-${photo.name}`}
@@ -170,7 +175,7 @@ function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhoto
                   alt={`Photo ${index + 1}`}
                   className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                   loading="lazy"
-                  onClick={() => openPhotoViewer(photo.name, index)}
+                  onClick={() => openPhotoViewer(photo, index)}
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
@@ -254,7 +259,7 @@ export default function Moments() {
           
           // If the moment is in the viewport
           if (rect.top <= headerHeight + 50 && rect.bottom >= headerHeight) {
-            currentMoment = moments.find(m => m.id === momentId);
+            currentMoment = moments.find(m => m.momentID === momentId);
           }
         }
       });
@@ -272,11 +277,15 @@ export default function Moments() {
   const fetchAllMomentPhotos = async () => {
     const map = {};
     for (const moment of moments) {
-      try {
-        const result = await momentsAPI.getPhotos(moment.id);
-        map[moment.id] = result.photos || [];
-      } catch {
-        map[moment.id] = [];
+      if (moment.momentID && !moment.momentID.startsWith('temp-')) {
+        try {
+          const result = await momentsAPI.getPhotos(moment.momentID);
+          map[moment.momentID] = result.photos || [];
+        } catch {
+          map[moment.momentID] = [];
+        }
+      } else {
+        map[moment.momentID] = [];
       }
     }
     setMomentPhotosMap(map);
@@ -312,9 +321,13 @@ export default function Moments() {
     }
   };
 
+  useEffect(() => {
+    // console.log("Moments in state:", moments); // DEBUG
+  }, [moments]);
+
   const handleSaveMoments = async (updatedMoment) => {
     try {
-      const response = await momentsAPI.update(updatedMoment.id, updatedMoment);
+      const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment);
       
       // Handle any change instructions from the backend
       if (response.changes) {
@@ -323,7 +336,7 @@ export default function Moments() {
         });
       } else {
         // Fallback to direct update if no change instructions
-        updateMoment(updatedMoment.id, response.moment || response);
+        updateMoment(updatedMoment.momentID, response.moment || response);
       }
       
       setShowEditModal(false);
@@ -394,7 +407,7 @@ export default function Moments() {
     
     try {
       // This would require backend support to move photos between moments
-      alert(`Moving ${globalSelection.size} photos to ${targetMoment.title}`);
+      alert(`Moving ${globalSelection.size} photos to ${targetMoment.label}`);
       setShowMoveModal(false);
       clearGlobalSelection();
     } catch (error) {
@@ -429,12 +442,10 @@ export default function Moments() {
     }
   };
 
-  const openPhotoViewer = (photos, photoName, index) => {
-    // Find the photo in the photos array
-    const photoMeta = photos.find(p => p.name === photoName) || { name: photoName };
+  const openPhotoViewer = (photos, photo, index) => {
     setPhotoViewer({
       show: true,
-      photo: photoMeta,
+      photo: photo,
       index: index,
       photos: photos
     });
@@ -464,9 +475,9 @@ export default function Moments() {
 
   const handleJumpToMoment = (momentInfo) => {
     // Find the moment in our moments list and scroll to it
-    const moment = moments.find(m => m.id === momentInfo.id);
+    const moment = moments.find(m => m.momentID === momentInfo.id);
     if (moment) {
-      scrollToMoment(moment.id);
+      scrollToMoment(moment.momentID);
     }
   };
 
@@ -639,23 +650,23 @@ export default function Moments() {
                   )}
                   {moments.map(moment => (
                     <motion.div 
-                      key={moment.id} 
+                      key={moment.momentID} 
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => scrollToMoment(moment.id)}
+                      onClick={() => scrollToMoment(moment.momentID)}
                     >
                       <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
                         {moment.representative_photo ? (
-                          <img src={`/images/${moment.representative_photo}`} alt="" className="object-cover w-full h-full" loading="lazy" />
+                          <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
                         ) : (
                           <Image className="w-8 h-8 text-white" />
                         )}
                       </div>
                       <div className="text-center">
-                        <div className="text-base font-semibold truncate max-w-[7rem]">{moment.title}</div>
+                        <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
                         <div className="text-xs text-gray-500 truncate max-w-[7rem]">
-                          {formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}
+                          {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
                         </div>
                       </div>
                     </motion.div>
@@ -683,12 +694,12 @@ export default function Moments() {
             <div className="fixed left-4 top-100 w-64 z-50 bg-white p-4 rounded-lg shadow-lg border border-gray-200">
               {currentVisibleMoment ? (
                 <>
-                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.title}</div>
+                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
                   <div className="text-xs text-gray-700 mb-1 font-medium">
-                    {formatTimeOnly(currentVisibleMoment.start_datetime)} - {formatTimeOnly(currentVisibleMoment.end_datetime)}
+                    {formatTimeOnly(currentVisibleMoment.start)} - {formatTimeOnly(currentVisibleMoment.end)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {formatDate(currentVisibleMoment.start_datetime)}
+                    {formatDate(currentVisibleMoment.start)}
                   </div>
                 </>
               ) : (
@@ -706,12 +717,12 @@ export default function Moments() {
             <div className="space-y-12 ml-64">
               {moments.map((moment, index) => (
                 <motion.div
-                  key={moment.id}
+                  key={moment.momentID}
                   initial={{ opacity: 0, x: -50 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                   className="relative flex"
-                  ref={el => momentsRef.current[moment.id] = el}
+                  ref={el => momentsRef.current[moment.momentID] = el}
                 >
                   {/* Timeline dot */}
                   <div className="relative flex-shrink-0">
@@ -731,7 +742,7 @@ export default function Moments() {
                             <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg overflow-hidden flex items-center justify-center">
                               {moment.representative_photo ? (
                                 <img 
-                                  src={`/images/${moment.representative_photo}`} 
+                                  src={moment.representative_photo} 
                                   alt="" 
                                   className="w-full h-full object-cover"
                                   loading="lazy"
@@ -742,15 +753,15 @@ export default function Moments() {
                             </div>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">{moment.title}</h3>
+                            <h3 className="text-xl font-bold text-gray-900 mb-1">{moment.label}</h3>
                             <div className="flex items-center space-x-4 text-sm text-gray-500">
                               <div className="flex items-center space-x-1">
                                 <Clock className="w-4 h-4" />
-                                <span>{formatTimeOnly(moment.start_datetime)} - {formatTimeOnly(moment.end_datetime)}</span>
+                                <span>{formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}</span>
                             </div>
                               <div className="flex items-center space-x-1">
                                 <Calendar className="w-4 h-4" />
-                                <span>{formatDate(moment.start_datetime)}</span>
+                                <span>{formatDate(moment.start)}</span>
                               </div>
                             </div>
                             {moment.description && (
@@ -763,7 +774,7 @@ export default function Moments() {
                       {/* Photos */}
                       <div className="p-6">
                         <PhotoGrid 
-                          momentId={moment.id} 
+                          momentId={moment.momentID} 
                           viewMode={viewMode} 
                           photoSize={photoSize}
                           onPhotoSelect={handlePhotoSelect}
@@ -819,13 +830,13 @@ export default function Moments() {
           >
             <h4 className="font-semibold mb-4">Move to Moment</h4>
             <select
-              value={targetMoment?.id || ''}
-              onChange={(e) => setTargetMoment(moments.find(m => m.id === e.target.value))}
+              value={targetMoment?.momentID || ''}
+              onChange={(e) => setTargetMoment(moments.find(m => m.momentID === e.target.value))}
               className="w-full border rounded px-3 py-2 mb-4"
             >
               <option value="">Select a moment...</option>
               {moments.map(m => (
-                <option key={m.id} value={m.id}>{m.title}</option>
+                <option key={m.momentID} value={m.momentID}>{m.label}</option>
               ))}
             </select>
             <div className="flex justify-end space-x-2">

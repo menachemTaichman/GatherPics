@@ -206,14 +206,14 @@ export const useDataStore = create((set, get) => ({
   updateMoment: (momentId, updates) => {
     set((state) => ({
       moments: state.moments.map(moment => 
-        moment.id === momentId ? { ...moment, ...updates } : moment
+        moment.momentID === momentId ? { ...moment, ...updates } : moment
       )
     }));
   },
   
   deleteMoment: (momentId) => {
     set((state) => ({
-      moments: state.moments.filter(moment => moment.id !== momentId)
+      moments: state.moments.filter(moment => moment.momentID !== momentId)
     }));
   },
   
@@ -261,11 +261,11 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
 
       
     case CHANGE_TYPES.MOMENT_UPDATED:
-      store.updateMoment(data.id, data);
+      store.updateMoment(data.momentID, data);
       break;
       
     case CHANGE_TYPES.MOMENT_DELETED:
-      store.deleteMoment(data.id);
+      store.deleteMoment(data.momentID);
       break;
       
     case CHANGE_TYPES.MOMENT_CREATED:

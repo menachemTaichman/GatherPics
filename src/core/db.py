@@ -41,7 +41,8 @@ TABLES = {
         label TEXT UNIQUE,
         description TEXT,
         start TEXT,
-        end TEXT
+        end TEXT,
+        representative_photo TEXT
     ''',
     'profiles': '''
         profileID TEXT PRIMARY KEY,

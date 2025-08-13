@@ -17,8 +17,8 @@ class Moments(BaseModel):
     def add(self, label: str = '', description: str = '', start: str = '', end: str = '', image_IDs: List[str] = []) -> Dict:
         moment_data = super().add(label, description, start, end, image_IDs)
         moment_id = moment_data['momentID']
-        for image_id in image_IDs:
-            self.add_image_to_moment(moment_id, image_id)
+        if image_IDs:  # Only process if there are images
+            self.add_image_to_moment(moment_id, image_IDs)
         return moment_data
 
     def edit(self, entity_id: str, fields: Dict) -> None:
@@ -33,14 +33,23 @@ class Moments(BaseModel):
         
         try:
             super().edit(entity_id, fields)
+            if 'image_IDs' in fields:
+                # Use set_photos which handles the complete replacement logic
+                self.set_photos(entity_id, fields['image_IDs'])
         except Exception as e:
             raise
 
-    def add_image_to_moment(self, moment_id: str, image_id: str) -> None:
-        self.db.execute_query('UPDATE images SET momentID=? WHERE imageID=?', (moment_id, image_id))
+    def add_image_to_moment(self, moment_id: str, image_ids: List[str]) -> None:
+        if not image_ids:  # Guard against empty lists
+            return
+        image_placeholders = ','.join(['?'] * len(image_ids))   
+        self.db.execute_query('UPDATE images SET momentID=? WHERE imageID IN ({})'.format(image_placeholders), (moment_id, *image_ids))
 
-    def remove_image_from_moment(self, moment_id: str, image_id: str) -> None:
-        self.db.execute_query('UPDATE images SET momentID=NULL WHERE imageID=? AND momentID=?', (image_id, moment_id))
+    def remove_image_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
+        if not image_ids:  # Guard against empty lists
+            return
+        image_placeholders = ','.join(['?'] * len(image_ids))
+        self.db.execute_query('UPDATE images SET momentID=NULL WHERE imageID IN ({}) AND momentID=?'.format(image_placeholders), (moment_id, *image_ids))
 
     def get_images(self, moment_id: str) -> List[str]:
         results = self.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))
@@ -57,6 +66,14 @@ class Moments(BaseModel):
         for moment in moments:
             moment['image_IDs'] = self.get_images(moment['momentID'])
         return moments
+
+    def set_photos(self, moment_id: str, image_ids: List[str]):
+        """Set the photos for a given moment, removing old ones."""
+        # First, remove all existing photos from the moment
+        self.db.execute_query('UPDATE images SET momentID = NULL WHERE momentID = ?', (moment_id,))
+        # Then, add the new photos
+        if image_ids:  # Only add if there are new images
+            self.add_image_to_moment(moment_id, image_ids)
 
     def check_name_conflict(self, label: str, exclude_moment_id: str = '') -> Dict:
         """Check if a moment name already exists and return conflict info."""

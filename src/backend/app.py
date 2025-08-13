@@ -411,6 +411,18 @@ def get_moments():
     event = get_event_with_profile()
     try:
         moments = event.moments_model.list()
+        # Add full URLs for representative photos
+        for moment in moments:
+            if moment.get('representative_photo'):
+                # Assuming representative_photo stores the image name
+                image = event.images_model.get_by_name(moment['representative_photo'])
+                if image:
+                    moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/display/{image["imageID"]}.webp'
+                else:
+                    moment['representative_photo'] = None
+            else:
+                moment['representative_photo'] = None
+        
         return jsonify({"moments": moments})
     except Exception as e:
         return bad_request(e)
@@ -440,7 +452,14 @@ def update_moment(moment_id):
     
     data = request.json or {}
     try:
-        event.moments_model.edit(moment_id, data)
+        # Handle photo assignments separately if 'image_IDs' is in the data
+        if 'image_IDs' in data:
+            event.moments_model.set_photos(moment_id, data['image_IDs'])
+            del data['image_IDs']  # Don't try to save this to the moments table
+                    
+        if data:  # Only edit if other fields are present
+            event.moments_model.edit(moment_id, data)
+
         updated = event.moments_model.get(moment_id)
         response_data = add_change_instruction({"moment": updated}, 'MOMENT_UPDATED', updated)
         return jsonify(response_data)
@@ -459,7 +478,7 @@ def delete_moment(moment_id):
     
     try:
         event.moments_model.delete(moment_id)
-        response_data = add_change_instruction({"success": True}, 'MOMENT_DELETED', {"id": moment_id})
+        response_data = add_change_instruction({"success": True}, 'MOMENT_DELETED', {"momentID": moment_id})
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -484,11 +503,25 @@ def get_moment_photos(moment_id):
 @app.route("/api/moments/<moment_id>/photos-in-period", methods=["GET"])
 @require_auth
 def get_moment_photos_in_period(moment_id):
-    """Get photos in a time period for a moment (stub for now)."""
+    """Get photos in a time period for a moment."""
     event = get_event_with_profile()
     try:
-        # TODO: Implement logic to get photos within moment's time range
-        return jsonify({"photos": []})
+        moment = event.moments_model.get(moment_id)
+        if not moment or not moment.get('start') or not moment.get('end'):
+            return jsonify({"photos": []})
+
+        start_time = moment['start']
+        end_time = moment['end']
+        
+        photo_ids = event.get_photos_in_period(start_time, end_time)
+        
+        photos_data = []
+        for photo_id in photo_ids:
+            photo_data = build_complete_photo_data(event, photo_id)
+            if photo_data:
+                photos_data.append(photo_data)
+                
+        return jsonify({"photos": photos_data})
     except Exception as e:
         return bad_request(e)
 
@@ -635,7 +668,14 @@ def get_images_json():
     event = get_event_with_profile()
     try:
         images = event.images_model.list()
-        return jsonify({"images": images})
+        
+        photos_data = []
+        for image in images:
+            photo_data = build_complete_photo_data(event, image['imageID'])
+            if photo_data:
+                photos_data.append(photo_data)
+                
+        return jsonify({"images": photos_data})
     except Exception as e:
         return bad_request(e)
 

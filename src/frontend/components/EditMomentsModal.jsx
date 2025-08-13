@@ -43,8 +43,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
   const handleSave = async () => {
     // Check if any moment was just created or updated with time range
     const momentsWithTimeRange = editingMoments.filter(m => 
-      m.start_datetime && m.end_datetime && 
-      (m.id.startsWith('temp-') || m.photos === undefined)
+      m.start && m.end && 
+      (m.momentID.startsWith('temp-') || m.photos === undefined)
     );
     
     if (momentsWithTimeRange.length > 0) {
@@ -66,29 +66,29 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
   const handleSaveMoment = async (moment) => {
     try {
       let savedMoment = moment;
-      if (moment.id.startsWith('temp-')) {
+      if (moment.momentID.startsWith('temp-')) {
         // Create new moment
-        const { id, ...momentData } = moment;
+        const { momentID, ...momentData } = moment;
         const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
         
         // Update the local state with the saved moment
         setEditingMoments(prev => prev.map(m => 
-          m.id === moment.id ? { ...savedMoment, id: savedMoment.id } : m
+          m.momentID === moment.momentID ? { ...savedMoment, momentID: savedMoment.momentID } : m
         ));
       } else {
         // Update existing moment
-        const result = await momentsAPI.update(moment.id, moment);
+        const result = await momentsAPI.update(moment.momentID, moment);
         savedMoment = result.moment;
         
         // Update the local state with the saved moment
         setEditingMoments(prev => prev.map(m => 
-          m.id === moment.id ? savedMoment : m
+          m.momentID === moment.momentID ? savedMoment : m
         ));
       }
       
       // Mark as changed
-      setChangedMoments(prev => new Set([...prev, savedMoment.id]));
+      setChangedMoments(prev => new Set([...prev, savedMoment.momentID]));
       
       return savedMoment;
     } catch (error) {
@@ -104,7 +104,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
       await momentsAPI.delete(id);
       
       // Remove from editing moments
-      setEditingMoments(prev => prev.filter(m => m.id !== id));
+      setEditingMoments(prev => prev.filter(m => m.momentID !== id));
       
       // Call parent's onDelete
       if (onDelete) {
@@ -118,23 +118,23 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
   };
 
   const updateMoment = (id, updates) => {
-    setEditingMoments(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+    setEditingMoments(prev => prev.map(m => m.momentID === id ? { ...m, ...updates } : m));
     // Mark this moment as changed
     setChangedMoments(prev => new Set([...prev, id]));
   };
 
   const addMoment = () => {
     const newMoment = {
-      id: `temp-${Date.now()}`,
-      title: '',
-      start_datetime: '',
-      end_datetime: '',
+      momentID: `temp-${Date.now()}`,
+      label: '',
+      start: '',
+      end: '',
       representative_photo: '',
       description: ''
     };
     setEditingMoments(prev => [...prev, newMoment]);
     // Mark the new moment as changed
-    setChangedMoments(prev => new Set([...prev, newMoment.id]));
+    setChangedMoments(prev => new Set([...prev, newMoment.momentID]));
   };
 
 
@@ -144,7 +144,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
 
   const handleTitleEdit = (momentId, newTitle) => {
-    updateMoment(momentId, { title: newTitle });
+    updateMoment(momentId, { label: newTitle });
     setEditingTitle(null);
   };
 
@@ -181,8 +181,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
         
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-3">
-            {editingMoments.map((moment, index) => (
-              <div key={moment.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+            {editingMoments.filter(m => m && m.momentID).map((moment, index) => (
+              <div key={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
                     {/* Representative Photo */}
@@ -190,7 +190,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       {moment.representative_photo ? (
                         <div className="w-16 h-16 rounded-lg overflow-hidden border">
                           <img 
-                            src={`/images/${moment.representative_photo}`}
+                            src={moment.representative_photo}
                             alt="" 
                             className="w-full h-full object-cover"
                             loading="lazy"
@@ -219,17 +219,17 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
                     {/* Inline Editable Title */}
                     <div className="flex-1">
-                      {editingTitle?.id === moment.id ? (
+                      {editingTitle?.id === moment.momentID ? (
                         <input
                           type="text"
-                          id={`edit-moment-title-${moment.id}`}
-                          name={`edit-moment-title-${moment.id}`}
+                          id={`edit-moment-title-${moment.momentID}`}
+                          name={`edit-moment-title-${moment.momentID}`}
                           value={editingTitle.title}
                           onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
-                          onBlur={() => handleTitleEdit(moment.id, editingTitle.title)}
+                          onBlur={() => handleTitleEdit(moment.momentID, editingTitle.title)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              handleTitleEdit(moment.id, editingTitle.title);
+                              handleTitleEdit(moment.momentID, editingTitle.title);
                             } else if (e.key === 'Escape') {
                               setEditingTitle(null);
                             }
@@ -239,10 +239,10 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                         />
                       ) : (
                         <div
-                          onClick={() => startTitleEdit(moment.id, moment.title)}
+                          onClick={() => startTitleEdit(moment.momentID, moment.label)}
                           className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
                         >
-                          {moment.title || `Moment ${index + 1}`}
+                          {moment.label || `Moment ${index + 1}`}
                         </div>
                       )}
                     </div>
@@ -250,7 +250,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
                   {/* Action Buttons */}
                   <div className="flex items-center space-x-2">
-                    {changedMoments.has(moment.id) && (
+                    {changedMoments.has(moment.momentID) && (
                       <button 
                         onClick={() => handleSaveMoment(moment)}
                         className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
@@ -267,7 +267,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       <List className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => handleDelete(moment.id)}
+                      onClick={() => handleDelete(moment.momentID)}
                       className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete Moment"
                     >
@@ -281,10 +281,10 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
                     <textarea
-                      id={`moment-description-${moment.id}`}
-                      name={`moment-description-${moment.id}`}
+                      id={`moment-description-${moment.momentID}`}
+                      name={`moment-description-${moment.momentID}`}
                       value={moment.description}
-                      onChange={(e) => updateMoment(moment.id, { description: e.target.value })}
+                      onChange={(e) => updateMoment(moment.momentID, { description: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm resize-none"
                       rows="2"
                       placeholder="Add description..."
@@ -296,15 +296,15 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       <label className="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
                       <input
                         type="datetime-local"
-                        id={`moment-start-${moment.id}`}
-                        name={`moment-start-${moment.id}`}
-                        value={moment.start_datetime}
-                        onChange={(e) => updateMoment(moment.id, { start_datetime: e.target.value })}
+                        id={`moment-start-${moment.momentID}`}
+                        name={`moment-start-${moment.momentID}`}
+                        value={moment.start}
+                        onChange={(e) => updateMoment(moment.momentID, { start: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.start_datetime && (
+                      {moment.start && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.start_datetime)}
+                          {formatDateTime(moment.start)}
                         </div>
                       )}
                     </div>
@@ -313,15 +313,15 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                       <label className="block text-xs font-medium text-gray-600 mb-1">End Time</label>
                       <input
                         type="datetime-local"
-                        id={`moment-end-${moment.id}`}
-                        name={`moment-end-${moment.id}`}
-                        value={moment.end_datetime}
-                        onChange={(e) => updateMoment(moment.id, { end_datetime: e.target.value })}
+                        id={`moment-end-${moment.momentID}`}
+                        name={`moment-end-${moment.momentID}`}
+                        value={moment.end}
+                        onChange={(e) => updateMoment(moment.momentID, { end: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.end_datetime && (
+                      {moment.end && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.end_datetime)}
+                          {formatDateTime(moment.end)}
                         </div>
                       )}
                     </div>
@@ -344,7 +344,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
                   {selectedMoment.representative_photo && (
                     <button
                       onClick={() => {
-                        updateMoment(selectedMoment.id, { representative_photo: '' });
+                        updateMoment(selectedMoment.momentID, { representative_photo: '' });
                         setShowPhotoSelector(false);
                       }}
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded transition-colors"
@@ -360,17 +360,17 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {(momentPhotosMap[selectedMoment.id] || []).map((img) => (
+                {(momentPhotosMap[selectedMoment.momentID] || []).map((img) => (
                   <div
                     key={img.name}
                     onClick={() => {
-                      updateMoment(selectedMoment.id, { representative_photo: img.name });
+                      updateMoment(selectedMoment.momentID, { representative_photo: img.name });
                       setShowPhotoSelector(false);
                     }}
                     className="cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors relative group"
                   >
                     <img
-                      src={`/images/${img.name}`}
+                      src={img.urls.thumbnail}
                       alt={img.name}
                       className="w-full h-24 object-cover"
                       loading="lazy"

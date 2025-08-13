@@ -15,6 +15,7 @@ class Event(JsonModel):
     DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
     ID_FIELD = 'id'
 
+    # event utils
     def __init__(self, event_id: str, load: bool = True, profile_id: Optional[str] = None):
         super().__init__(event_id, load=load)
         self.event_dir = os.path.join(DATA_ROOT, self.id)
@@ -39,14 +40,6 @@ class Event(JsonModel):
         self.high_quality_dir = os.path.join(self.event_dir, 'high_quality')
         self._ensure_event_dirs()
 
-    def set_profile_id(self, profile_id: Optional[str]):
-        """Set the profile ID for access control across all models."""
-        self.db.set_profile_id(profile_id)
-
-    def get_profile_id(self) -> Optional[str]:
-        """Get the current profile ID."""
-        return self.db.get_profile_id()
-
     def _init_fields(self):
         self.name = ''
         self.date = ''
@@ -58,261 +51,6 @@ class Event(JsonModel):
         self.date = data.get('date', '')
         self.events_manager = data.get('events_manager', '')
         self.last_group_id = data.get('last_group_id', '')
-
-    def get_info(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'date': self.date,
-            'events_manager': self.events_manager,
-            'last_group_id': self.last_group_id,
-            'DB_PATH': self.DB_PATH
-        }
-    
-    def get_crop_mapping(self, group_id: str) -> dict:
-        """
-        Get mapping from image_id to face_id for crop display.
-        For each image in the group, returns the first face that belongs to this group.
-        """
-        query = '''
-            SELECT DISTINCT f.imageID, f.faceID
-            FROM faces f 
-            WHERE f.groupID = ?
-            GROUP BY f.imageID
-        '''
-        results = self.db.execute_query(query, (group_id,))
-        return {row[0]: row[1] for row in results}
-
-    def get_faces_by_image_and_group(self, image_id: str, group_id: str) -> List[str]:
-        """
-        Get all face IDs that belong to a specific group in a specific image.
-        
-        Args:
-            image_id: The image ID
-            group_id: The group ID
-            
-        Returns:
-            List of face IDs that belong to the specified group in the specified image
-        """
-        query = 'SELECT faceID FROM faces WHERE imageID=? AND groupID=?'
-        results = self.db.execute_query(query, (image_id, group_id))
-        return [row[0] for row in results]
-    
-    def is_group_empty(self, group_id: str) -> bool:
-        """
-        Check if a group is empty by counting faces, bypassing profile access.
-        This method is used for internal operations like transfer_faces where
-        we need to determine if a group should be deleted regardless of profile access.
-        
-        Args:
-            group_id: The group ID to check
-            
-        Returns:
-            True if the group has no faces, False otherwise
-        """
-        query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
-        results = self.db.execute_query(query, (group_id,))
-        count = results[0][0] if results else 0
-        return count == 0
-    
-    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
-        """
-        Get filtered image IDs based on filter criteria.
-        
-        Args:
-            groups_ids: List of group IDs
-            mode: 'and' or 'or'
-            only: If True, any image shouldn't belong to any groups that aren't in groups list
-        
-        Returns:
-            List of image IDs that match the filter criteria
-        """
-        if not groups_ids:
-            return []
-
-        group_placeholders = ','.join(['?'] * len(groups_ids))
-
-        if mode == 'and':
-            # Images must contain faces from ALL groups in the list
-            base_query = f'''
-                SELECT imageID
-                FROM faces
-                WHERE groupID IN ({group_placeholders})
-                GROUP BY imageID
-                HAVING COUNT(DISTINCT groupID) = ?
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)])]
-        else:  # mode == 'or'
-            # Images must contain faces from AT LEAST ONE of the groups in the list
-            base_query = f'''
-                SELECT DISTINCT imageID
-                FROM faces
-                WHERE groupID IN ({group_placeholders})
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids)]
-
-        if only and image_ids:
-            # Filter out images that contain faces from other groups
-            image_placeholders = ','.join(['?'] * len(image_ids))
-            
-            # Find all images from the current set that ALSO have faces from other groups
-            images_with_other_groups_query = f'''
-                SELECT DISTINCT imageID
-                FROM faces
-                WHERE imageID IN ({image_placeholders})
-                AND groupID NOT IN ({group_placeholders})
-            '''
-            
-            images_to_exclude = {row[0] for row in self.db.execute_query(
-                images_with_other_groups_query, image_ids + groups_ids
-            )}
-
-            # Return only the images that are not in the exclusion list
-            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
-
-        return image_ids
-    
-    def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
-        """
-        Get related groups based on filtered images and co-occurrence frequency.
-        
-        Args:
-            group_ids: List of group IDs
-            mode: 'and' or 'or'
-            only: If True, any image shouldn't belong to any groups that aren't in groups list
-        
-        Returns:
-            List of group IDs ordered by relevance: selected groups, then by co-occurrence, then by name.
-        """
-        if not group_ids:
-            return []
-
-        group_id_placeholders = ','.join(['?'] * len(group_ids))
-        
-        if mode == 'or':
-            # OR mode: Get all other groups, ordered by co-occurrence with ANY of the selected groups.
-            query = f'''
-                SELECT 
-                    g.groupID,
-                    g.label,
-                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM faces WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
-                FROM groups g
-                LEFT JOIN faces f ON g.groupID = f.groupID
-                WHERE g.groupID NOT IN ({group_id_placeholders})
-                GROUP BY g.groupID, g.label
-                ORDER BY common_images_count DESC, g.label ASC
-            '''
-            query_params = group_ids + group_ids
-            related_group_rows = self.db.execute_query(query, query_params)
-        else:  # AND mode
-            # AND mode: Get only groups that appear in images containing ALL of the selected groups.
-            base_image_ids = self.get_filtered_images(group_ids, 'and', False) # Use 'only'=False to find potential candidates
-            
-            if not base_image_ids:
-                related_group_rows = []
-            else:
-                image_placeholders = ','.join(['?'] * len(base_image_ids))
-                query = f'''
-                    SELECT
-                        g.groupID,
-                        g.label,
-                        COUNT(DISTINCT f.imageID) AS common_images_count
-                    FROM groups g
-                    JOIN faces f ON g.groupID = f.groupID
-                    WHERE f.imageID IN ({image_placeholders})
-                    AND g.groupID NOT IN ({group_id_placeholders})
-                    GROUP BY g.groupID, g.label
-                    ORDER BY common_images_count DESC, g.label ASC
-                '''
-                query_params = base_image_ids + group_ids
-                related_group_rows = self.db.execute_query(query, query_params)
-
-        # Construct the final ordered list
-        ordered_group_ids = list(group_ids)
-        for row in related_group_rows:
-            ordered_group_ids.append(row[0])
-            
-        return ordered_group_ids
-    
-    def _build_complete_photo_data(self, image_id: str, group_filter: str = None) -> Dict:
-        """
-        Build complete photo data with all related information.
-        This is similar to build_complete_photo_data in app.py but as a method.
-        """
-        try:
-            image = self.images_model.get(image_id)
-            if not image:
-                return None
-            
-            # Get face IDs for this image
-            face_ids = self.images_model.get_faces(image_id)
-            
-            # Build faces data
-            faces_data = []
-            for face_id in face_ids:
-                face = self.faces_model.get(face_id)
-                if face:
-                    # Apply group filter if specified
-                    if group_filter and face.get('groupID') != group_filter:
-                        continue
-                    
-                    group = None
-                    if face.get('groupID'):
-                        group = self.groups_model.get(face['groupID'])
-                    
-                    face_data = {
-                        'face_id': face_id,
-                        'face_coords': {
-                            'Left': face['left'],
-                            'Top': face['top'], 
-                            'Width': face['width'],
-                            'Height': face['height']
-                        },
-                        'group_id': face.get('groupID'),
-                        'group_label': group['label'] if group else 'Unknown',
-                        'group_representative': group.get('face_representative') if group else None
-                    }
-                    faces_data.append(face_data)
-            
-            # Get moment info if available
-            moment_info = None
-            if image.get('momentID'):
-                moment = self.moments_model.get(image['momentID'])
-                if moment:
-                    moment_info = {
-                        'id': moment['id'],
-                        'title': moment['title'],
-                        'description': moment.get('description', ''),
-                        'start': moment.get('start'),
-                    }
-            
-            # Build complete response
-            photo_data = {
-                'id': image_id,
-                'name': image['name'],
-                'date_taken': image.get('date_taken'),
-                'file_size': image.get('file_size'),
-                'width': image.get('width'),
-                'height': image.get('height'),
-                'faces_count': len(faces_data),
-                'faces': faces_data,
-                'moment': moment_info,
-                'urls': {
-                    'display': f'/api/events/{self.id}/display/{image_id}.webp',
-                    'thumbnail': f'/api/events/{self.id}/thumb/{image_id}.webp',
-                    'high_quality': f'/api/events/{self.id}/high_quality/{image_id}.webp',
-                    'original': f'/api/events/{self.id}/original/{image_id}.webp',
-                }
-            }
-            
-            return photo_data
-        except Exception as e:
-            return None
-
-    def add(self, **fields) -> 'Event':
-        super().add(**fields)
-        self.last_group_id = 0
-        return self
 
     def _ensure_event_dirs(self):
         os.makedirs(self.event_dir, exist_ok=True)
@@ -353,24 +91,59 @@ class Event(JsonModel):
             can_edit_moments=True
         )
 
-    def delete_image(self, image_id: str) -> None:
-        faces = self.images_model.get_faces(image_id)
-        self.face_utils.rek_helper.delete_faces(faces)
-        for face in faces:
-            try:
-                os.remove(os.path.join(self.faces_dir, f"{face}.jpg"))
-            except FileNotFoundError:
-                pass
+    def add(self, **fields) -> 'Event':
+        super().add(**fields)
+        self.last_group_id = 0
+        return self
 
-        self.images_model.delete(image_id)
-        try:
-            os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.display_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
-        except FileNotFoundError:
-            pass
+    def set_profile_id(self, profile_id: Optional[str]):
+        """Set the profile ID for access control across all models."""
+        self.db.set_profile_id(profile_id)
 
+    def get_profile_id(self) -> Optional[str]:
+        """Get the current profile ID."""
+        return self.db.get_profile_id()
+
+    def get_info(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'date': self.date,
+            'events_manager': self.events_manager,
+            'last_group_id': self.last_group_id,
+            'DB_PATH': self.DB_PATH
+        }
+
+    # faces utils
+    def get_crop_mapping(self, group_id: str) -> dict:
+        """
+        Get mapping from image_id to face_id for crop display.
+        For each image in the group, returns the first face that belongs to this group.
+        """
+        query = '''
+            SELECT DISTINCT f.imageID, f.faceID
+            FROM faces f 
+            WHERE f.groupID = ?
+            GROUP BY f.imageID
+        '''
+        results = self.db.execute_query(query, (group_id,))
+        return {row[0]: row[1] for row in results}
+
+    def get_faces_by_image_and_group(self, image_id: str, group_id: str) -> List[str]:
+        """
+        Get all face IDs that belong to a specific group in a specific image.
+        
+        Args:
+            image_id: The image ID
+            group_id: The group ID
+            
+        Returns:
+            List of face IDs that belong to the specified group in the specified image
+        """
+        query = 'SELECT faceID FROM faces WHERE imageID=? AND groupID=?'
+        results = self.db.execute_query(query, (image_id, group_id))
+        return [row[0] for row in results]
+    
     def transfer_faces(self, old_group_id: str, face_ids: list, target_group_id: str = None, new_group_name: str = None) -> dict:
         """
         Transfer faces from one group to another group or create a new group.
@@ -511,15 +284,247 @@ class Event(JsonModel):
             
         return result
 
+    # groups utils
+    def is_group_empty(self, group_id: str) -> bool:
+        """
+        Check if a group is empty by counting faces, bypassing profile access.
+        This method is used for internal operations like transfer_faces where
+        we need to determine if a group should be deleted regardless of profile access.
+        
+        Args:
+            group_id: The group ID to check
+            
+        Returns:
+            True if the group has no faces, False otherwise
+        """
+        query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
+        results = self.db.execute_query(query, (group_id,))
+        count = results[0][0] if results else 0
+        return count == 0
+    
+    def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
+        """
+        Get related groups based on filtered images and co-occurrence frequency.
+        
+        Args:
+            group_ids: List of group IDs
+            mode: 'and' or 'or'
+            only: If True, any image shouldn't belong to any groups that aren't in groups list
+        
+        Returns:
+            List of group IDs ordered by relevance: selected groups, then by co-occurrence, then by name.
+        """
+        if not group_ids:
+            return []
 
+        group_id_placeholders = ','.join(['?'] * len(group_ids))
+        
+        if mode == 'or':
+            # OR mode: Get all other groups, ordered by co-occurrence with ANY of the selected groups.
+            query = f'''
+                SELECT 
+                    g.groupID,
+                    g.label,
+                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM faces WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
+                FROM groups g
+                LEFT JOIN faces f ON g.groupID = f.groupID
+                WHERE g.groupID NOT IN ({group_id_placeholders})
+                GROUP BY g.groupID, g.label
+                ORDER BY common_images_count DESC, g.label ASC
+            '''
+            query_params = group_ids + group_ids
+            related_group_rows = self.db.execute_query(query, query_params)
+        else:  # AND mode
+            # AND mode: Get only groups that appear in images containing ALL of the selected groups.
+            base_image_ids = self.get_filtered_images(group_ids, 'and', False) # Use 'only'=False to find potential candidates
+            
+            if not base_image_ids:
+                related_group_rows = []
+            else:
+                image_placeholders = ','.join(['?'] * len(base_image_ids))
+                query = f'''
+                    SELECT
+                        g.groupID,
+                        g.label,
+                        COUNT(DISTINCT f.imageID) AS common_images_count
+                    FROM groups g
+                    JOIN faces f ON g.groupID = f.groupID
+                    WHERE f.imageID IN ({image_placeholders})
+                    AND g.groupID NOT IN ({group_id_placeholders})
+                    GROUP BY g.groupID, g.label
+                    ORDER BY common_images_count DESC, g.label ASC
+                '''
+                query_params = base_image_ids + group_ids
+                related_group_rows = self.db.execute_query(query, query_params)
 
-    def process_new_images(self, 
-                          display_size: int = 2048, 
-                          thumb_size: int = 512,
-                          cluster_threshold: int = 90,
-                          max_matches_faces: int = 100,
-                          verbose: bool = True
-    ) -> dict:
+        # Construct the final ordered list
+        ordered_group_ids = list(group_ids)
+        for row in related_group_rows:
+            ordered_group_ids.append(row[0])
+            
+        return ordered_group_ids
+    
+    # images utils
+    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
+        """
+        Get filtered image IDs based on filter criteria.
+        
+        Args:
+            groups_ids: List of group IDs
+            mode: 'and' or 'or'
+            only: If True, any image shouldn't belong to any groups that aren't in groups list
+        
+        Returns:
+            List of image IDs that match the filter criteria
+        """
+        if not groups_ids:
+            return []
+
+        group_placeholders = ','.join(['?'] * len(groups_ids))
+
+        if mode == 'and':
+            # Images must contain faces from ALL groups in the list
+            base_query = f'''
+                SELECT imageID
+                FROM faces
+                WHERE groupID IN ({group_placeholders})
+                GROUP BY imageID
+                HAVING COUNT(DISTINCT groupID) = ?
+            '''
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)])]
+        else:  # mode == 'or'
+            # Images must contain faces from AT LEAST ONE of the groups in the list
+            base_query = f'''
+                SELECT DISTINCT imageID
+                FROM faces
+                WHERE groupID IN ({group_placeholders})
+            '''
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids)]
+
+        if only and image_ids:
+            # Filter out images that contain faces from other groups
+            image_placeholders = ','.join(['?'] * len(image_ids))
+            
+            # Find all images from the current set that ALSO have faces from other groups
+            images_with_other_groups_query = f'''
+                SELECT DISTINCT imageID
+                FROM faces
+                WHERE imageID IN ({image_placeholders})
+                AND groupID NOT IN ({group_placeholders})
+            '''
+            
+            images_to_exclude = {row[0] for row in self.db.execute_query(
+                images_with_other_groups_query, image_ids + groups_ids
+            )}
+
+            # Return only the images that are not in the exclusion list
+            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
+
+        return image_ids
+
+    def get_photos_in_period(self, start_time: str, end_time: str) -> list:
+        """Get all photos within a given time period."""
+        query = """
+            SELECT imageID FROM images
+            WHERE date_taken BETWEEN ? AND ?
+        """
+        results = self.db.execute_query(query, (start_time, end_time))
+        return [row[0] for row in results]
+
+    def _build_complete_photo_data(self, image_id: str, group_filter: str = None) -> Dict:
+        """
+        Build complete photo data with all related information.
+        This is similar to build_complete_photo_data in app.py but as a method.
+        """
+        try:
+            image = self.images_model.get(image_id)
+            if not image:
+                return None
+            
+            # Get face IDs for this image
+            face_ids = self.images_model.get_faces(image_id)
+            
+            # Build faces data
+            faces_data = []
+            for face_id in face_ids:
+                face = self.faces_model.get(face_id)
+                if face:
+                    # Apply group filter if specified
+                    if group_filter and face.get('groupID') != group_filter:
+                        continue
+                    
+                    group = None
+                    if face.get('groupID'):
+                        group = self.groups_model.get(face['groupID'])
+                    
+                    face_data = {
+                        'face_id': face_id,
+                        'face_coords': {
+                            'Left': face['left'],
+                            'Top': face['top'], 
+                            'Width': face['width'],
+                            'Height': face['height']
+                        },
+                        'group_id': face.get('groupID'),
+                        'group_label': group['label'] if group else 'Unknown',
+                        'group_representative': group.get('face_representative') if group else None
+                    }
+                    faces_data.append(face_data)
+            
+            # Get moment info if available
+            moment_info = None
+            if image.get('momentID'):
+                moment = self.moments_model.get(image['momentID'])
+                if moment:
+                    moment_info = {
+                        'id': moment['id'],
+                        'title': moment['title'],
+                        'description': moment.get('description', ''),
+                        'start': moment.get('start'),
+                    }
+            
+            # Build complete response
+            photo_data = {
+                'id': image_id,
+                'name': image['name'],
+                'date_taken': image.get('date_taken'),
+                'file_size': image.get('file_size'),
+                'width': image.get('width'),
+                'height': image.get('height'),
+                'faces_count': len(faces_data),
+                'faces': faces_data,
+                'moment': moment_info,
+                'urls': {
+                    'display': f'/api/events/{self.id}/display/{image_id}.webp',
+                    'thumbnail': f'/api/events/{self.id}/thumb/{image_id}.webp',
+                    'high_quality': f'/api/events/{self.id}/high_quality/{image_id}.webp',
+                    'original': f'/api/events/{self.id}/original/{image_id}.webp',
+                }
+            }
+            
+            return photo_data
+        except Exception as e:
+            return None
+
+    def delete_image(self, image_id: str) -> None:
+        faces = self.images_model.get_faces(image_id)
+        self.face_utils.rek_helper.delete_faces(faces)
+        for face in faces:
+            try:
+                os.remove(os.path.join(self.faces_dir, f"{face}.jpg"))
+            except FileNotFoundError:
+                pass
+
+        self.images_model.delete(image_id)
+        try:
+            os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.display_dir, f"{image_id}.jpg"))
+            os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
+        except FileNotFoundError:
+            pass
+
+    def process_new_images(self, display_size: int = 2048, thumb_size: int = 512, cluster_threshold: int = 90, max_matches_faces: int = 100, verbose: bool = True) -> dict:
         """
         Process new images from to_process folder.
         Args:
@@ -670,6 +675,8 @@ class Event(JsonModel):
             print(f"  - Faces detected: {summary['faces_detected']}")
             print(f"  - Groups created: {summary['groups_created']}")
         return summary
+
+
 
 # Convenience functions for compatibility
 add_event = Event.add
