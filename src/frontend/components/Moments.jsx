@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar } from 'lucide-react';
+import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move } from 'lucide-react';
 import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
@@ -8,6 +8,8 @@ import { useLocation } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
 import { momentsAPI, imagesAPI } from '../utils/apiService';
+import MomentCard from './MomentCard';
+import { useModalManager } from '../utils/modalManager';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -38,165 +40,6 @@ function formatDate(dateString) {
   }
 }
 
-function PhotoGrid({ momentId, viewMode, photoSize, onPhotoSelect, selectedPhotos, globalSelection, onOpenPhotoViewer }) {
-  const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [photoClasses, setPhotoClasses] = useState({});
-
-  useEffect(() => {
-    fetchPhotos();
-  }, [momentId]);
-
-  const fetchPhotos = async () => {
-    setLoading(true);
-    if (momentId && !momentId.startsWith('temp-')) {
-      try {
-        const result = await momentsAPI.getPhotos(momentId);
-        setPhotos(result.photos || []);
-      } catch {
-        setPhotos([]);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setPhotos([]);
-      setLoading(false);
-    }
-  };
-
-  const handleImageLoad = (photoName, e) => {
-    const img = e.target;
-    const aspectRatio = img.naturalWidth / img.naturalHeight;
-    
-    let imageClass = 'square';
-    if (aspectRatio > 1.2) {
-      imageClass = 'landscape';
-    } else if (aspectRatio < 0.8) {
-      imageClass = 'portrait';
-    }
-    
-    setPhotoClasses(prev => ({
-      ...prev,
-      [photoName]: imageClass
-    }));
-  };
-
-  const togglePhotoSelection = (photoName) => {
-    onPhotoSelect(photoName, momentId);
-  };
-
-  const openPhotoViewer = (photo, index) => {
-    onOpenPhotoViewer(photos, photo, index);
-  };
-
-  // Helper to get thumb filename
-  const getThumbFilename = (photo) => {
-    // Use the photo data directly since it comes from the API
-    return photo.urls?.thumbnail || photo.thumb_path || photo.display_path || photo.original_path || photo.name;
-  };
-
-  if (loading) return <div className="py-4 text-gray-400">Loading photos...</div>;
-  if (photos.length === 0) return <div className="py-4 text-gray-400">No photos in this moment.</div>;
-
-  return (
-    <div className="mt-4">
-      {/* Photos Grid/List */}
-      {viewMode === 'grid' ? (
-        <div 
-          className="photo-gallery-grid"
-          style={{
-            gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * photoSize)}px, 1fr))`,
-            gridAutoRows: `${Math.max(100, 266 * photoSize)}px`
-          }}
-        >
-          {photos.map((photo, index) => (
-            <div
-              key={photo.id}
-              className={`photo-card ${photoClasses[photo.name] || 'square'}`}
-            >
-              <div className="relative group cursor-pointer h-full" onClick={() => openPhotoViewer(photo, index)}>
-                <input
-                  type="checkbox"
-                  id={`photo-checkbox-${momentId}-${photo.name}`}
-                  name={`photo-checkbox-${momentId}-${photo.name}`}
-                  checked={globalSelection.has(`${momentId}:${photo.name}`)}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    togglePhotoSelection(photo.name);
-                  }}
-                  onClick={e => e.stopPropagation()}
-                  className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                />
-                <img
-                  src={`/${getThumbFilename(photo)}`}
-                  alt={`Photo ${index + 1}`}
-                  className="w-full h-full object-cover rounded-lg"
-                  loading="lazy"
-                  onLoad={(e) => handleImageLoad(photo.name, e)}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
-                  }}
-                />
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-                    <Image className="w-8 h-8 mx-auto mb-1" />
-                    <span className="text-sm">Click to view</span>
-                  </div>
-                </div>
-                {/* Date overlay */}
-                {photo.date_taken && (
-                  <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                    {formatTimeOnly(photo.date_taken)}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4 max-w-3xl mx-auto block">
-          {photos.map((photo, index) => (
-            <div key={photo.id} className="flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full">
-              <input
-                type="checkbox"
-                id={`photo-checkbox-list-${momentId}-${photo.name}`}
-                name={`photo-checkbox-list-${momentId}-${photo.name}`}
-                checked={globalSelection.has(`${momentId}:${photo.name}`)}
-                onChange={(e) => {
-                  togglePhotoSelection(photo.name);
-                }}
-                onClick={e => e.stopPropagation()}
-                className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-              />
-              <div className="relative">
-                <img
-                  src={`/${getThumbFilename(photo)}`}
-                  alt={`Photo ${index + 1}`}
-                  className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                  loading="lazy"
-                  onClick={() => openPhotoViewer(photo, index)}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
-                  }}
-                />
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-gray-900">{photo.name}</div>
-                {photo.date_taken && (
-                  <div className="text-sm text-gray-500">{formatTimeOnly(photo.date_taken)}</div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-    </div>
-  );
-}
-
 export default function Moments() {
   const location = useLocation();
   const { 
@@ -205,13 +48,12 @@ export default function Moments() {
     updateMoment, 
     deleteMoment, 
     addMoment,
-    setLoading, 
-    setError 
+    loading: storeLoading,
+    error: storeError,
+    setLoading: setStoreLoading,
+    setError: setStoreError
   } = useDataStore();
   
-  const [loading, setLocalLoading] = useState(true);
-  const [error, setLocalError] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [images, setImages] = useState([]);
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
   const [photoSize, setPhotoSize] = useSetting('moments_photoSize', 1.0);
@@ -223,10 +65,10 @@ export default function Moments() {
   const [carouselVisible, setCarouselVisible] = useSetting('moments_carouselVisible', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
-  const [showEditPhotosModal, setShowEditPhotosModal] = useState(false);
   const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
 
   const momentsRef = useRef({});
+  const { register: registerModal } = useModalManager();
 
   useEffect(() => {
     fetchMoments();
@@ -297,18 +139,14 @@ export default function Moments() {
 
   const fetchMoments = async () => {
     try {
-      setLoading(true);
-      setLocalLoading(true);
+      setStoreLoading(true);
       const response = await momentsAPI.getAll();
       setMoments(response.moments || []);
-      setError(null);
-      setLocalError(null);
+      setStoreError(null);
     } catch (err) {
-      setError('Failed to load moments.');
-      setLocalError('Failed to load moments.');
+      setStoreError('Failed to load moments.');
     } finally {
-      setLoading(false);
-      setLocalLoading(false);
+      setStoreLoading(false);
     }
   };
 
@@ -339,7 +177,7 @@ export default function Moments() {
         updateMoment(updatedMoment.momentID, response.moment || response);
       }
       
-      setShowEditModal(false);
+      // setShowEditModal(false); // This state is now managed by modalManager
     } catch (error) {
       console.error('Error saving moment:', error);
     }
@@ -483,139 +321,145 @@ export default function Moments() {
 
   const handleOpenEditPhotos = (moment) => {
     setEditingPhotosForMoment(moment);
-    setShowEditPhotosModal(true);
+    registerModal('edit-moment-photos-modal');
   };
 
-  if (loading) return <div className="p-8 text-center">Loading moments...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+  if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
+  if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
 
   return (
     <div className="w-full bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-30">
-        <div className="px-4 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
-              <p className="text-gray-600 mt-1">Your captured moments in time</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              {globalSelection.size > 0 && (
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-30 px-8 py-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => registerModal('edit-moments-modal')}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Edit moments"
+            >
+              <Settings className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+        </div>
+
+        {/* Controls Row */}
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center divide-x divide-gray-200">
+            {/* Group 1: View and Size Controls */}
+            <div className="flex items-center space-x-3 px-4">
+              <button
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+              >
+                {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+              </button>
+
+              {viewMode === 'grid' && (
                 <>
-                  <motion.button 
-                    initial={{ scale: 0.9 }}
-                    animate={{ scale: 1 }}
-                    onClick={handleGlobalAddToBucket} 
-                    className="btn-primary flex items-center space-x-2"
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(photoSize * 100);
+                      const subtractValue = currentPercent > 100 ? 25 : 10;
+                      const newPercent = Math.max(50, currentPercent - subtractValue);
+                      setPhotoSize(newPercent / 100);
+                    }}
+                    disabled={photoSize <= 0.5}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Decrease size"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Add to Bucket ({globalSelection.size})</span>
-                  </motion.button>
-                  <button onClick={handleRemoveFromMoment} className="btn-secondary">
-                    Remove from Moment
+                    <Minus className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setShowMoveModal(true)} className="btn-secondary">
-                    Move to Moment
-                  </button>
-                  <button onClick={clearGlobalSelection} className="btn-secondary">
-                    Clear Selection
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
+                    onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    onBlur={e => {
+                      let val = parseInt(e.target.value, 10);
+                      if (isNaN(val)) val = Math.round(photoSize * 100);
+                      val = Math.max(50, Math.min(300, val));
+                      setPhotoSize(val / 100);
+                      setPhotoSizeInputValue(undefined);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') e.target.blur();
+                      else if (e.key === 'Escape') setPhotoSizeInputValue(undefined);
+                    }}
+                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '3rem'}}
+                  />
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(photoSize * 100);
+                      const addValue = currentPercent >= 100 ? 25 : 10;
+                      const newPercent = Math.min(300, currentPercent + addValue);
+                      setPhotoSize(newPercent / 100);
+                    }}
+                    disabled={photoSize >= 3}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Increase size"
+                  >
+                    <Plus className="w-4 h-4" />
                   </button>
                 </>
               )}
-              <motion.button 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowEditModal(true)} 
-                className="btn-primary flex items-center space-x-2"
+            </div>
+
+            {/* Group 2: Selection Controls */}
+            <div className="flex items-center space-x-3 px-4">
+              <button
+                onClick={selectAllPhotos}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                title="Select all photos"
               >
-                <Settings className="w-4 h-4" />
-                <span>Edit Moments</span>
-              </motion.button>
-            </div>
-          </div>
-          
-          {/* Controls */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
-                  }`}
-                >
-                  <Grid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
-                  }`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
-                <button
-                  onClick={() => {
-                    const currentPercent = Math.round(photoSize * 100);
-                    const next25 = Math.ceil(currentPercent / 25) * 25;
-                    const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
-                    const subtract25 = currentPercent - 25;
-                    const newPercent = Math.max(50, Math.max(subtract25, prev25));
-                    setPhotoSize(newPercent / 100);
-                  }}
-                  disabled={photoSize <= 0.5}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <input
-                  type="text"
-                  id="photo-size-input"
-                  name="photo-size-input"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
-                  onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                  onBlur={e => {
-                    let val = parseInt(e.target.value, 10);
-                    if (isNaN(val)) val = Math.round(photoSize * 100);
-                    val = Math.max(50, Math.min(300, val));
-                    setPhotoSize(val / 100);
-                    setPhotoSizeInputValue(undefined);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.target.blur();
-                    } else if (e.key === 'Escape') {
-                      setPhotoSizeInputValue(undefined);
-                    }
-                  }}
-                  className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                  style={{width: '3rem'}}
-                />
-                <button
-                  onClick={() => {
-                    const currentPercent = Math.round(photoSize * 100);
-                    const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
-                    const add25 = currentPercent + 25;
-                    const newPercent = Math.min(300, Math.min(add25, next25));
-                    setPhotoSize(newPercent / 100);
-                  }}
-                  disabled={photoSize >= 3}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-
-              <button onClick={selectAllPhotos} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                Select All Photos
+                <CheckCheck className="w-4 h-4" />
               </button>
+              {globalSelection.size > 0 && (
+                <button
+                  onClick={clearGlobalSelection}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                  title="Clear selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            
+
+            {/* Group 3: Actions on Selection */}
+            {globalSelection.size > 0 && (
+              <div className="flex items-center space-x-3 px-4">
+                <button
+                  onClick={handleGlobalAddToBucket}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                  title="Add selected photos to bucket"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleRemoveFromMoment}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
+                  title="Remove selected photos from moment"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowMoveModal(true)}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-700"
+                  title="Move selected photos to another moment"
+                >
+                  <Move className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center">
             {/* Carousel Toggle Button */}
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -631,52 +475,52 @@ export default function Moments() {
               )}
             </motion.button>
           </div>
-
-          {/* Carousel */}
-          <AnimatePresence>
-            {carouselVisible && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="carousel-container flex space-x-4 overflow-x-auto pb-2">
-                  {moments.length === 0 && (
-                    <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
-                      No moments yet
-                    </div>
-                  )}
-                  {moments.map(moment => (
-                    <motion.div 
-                      key={moment.momentID} 
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => scrollToMoment(moment.momentID)}
-                    >
-                      <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                        {moment.representative_photo ? (
-                          <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
-                        ) : (
-                          <Image className="w-8 h-8 text-white" />
-                        )}
-                      </div>
-                      <div className="text-center">
-                        <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
-                        <div className="text-xs text-gray-500 truncate max-w-[7rem]">
-                          {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
+
+      {/* Carousel */}
+      <AnimatePresence>
+        {carouselVisible && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="carousel-container flex space-x-4 overflow-x-auto pb-2">
+              {moments.length === 0 && (
+                <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
+                  No moments yet
+                </div>
+              )}
+              {moments.map(moment => (
+                <motion.div 
+                  key={moment.momentID} 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => scrollToMoment(moment.momentID)}
+                >
+                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
+                    {moment.representative_photo ? (
+                      <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
+                    ) : (
+                      <Image className="w-8 h-8 text-white" />
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
+                    <div className="text-xs text-gray-500 truncate max-w-[7rem]">
+                      {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Timeline */}
       <div className="px-4 py-8">
@@ -716,85 +560,23 @@ export default function Moments() {
             {/* Timeline items */}
             <div className="space-y-12 ml-64">
               {moments.map((moment, index) => (
-                <motion.div
+                <MomentCard
                   key={moment.momentID}
-                  initial={{ opacity: 0, x: -50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="relative flex"
-                  ref={el => momentsRef.current[moment.momentID] = el}
-                >
-                  {/* Timeline dot */}
-                  <div className="relative flex-shrink-0">
-                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10 mt-6"></div>
-                  </div>
-                  
-                  {/* Moment card */}
-                  <div className="flex-1 pl-6">
-                    <motion.div 
-                      className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow duration-300"
-                      whileHover={{ y: -2 }}
-                    >
-                      {/* Header */}
-                      <div className="p-6 border-b border-gray-100">
-                        <div className="flex items-start space-x-4">
-                          <div className="flex-shrink-0">
-                            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg overflow-hidden flex items-center justify-center">
-                              {moment.representative_photo ? (
-                                <img 
-                                  src={moment.representative_photo} 
-                                  alt="" 
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <Image className="w-8 h-8 text-white" />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">{moment.label}</h3>
-                            <div className="flex items-center space-x-4 text-sm text-gray-500">
-                              <div className="flex items-center space-x-1">
-                                <Clock className="w-4 h-4" />
-                                <span>{formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}</span>
-                            </div>
-                              <div className="flex items-center space-x-1">
-                                <Calendar className="w-4 h-4" />
-                                <span>{formatDate(moment.start)}</span>
-                              </div>
-                            </div>
-                            {moment.description && (
-                              <p className="text-gray-600 mt-2">{moment.description}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Photos */}
-                      <div className="p-6">
-                        <PhotoGrid 
-                          momentId={moment.momentID} 
-                          viewMode={viewMode} 
-                          photoSize={photoSize}
-                          onPhotoSelect={handlePhotoSelect}
-                          selectedPhotos={new Set()}
-                          globalSelection={globalSelection}
-                          onOpenPhotoViewer={openPhotoViewer}
-                        />
-                      </div>
-                    </motion.div>
-                  </div>
-                </motion.div>
+                  moment={moment}
+                  photos={momentPhotosMap[moment.momentID] || []}
+                  viewMode={viewMode}
+                  photoSize={photoSize}
+                  globalSelection={globalSelection}
+                  onPhotoSelect={handlePhotoSelect}
+                  onOpenPhotoViewer={openPhotoViewer}
+                />
               ))}
             </div>
           </div>
         )}
       </div>
 
-      <EditMomentsModal 
-        open={showEditModal} 
-        onClose={() => setShowEditModal(false)} 
+      <EditMomentsModal
         onSave={handleSaveMoments}
         onDelete={handleDeleteMoment}
         moments={moments}
@@ -805,8 +587,6 @@ export default function Moments() {
       />
 
       <EditMomentPhotosModal
-        open={showEditPhotosModal}
-        onClose={() => setShowEditPhotosModal(false)}
         moment={editingPhotosForMoment}
         momentPhotosMap={momentPhotosMap}
         onRefreshPhotos={fetchAllMomentPhotos}

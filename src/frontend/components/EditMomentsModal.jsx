@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
-import { momentsAPI, handleAPIError } from '../utils/apiService';
+import { momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { useModalManager } from '../utils/modalManager';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -21,24 +22,32 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, momentPhotosMap, onRefreshPhotos, onOpenEditPhotos }) {
+function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, onRefreshPhotos, onOpenEditPhotos, showToast }) {
   const [editingMoments, setEditingMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
   const [showPhotoSelector, setShowPhotoSelector] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
-
   const [changedMoments, setChangedMoments] = useState(new Set());
 
+  const { register, unregister, isTopModal } = useModalManager();
+  const MODAL_ID = 'edit-moments-modal';
+
   useEffect(() => {
-    if (open) {
-      // Sort moments using global utility
+    register(MODAL_ID);
+    return () => unregister(MODAL_ID);
+  }, [register, unregister]);
+
+  useEffect(() => {
+    if (isTopModal(MODAL_ID)) {
       const sortedMoments = sortMoments(moments, 'asc');
       setEditingMoments(sortedMoments);
-      
-      // Reset changed moments tracking
       setChangedMoments(new Set());
     }
-  }, [open, moments]);
+  }, [isTopModal(MODAL_ID), moments]);
+
+  const handleClose = () => {
+    unregister(MODAL_ID);
+  };
 
   const handleSave = async () => {
     // Check if any moment was just created or updated with time range
@@ -60,36 +69,21 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
     }
     
     onSave(editingMoments);
-    onClose();
+    handleClose();
   };
 
   const handleSaveMoment = async (moment) => {
     try {
-      let savedMoment = moment;
+      let savedMoment;
       if (moment.momentID.startsWith('temp-')) {
-        // Create new moment
         const { momentID, ...momentData } = moment;
-        const result = await momentsAPI.create(momentData);
+        const result = await optimisticUpdates.createMoment(momentData);
         savedMoment = result.moment;
-        
-        // Update the local state with the saved moment
-        setEditingMoments(prev => prev.map(m => 
-          m.momentID === moment.momentID ? { ...savedMoment, momentID: savedMoment.momentID } : m
-        ));
       } else {
-        // Update existing moment
-        const result = await momentsAPI.update(moment.momentID, moment);
+        const result = await optimisticUpdates.updateMoment(moment.momentID, moment);
         savedMoment = result.moment;
-        
-        // Update the local state with the saved moment
-        setEditingMoments(prev => prev.map(m => 
-          m.momentID === moment.momentID ? savedMoment : m
-        ));
       }
-      
-      // Mark as changed
       setChangedMoments(prev => new Set([...prev, savedMoment.momentID]));
-      
       return savedMoment;
     } catch (error) {
       console.error('Error saving moment:', error);
@@ -101,15 +95,8 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
   const handleDelete = async (id) => {
     try {
-      await momentsAPI.delete(id);
-      
-      // Remove from editing moments
-      setEditingMoments(prev => prev.filter(m => m.momentID !== id));
-      
-      // Call parent's onDelete
-      if (onDelete) {
-        onDelete(id);
-      }
+      await optimisticUpdates.deleteMoment(id);
+      showToast('Moment deleted successfully.', 'success');
     } catch (error) {
       console.error('Error deleting moment:', error);
       const errorInfo = handleAPIError(error, 'Failed to delete moment');
@@ -125,16 +112,13 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
   const addMoment = () => {
     const newMoment = {
-      momentID: `temp-${Date.now()}`,
-      label: '',
-      start: '',
-      end: '',
+      label: 'New Moment',
+      start: new Date().toISOString().slice(0, 16),
+      end: new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 16),
       representative_photo: '',
       description: ''
     };
-    setEditingMoments(prev => [...prev, newMoment]);
-    // Mark the new moment as changed
-    setChangedMoments(prev => new Set([...prev, newMoment.momentID]));
+    handleSaveMoment({ ...newMoment, momentID: `temp-${Date.now()}` });
   };
 
 
@@ -154,7 +138,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
 
 
 
-  if (!open) return null;
+  if (!isTopModal(MODAL_ID)) return null;
 
   return (
     <motion.div 
@@ -174,7 +158,7 @@ function EditMomentsModal({ open, onClose, moments, images, onSave, onDelete, mo
             <h3 className="text-lg font-bold">Edit Moments</h3>
             <div className="flex space-x-2">
               <button onClick={addMoment} className="btn-secondary">Add Moment</button>
-              <button onClick={onClose} className="btn-secondary">Close</button>
+              <button onClick={handleClose} className="btn-secondary">Close</button>
             </div>
           </div>
         </div>

@@ -267,10 +267,35 @@ export const optimisticUpdates = {
     }
   },
 
+  createMoment: async (momentData, rollbackFn) => {
+    const store = useDataStore.getState();
+    const tempId = `temp-${Date.now()}`;
+    const newMoment = { ...momentData, momentID: tempId };
+
+    // Apply optimistic update
+    store.addMoment(newMoment);
+
+    try {
+      const result = await momentsAPI.create(momentData);
+      
+      // Update the temporary moment with the real data from the server
+      store.updateMoment(tempId, result.moment);
+      
+      return result;
+    } catch (error) {
+      // Rollback on error
+      if (rollbackFn) {
+        rollbackFn();
+      }
+      store.deleteMoment(tempId);
+      throw error;
+    }
+  },
+
   // Optimistic moment update
   updateMoment: async (momentId, updates, rollbackFn) => {
     const store = useDataStore.getState();
-    const previousState = store.moments.find(m => m.id === momentId);
+    const previousState = store.moments.find(m => m.momentID === momentId);
     
     // Apply optimistic update
     store.updateMoment(momentId, updates);
@@ -282,6 +307,8 @@ export const optimisticUpdates = {
       // Rollback on error
       if (rollbackFn && previousState) {
         rollbackFn(previousState);
+      } else if (previousState) {
+        store.updateMoment(momentId, previousState);
       }
       throw error;
     }
@@ -290,7 +317,7 @@ export const optimisticUpdates = {
   // Optimistic moment delete
   deleteMoment: async (momentId, rollbackFn) => {
     const store = useDataStore.getState();
-    const previousState = store.moments.find(m => m.id === momentId);
+    const previousState = store.moments.find(m => m.momentID === momentId);
     
     // Apply optimistic update
     store.deleteMoment(momentId);
@@ -301,6 +328,8 @@ export const optimisticUpdates = {
     } catch (error) {
       // Rollback on error
       if (rollbackFn && previousState) {
+        rollbackFn(previousState);
+      } else if (previousState) {
         store.addMoment(previousState);
       }
       throw error;

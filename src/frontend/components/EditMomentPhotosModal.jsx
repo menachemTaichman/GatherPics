@@ -4,6 +4,7 @@ import { ArrowUp, ArrowDown, Filter } from 'lucide-react';
 import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { imagesAPI, momentsAPI, handleAPIError } from '../utils/apiService';
+import { useModalManager } from '../utils/modalManager';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -22,7 +23,7 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhotos, onSave, moments }) {
+function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, moments }) {
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
   const [photosInPeriod, setPhotosInPeriod] = useState([]);
@@ -30,34 +31,43 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
   const [filterType, setFilterType] = useSetting('editMomentPhotos_filterType', 'all');
   const [error, setError] = useState('');
 
+  const { register, unregister, isTopModal } = useModalManager();
+  const MODAL_ID = 'edit-moment-photos-modal';
+
   useEffect(() => {
-    if (open && moment) {
-      // Get current photos for this moment
+    register(MODAL_ID);
+    return () => unregister(MODAL_ID);
+  }, [register, unregister]);
+
+  useEffect(() => {
+    if (isTopModal(MODAL_ID) && moment) {
       const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.name);
       setSelectedPhotos(new Set(currentPhotos));
       fetchPhotosInPeriod();
+      fetchAllImagesWithTimestamps();
+      setError('');
     }
-  }, [open, moment, momentPhotosMap]);
+  }, [isTopModal(MODAL_ID), moment, momentPhotosMap]);
 
   // Fetch all images with timestamps when modal opens
   useEffect(() => {
-    if (open && moment) {
+    if (isTopModal(MODAL_ID) && moment) {
       fetchAllImagesWithTimestamps();
     }
-  }, [open, moment]); // Removed photosInPeriod and momentPhotosMap dependencies
+  }, [isTopModal(MODAL_ID), moment]); // Removed photosInPeriod and momentPhotosMap dependencies
 
   // Refetch images when dependencies change (only if modal is open)
   useEffect(() => {
-    if (open && moment && (photosInPeriod.length > 0 || Object.keys(momentPhotosMap).length > 0)) {
+    if (isTopModal(MODAL_ID) && moment && (photosInPeriod.length > 0 || Object.keys(momentPhotosMap).length > 0)) {
       fetchAllImagesWithTimestamps();
     }
   }, [photosInPeriod, momentPhotosMap]);
 
   useEffect(() => {
-    if (open) {
+    if (isTopModal(MODAL_ID)) {
       setError('');
     }
-  }, [open]);
+  }, [isTopModal(MODAL_ID)]);
 
   const fetchAllImagesWithTimestamps = async () => {
     try {
@@ -104,7 +114,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
         onRefreshPhotos();
       }
       
-      onClose();
+      handleClose();
     } catch (error) {
       console.error('Error saving photos:', error);
       const errorInfo = handleAPIError(error, 'Failed to save photos');
@@ -114,7 +124,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
 
   const handleClose = () => {
     setError('');
-    onClose();
+    unregister(MODAL_ID);
   };
 
   const togglePhoto = (photoName) => {
@@ -182,7 +192,7 @@ function EditPhotosModal({ open, onClose, moment, momentPhotosMap, onRefreshPhot
     return sortPhotosWithDatePriority(filteredImages, sortOrder);
   };
 
-  if (!open || !moment) return null;
+  if (!isTopModal(MODAL_ID) || !moment) return null;
 
   return (
     <motion.div 
