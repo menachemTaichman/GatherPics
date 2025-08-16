@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Pencil, Trash2, X, Image, List } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
-import { useModalManager } from '../utils/modalManager';
+import { useModalFocus } from '../utils/useModalFocus';
+
+import EditMomentPhotosModal from './EditMomentPhotosModal';
+import RepresentativePhotoModal from './RepresentativePhotoModal';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -22,34 +25,45 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, onRefreshPhotos, onOpenEditPhotos, showToast }) {
+function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, onRefreshPhotos, onToast, onClose }) {
   const [editingMoments, setEditingMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
   const [showPhotoSelector, setShowPhotoSelector] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
   const [changedMoments, setChangedMoments] = useState(new Set());
+  const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
+  const [tempMomentCounter, setTempMomentCounter] = useState(0);
 
-  const { register, unregister, isTopModal } = useModalManager();
-  const MODAL_ID = 'edit-moments-modal';
+  // Use modal focus hook
+  const { modalRef } = useModalFocus(true, onClose, {
+    allowOutsideScroll: true
+  });
 
   useEffect(() => {
-    register(MODAL_ID);
-    return () => unregister(MODAL_ID);
-  }, [register, unregister]);
-
-  useEffect(() => {
-    if (isTopModal(MODAL_ID)) {
-      const sortedMoments = sortMoments(moments, 'asc');
-      setEditingMoments(sortedMoments);
-      setChangedMoments(new Set());
-    }
-  }, [isTopModal(MODAL_ID), moments]);
+    const sortedMoments = sortMoments(moments, 'asc');
+    setEditingMoments(sortedMoments);
+    setChangedMoments(new Set());
+  }, [moments]);
 
   const handleClose = () => {
-    unregister(MODAL_ID);
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  const handleDiscard = () => {
+    // Reset all changes and remove temporary moments
+    const sortedMoments = sortMoments(moments, 'asc');
+    setEditingMoments(sortedMoments);
+    setChangedMoments(new Set());
   };
 
   const handleSave = async () => {
+    // Only save moments that have been changed and are not temporary
+    const momentsToSave = editingMoments.filter(m => 
+      changedMoments.has(m.momentID) && !m.momentID.startsWith('temp-')
+    );
+    
     // Check if any moment was just created or updated with time range
     const momentsWithTimeRange = editingMoments.filter(m => 
       m.start && m.end && 
@@ -57,8 +71,12 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     );
     
     if (momentsWithTimeRange.length > 0) {
-      // Save the moments first
-      onSave(editingMoments);
+      // Save the non-temporary moments first
+      if (momentsToSave.length > 0) {
+        for (const moment of momentsToSave) {
+          await onSave(moment);
+        }
+      }
       
       // Then auto-open edit photos for the first moment with time range
       const momentToEdit = momentsWithTimeRange[0];
@@ -68,7 +86,13 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       return;
     }
     
-    onSave(editingMoments);
+    // Save all non-temporary changed moments
+    if (momentsToSave.length > 0) {
+      for (const moment of momentsToSave) {
+        await onSave(moment);
+      }
+    }
+    
     handleClose();
   };
 
@@ -77,13 +101,35 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       let savedMoment;
       if (moment.momentID.startsWith('temp-')) {
         const { momentID, ...momentData } = moment;
-        const result = await optimisticUpdates.createMoment(momentData);
+        // Create moment directly without optimistic updates to avoid duplicates
+        const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
       } else {
-        const result = await optimisticUpdates.updateMoment(moment.momentID, moment);
+        // Update existing moment directly without optimistic updates to avoid conflicts
+        const result = await momentsAPI.update(moment.momentID, moment);
         savedMoment = result.moment;
       }
-      setChangedMoments(prev => new Set([...prev, savedMoment.momentID]));
+      // Remove from changed moments since it's now saved
+      setChangedMoments(prev => {
+        const next = new Set(prev);
+        next.delete(moment.momentID);
+        return next;
+      });
+      
+      // Update the moment in editingMoments with the saved data
+      setEditingMoments(prev => prev.map(m => 
+        m.momentID === moment.momentID ? savedMoment : m
+      ));
+      
+      // Show success message
+      if (onToast) {
+        if (moment.momentID.startsWith('temp-')) {
+          onToast('Moment created successfully.', 'success');
+        } else {
+          onToast('Moment updated successfully.', 'success');
+        }
+      }
+      
       return savedMoment;
     } catch (error) {
       console.error('Error saving moment:', error);
@@ -95,12 +141,33 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
 
   const handleDelete = async (id) => {
     try {
-      await optimisticUpdates.deleteMoment(id);
-      showToast('Moment deleted successfully.', 'success');
+      // Call the parent's onDelete function
+      if (onDelete) {
+        await onDelete(id);
+      }
+      
+      // Remove the moment from editingMoments
+      setEditingMoments(prev => prev.filter(m => m.momentID !== id));
+      
+      // Remove from changedMoments if it was there
+      setChangedMoments(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      
+      // Show success message
+      if (onToast) {
+        onToast('Moment deleted successfully.', 'success');
+      }
     } catch (error) {
       console.error('Error deleting moment:', error);
       const errorInfo = handleAPIError(error, 'Failed to delete moment');
-      alert(errorInfo.message);
+      if (onToast) {
+        onToast(errorInfo.message, 'error');
+      } else {
+        alert(errorInfo.message);
+      }
     }
   };
 
@@ -112,13 +179,25 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
 
   const addMoment = () => {
     const newMoment = {
+      momentID: `temp-${Date.now()}-${tempMomentCounter}`,
       label: 'New Moment',
       start: new Date().toISOString().slice(0, 16),
       end: new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 16),
-      representative_photo: '',
       description: ''
     };
-    handleSaveMoment({ ...newMoment, momentID: `temp-${Date.now()}` });
+    
+    // Add to editing moments list (don't save to backend yet)
+    setEditingMoments(prev => [...prev, newMoment]);
+    setChangedMoments(prev => new Set([...prev, newMoment.momentID]));
+    setTempMomentCounter(prev => prev + 1); // Increment counter for next temporary moment
+    
+    // Jump to the newly added moment by scrolling to it
+    setTimeout(() => {
+      const momentElement = document.querySelector(`[data-moment-id="${newMoment.momentID}"]`);
+      if (momentElement) {
+        momentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
 
@@ -138,27 +217,37 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
 
 
 
-  if (!isTopModal(MODAL_ID)) return null;
+
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4"
-    >
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
-      >
+    <AnimatePresence>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <motion.div 
+          ref={modalRef}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+          tabIndex={-1}
+        >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold">Edit Moments</h3>
             <div className="flex space-x-2">
-              <button onClick={addMoment} className="btn-secondary">Add Moment</button>
-              <button onClick={handleClose} className="btn-secondary">Close</button>
+              <button 
+                onClick={addMoment} 
+                className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
+                title="Add Moment"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleClose} 
+                className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -166,7 +255,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-3">
             {editingMoments.filter(m => m && m.momentID).map((moment, index) => (
-              <div key={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div key={moment.momentID} data-moment-id={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
                     {/* Representative Photo */}
@@ -235,24 +324,56 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
                   {/* Action Buttons */}
                   <div className="flex items-center space-x-2">
                     {changedMoments.has(moment.momentID) && (
-                      <button 
-                        onClick={() => handleSaveMoment(moment)}
-                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-                        title="Save Moment"
-                      >
-                        Save
-                      </button>
+                      <>
+                        <button 
+                          onClick={() => handleSaveMoment(moment)}
+                          className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-green-100 text-green-700"
+                          title="Save Moment"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (moment.momentID.startsWith('temp-')) {
+                              // Remove temporary moment completely
+                              setEditingMoments(prev => prev.filter(m => m.momentID !== moment.momentID));
+                              setChangedMoments(prev => {
+                                const next = new Set(prev);
+                                next.delete(moment.momentID);
+                                return next;
+                              });
+                            } else {
+                              // Reset to original for existing moment
+                              const originalMoment = moments.find(m => m.momentID === moment.momentID);
+                              if (originalMoment) {
+                                setEditingMoments(prev => prev.map(m => 
+                                  m.momentID === moment.momentID ? originalMoment : m
+                                ));
+                                setChangedMoments(prev => {
+                                  const next = new Set(prev);
+                                  next.delete(moment.momentID);
+                                  return next;
+                                });
+                              }
+                            }
+                          }}
+                          className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
+                          title="Discard Changes"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
                     <button
-                      onClick={() => onOpenEditPhotos(moment)}
-                      className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                      onClick={() => setEditingPhotosForMoment(moment)}
+                      className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
                       title="Edit Photos"
                     >
-                      <List className="w-4 h-4" />
+                      <Image className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => handleDelete(moment.momentID)}
-                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
                       title="Delete Moment"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -317,71 +438,33 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         </div>
       </motion.div>
 
-      {/* Photo Selector Modal */}
-      {showPhotoSelector && selectedMoment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-center">
-                <h4 className="font-semibold">Select Representative Photo</h4>
-                <div className="flex space-x-2">
-                  {selectedMoment.representative_photo && (
-                    <button
-                      onClick={() => {
-                        updateMoment(selectedMoment.momentID, { representative_photo: '' });
-                        setShowPhotoSelector(false);
-                      }}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded transition-colors"
-                    >
-                      Remove Photo
-                    </button>
-                  )}
-                  <button onClick={() => setShowPhotoSelector(false)} className="text-gray-500 hover:text-gray-700">
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {(momentPhotosMap[selectedMoment.momentID] || []).map((img) => (
-                  <div
-                    key={img.name}
-                    onClick={() => {
-                      updateMoment(selectedMoment.momentID, { representative_photo: img.name });
-                      setShowPhotoSelector(false);
-                    }}
-                    className="cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors relative group"
-                  >
-                    <img
-                      src={img.urls.thumbnail}
-                      alt={img.name}
-                      className="w-full h-24 object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-                      }}
-                    />
-                    <div className="p-2 text-xs text-gray-600 truncate">
-                      {img.date_taken ? formatDateTime(img.date_taken) : img.name}
-                    </div>
-                    {selectedMoment.representative_photo === img.name && (
-                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-1 py-0.5 rounded">
-                        Current
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Edit Photos Modal - Render as child modal */}
+      {editingPhotosForMoment && (
+        <EditMomentPhotosModal
+          moment={editingPhotosForMoment}
+          momentPhotosMap={momentPhotosMap}
+          onRefreshPhotos={onRefreshPhotos}
+          onSave={onSave}
+          moments={moments}
+          onClose={() => setEditingPhotosForMoment(null)}
+        />
       )}
 
-
-    </motion.div>
+      {/* Representative Photo Modal */}
+      <RepresentativePhotoModal
+        isOpen={showPhotoSelector}
+        onClose={() => setShowPhotoSelector(false)}
+        moment={selectedMoment}
+        momentPhotosMap={momentPhotosMap}
+        onPhotoSelect={(photoName) => {
+          if (selectedMoment) {
+            updateMoment(selectedMoment.momentID, { representative_photo: photoName });
+          }
+        }}
+      />
+    </div>
+    </AnimatePresence>
   );
 }
 
-export default EditMomentsModal; 
+export default EditMomentsModal;

@@ -340,10 +340,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   return (
     <AnimatePresence>
-      <div key="photo-viewer-modal" className="modal-overlay">
+      <div key="photo-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <motion.div
           ref={modalRef}
-          className="modal-content max-w-7xl w-full photo-viewer-modal"
+          className="bg-white rounded-lg shadow-xl max-w-7xl w-full mx-4 photo-viewer-modal"
           style={{ 
             maxHeight: '92vh',
             height: '92vh'

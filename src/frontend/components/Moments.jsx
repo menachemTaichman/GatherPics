@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move } from 'lucide-react';
+import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil } from 'lucide-react';
 import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
@@ -9,7 +9,7 @@ import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
 import { momentsAPI, imagesAPI } from '../utils/apiService';
 import MomentCard from './MomentCard';
-import { useModalManager } from '../utils/modalManager';
+
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -65,10 +65,18 @@ export default function Moments() {
   const [carouselVisible, setCarouselVisible] = useSetting('moments_carouselVisible', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
-  const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Toast notification function
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
 
   const momentsRef = useRef({});
-  const { register: registerModal } = useModalManager();
+  const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
 
   useEffect(() => {
     fetchMoments();
@@ -319,16 +327,33 @@ export default function Moments() {
     }
   };
 
-  const handleOpenEditPhotos = (moment) => {
-    setEditingPhotosForMoment(moment);
-    registerModal('edit-moment-photos-modal');
-  };
+
 
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
 
   return (
     <div className="w-full bg-gray-50 min-h-screen">
+      {/* Toast Notifications */}
+      <AnimatePresence>
+        {toast.show && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] px-6 py-3 rounded-lg shadow-lg text-white font-medium ${
+              toast.type === 'success' 
+                ? 'bg-green-500' 
+                : toast.type === 'error' 
+                ? 'bg-red-500' 
+                : 'bg-blue-500'
+            }`}
+          >
+            {toast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-16 z-30 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
@@ -337,11 +362,11 @@ export default function Moments() {
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => registerModal('edit-moments-modal')}
+              onClick={() => setShowEditMomentsModal(true)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               title="Edit moments"
             >
-              <Settings className="w-5 h-5 text-gray-600" />
+              <Pencil className="w-5 h-5 text-gray-600" />
             </button>
           </div>
         </div>
@@ -576,23 +601,20 @@ export default function Moments() {
         )}
       </div>
 
-      <EditMomentsModal
-        onSave={handleSaveMoments}
-        onDelete={handleDeleteMoment}
-        moments={moments}
-        images={images}
-        momentPhotosMap={momentPhotosMap}
-        onRefreshPhotos={fetchAllMomentPhotos}
-        onOpenEditPhotos={handleOpenEditPhotos}
-      />
+      {showEditMomentsModal && (
+        <EditMomentsModal
+          onSave={handleSaveMoments}
+          onDelete={handleDeleteMoment}
+          moments={moments}
+          images={images}
+          momentPhotosMap={momentPhotosMap}
+          onRefreshPhotos={fetchAllMomentPhotos}
+          onClose={() => setShowEditMomentsModal(false)}
+          onToast={showToast}
+        />
+      )}
 
-      <EditMomentPhotosModal
-        moment={editingPhotosForMoment}
-        momentPhotosMap={momentPhotosMap}
-        onRefreshPhotos={fetchAllMomentPhotos}
-        onSave={handleSaveMoments}
-        moments={moments}
-      />
+
 
       {/* Move Modal */}
       {showMoveModal && (

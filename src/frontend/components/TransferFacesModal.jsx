@@ -205,7 +205,7 @@ export default function TransferFacesModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" tabIndex={-1}>
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[92vh] overflow-y-auto" tabIndex={-1}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -257,7 +257,7 @@ export default function TransferFacesModal({
               </select>
               <button
                 onClick={handleToggleSortOrder}
-                className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               >
                 {sortOrder === 'asc' ? (

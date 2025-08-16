@@ -95,6 +95,9 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   useEffect(() => {
     if (!preventBackgroundScroll) return;
     
+    // Don't prevent scrolling if allowOutsideScroll is true
+    if (allowOutsideScroll) return;
+    
     // Only apply scroll lock if this is the only modal open
     if (isOpen && isTopModal(modalId) && document.body.style.overflow !== 'hidden') {
       const originalOverflow = document.body.style.overflow;
@@ -107,7 +110,7 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         }
       };
     }
-  }, [isOpen, preventBackgroundScroll, modalId, isTopModal]);
+  }, [isOpen, preventBackgroundScroll, allowOutsideScroll, modalId, isTopModal]);
 
   // Handle mouse position tracking for outside scroll detection
   const mousePosition = useRef({ x: 0, y: 0 });
@@ -219,17 +222,9 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       return; // Allow scrolling inside modal
     }
 
-    // When mouse is outside modal bounds, use smooth scrolling
+    // When mouse is outside modal bounds and outside scroll is allowed
     if (allowOutsideScroll && isMouseOutsideModal.current) {
-      // Use smooth scrolling behavior
-      window.scrollBy({
-        top: e.deltaY,
-        behavior: 'smooth'
-      });
-      
-      // Prevent the original event
-      e.preventDefault();
-      e.stopPropagation();
+      // Don't prevent the default scroll behavior - let the browser handle it naturally
       return;
     }
 

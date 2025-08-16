@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowUp, ArrowDown, Filter } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowUp, ArrowDown, Filter, X, CheckCheck } from 'lucide-react';
 import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { imagesAPI, momentsAPI, handleAPIError } from '../utils/apiService';
-import { useModalManager } from '../utils/modalManager';
+import { useModalFocus } from '../utils/useModalFocus';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -23,51 +23,50 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, moments }) {
+function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, moments, onClose }) {
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
   const [photosInPeriod, setPhotosInPeriod] = useState([]);
   const [sortOrder, setSortOrder] = useSetting('editMomentPhotos_sortOrder', 'asc');
   const [filterType, setFilterType] = useSetting('editMomentPhotos_filterType', 'all');
   const [error, setError] = useState('');
+  const [focusedPhotoIndex, setFocusedPhotoIndex] = useState(0);
+  const photoRefs = useRef([]);
 
-  const { register, unregister, isTopModal } = useModalManager();
-  const MODAL_ID = 'edit-moment-photos-modal';
+  // Use modal focus hook with allowOutsideScroll: false to prevent space key scrolling
+  const { modalRef } = useModalFocus(true, onClose, {
+    allowOutsideScroll: false
+  });
 
   useEffect(() => {
-    register(MODAL_ID);
-    return () => unregister(MODAL_ID);
-  }, [register, unregister]);
-
-  useEffect(() => {
-    if (isTopModal(MODAL_ID) && moment) {
+    if (moment) {
       const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.name);
       setSelectedPhotos(new Set(currentPhotos));
       fetchPhotosInPeriod();
       fetchAllImagesWithTimestamps();
       setError('');
     }
-  }, [isTopModal(MODAL_ID), moment, momentPhotosMap]);
+  }, [moment, momentPhotosMap]);
 
   // Fetch all images with timestamps when modal opens
   useEffect(() => {
-    if (isTopModal(MODAL_ID) && moment) {
+    if (moment) {
       fetchAllImagesWithTimestamps();
     }
-  }, [isTopModal(MODAL_ID), moment]); // Removed photosInPeriod and momentPhotosMap dependencies
+  }, [moment]);
 
   // Refetch images when dependencies change (only if modal is open)
   useEffect(() => {
-    if (isTopModal(MODAL_ID) && moment && (photosInPeriod.length > 0 || Object.keys(momentPhotosMap).length > 0)) {
+    if (moment && (photosInPeriod.length > 0 || Object.keys(momentPhotosMap).length > 0)) {
       fetchAllImagesWithTimestamps();
     }
-  }, [photosInPeriod, momentPhotosMap]);
+  }, [photosInPeriod, momentPhotosMap, moment]);
 
   useEffect(() => {
-    if (isTopModal(MODAL_ID)) {
+    if (moment) {
       setError('');
     }
-  }, [isTopModal(MODAL_ID)]);
+  }, [moment]);
 
   const fetchAllImagesWithTimestamps = async () => {
     try {
@@ -124,7 +123,10 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
 
   const handleClose = () => {
     setError('');
-    unregister(MODAL_ID);
+    // Call the parent's onClose function
+    if (onClose) {
+      onClose();
+    }
   };
 
   const togglePhoto = (photoName) => {
@@ -143,15 +145,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     setSortOrder(prev => toggleSortOrder(prev));
   };
 
-  const selectAllFiltered = () => {
-    const filteredImages = getFilteredAndSortedImages();
-    const filteredPhotoNames = filteredImages.map(img => img.name);
-    setSelectedPhotos(prev => {
-      const next = new Set(prev);
-      filteredPhotoNames.forEach(name => next.add(name));
-      return next;
-    });
-  };
+
 
   // Use moments array to get the title for a moment ID
   const getPhotoMomentInfo = (photoName) => {
@@ -192,21 +186,129 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     return sortPhotosWithDatePriority(filteredImages, sortOrder);
   };
 
-  if (!isTopModal(MODAL_ID) || !moment) return null;
+  // Keyboard navigation handler
+  const handleKeyDown = useCallback((e) => {
+    const filteredImages = getFilteredAndSortedImages();
+    if (filteredImages.length === 0) return;
+
+    // Handle space key when a photo is focused
+    if (document.activeElement && document.activeElement.closest('.photo-item') && e.key === ' ') {
+      e.preventDefault();
+      const photoName = document.activeElement.getAttribute('data-photo-name');
+      if (photoName) {
+        togglePhoto(photoName);
+      }
+      return;
+    }
+
+    // Handle Tab normally for navigation
+    if (e.key === 'Tab') {
+      return;
+    }
+
+    // Handle all other keys
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        handleSavePhotos();
+        break;
+      
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusedPhotoIndex(prev => {
+          const cols = window.innerWidth >= 1024 ? 6 : window.innerWidth >= 768 ? 4 : window.innerWidth >= 640 ? 3 : 2;
+          const newIndex = prev - cols;
+          return newIndex >= 0 ? newIndex : prev;
+        });
+        break;
+      
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusedPhotoIndex(prev => {
+          const cols = window.innerWidth >= 1024 ? 6 : window.innerWidth >= 768 ? 4 : window.innerWidth >= 640 ? 3 : 2;
+          const newIndex = prev + cols;
+          return newIndex < filteredImages.length ? newIndex : prev;
+        });
+        break;
+      
+      case 'ArrowLeft':
+        e.preventDefault();
+        setFocusedPhotoIndex(prev => {
+          const newIndex = prev > 0 ? prev - 1 : prev;
+          return newIndex;
+        });
+        break;
+      
+      case 'ArrowRight':
+        e.preventDefault();
+        setFocusedPhotoIndex(prev => {
+          const newIndex = prev < filteredImages.length - 1 ? prev + 1 : prev;
+          return newIndex;
+        });
+        break;
+    }
+  }, [focusedPhotoIndex, getFilteredAndSortedImages, handleSavePhotos, togglePhoto]);
+
+  // Reset focused index when filter or sort changes
+  useEffect(() => {
+    // Clear old refs when images change
+    photoRefs.current = [];
+    // Reset focus after a short delay to ensure refs are populated
+    setTimeout(() => {
+      setFocusedPhotoIndex(0);
+    }, 100);
+  }, [filterType, sortOrder]);
+
+  // Add document-level keyboard listener as fallback
+  useEffect(() => {
+    if (moment) {
+      const handleDocumentKeyDown = (e) => {
+        // Only handle if the modal is open and focused
+        if (modalRef.current && modalRef.current.contains(document.activeElement)) {
+          handleKeyDown(e);
+        }
+      };
+      
+      document.addEventListener('keydown', handleDocumentKeyDown, true); // Use capture phase
+      return () => {
+        document.removeEventListener('keydown', handleDocumentKeyDown, true);
+      };
+    }
+  }, [moment, handleKeyDown]);
+
+  if (!moment) return null;
+
+  const filteredImages = getFilteredAndSortedImages();
+
+  // Focus the photo element when focusedPhotoIndex changes
+  useEffect(() => {
+    if (photoRefs.current[focusedPhotoIndex] && focusedPhotoIndex < photoRefs.current.length) {
+      photoRefs.current[focusedPhotoIndex].focus();
+    }
+  }, [focusedPhotoIndex]);
+
+  // Ensure refs are populated when filtered images change
+  useEffect(() => {
+    // Wait for refs to be populated
+    const timer = setTimeout(() => {
+      if (photoRefs.current.length > 0 && focusedPhotoIndex === 0) {
+        photoRefs.current[0]?.focus();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [filteredImages, focusedPhotoIndex]);
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
-    >
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
-      >
+    <AnimatePresence>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
+        <motion.div 
+          ref={modalRef}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+          tabIndex={-1}
+        >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold">Edit Photos: {moment.label}</h3>
@@ -221,6 +323,15 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
           {/* Filter and Sort Controls */}
           <div className="flex items-center justify-between mt-4">
             <div className="flex items-center space-x-2">
+              {/* Sort button - moved before filter */}
+              <button
+                onClick={handleToggleSortOrder}
+                className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
+                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+              >
+                {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+              </button>
+              
               <Filter className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-medium text-gray-700">Filter:</span>
               <button
@@ -265,37 +376,90 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
               </button>
             </div>
             <div className="flex items-center space-x-2">
+              {selectedPhotos.size > 0 && (
+                <button
+                  onClick={() => setSelectedPhotos(new Set())}
+                  className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
+                  title="Clear selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
               <button
-                onClick={selectAllFiltered}
-                className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                onClick={() => {
+                  const filteredImages = getFilteredAndSortedImages();
+                  const filteredPhotoNames = filteredImages.map(img => img.name);
+                  const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                  
+                  if (allSelected) {
+                    // Deselect all filtered
+                    setSelectedPhotos(prev => {
+                      const next = new Set(prev);
+                      filteredPhotoNames.forEach(name => next.delete(name));
+                      return next;
+                    });
+                  } else {
+                    // Select all filtered
+                    setSelectedPhotos(prev => {
+                      const next = new Set(prev);
+                      filteredPhotoNames.forEach(name => next.add(name));
+                      return next;
+                    });
+                  }
+                }}
+                className={`w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center ${
+                  (() => {
+                    const filteredImages = getFilteredAndSortedImages();
+                    const filteredPhotoNames = filteredImages.map(img => img.name);
+                    const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                    return allSelected
+                      ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                      : 'hover:bg-gray-100 text-gray-700';
+                  })()
+                }`}
+                title={(() => {
+                  const filteredImages = getFilteredAndSortedImages();
+                  const filteredPhotoNames = filteredImages.map(img => img.name);
+                  const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                  return allSelected ? "Deselect all filtered photos" : "Select all filtered photos";
+                })()}
               >
-                Select All
-              </button>
-              <span className="text-sm font-medium text-gray-700">Sort:</span>
-              <button
-                onClick={handleToggleSortOrder}
-                className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
-              >
-                {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                <CheckCheck className="w-4 h-4" />
               </button>
             </div>
           </div>
+
         </div>
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {getFilteredAndSortedImages().map((photo) => {
+            {filteredImages.map((photo, index) => {
               const isSelected = selectedPhotos.has(photo.name);
               const momentInfo = getPhotoMomentInfo(photo.name);
               const isInPeriod = isPhotoInPeriod(photo.name);
+              const isFocused = index === focusedPhotoIndex;
+              
               return (
                 <div
                   key={photo.id}
+                  ref={el => photoRefs.current[index] = el}
                   onClick={() => togglePhoto(photo.name)}
-                  className={`relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors ${
-                    isSelected ? 'border-primary-500 ring-2 ring-primary-200' : 
+                  onFocus={() => setFocusedPhotoIndex(index)}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                      e.preventDefault();
+                      togglePhoto(photo.name);
+                    }
+                  }}
+                  className={`photo-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${
+                    isSelected ? 'border-purple-500 ring-2 ring-purple-200' : 
                     isInPeriod && !momentInfo ? 'border-red-500 ring-2 ring-red-200' : ''
+                  } ${
+                    isFocused ? 'ring-2 ring-blue-400 ring-offset-2' : ''
                   }`}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Photo ${photo.name}${isSelected ? ' (selected)' : ''}`}
+                  data-photo-name={photo.name}
                 >
                   <img
                     src={photo.urls.thumbnail}
@@ -323,8 +487,9 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </div>
+    </AnimatePresence>
   );
 }
 
-export default EditPhotosModal; 
+export default EditPhotosModal;
