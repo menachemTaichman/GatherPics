@@ -476,51 +476,51 @@ export default function Moments() {
             </motion.button>
           </div>
         </div>
-      </div>
 
-      {/* Carousel */}
-      <AnimatePresence>
-        {carouselVisible && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="carousel-container flex space-x-4 overflow-x-auto pb-2">
-              {moments.length === 0 && (
-                <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
-                  No moments yet
-                </div>
-              )}
-              {moments.map(moment => (
-                <motion.div 
-                  key={moment.momentID} 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => scrollToMoment(moment.momentID)}
-                >
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                    {moment.representative_photo ? (
-                      <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
-                    ) : (
-                      <Image className="w-8 h-8 text-white" />
-                    )}
+        {/* Carousel - Now part of the header */}
+        <AnimatePresence>
+          {carouselVisible && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="overflow-hidden pt-4"
+            >
+              <div className="carousel-container flex space-x-4 overflow-x-auto pb-2">
+                {moments.length === 0 && (
+                  <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
+                    No moments yet
                   </div>
-                  <div className="text-center">
-                    <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
-                    <div className="text-xs text-gray-500 truncate max-w-[7rem]">
-                      {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
+                )}
+                {moments.map(moment => (
+                  <motion.div 
+                    key={moment.momentID} 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => scrollToMoment(moment.momentID)}
+                  >
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
+                      {moment.representative_photo ? (
+                        <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
+                      ) : (
+                        <Image className="w-8 h-8 text-white" />
+                      )}
                     </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                    <div className="text-center">
+                      <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
+                      <div className="text-xs text-gray-500 truncate max-w-[7rem]">
+                        {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Timeline */}
       <div className="px-4 py-8">

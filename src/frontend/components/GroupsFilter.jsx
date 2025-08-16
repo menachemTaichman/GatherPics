@@ -114,7 +114,7 @@ export default function GroupsFilter({
           height: { duration: 0.3, ease: "easeInOut" },
           opacity: { duration: 0.2, ease: "easeInOut" }
         }}
-        className="bg-white border-b border-gray-200 px-8 py-4"
+        className="px-5 py-4"
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
@@ -146,9 +146,8 @@ export default function GroupsFilter({
             >
               <Eye className="w-4 h-4" />
             </button>
-          </div>
 
-          <div className="flex items-center space-x-2">
+            {/* Reset Button - Now after the "only" button */}
             {showResetButton && (
               <button
                 onClick={onReset}

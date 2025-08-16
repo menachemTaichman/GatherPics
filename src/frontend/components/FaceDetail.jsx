@@ -1168,25 +1168,25 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             )}
           </div>
         </div>
-      </div>
 
-      {/* Groups Filter */}
-      <AnimatePresence>
-        {filterVisible && (
-          <GroupsFilter
-            group={group}
-            relatedGroups={relatedGroups.filter(g => g.groupID !== group?.groupID)}
-            selectedGroups={filterGroups}
-            filterMode={filterMode}
-            onlySelected={onlySelected}
-            onFilterChange={handleFilterChange}
-            onModeChange={handleFilterModeChange}
-            onOnlySelectedChange={handleOnlySelectedChange}
-            onReset={handleFilterReset}
-            isVisible={filterVisible}
-          />
-        )}
-      </AnimatePresence>
+        {/* Groups Filter - Now part of the header */}
+        <AnimatePresence>
+          {filterVisible && (
+            <GroupsFilter
+              group={group}
+              relatedGroups={relatedGroups.filter(g => g.groupID !== group?.groupID)}
+              selectedGroups={filterGroups}
+              filterMode={filterMode}
+              onlySelected={onlySelected}
+              onFilterChange={handleFilterChange}
+              onModeChange={handleFilterModeChange}
+              onOnlySelectedChange={handleOnlySelectedChange}
+              onReset={handleFilterReset}
+              isVisible={filterVisible}
+            />
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Content Area */}
       <div className="px-8 py-8">
