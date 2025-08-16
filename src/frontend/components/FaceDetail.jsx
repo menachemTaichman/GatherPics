@@ -107,30 +107,127 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   // Use groups from store if available, otherwise fall back to props
   const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
 
-  // Initialize filter state from URL on first load
+  // Initialize filter state from URL on first load - only run once
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const mode = searchParams.get('filterMode');
-    const groupNames = searchParams.get('filterGroups');
     const only = searchParams.get('only');
+    const groupNames = searchParams.get('filterGroups');
 
     if (mode) {
       setFilterMode(mode);
     }
     
-    // If we have group names and the list of all groups is available, map names to IDs
-    if (groupNames && relatedGroups.length > 0) {
-      const groupNameArray = groupNames.split(',');
-      const groupIds = groupNameArray
-        .map(name => relatedGroups.find(g => g.label === name)?.groupID)
-        .filter(Boolean); // Filter out any undefineds if a group isn't found
-      setFilterGroups(groupIds);
-    }
-    
     if (only) {
       setOnlySelected(only === 'true');
     }
-  }, [location.search, relatedGroups]); // Re-run when related groups are loaded
+
+    // Store group names for later restoration when relatedGroups are loaded
+    if (groupNames) {
+      // We'll restore these when relatedGroups are available
+      // Store them in a ref to avoid dependency issues
+      window.__pendingFilterGroups = groupNames.split(',');
+    }
+  }, []); // Empty dependency array - only run once on mount
+
+  // Restore filter groups from URL once relatedGroups are loaded
+  useEffect(() => {
+    if (relatedGroups.length === 0 || !window.__pendingFilterGroups) return;
+    
+    const groupNames = window.__pendingFilterGroups;
+    const groupIds = groupNames
+      .map(name => relatedGroups.find(g => g.label === name)?.groupID)
+      .filter(Boolean); // Filter out any undefineds if a group isn't found
+    
+    // Only set filter groups if we found matching groups
+    if (groupIds.length > 0) {
+      setFilterGroups(groupIds);
+    }
+    
+    // Clear the pending groups
+    delete window.__pendingFilterGroups;
+  }, [relatedGroups]); // Only depend on relatedGroups, not location.search
+
+  // Fallback: Try to restore filter groups from main groups list if relatedGroups aren't loaded yet
+  useEffect(() => {
+    if (currentGroups.length === 0 || !window.__pendingFilterGroups) return;
+    
+    const groupNames = window.__pendingFilterGroups;
+    const groupIds = groupNames
+      .map(name => currentGroups.find(g => g.label === name)?.groupID)
+      .filter(Boolean)
+      .filter(id => id !== group?.groupID); // Exclude the main group
+    
+    if (groupIds.length > 0) {
+      setFilterGroups(groupIds);
+      // Clear the pending groups
+      delete window.__pendingFilterGroups;
+    }
+  }, [currentGroups, group?.groupID]);
+
+  // Cleanup pending filter groups on unmount
+  useEffect(() => {
+    return () => {
+      if (window.__pendingFilterGroups) {
+        delete window.__pendingFilterGroups;
+      }
+    };
+  }, []);
+
+  // Update URL when filter state changes
+  useEffect(() => {
+    // Skip URL updates during initial load to avoid conflicts with URL restoration
+    if (window.__pendingFilterGroups) {
+      return;
+    }
+    
+    const searchParams = new URLSearchParams(location.search);
+    
+    // Update filter mode
+    if (filterMode !== 'and') {
+      searchParams.set('filterMode', filterMode);
+    } else {
+      searchParams.delete('filterMode');
+    }
+    
+    // Update filter groups - always update URL when filterGroups changes, regardless of relatedGroups
+    if (filterGroups.length > 0) {
+      // If we have relatedGroups loaded, use them to get group names
+      if (relatedGroups.length > 0) {
+        const groupNames = filterGroups
+          .map(id => relatedGroups.find(g => g.groupID === id)?.label)
+          .filter(Boolean)
+          .join(',');
+        if (groupNames) {
+          searchParams.set('filterGroups', groupNames);
+        }
+      } else {
+        // If relatedGroups aren't loaded yet, try to get names from currentGroups as fallback
+        const groupNames = filterGroups
+          .map(id => currentGroups.find(g => g.groupID === id)?.label)
+          .filter(Boolean)
+          .filter(name => name !== group?.label) // Exclude the main group
+          .join(',');
+        if (groupNames) {
+          searchParams.set('filterGroups', groupNames);
+        }
+      }
+    } else {
+      // Always clear filterGroups from URL when empty
+      searchParams.delete('filterGroups');
+    }
+    
+    // Update only selected
+    if (onlySelected) {
+      searchParams.set('only', 'true');
+    } else {
+      searchParams.delete('only');
+    }
+    
+    // Update URL without triggering navigation
+    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    window.history.replaceState(null, '', newUrl);
+  }, [filterGroups, filterMode, onlySelected, relatedGroups, location.pathname, currentGroups, group?.label]);
 
   // Use the custom hook for conflict handling
   const {
@@ -153,17 +250,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   useEffect(() => {
     const foundGroup = currentGroups.find(g => g.label === group_name);
     if (foundGroup) {
-      console.debug('[DEBUG] FaceDetail: group received from API', {
-        groupID: foundGroup.groupID,
-        label: foundGroup.label,
-        face_representative: foundGroup.face_representative
-      });
       setGroup(foundGroup);
-      console.debug('[DEBUG] FaceDetail: setGroup called', {
-        groupID: foundGroup.groupID,
-        label: foundGroup.label,
-        face_representative: foundGroup.face_representative
-      });
     } else if (group && group.groupID) {
       // If we have a group but the label doesn't match the URL, 
       // it might be because we just updated the group name
@@ -176,11 +263,6 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
   useEffect(() => {
     if (group) {
-      console.debug('[DEBUG] FaceDetail: group used in UI', {
-        groupID: group.groupID,
-        label: group.label,
-        face_representative: group.face_representative
-      });
     }
   }, [group]);
 
@@ -366,6 +448,19 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setFilterGroups([]);
     setFilterMode('and');
     setOnlySelected(false);
+    
+    // Clear pending filter groups to prevent conflicts
+    if (window.__pendingFilterGroups) {
+      delete window.__pendingFilterGroups;
+    }
+    
+    // Clear URL parameters
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.delete('filterMode');
+    searchParams.delete('filterGroups');
+    searchParams.delete('only');
+    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    window.history.replaceState(null, '', newUrl);
   };
 
   const handleFilterVisibilityToggle = () => {
@@ -707,41 +802,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setIsEditingTitle(true); // Restore editing mode
   };
 
-  // Update URL when filter state changes
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    
-    if (filterGroups.length > 0) {
-      // Find the group objects from the IDs to get their names
-      const selectedGroupNames = filterGroups
-        .map(id => relatedGroups.find(g => g.groupID === id)?.label)
-        .filter(Boolean); // Filter out any undefineds if a group isn't found
-      
-      if (selectedGroupNames.length > 0) {
-        searchParams.set('filterGroups', selectedGroupNames.join(','));
-      } else {
-        searchParams.delete('filterGroups');
-      }
-    } else {
-      searchParams.delete('filterGroups');
-    }
 
-    if (filterMode !== 'and') {
-      searchParams.set('filterMode', filterMode);
-    } else {
-      searchParams.delete('filterMode');
-    }
-
-    if (onlySelected) {
-      searchParams.set('only', 'true');
-    } else {
-      searchParams.delete('only');
-    }
-
-    // Use replace to avoid polluting browser history
-    navigate(`${location.pathname}?${searchParams.toString()}`, { replace: true });
-
-  }, [filterGroups, filterMode, onlySelected, navigate, location.pathname, relatedGroups]);
 
   if (!group) {
     return <div>Loading...</div>;
