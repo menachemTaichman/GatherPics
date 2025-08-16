@@ -60,7 +60,6 @@ export default function Moments() {
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [momentPhotosMap, setMomentPhotosMap] = useState({});
   const [photosLoading, setPhotosLoading] = useState(false);
-  const [photosProgress, setPhotosProgress] = useState({ current: 0, total: 0 });
   const [globalSelection, setGlobalSelection] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
@@ -131,17 +130,23 @@ export default function Moments() {
       setPhotosLoading(true);
       
       const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
-      setPhotosProgress({ current: 0, total: validMoments.length });
       
-      // Use parallel API calls instead of sequential for much better performance
-      const photoPromises = validMoments.map(async (moment, index) => {
+      // Check which moments need photos fetched
+      const momentsToFetch = validMoments.filter(moment => !momentPhotosMap[moment.momentID]);
+      
+      if (momentsToFetch.length === 0) {
+        // All photos are already loaded
+        setPhotosLoading(false);
+        return;
+      }
+      
+      // Use parallel API calls for moments that need photos fetched
+      const photoPromises = momentsToFetch.map(async (moment) => {
         try {
           const result = await momentsAPI.getPhotos(moment.momentID);
-          setPhotosProgress(prev => ({ ...prev, current: prev.current + 1 }));
           return { momentId: moment.momentID, photos: result.photos || [] };
         } catch (error) {
           console.error(`Error fetching photos for moment ${moment.momentID}:`, error);
-          setPhotosProgress(prev => ({ ...prev, current: prev.current + 1 }));
           return { momentId: moment.momentID, photos: [] };
         }
       });
@@ -149,42 +154,25 @@ export default function Moments() {
       // Wait for all photo requests to complete in parallel
       const results = await Promise.all(photoPromises);
       
-      // Build the map from results
-      const map = {};
-      results.forEach(({ momentId, photos }) => {
-        map[momentId] = photos;
+      // Update the photos map
+      setMomentPhotosMap(prev => {
+        const newMap = { ...prev };
+        results.forEach(({ momentId, photos }) => {
+          newMap[momentId] = photos;
+        });
+        return newMap;
       });
       
-      // Add empty arrays for moments without photos
-      moments.forEach(moment => {
-        if (!map[moment.momentID]) {
-          map[moment.momentID] = [];
-        }
-      });
-      
-      setMomentPhotosMap(map);
     } catch (error) {
       console.error('Error fetching moment photos:', error);
-      // Fallback to empty map
-      const map = {};
-      moments.forEach(moment => {
-        map[moment.momentID] = [];
-      });
-      setMomentPhotosMap(map);
     } finally {
       setPhotosLoading(false);
-      setPhotosProgress({ current: 0, total: 0 });
     }
   };
 
   useEffect(() => {
     if (moments.length > 0) {
-      // Add a small delay to avoid fetching photos immediately on every moments change
-      const timer = setTimeout(() => {
-        fetchAllMomentPhotos();
-      }, 100);
-      
-      return () => clearTimeout(timer);
+      fetchAllMomentPhotos();
     }
   }, [moments]);
 
@@ -231,6 +219,9 @@ export default function Moments() {
         updateMomentPhotosMap(updatedMoment.momentID);
       }
 
+      // Return the response so the caller knows the operation succeeded
+      return response;
+
       // setShowEditModal(false); // This state is now managed by modalManager
     } catch (error) {
       console.error('Error updating moment:', error);
@@ -243,13 +234,10 @@ export default function Moments() {
     try {
       const result = await momentsAPI.getPhotos(momentId);
       
-      setMomentPhotosMap(prev => {
-        const newMap = {
-          ...prev,
-          [momentId]: result.photos || []
-        };
-        return newMap;
-      });
+      setMomentPhotosMap(prev => ({
+        ...prev,
+        [momentId]: result.photos || []
+      }));
       
     } catch (error) {
       console.error('Error updating moment photos map:', error);
@@ -392,8 +380,6 @@ export default function Moments() {
     }
   };
 
-
-
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
 
@@ -443,8 +429,8 @@ export default function Moments() {
             <div className="flex items-center space-x-3 px-4">
               {photosLoading && (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-                  <span>Loading photos... {photosProgress.current}/{photosProgress.total}</span>
+                  <div className="animate-spin rounded-full h-4 h-4 border-b-2 border-primary-600"></div>
+                  <span>Loading photos...</span>
                 </div>
               )}
               <button
@@ -512,7 +498,7 @@ export default function Moments() {
               {photosLoading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-                  <span>{photosProgress.current}/{photosProgress.total}</span>
+                  <span>Loading...</span>
                 </div>
               ) : (
                 <>
@@ -602,7 +588,7 @@ export default function Moments() {
                   <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
                     <div className="flex items-center space-x-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                      <span>{photosProgress.current}/{photosProgress.total}</span>
+                      <span>Loading...</span>
                     </div>
                   </div>
                 )}
@@ -653,7 +639,7 @@ export default function Moments() {
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600"></div>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Loading timeline...</h3>
-            <p className="text-gray-500">Loading photos... {photosProgress.current}/{photosProgress.total}</p>
+            <p className="text-gray-500">Loading photos...</p>
           </div>
         ) : (
           <div className="relative">
@@ -686,7 +672,7 @@ export default function Moments() {
                 <div className="text-center py-8">
                   <div className="inline-flex items-center space-x-2 text-gray-500">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-                    <span>Loading photos... {photosProgress.current}/{photosProgress.total}</span>
+                    <span>Loading photos...</span>
                   </div>
                 </div>
               )}

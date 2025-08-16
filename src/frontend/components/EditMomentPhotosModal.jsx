@@ -40,7 +40,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
 
   useEffect(() => {
     if (moment) {
-      const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.name);
+      const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.id || p.imageID);
       setSelectedPhotos(new Set(currentPhotos));
       fetchPhotosInPeriod();
       fetchAllImagesWithTimestamps();
@@ -111,16 +111,9 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       
       // Only proceed if there are actual changes
       if (photosToAdd.length === 0 && photosToRemove.length === 0) {
-        console.log('No photo changes detected, closing modal');
         handleClose();
         return;
       }
-      
-      console.log('Updating moment photos incrementally:', {
-        photosToAdd,
-        photosToRemove,
-        totalChanges: photosToAdd.length + photosToRemove.length
-      });
       
       // Update the moment with incremental photo changes
       const updatedMoment = {
@@ -245,7 +238,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         setFocusedPhotoIndex(prev => {
           const cols = window.innerWidth >= 1024 ? 6 : window.innerWidth >= 768 ? 4 : window.innerWidth >= 640 ? 3 : 2;
           const newIndex = prev - cols;
-          return newIndex >= 0 ? newIndex : prev;
+          return newIndex >= 0 ? newIndex : filteredImages.length - 1;
         });
         break;
       
@@ -254,14 +247,14 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         setFocusedPhotoIndex(prev => {
           const cols = window.innerWidth >= 1024 ? 6 : window.innerWidth >= 768 ? 4 : window.innerWidth >= 640 ? 3 : 2;
           const newIndex = prev + cols;
-          return newIndex < filteredImages.length ? newIndex : prev;
+          return newIndex < filteredImages.length ? newIndex : 0;
         });
         break;
       
       case 'ArrowLeft':
         e.preventDefault();
         setFocusedPhotoIndex(prev => {
-          const newIndex = prev > 0 ? prev - 1 : prev;
+          const newIndex = prev > 0 ? prev - 1 : filteredImages.length - 1;
           return newIndex;
         });
         break;
@@ -269,7 +262,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       case 'ArrowRight':
         e.preventDefault();
         setFocusedPhotoIndex(prev => {
-          const newIndex = prev < filteredImages.length - 1 ? prev + 1 : prev;
+          const newIndex = prev < filteredImages.length - 1 ? prev + 1 : 0;
           return newIndex;
         });
         break;
@@ -478,10 +471,11 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
                     }
                   }}
                   className={`photo-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${
-                    isSelected ? 'border-purple-500 ring-2 ring-purple-200' : 
+                    isSelected ? 'border-green-500 ring-2 ring-green-200' : 
+                    momentInfo && momentInfo.isCurrentMoment ? 'border-red-500 ring-2 ring-red-200' :
                     isInPeriod && !momentInfo ? 'border-red-500 ring-2 ring-red-200' : ''
                   } ${
-                    isFocused ? 'ring-2 ring-blue-400 ring-offset-2' : ''
+                    isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
                   }`}
                   tabIndex={0}
                   role="button"
