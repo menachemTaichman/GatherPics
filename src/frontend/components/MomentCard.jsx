@@ -90,54 +90,60 @@ export default function MomentCard({
           </div>
           <div className="p-6">
             <div
-              className={viewMode === 'grid' ? "photo-gallery-grid" : "space-y-4 max-w-3xl mx-auto block"}
-              style={viewMode === 'grid' ? {
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * photoSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(100, 266 * photoSize)}px`
-              } : {}}
+              className={viewMode === 'grid' ? `photo-gallery-grid size-${Math.round(photoSize * 100).toString().padStart(3, '0')}` : "space-y-4 max-w-3xl mx-auto block"}
             >
-              {photos.map((photo, index) => (
-                <div
-                  key={photo.id}
-                  className={viewMode === 'grid' ? `photo-card ${photo.aspectRatioClass || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
-                >
-                  <div className="relative group cursor-pointer h-full" onClick={() => onOpenPhotoViewer(photos, photo, index)}>
-                    <input
-                      type="checkbox"
-                      id={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                      name={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                      checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        onPhotoSelect(photo.name, moment.momentID);
-                      }}
-                      onClick={e => e.stopPropagation()}
-                      className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                    />
-                    <img
-                      src={`/${photo.thumbFilename}`}
-                      alt={`Photo ${index + 1}`}
-                      className="w-full h-full object-cover rounded-lg"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-                        <Image className="w-8 h-8 mx-auto mb-1" />
-                        <span className="text-sm">Click to view</span>
+              {photos.map((photo, index) => {
+                // Determine aspect ratio class for masonry layout
+                let aspectRatioClass = 'square';
+                if (photo.aspect_ratio) {
+                  const ratio = photo.aspect_ratio;
+                  if (ratio > 1.2) aspectRatioClass = 'landscape';
+                  else if (ratio < 0.8) aspectRatioClass = 'portrait';
+                }
+                
+                return (
+                  <div
+                    key={photo.id}
+                    className={viewMode === 'grid' ? `photo-card ${aspectRatioClass}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}
+                  >
+                    <div className="relative group cursor-pointer h-full" onClick={() => onOpenPhotoViewer(photos, photo, index)}>
+                      <input
+                        type="checkbox"
+                        id={`photo-checkbox-${moment.momentID}-${photo.name}`}
+                        name={`photo-checkbox-${moment.momentID}-${photo.name}`}
+                        checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          onPhotoSelect(photo.name, moment.momentID);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
+                      />
+                      <img
+                        src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
+                        alt={`Photo ${index + 1}`}
+                        className="w-full h-full object-cover rounded-lg"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
+                          <Image className="w-8 h-8 mx-auto mb-1" />
+                          <span className="text-sm">Click to view</span>
+                        </div>
                       </div>
+                      {photo.date_taken && (
+                        <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                          {formatTimeOnly(photo.date_taken)}
+                        </div>
+                      )}
                     </div>
-                    {photo.date_taken && (
-                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                        {formatTimeOnly(photo.date_taken)}
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </motion.div>

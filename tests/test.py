@@ -311,4 +311,6 @@ def clear_moments_images():
         for image in images:
             event.moments_model.remove_image_from_moment(moment['momentID'], image)
 
-print(event.moments_model.list())
+# print(event.moments_model.list())
+
+print(event.images_model.get('ba9ca86a-ac92-49e9-b379-63812f355867'))

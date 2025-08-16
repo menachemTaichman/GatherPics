@@ -99,19 +99,38 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
 
   const handleSavePhotos = async () => {
     try {
-      // Update the moment with the selected photos
+      // Calculate which photos to add and remove instead of sending the full list
+      const currentPhotos = getCurrentMomentPhotos();
+      const newPhotos = Array.from(selectedPhotos);
+      
+      // Find photos to add (in newPhotos but not in currentPhotos)
+      const photosToAdd = newPhotos.filter(photo => !currentPhotos.includes(photo));
+      
+      // Find photos to remove (in currentPhotos but not in newPhotos)
+      const photosToRemove = currentPhotos.filter(photo => !newPhotos.includes(photo));
+      
+      // Only proceed if there are actual changes
+      if (photosToAdd.length === 0 && photosToRemove.length === 0) {
+        console.log('No photo changes detected, closing modal');
+        handleClose();
+        return;
+      }
+      
+      console.log('Updating moment photos incrementally:', {
+        photosToAdd,
+        photosToRemove,
+        totalChanges: photosToAdd.length + photosToRemove.length
+      });
+      
+      // Update the moment with incremental photo changes
       const updatedMoment = {
         ...moment,
-        image_IDs: Array.from(selectedPhotos)
+        photos_to_add: photosToAdd,
+        photos_to_remove: photosToRemove
       };
 
       // The API service interceptor will automatically handle the state updates
       await onSave(updatedMoment);
-      
-      // Manually trigger a refresh of photos for the moments view if needed
-      if (onRefreshPhotos) {
-        onRefreshPhotos();
-      }
       
       handleClose();
     } catch (error) {
@@ -129,13 +148,13 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     }
   };
 
-  const togglePhoto = (photoName) => {
+  const togglePhoto = (photoId) => {
     setSelectedPhotos(prev => {
       const next = new Set(prev);
-      if (next.has(photoName)) {
-        next.delete(photoName);
+      if (next.has(photoId)) {
+        next.delete(photoId);
       } else {
-        next.add(photoName);
+        next.add(photoId);
       }
       return next;
     });
@@ -148,10 +167,10 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
 
 
   // Use moments array to get the title for a moment ID
-  const getPhotoMomentInfo = (photoName) => {
+  const getPhotoMomentInfo = (photoId) => {
     for (const momentId in momentPhotosMap) {
       const momentPhotos = momentPhotosMap[momentId] || [];
-      const foundPhoto = momentPhotos.find(p => p.name === photoName);
+      const foundPhoto = momentPhotos.find(p => (p.id || p.imageID) === photoId);
       if (foundPhoto) {
         const momentObj = moments.find(m => m.momentID === momentId);
         return {
@@ -164,19 +183,27 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     return null;
   };
 
-  const isPhotoInPeriod = (photoName) => {
-    return photosInPeriod.some(p => p.name === photoName);
+  // Get current photos from the moment
+  const getCurrentMomentPhotos = () => {
+    if (!moment || !momentPhotosMap[moment.momentID]) {
+      return [];
+    }
+    return momentPhotosMap[moment.momentID].map(p => p.id || p.imageID);
+  };
+
+  const isPhotoInPeriod = (photoId) => {
+    return photosInPeriod.some(p => (p.id || p.imageID) === photoId);
   };
 
   const getFilteredAndSortedImages = () => {
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        (momentPhotosMap[moment?.momentID] || []).some(p => p.name === img.name)
+        (momentPhotosMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        !(momentPhotosMap[moment?.momentID] || []).some(p => p.name === img.name)
+        !(momentPhotosMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
       );
     } else if (filterType === 'in-period') {
       filteredImages = photosInPeriod;
@@ -194,9 +221,9 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     // Handle space key when a photo is focused
     if (document.activeElement && document.activeElement.closest('.photo-item') && e.key === ' ') {
       e.preventDefault();
-      const photoName = document.activeElement.getAttribute('data-photo-name');
-      if (photoName) {
-        togglePhoto(photoName);
+      const photoId = document.activeElement.getAttribute('data-photo-id');
+      if (photoId) {
+        togglePhoto(photoId);
       }
       return;
     }
@@ -388,21 +415,21 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
               <button
                 onClick={() => {
                   const filteredImages = getFilteredAndSortedImages();
-                  const filteredPhotoNames = filteredImages.map(img => img.name);
-                  const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                  const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
+                  const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
                   
                   if (allSelected) {
                     // Deselect all filtered
                     setSelectedPhotos(prev => {
                       const next = new Set(prev);
-                      filteredPhotoNames.forEach(name => next.delete(name));
+                      filteredPhotoIds.forEach(id => next.delete(id));
                       return next;
                     });
                   } else {
                     // Select all filtered
                     setSelectedPhotos(prev => {
                       const next = new Set(prev);
-                      filteredPhotoNames.forEach(name => next.add(name));
+                      filteredPhotoIds.forEach(id => next.add(id));
                       return next;
                     });
                   }
@@ -410,8 +437,8 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
                 className={`w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center ${
                   (() => {
                     const filteredImages = getFilteredAndSortedImages();
-                    const filteredPhotoNames = filteredImages.map(img => img.name);
-                    const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                    const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
+                    const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
                     return allSelected
                       ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
                       : 'hover:bg-gray-100 text-gray-700';
@@ -419,8 +446,8 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
                 }`}
                 title={(() => {
                   const filteredImages = getFilteredAndSortedImages();
-                  const filteredPhotoNames = filteredImages.map(img => img.name);
-                  const allSelected = filteredPhotoNames.every(name => selectedPhotos.has(name));
+                  const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
+                  const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
                   return allSelected ? "Deselect all filtered photos" : "Select all filtered photos";
                 })()}
               >
@@ -433,21 +460,21 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {filteredImages.map((photo, index) => {
-              const isSelected = selectedPhotos.has(photo.name);
-              const momentInfo = getPhotoMomentInfo(photo.name);
-              const isInPeriod = isPhotoInPeriod(photo.name);
+              const isSelected = selectedPhotos.has(photo.id || photo.imageID);
+              const momentInfo = getPhotoMomentInfo(photo.id || photo.imageID);
+              const isInPeriod = isPhotoInPeriod(photo.id || photo.imageID);
               const isFocused = index === focusedPhotoIndex;
               
               return (
                 <div
                   key={photo.id}
                   ref={el => photoRefs.current[index] = el}
-                  onClick={() => togglePhoto(photo.name)}
+                  onClick={() => togglePhoto(photo.id || photo.imageID)}
                   onFocus={() => setFocusedPhotoIndex(index)}
                   onKeyDown={(e) => {
                     if (e.key === ' ' || e.key === 'Enter') {
                       e.preventDefault();
-                      togglePhoto(photo.name);
+                      togglePhoto(photo.id || photo.imageID);
                     }
                   }}
                   className={`photo-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${
@@ -459,7 +486,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
                   tabIndex={0}
                   role="button"
                   aria-label={`Photo ${photo.name}${isSelected ? ' (selected)' : ''}`}
-                  data-photo-name={photo.name}
+                  data-photo-id={photo.id || photo.imageID}
                 >
                   <img
                     src={photo.urls.thumbnail}

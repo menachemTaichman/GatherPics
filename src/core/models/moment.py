@@ -33,9 +33,17 @@ class Moments(BaseModel):
         
         try:
             super().edit(entity_id, fields)
+            
+            # Handle photo updates - support both incremental and full replacement
             if 'image_IDs' in fields:
                 # Use set_photos which handles the complete replacement logic
                 self.set_photos(entity_id, fields['image_IDs'])
+            elif 'photos_to_add' in fields or 'photos_to_remove' in fields:
+                # Handle incremental updates
+                photos_to_add = fields.get('photos_to_add', [])
+                photos_to_remove = fields.get('photos_to_remove', [])
+                self.update_photos_incrementally(entity_id, photos_to_add, photos_to_remove)
+                
         except Exception as e:
             raise
 
@@ -43,13 +51,30 @@ class Moments(BaseModel):
         if not image_ids:  # Guard against empty lists
             return
         image_placeholders = ','.join(['?'] * len(image_ids))   
-        self.db.execute_query('UPDATE images SET momentID=? WHERE imageID IN ({})'.format(image_placeholders), (moment_id, *image_ids))
+        query = 'UPDATE images SET momentID=? WHERE imageID IN ({})'.format(image_placeholders)
+        self.db.execute_query(query, (moment_id, *image_ids))
 
     def remove_image_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
         if not image_ids:  # Guard against empty lists
             return
         image_placeholders = ','.join(['?'] * len(image_ids))
-        self.db.execute_query('UPDATE images SET momentID=NULL WHERE imageID IN ({}) AND momentID=?'.format(image_placeholders), (moment_id, *image_ids))
+        query = 'UPDATE images SET momentID=NULL WHERE imageID IN ({}) AND momentID=?'.format(image_placeholders)
+        self.db.execute_query(query, (moment_id, *image_ids))
+
+    def update_photos_incrementally(self, moment_id: str, photos_to_add: List[str], photos_to_remove: List[str]) -> None:
+        """Update moment photos incrementally by adding and removing specific photos."""
+        
+        try:
+            # Remove photos first
+            if photos_to_remove:
+                self.remove_image_from_moment(moment_id, photos_to_remove)
+            
+            # Add new photos
+            if photos_to_add:
+                self.add_image_to_moment(moment_id, photos_to_add)
+            
+        except Exception:
+            raise
 
     def get_images(self, moment_id: str) -> List[str]:
         results = self.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))

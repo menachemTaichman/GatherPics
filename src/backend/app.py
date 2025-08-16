@@ -60,8 +60,8 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
             moment = event.moments_model.get(image['momentID'])
             if moment:
                 moment_info = {
-                    'id': moment['id'],
-                    'title': moment['title'],
+                    'id': moment.get('momentID', moment.get('id', 'Unknown')),
+                    'title': moment.get('title', 'Unknown'),
                     'description': moment.get('description', ''),
                     'start': moment.get('start'),
                 }
@@ -258,9 +258,6 @@ def transfer_faces():
             'updated_target_group': result.get('updated_target_group'),  # Include updated target group
             'photos_to_add_to_grid': result.get('photos_to_add_to_grid'),  # New field for full transfer
         }
-        # Debug: print the face representative of the updated target group being sent to frontend
-        if result.get('updated_target_group'):
-            print(f"[DEBUG] /api/groups/transfer-faces: updated_target_group face_representative: {result['updated_target_group'].get('face_representative')}")
         
         # Include new group name if a new group was created
         if 'new_group_name' in result:
@@ -451,12 +448,26 @@ def update_moment(moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
     
     data = request.json or {}
+
     try:
-        # Handle photo assignments separately if 'image_IDs' is in the data
-        if 'image_IDs' in data:
-            event.moments_model.set_photos(moment_id, data['image_IDs'])
-            del data['image_IDs']  # Don't try to save this to the moments table
-                    
+        # Handle photo assignments - only incremental updates are supported
+        if 'photos_to_add' in data or 'photos_to_remove' in data:
+            # Incremental update mode
+            photos_to_add = data.get('photos_to_add', [])
+            photos_to_remove = data.get('photos_to_remove', [])
+                        
+            # Remove the photo fields from data so they don't get saved to moments table
+            if 'photos_to_add' in data:
+                del data['photos_to_add']
+            if 'photos_to_remove' in data:
+                del data['photos_to_remove']
+            # Also remove image_IDs if present (shouldn't happen with new frontend)
+            if 'image_IDs' in data:
+                del data['image_IDs']
+            
+            # Update photos incrementally
+            event.moments_model.update_photos_incrementally(moment_id, photos_to_add, photos_to_remove)
+            
         if data:  # Only edit if other fields are present
             event.moments_model.edit(moment_id, data)
 

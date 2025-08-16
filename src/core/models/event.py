@@ -210,21 +210,12 @@ class Event(JsonModel):
 
         # Transfer faces to target group
         self.groups_model.add_faces(target_group_id, face_ids)
-        
-        # Debug: print current face representative before update
-        target_group_before = self.groups_model.get(target_group_id)
-        print(f"[DEBUG] Target group {target_group_id} face rep BEFORE update: {target_group_before.get('face_representative')}")
-        
+                
         # After transferring, update the target group's representative to the biggest face
         target_group_faces = self.groups_model.get_faces(target_group_id)
         new_representative = self.faces_model.get_biggest_face(target_group_faces)
-        print(f"[DEBUG] Biggest face for group {target_group_id} after transfer: {new_representative}")
         if new_representative:
             self.groups_model.edit(target_group_id, {'face_representative': new_representative})
-        
-        # Debug: print face representative after update
-        target_group_after = self.groups_model.get(target_group_id)
-        print(f"[DEBUG] Target group {target_group_id} face rep AFTER update: {target_group_after.get('face_representative')}")
         
         # Check which photos no longer belong to source group after transfer
         photos_to_remove_from_source = set()

@@ -38,7 +38,6 @@ class Groups(BaseModel):
 
     def edit(self, entity_id: str, fields: Dict) -> None:
         """Edit a group with validation for unique labels."""
-        print(f"[DEBUG] Groups.edit called for group {entity_id} with fields: {fields}")
         if 'label' in fields and fields['label']:
             # Check for duplicate labels (excluding current group) - use is_exists method
             existing_id = self.db.is_exists(self.table_name, {'label': fields['label']})

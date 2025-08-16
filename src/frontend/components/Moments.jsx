@@ -59,6 +59,8 @@ export default function Moments() {
   const [photoSize, setPhotoSize] = useSetting('moments_photoSize', 1.0);
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [momentPhotosMap, setMomentPhotosMap] = useState({});
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photosProgress, setPhotosProgress] = useState({ current: 0, total: 0 });
   const [globalSelection, setGlobalSelection] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
@@ -125,24 +127,65 @@ export default function Moments() {
   }, [moments]);
 
   const fetchAllMomentPhotos = async () => {
-    const map = {};
-    for (const moment of moments) {
-      if (moment.momentID && !moment.momentID.startsWith('temp-')) {
+    try {
+      setPhotosLoading(true);
+      
+      const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
+      setPhotosProgress({ current: 0, total: validMoments.length });
+      
+      // Use parallel API calls instead of sequential for much better performance
+      const photoPromises = validMoments.map(async (moment, index) => {
         try {
           const result = await momentsAPI.getPhotos(moment.momentID);
-          map[moment.momentID] = result.photos || [];
-        } catch {
+          setPhotosProgress(prev => ({ ...prev, current: prev.current + 1 }));
+          return { momentId: moment.momentID, photos: result.photos || [] };
+        } catch (error) {
+          console.error(`Error fetching photos for moment ${moment.momentID}:`, error);
+          setPhotosProgress(prev => ({ ...prev, current: prev.current + 1 }));
+          return { momentId: moment.momentID, photos: [] };
+        }
+      });
+
+      // Wait for all photo requests to complete in parallel
+      const results = await Promise.all(photoPromises);
+      
+      // Build the map from results
+      const map = {};
+      results.forEach(({ momentId, photos }) => {
+        map[momentId] = photos;
+      });
+      
+      // Add empty arrays for moments without photos
+      moments.forEach(moment => {
+        if (!map[moment.momentID]) {
           map[moment.momentID] = [];
         }
-      } else {
+      });
+      
+      setMomentPhotosMap(map);
+    } catch (error) {
+      console.error('Error fetching moment photos:', error);
+      // Fallback to empty map
+      const map = {};
+      moments.forEach(moment => {
         map[moment.momentID] = [];
-      }
+      });
+      setMomentPhotosMap(map);
+    } finally {
+      setPhotosLoading(false);
+      setPhotosProgress({ current: 0, total: 0 });
     }
-    setMomentPhotosMap(map);
   };
 
   useEffect(() => {
-    if (moments.length > 0) fetchAllMomentPhotos();
+    if (moments.length > 0) {
+      // Add a small delay to avoid fetching photos immediately on every moments change
+      const timer = setTimeout(() => {
+        fetchAllMomentPhotos();
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
   }, [moments]);
 
   const fetchMoments = async () => {
@@ -167,27 +210,49 @@ export default function Moments() {
     }
   };
 
-  useEffect(() => {
-    // console.log("Moments in state:", moments); // DEBUG
-  }, [moments]);
-
   const handleSaveMoments = async (updatedMoment) => {
     try {
       const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment);
-      
+
       // Handle any change instructions from the backend
       if (response.changes) {
         response.changes.forEach(change => {
           handleDataChange(change.type, change.data);
+
+          // If this is a moment update, also update the momentPhotosMap
+          if (change.type === CHANGE_TYPES.MOMENT_UPDATED) {
+            updateMomentPhotosMap(change.data.momentID);
+          }
         });
       } else {
         // Fallback to direct update if no change instructions
         updateMoment(updatedMoment.momentID, response.moment || response);
+        // Also update the momentPhotosMap
+        updateMomentPhotosMap(updatedMoment.momentID);
       }
-      
+
       // setShowEditModal(false); // This state is now managed by modalManager
     } catch (error) {
-      console.error('Error saving moment:', error);
+      console.error('Error updating moment:', error);
+      showToast('Failed to update moment', 'error');
+    }
+  };
+
+  // Function to update the momentPhotosMap for a specific moment
+  const updateMomentPhotosMap = async (momentId) => {
+    try {
+      const result = await momentsAPI.getPhotos(momentId);
+      
+      setMomentPhotosMap(prev => {
+        const newMap = {
+          ...prev,
+          [momentId]: result.photos || []
+        };
+        return newMap;
+      });
+      
+    } catch (error) {
+      console.error('Error updating moment photos map:', error);
     }
   };
 
@@ -291,7 +356,7 @@ export default function Moments() {
   const openPhotoViewer = (photos, photo, index) => {
     setPhotoViewer({
       show: true,
-      photo: photo,
+      photo: photo.id, // Pass the photo ID instead of the photo object
       index: index,
       photos: photos
     });
@@ -313,7 +378,7 @@ export default function Moments() {
     }
     setPhotoViewer({
       show: true,
-      photo: photoViewer.photos[newIndex].name,
+      photo: photoViewer.photos[newIndex].id, // Use photo.id instead of photo.name
       index: newIndex,
       photos: photoViewer.photos
     });
@@ -376,6 +441,12 @@ export default function Moments() {
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: View and Size Controls */}
             <div className="flex items-center space-x-3 px-4">
+              {photosLoading && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                  <span>Loading photos... {photosProgress.current}/{photosProgress.total}</span>
+                </div>
+              )}
               <button
                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                 className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
@@ -438,26 +509,35 @@ export default function Moments() {
 
             {/* Group 2: Selection Controls */}
             <div className="flex items-center space-x-3 px-4">
-              <button
-                onClick={selectAllPhotos}
-                className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                title="Select all photos"
-              >
-                <CheckCheck className="w-4 h-4" />
-              </button>
-              {globalSelection.size > 0 && (
-                <button
-                  onClick={clearGlobalSelection}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                  title="Clear selection"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              {photosLoading ? (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                  <span>{photosProgress.current}/{photosProgress.total}</span>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={selectAllPhotos}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                    title="Select all photos"
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                  </button>
+                  {globalSelection.size > 0 && (
+                    <button
+                      onClick={clearGlobalSelection}
+                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                      title="Clear selection"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
             {/* Group 3: Actions on Selection */}
-            {globalSelection.size > 0 && (
+            {globalSelection.size > 0 && !photosLoading && (
               <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={handleGlobalAddToBucket}
@@ -518,6 +598,14 @@ export default function Moments() {
                     No moments yet
                   </div>
                 )}
+                {photosLoading && moments.length > 0 && (
+                  <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                      <span>{photosProgress.current}/{photosProgress.total}</span>
+                    </div>
+                  </div>
+                )}
                 {moments.map(moment => (
                   <motion.div 
                     key={moment.momentID} 
@@ -529,6 +617,8 @@ export default function Moments() {
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
                       {moment.representative_photo ? (
                         <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
+                      ) : photosLoading ? (
+                        <div className="animate-pulse bg-gray-300 w-full h-full rounded"></div>
                       ) : (
                         <Image className="w-8 h-8 text-white" />
                       )}
@@ -557,6 +647,14 @@ export default function Moments() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No moments yet</h3>
             <p className="text-gray-500">Create your first moment to start building your timeline.</p>
           </div>
+        ) : photosLoading && Object.keys(momentPhotosMap).length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600"></div>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Loading timeline...</h3>
+            <p className="text-gray-500">Loading photos... {photosProgress.current}/{photosProgress.total}</p>
+          </div>
         ) : (
           <div className="relative">
             {/* Fixed left sidebar for sticky info */}
@@ -584,6 +682,14 @@ export default function Moments() {
             
             {/* Timeline items */}
             <div className="space-y-12 ml-64">
+              {photosLoading && (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center space-x-2 text-gray-500">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                    <span>Loading photos... {photosProgress.current}/{photosProgress.total}</span>
+                  </div>
+                </div>
+              )}
               {moments.map((moment, index) => (
                 <MomentCard
                   key={moment.momentID}
