@@ -52,15 +52,15 @@ export default function Header() {
             </Link>
 
             <Link
-              to="/moments"
+              to="/timeline"
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                location.pathname.startsWith('/moments')
+                location.pathname.startsWith('/timeline')
                   ? 'bg-primary-100 text-primary-700'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
               <Clock className="w-4 h-4" />
-              <span className="hidden sm:inline">Moments</span>
+              <span className="hidden sm:inline">Timeline</span>
             </Link>
 
             <button

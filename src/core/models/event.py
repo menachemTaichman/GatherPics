@@ -468,10 +468,11 @@ class Event(JsonModel):
                 moment = self.moments_model.get(image['momentID'])
                 if moment:
                     moment_info = {
-                        'id': moment['id'],
-                        'title': moment['title'],
+                        'id': moment.get('momentID', moment.get('id', 'Unknown')),
+                        'title': moment.get('label', 'Unknown'),  # Always use 'label' from database
                         'description': moment.get('description', ''),
                         'start': moment.get('start'),
+                        'end': moment.get('end'),
                     }
             
             # Build complete response

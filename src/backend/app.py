@@ -61,9 +61,10 @@ def build_complete_photo_data(event, image_id, include_all_faces=True, group_fil
             if moment:
                 moment_info = {
                     'id': moment.get('momentID', moment.get('id', 'Unknown')),
-                    'title': moment.get('title', 'Unknown'),
+                    'title': moment.get('label', 'Unknown'),  # Always use 'label' from database
                     'description': moment.get('description', ''),
                     'start': moment.get('start'),
+                    'end': moment.get('end'),
                 }
         
         # Build complete response

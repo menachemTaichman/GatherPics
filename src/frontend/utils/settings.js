@@ -17,6 +17,9 @@ const DEFAULT_SETTINGS = {
   faceDetail_sortBy: 'date',
   faceDetail_sortOrder: 'asc',
   
+  // Shared selection settings
+  selectionMode: false,
+  
   // Moments settings
   moments_viewMode: 'grid',
   moments_photoSize: 1.0,

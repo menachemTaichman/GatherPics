@@ -37,6 +37,7 @@ import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 import { clearTransferredPhotosFromCache } from '../utils/selection';
+import timelineManager from '../utils/timeline';
 
 export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
@@ -88,7 +89,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
-  const [selectionMode, setSelectionMode] = useSetting('faceDetail_selectionMode', false);
+  const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   
   // Filter state
@@ -721,8 +722,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const handleJumpToMoment = (momentInfo) => {
-    // Navigate to the moments page and scroll to the specific moment
-    navigate('/moments', { state: { scrollToMoment: momentInfo.id } });
+    timelineManager.navigateToMoment(momentInfo.label, momentInfo.label);
   };
 
   const handleTitleEdit = () => {
@@ -1078,23 +1078,32 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
+                {/* Select all button - only visible when checkboxes are shown */}
                 {selectionMode && (
                   <button
                     onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
                     className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                       selectedPhotos.size === sortedPhotos.length
                         ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                        : 'hover:bg-gray-100 text-gray-700'
+                        : selectedPhotos.size > 0
+                        ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                     title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
                   >
-                    <CheckCheck className="w-4 h-4" />
+                    {selectedPhotos.size === sortedPhotos.length ? <X className="w-4 h-4" /> : <CheckCheck className="w-4 h-4" />}
                   </button>
                 )}
+                
+                {/* Clear button - always visible when any photos are selected */}
                 {selectedPhotos.size > 0 && (
                   <button
                     onClick={clearSelection}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                      selectedPhotos.size === sortedPhotos.length
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
                     title="Clear selection"
                   >
                     <X className="w-4 h-4" />
@@ -1130,17 +1139,27 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               <>
                 {/* Group 3: Selection Controls */}
                 <div className="flex items-center space-x-3 px-4">
-                  <button
-                    onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                      selectedPhotos.size === sortedPhotos.length
-                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                        : 'hover:bg-gray-100 text-gray-700'
-                    }`}
-                    title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
-                  >
-                    <CheckCheck className="w-4 h-4" />
-                  </button>
+                  {selectedPhotos.size === sortedPhotos.length ? (
+                    <button
+                      onClick={clearSelection}
+                      className="w-8 h-8 bg-primary-100 text-primary-700 hover:bg-primary-200 rounded transition-colors flex items-center justify-center"
+                      title="Clear selection"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={selectAllPhotos}
+                      className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
+                        selectedPhotos.size > 0
+                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title="Select all photos (Ctrl+A)"
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Group 4: Actions on Selection */}

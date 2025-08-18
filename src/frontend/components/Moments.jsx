@@ -1,14 +1,15 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil } from 'lucide-react';
+import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil, Square, CheckSquare } from 'lucide-react';
 import PhotoViewer from './PhotoViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentPhotosModal from './EditMomentPhotosModal';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
 import { momentsAPI, imagesAPI } from '../utils/apiService';
 import MomentCard from './MomentCard';
+import timelineManager from '../utils/timeline';
 
 
 function formatTimeOnly(dateString) {
@@ -42,6 +43,7 @@ function formatDate(dateString) {
 
 export default function Moments() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { 
     moments, 
     setMoments, 
@@ -67,6 +69,10 @@ export default function Moments() {
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  
+  // New state for checkbox visibility and selection mode
+  const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
+  const [lastSelectedPhoto, setLastSelectedPhoto] = useState(null);
 
   // Toast notification function
   const showToast = (message, type = 'success') => {
@@ -78,6 +84,47 @@ export default function Moments() {
 
   const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
+  const navigateRef = useRef(navigate);
+
+
+  // Update the ref when navigate changes
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
+
+  // Initialize timeline manager when component mounts
+  useEffect(() => {
+    timelineManager.init('/timeline', '.sticky.top-16', (momentKey) => {
+      // Callback from timeline manager when moment changes
+      const moment = moments.find(m => m.label === momentKey);
+      if (moment) {
+        setCurrentVisibleMoment(moment);
+      }
+    });
+    
+    return () => {
+      timelineManager.destroy();
+    };
+  }, [moments]);
+
+  // Clean up refs when moments change
+  useEffect(() => {
+    // Clear old refs
+    momentsRef.current = {};
+  }, [moments]);
+
+  // Callback ref function to set refs for moment elements
+  const setMomentRef = useCallback((momentIdOrName) => (element) => {
+    if (element) {
+      momentsRef.current[momentIdOrName] = element;
+      // Register with timeline manager using name key
+      timelineManager.registerMoment(momentIdOrName, element);
+    } else {
+      // Clean up ref when element is unmounted
+      delete momentsRef.current[momentIdOrName];
+      timelineManager.unregisterMoment(momentIdOrName);
+    }
+  }, []);
 
   useEffect(() => {
     fetchMoments();
@@ -88,42 +135,39 @@ export default function Moments() {
   useEffect(() => {
     if (location.state?.scrollToMoment && moments.length > 0) {
       const momentId = location.state.scrollToMoment;
-      // Clear the state to prevent re-scrolling
       window.history.replaceState({}, document.title);
-      
-      // Wait a bit for the page to load, then scroll to the moment
-      setTimeout(() => {
-        scrollToMoment(momentId);
-      }, 500);
+      const moment = moments.find(m => m.momentID === momentId);
+      if (moment) {
+        timelineManager.navigateToMoment(moment.label, moment.label);
+      }
     }
   }, [location.state, moments]);
 
+  // Handle URL query parameter for moment (moment name)
   useEffect(() => {
-    const handleScroll = () => {
-      let currentMoment = null;
-      
-      // Find which moment is currently most visible
-      Object.entries(momentsRef.current).forEach(([momentId, element]) => {
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          const headerHeight = 250; // Account for the main header with controls and carousel
-          
-          // If the moment is in the viewport
-          if (rect.top <= headerHeight + 50 && rect.bottom >= headerHeight) {
-            currentMoment = moments.find(m => m.momentID === momentId);
-          }
+    if (moments.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const momentName = urlParams.get('moment');
+      if (momentName) {
+        const decodedName = decodeURIComponent(momentName);
+        const moment = moments.find(m => m.label === decodedName);
+        if (moment) {
+          timelineManager.navigateToMoment(moment.label, moment.label);
         }
-      });
-      
-      setCurrentVisibleMoment(currentMoment);
-    };
+      }
+    }
+  }, [moments, location.search]);
 
-    // Call once on mount to set initial state
-    handleScroll();
-    
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [moments]);
+  // Recalculate timeline offset when carousel visibility changes
+  useEffect(() => {
+    // Use a delay to ensure the DOM has updated and animations complete
+    const timer = setTimeout(() => {
+      timelineManager.recalculateOffset();
+    }, 400); // Slightly longer than timeline manager's delay to ensure DOM is ready
+    return () => clearTimeout(timer);
+  }, [carouselVisible]);
+
+  // The timeline manager now handles all scroll detection and URL updates automatically
 
   const fetchAllMomentPhotos = async () => {
     try {
@@ -262,9 +306,40 @@ export default function Moments() {
     }
   };
 
-  const handlePhotoSelect = (photoName, momentId) => {
+  const handlePhotoSelect = (photoName, momentId, event) => {
+    const key = `${momentId}:${photoName}`;
+    
+    // Handle shift-click for range selection
+    if (event?.shiftKey && lastSelectedPhoto && lastSelectedPhoto !== key) {
+      const [lastMomentId, lastPhotoName] = lastSelectedPhoto.split(':');
+      
+      // Only allow range selection within the same moment
+      if (lastMomentId === momentId) {
+        const currentPhotos = momentPhotosMap[momentId] || [];
+        const lastIndex = currentPhotos.findIndex(p => p.name === lastPhotoName);
+        const currentIndex = currentPhotos.findIndex(p => p.name === photoName);
+        
+        if (lastIndex !== -1 && currentIndex !== -1) {
+          const startIndex = Math.min(lastIndex, currentIndex);
+          const endIndex = Math.max(lastIndex, currentIndex);
+          
+          // Add all photos in the range
+          setGlobalSelection(prev => {
+            const next = new Set(prev);
+            for (let i = startIndex; i <= endIndex; i++) {
+              const photo = currentPhotos[i];
+              next.add(`${momentId}:${photo.name}`);
+            }
+            return next;
+          });
+          setLastSelectedPhoto(key);
+          return;
+        }
+      }
+    }
+    
+    // Regular click - toggle the photo
     setGlobalSelection(prev => {
-      const key = `${momentId}:${photoName}`;
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -273,21 +348,136 @@ export default function Moments() {
       }
       return next;
     });
+    setLastSelectedPhoto(key);
+  };
+
+  // Helper function to get all current photo keys
+  const getAllCurrentPhotoKeys = () => {
+    const allCurrentPhotos = new Set();
+    Object.entries(momentPhotosMap).forEach(([momentId, photos]) => {
+      photos.forEach(photo => {
+        allCurrentPhotos.add(`${momentId}:${photo.name}`);
+      });
+    });
+    return allCurrentPhotos;
+  };
+
+  // Helper function to get current moment photo keys (for Ctrl+A logic)
+  const getCurrentMomentPhotoKeys = () => {
+    // Find current moment from URL or current visible moment
+    const urlParams = new URLSearchParams(window.location.search);
+    const momentName = urlParams.get('moment');
+    let currentMoment = null;
+    
+    if (momentName) {
+      const decodedName = decodeURIComponent(momentName);
+      currentMoment = moments.find(m => m.label === decodedName);
+    } else if (currentVisibleMoment) {
+      currentMoment = currentVisibleMoment;
+    }
+    
+    if (currentMoment) {
+      const photos = momentPhotosMap[currentMoment.momentID] || [];
+      return photos.map(photo => `${currentMoment.momentID}:${photo.name}`);
+    }
+    
+    return [];
   };
 
   const selectAllPhotos = () => {
-    const allPhotos = new Set();
-    Object.entries(momentPhotosMap).forEach(([momentId, photos]) => {
-      photos.forEach(photo => {
-        allPhotos.add(`${momentId}:${photo.name}`);
+    const currentMomentKeys = getCurrentMomentPhotoKeys();
+    const allCurrentPhotos = getAllCurrentPhotoKeys();
+    
+    // If we have a current moment, check if all photos in that moment are selected
+    if (currentMomentKeys.length > 0) {
+      const allCurrentMomentSelected = currentMomentKeys.every(key => globalSelection.has(key));
+      
+      if (allCurrentMomentSelected) {
+        // All current moment photos are selected, select all from all moments
+        setGlobalSelection(allCurrentPhotos);
+      } else {
+        // Select all photos from current moment
+        setGlobalSelection(prev => {
+          const next = new Set(prev);
+          currentMomentKeys.forEach(key => next.add(key));
+          return next;
+        });
+      }
+    } else {
+      // No current moment, use the old logic
+      const allCurrentSelected = allCurrentPhotos.size > 0 && 
+        Array.from(allCurrentPhotos).every(key => globalSelection.has(key));
+      
+      if (allCurrentSelected) {
+        // All current photos are selected, clear selection
+        setGlobalSelection(new Set());
+        // Don't reset lastSelectedPhoto here to preserve shift+click functionality
+      } else {
+        // Select all current photos
+        setGlobalSelection(allCurrentPhotos);
+      }
+    }
+  };
+
+  const selectAllInMoment = (momentId) => {
+    const momentPhotos = momentPhotosMap[momentId] || [];
+    const momentPhotoKeys = momentPhotos.map(photo => `${momentId}:${photo.name}`);
+    
+    // Check if all photos in this moment are already selected
+    const allSelected = momentPhotoKeys.every(key => globalSelection.has(key));
+    
+    if (allSelected) {
+      // Clear selection for this moment
+      setGlobalSelection(prev => {
+        const next = new Set(prev);
+        momentPhotoKeys.forEach(key => next.delete(key));
+        return next;
       });
+    } else {
+      // Select all photos in this moment
+      setGlobalSelection(prev => {
+        const next = new Set(prev);
+        momentPhotoKeys.forEach(key => next.add(key));
+        return next;
+      });
+    }
+  };
+
+  const clearMomentSelection = (momentId) => {
+    const momentPhotos = momentPhotosMap[momentId] || [];
+    const momentPhotoKeys = momentPhotos.map(photo => `${momentId}:${photo.name}`);
+    
+    setGlobalSelection(prev => {
+      const next = new Set(prev);
+      momentPhotoKeys.forEach(key => next.delete(key));
+      return next;
     });
-    setGlobalSelection(allPhotos);
   };
 
   const clearGlobalSelection = () => {
     setGlobalSelection(new Set());
+    setLastSelectedPhoto(null);
   };
+
+
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Ctrl+A or Cmd+A for select all
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        selectAllPhotos();
+      }
+      // Escape to clear selection
+      if (event.key === 'Escape') {
+        clearGlobalSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [momentPhotosMap, globalSelection]);
 
   const handleGlobalAddToBucket = async () => {
     if (globalSelection.size === 0) return;
@@ -314,32 +504,9 @@ export default function Moments() {
     }
   };
 
-  const scrollToMoment = (momentId) => {
-    const element = momentsRef.current[momentId];
-    if (element) {
-      // Calculate the exact position we want to scroll to
-      const stickyHeader = document.querySelector('.sticky.top-16');
-      const carouselContainer = document.querySelector('.carousel-container');
-      
-      const headerHeight = stickyHeader ? stickyHeader.offsetHeight : 0;
-      const carouselHeight = carouselContainer ? carouselContainer.offsetHeight : 0;
-      const fixedAdjustment = -100; // Adjust this value: positive = scroll down more, negative = scroll up more
-      const totalOffset = headerHeight + carouselHeight + 20 + fixedAdjustment; // Add 20px padding + manual adjustment
-      
-      // Get the element's position relative to the document
-      const elementRect = element.getBoundingClientRect();
-      const elementTop = elementRect.top + window.pageYOffset;
-      
-      // Calculate the target scroll position
-      const targetScroll = elementTop - totalOffset;
-      
-      // Scroll to the calculated position
-      window.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: 'smooth'
-      });
-    }
-  };
+
+
+
 
   const openPhotoViewer = (photos, photo, index) => {
     setPhotoViewer({
@@ -376,12 +543,19 @@ export default function Moments() {
     // Find the moment in our moments list and scroll to it
     const moment = moments.find(m => m.momentID === momentInfo.id);
     if (moment) {
-      scrollToMoment(moment.momentID);
+      // Use timeline manager for navigation
+      timelineManager.navigateToMoment(moment.momentID, moment.label);
     }
   };
 
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
+
+  // Calculate if all current photos are selected for the select all button
+  const allCurrentPhotos = getAllCurrentPhotoKeys();
+  const allCurrentSelected = allCurrentPhotos.size > 0 && 
+    allCurrentPhotos.size === globalSelection.size &&
+    Array.from(globalSelection).every(key => allCurrentPhotos.has(key));
 
   return (
     <div className="w-full bg-gray-50 min-h-screen">
@@ -503,16 +677,41 @@ export default function Moments() {
               ) : (
                 <>
                   <button
-                    onClick={selectAllPhotos}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                    title="Select all photos"
+                    onClick={() => setSelectionMode(!selectionMode)}
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                      selectionMode 
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                    title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
                   >
-                    <CheckCheck className="w-4 h-4" />
+                    {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                   </button>
+                  
+                  {/* Select all button - only visible when checkboxes are shown */}
+                  {selectionMode && allCurrentPhotos.size > 0 && (
+                    <button
+                      onClick={selectAllPhotos}
+                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                        allCurrentSelected
+                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title="Select all photos (Ctrl+A)"
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                    </button>
+                  )}
+                  
+                  {/* Clear button - always visible when any photos are selected */}
                   {globalSelection.size > 0 && (
                     <button
                       onClick={clearGlobalSelection}
-                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                        allCurrentSelected
+                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
                       title="Clear selection"
                     >
                       <X className="w-4 h-4" />
@@ -598,7 +797,10 @@ export default function Moments() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => scrollToMoment(moment.momentID)}
+                    onClick={() => {
+                      // Use timeline manager for navigation with moment name
+                      timelineManager.navigateToMoment(moment.label, moment.label);
+                    }}
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
                       {moment.representative_photo ? (
@@ -686,6 +888,10 @@ export default function Moments() {
                   globalSelection={globalSelection}
                   onPhotoSelect={handlePhotoSelect}
                   onOpenPhotoViewer={openPhotoViewer}
+                  selectionMode={selectionMode}
+                  onSelectAllInMoment={selectAllInMoment}
+                  onClearMomentSelection={clearMomentSelection}
+                  ref={setMomentRef(moment.label)}
                 />
               ))}
             </div>

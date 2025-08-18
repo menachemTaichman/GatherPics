@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredPhotosFromCache } from '../utils/selection';
+import timelineManager from '../utils/timeline';
 
 export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Custom keyboard handler for PhotoViewer-specific shortcuts
   const handlePhotoViewerKeys = (e) => {
@@ -229,6 +231,9 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const handleJumpToMoment = () => {
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
+    } else if (momentInfo) {
+      // If no onJumpToMoment callback, use timeline manager for navigation
+      timelineManager.navigateToMoment(momentInfo.title, momentInfo.title);
     }
   };
 
@@ -645,8 +650,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         {momentInfo.description && (
                           <div><span className="font-semibold">Description:</span> {momentInfo.description}</div>
                         )}
-                        <div><span className="font-semibold">Time:</span> {momentInfo.start_datetime && momentInfo.end_datetime ? 
-                          `${new Date(momentInfo.start_datetime).toLocaleTimeString()} - ${new Date(momentInfo.end_datetime).toLocaleTimeString()}` : 
+                        <div><span className="font-semibold">Time:</span> {momentInfo.start && momentInfo.end ? 
+                          `${new Date(momentInfo.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${new Date(momentInfo.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}` : 
                           'Unknown'
                         }</div>
                       </div>

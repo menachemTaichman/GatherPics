@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { Image, Clock, Calendar, Grid, List } from 'lucide-react';
+import { forwardRef } from 'react';
+import { Image, Clock, Calendar, Grid, List, CheckCheck, X } from 'lucide-react';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -30,17 +31,27 @@ function formatDate(dateString) {
   }
 }
 
-export default function MomentCard({
+const MomentCard = forwardRef(({
   moment,
   photos,
   viewMode,
   photoSize,
   globalSelection,
   onPhotoSelect,
-  onOpenPhotoViewer
-}) {
+  onOpenPhotoViewer,
+  selectionMode,
+  onSelectAllInMoment,
+  onClearMomentSelection
+}, ref) => {
+  // Calculate selection stats for this moment
+  const momentPhotoKeys = photos.map(photo => `${moment.momentID}:${photo.name}`);
+  const selectedInMoment = momentPhotoKeys.filter(key => globalSelection.has(key));
+  const allSelectedInMoment = photos.length > 0 && selectedInMoment.length === photos.length;
+  const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < photos.length;
+
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, x: -50 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.1 }}
@@ -56,22 +67,46 @@ export default function MomentCard({
         >
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg overflow-hidden flex items-center justify-center">
-                  {moment.representative_photo ? (
-                    <img
-                      src={moment.representative_photo}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Image className="w-8 h-8 text-white" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xl font-bold text-gray-900">{moment.label}</h3>
+                  
+                  {/* Per-moment selection controls - compact design with icons only */}
+                  {photos.length > 0 && selectionMode && (
+                    <div className="flex items-center space-x-2">
+                      {allSelectedInMoment ? (
+                        <button
+                          onClick={() => onClearMomentSelection(moment.momentID)}
+                          className="w-8 h-8 bg-primary-100 text-primary-700 hover:bg-primary-200 rounded transition-colors flex items-center justify-center"
+                          title="Clear selection"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onSelectAllInMoment(moment.momentID)}
+                          className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
+                            someSelectedInMoment
+                              ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="Select all"
+                        >
+                          <CheckCheck className="w-4 h-4" />
+                        </button>
+                      )}
+                      {someSelectedInMoment && !allSelectedInMoment && (
+                        <button
+                          onClick={() => onClearMomentSelection(moment.momentID)}
+                          className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
+                          title="Clear selection"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-bold text-gray-900 mb-1">{moment.label}</h3>
                 <div className="flex items-center space-x-4 text-sm text-gray-500">
                   <div className="flex items-center space-x-1">
                     <Clock className="w-4 h-4" />
@@ -81,6 +116,17 @@ export default function MomentCard({
                     <Calendar className="w-4 h-4" />
                     <span>{formatDate(moment.start)}</span>
                   </div>
+                  {photos.length > 0 && (
+                    <div className="flex items-center space-x-1">
+                      <Image className="w-4 h-4" />
+                      <span>{photos.length} photos</span>
+                      {selectedInMoment.length > 0 && (
+                        <span className="text-primary-600 font-medium">
+                          • {selectedInMoment.length} selected
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {moment.description && (
                   <p className="text-gray-600 mt-2">{moment.description}</p>
@@ -130,10 +176,12 @@ export default function MomentCard({
                           checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
                           onChange={(e) => {
                             e.stopPropagation();
-                            onPhotoSelect(photo.name, moment.momentID);
+                            onPhotoSelect(photo.name, moment.momentID, e);
                           }}
                           onClick={e => e.stopPropagation()}
-                          className="absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
+                          className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+                            selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}
                         />
                         <img
                           src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
@@ -165,7 +213,7 @@ export default function MomentCard({
                           name={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
                           checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
                           onChange={(e) => {
-                            onPhotoSelect(photo.name, moment.momentID);
+                            onPhotoSelect(photo.name, moment.momentID, e);
                           }}
                           className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                         />
@@ -199,4 +247,6 @@ export default function MomentCard({
       </div>
     </motion.div>
   );
-}
+});
+
+export default MomentCard;

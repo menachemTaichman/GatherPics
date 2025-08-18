@@ -164,7 +164,7 @@ export default function App() {
               } 
             />
             <Route
-              path="/moments"
+              path="/timeline"
               element={
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
