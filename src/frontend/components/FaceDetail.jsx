@@ -1078,32 +1078,26 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
-                {/* Select all button - only visible when checkboxes are shown */}
-                {selectionMode && (
+                {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
+                {selectionMode && selectedPhotos.size < sortedPhotos.length && (
                   <button
-                    onClick={() => selectedPhotos.size === sortedPhotos.length ? clearSelection() : selectAllPhotos()}
+                    onClick={selectAllPhotos}
                     className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                      selectedPhotos.size === sortedPhotos.length
-                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                        : selectedPhotos.size > 0
-                        ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      selectedPhotos.size > 0 
+                        ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                        : 'hover:bg-gray-100 text-gray-700'
                     }`}
-                    title={selectedPhotos.size === sortedPhotos.length ? "Clear selection" : "Select all photos (Ctrl+A)"}
+                    title="Select all photos (Ctrl+A)"
                   >
-                    {selectedPhotos.size === sortedPhotos.length ? <X className="w-4 h-4" /> : <CheckCheck className="w-4 h-4" />}
+                    <CheckCheck className="w-4 h-4" />
                   </button>
                 )}
                 
-                {/* Clear button - always visible when any photos are selected */}
+                {/* Clear button - always visible when any photos are selected, always red */}
                 {selectedPhotos.size > 0 && (
                   <button
                     onClick={clearSelection}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                      selectedPhotos.size === sortedPhotos.length
-                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                        : 'bg-red-100 text-red-700 hover:bg-red-200'
-                    }`}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center bg-red-100 text-red-700 hover:bg-red-200"
                     title="Clear selection"
                   >
                     <X className="w-4 h-4" />
@@ -1139,25 +1133,29 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               <>
                 {/* Group 3: Selection Controls */}
                 <div className="flex items-center space-x-3 px-4">
-                  {selectedPhotos.size === sortedPhotos.length ? (
-                    <button
-                      onClick={clearSelection}
-                      className="w-8 h-8 bg-primary-100 text-primary-700 hover:bg-primary-200 rounded transition-colors flex items-center justify-center"
-                      title="Clear selection"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  ) : (
+                  {/* Select all button - only visible when not all are selected */}
+                  {selectedPhotos.size < sortedPhotos.length && (
                     <button
                       onClick={selectAllPhotos}
                       className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
-                        selectedPhotos.size > 0
-                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        selectedPhotos.size > 0 
+                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                          : 'hover:bg-gray-100 text-gray-700'
                       }`}
                       title="Select all photos (Ctrl+A)"
                     >
                       <CheckCheck className="w-4 h-4" />
+                    </button>
+                  )}
+                  
+                  {/* Clear button - always visible when any photos are selected, always red */}
+                  {selectedPhotos.size > 0 && (
+                    <button
+                      onClick={clearSelection}
+                      className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
+                      title="Clear selection"
+                    >
+                      <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>

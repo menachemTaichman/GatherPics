@@ -10,6 +10,7 @@ import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManag
 import { momentsAPI, imagesAPI } from '../utils/apiService';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
+import { getSetting, setSetting } from '../utils/settings';
 
 
 function formatTimeOnly(dateString) {
@@ -73,6 +74,28 @@ export default function Moments() {
   // New state for checkbox visibility and selection mode
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [lastSelectedPhoto, setLastSelectedPhoto] = useState(null);
+
+  // Load selected photos from cache when component mounts
+  useEffect(() => {
+    const cachedSelection = getSetting('moments_selection');
+    if (cachedSelection && Array.isArray(cachedSelection)) {
+      setGlobalSelection(new Set(cachedSelection));
+    }
+  }, []);
+  
+  // Save selection to cache whenever it changes
+  useEffect(() => {
+    if (globalSelection.size > 0) {
+      setSetting('moments_selection', Array.from(globalSelection));
+    } else {
+      // Clear cache when selection is empty
+      try {
+        localStorage.removeItem('face_gallery_settings_moments_selection');
+      } catch (error) {
+        console.warn('Failed to clear selection cache:', error);
+      }
+    }
+  }, [globalSelection]);
 
   // Toast notification function
   const showToast = (message, type = 'success') => {
@@ -362,60 +385,57 @@ export default function Moments() {
     return allCurrentPhotos;
   };
 
-  // Helper function to get current moment photo keys (for Ctrl+A logic)
-  const getCurrentMomentPhotoKeys = () => {
-    // Find current moment from URL or current visible moment
-    const urlParams = new URLSearchParams(window.location.search);
-    const momentName = urlParams.get('moment');
-    let currentMoment = null;
-    
-    if (momentName) {
-      const decodedName = decodeURIComponent(momentName);
-      currentMoment = moments.find(m => m.label === decodedName);
-    } else if (currentVisibleMoment) {
-      currentMoment = currentVisibleMoment;
-    }
-    
-    if (currentMoment) {
-      const photos = momentPhotosMap[currentMoment.momentID] || [];
-      return photos.map(photo => `${currentMoment.momentID}:${photo.name}`);
-    }
-    
-    return [];
-  };
+
 
   const selectAllPhotos = () => {
-    const currentMomentKeys = getCurrentMomentPhotoKeys();
+    // Button always selects all photos from all moments
     const allCurrentPhotos = getAllCurrentPhotoKeys();
     
-    // If we have a current moment, check if all photos in that moment are selected
-    if (currentMomentKeys.length > 0) {
-      const allCurrentMomentSelected = currentMomentKeys.every(key => globalSelection.has(key));
+    // Use the global allCurrentSelected variable that's calculated at render time
+    if (allCurrentSelected) {
+      // All current photos are selected, clear selection
+      setGlobalSelection(new Set());
+      // Clear cache when selection is cleared
+      try {
+        localStorage.removeItem('face_gallery_settings_moments_selection');
+      } catch (error) {
+        console.warn('Failed to clear selection cache:', error);
+      }
+      // Don't reset lastSelectedPhoto here to preserve shift+click functionality
+    } else {
+      // Select all photos
+      setGlobalSelection(allCurrentPhotos);
+    }
+  };
+
+  // Separate function for Ctrl+A behavior
+  const handleCtrlA = () => {
+    // First, try to select from current moment if one is focused
+    const currentMoment = currentVisibleMoment;
+    
+    if (currentMoment) {
+      const currentMomentPhotos = momentPhotosMap[currentMoment.momentID] || [];
+      const currentMomentPhotoKeys = currentMomentPhotos.map(photo => `${currentMoment.momentID}:${photo.name}`);
+      
+      // Check if all photos in current moment are already selected
+      const allCurrentMomentSelected = currentMomentPhotoKeys.length > 0 && 
+        currentMomentPhotoKeys.every(key => globalSelection.has(key));
       
       if (allCurrentMomentSelected) {
-        // All current moment photos are selected, select all from all moments
+        // Current moment is fully selected, now select all from all moments
+        const allCurrentPhotos = getAllCurrentPhotoKeys();
         setGlobalSelection(allCurrentPhotos);
       } else {
         // Select all photos from current moment
         setGlobalSelection(prev => {
           const next = new Set(prev);
-          currentMomentKeys.forEach(key => next.add(key));
+          currentMomentPhotoKeys.forEach(key => next.add(key));
           return next;
         });
       }
     } else {
-      // No current moment, use the old logic
-      const allCurrentSelected = allCurrentPhotos.size > 0 && 
-        Array.from(allCurrentPhotos).every(key => globalSelection.has(key));
-      
-      if (allCurrentSelected) {
-        // All current photos are selected, clear selection
-        setGlobalSelection(new Set());
-        // Don't reset lastSelectedPhoto here to preserve shift+click functionality
-      } else {
-        // Select all current photos
-        setGlobalSelection(allCurrentPhotos);
-      }
+      // No current moment focused, use the same logic as button
+      selectAllPhotos();
     }
   };
 
@@ -452,11 +472,19 @@ export default function Moments() {
       momentPhotoKeys.forEach(key => next.delete(key));
       return next;
     });
+    
+    // Note: Cache will be automatically updated by the useEffect that watches globalSelection
   };
 
   const clearGlobalSelection = () => {
     setGlobalSelection(new Set());
     setLastSelectedPhoto(null);
+    // Clear cache when selection is cleared
+    try {
+      localStorage.removeItem('face_gallery_settings_moments_selection');
+    } catch (error) {
+      console.warn('Failed to clear selection cache:', error);
+    }
   };
 
 
@@ -467,7 +495,7 @@ export default function Moments() {
       // Ctrl+A or Cmd+A for select all
       if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
         event.preventDefault();
-        selectAllPhotos();
+        handleCtrlA();
       }
       // Escape to clear selection
       if (event.key === 'Escape') {
@@ -554,8 +582,7 @@ export default function Moments() {
   // Calculate if all current photos are selected for the select all button
   const allCurrentPhotos = getAllCurrentPhotoKeys();
   const allCurrentSelected = allCurrentPhotos.size > 0 && 
-    allCurrentPhotos.size === globalSelection.size &&
-    Array.from(globalSelection).every(key => allCurrentPhotos.has(key));
+    Array.from(allCurrentPhotos).every(key => globalSelection.has(key));
 
   return (
     <div className="w-full bg-gray-50 min-h-screen">
@@ -582,8 +609,18 @@ export default function Moments() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-16 z-30 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-8">
             <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
+            <div className="flex items-center space-x-4">
+              <p className="text-gray-600">
+                {allCurrentPhotos.size} photos
+              </p>
+              {globalSelection.size > 0 && (
+                <span className="text-sm text-primary-600 font-medium">
+                  • {globalSelection.size} selected
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -597,7 +634,7 @@ export default function Moments() {
         </div>
 
         {/* Controls Row */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: View and Size Controls */}
             <div className="flex items-center space-x-3 px-4">
@@ -607,6 +644,7 @@ export default function Moments() {
                   <span>Loading photos...</span>
                 </div>
               )}
+              
               <button
                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                 className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
@@ -688,13 +726,13 @@ export default function Moments() {
                     {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                   </button>
                   
-                  {/* Select all button - only visible when checkboxes are shown */}
-                  {selectionMode && allCurrentPhotos.size > 0 && (
+                  {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
+                  {selectionMode && allCurrentPhotos.size > 0 && !allCurrentSelected && (
                     <button
                       onClick={selectAllPhotos}
                       className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                        allCurrentSelected
-                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                        globalSelection.size > 0 
+                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                           : 'hover:bg-gray-100 text-gray-700'
                       }`}
                       title="Select all photos (Ctrl+A)"
@@ -703,15 +741,11 @@ export default function Moments() {
                     </button>
                   )}
                   
-                  {/* Clear button - always visible when any photos are selected */}
+                  {/* Clear button - always visible when any photos are selected, always red */}
                   {globalSelection.size > 0 && (
                     <button
                       onClick={clearGlobalSelection}
-                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                        allCurrentSelected
-                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                          : 'bg-red-100 text-red-700 hover:bg-red-200'
-                      }`}
+                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center bg-red-100 text-red-700 hover:bg-red-200"
                       title="Clear selection"
                     >
                       <X className="w-4 h-4" />
@@ -845,8 +879,8 @@ export default function Moments() {
           </div>
         ) : (
           <div className="relative">
-            {/* Fixed left sidebar for sticky info */}
-            <div className="fixed left-4 top-100 w-64 z-50 bg-white p-4 rounded-lg shadow-lg border border-gray-200">
+            {/* Fixed right sidebar for sticky info */}
+            <div className="fixed right-4 top-100 w-64 z-50 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
               {currentVisibleMoment ? (
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
@@ -866,10 +900,29 @@ export default function Moments() {
             </div>
             
             {/* Timeline line */}
-            <div className="absolute left-64 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500"></div>
+            <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500">
+              {/* Colorful dots for each moment */}
+              {moments.map((moment, index) => (
+                <div
+                  key={moment.momentID}
+                  className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10"
+                  style={{
+                    left: '-6px'
+                  }}
+                  ref={(el) => {
+                    if (el && momentsRef.current[moment.label]) {
+                      // Position the dot at the beginning of the moment card (top of info box)
+                      const momentRect = momentsRef.current[moment.label].getBoundingClientRect();
+                      const containerRect = el.parentElement.getBoundingClientRect();
+                      el.style.top = `${momentRect.top - containerRect.top + 24}px`; // 24px = p-6 (24px) to align with top of info box
+                    }
+                  }}
+                ></div>
+              ))}
+            </div>
             
             {/* Timeline items */}
-            <div className="space-y-12 ml-64">
+            <div className="space-y-12 pr-4">
               {photosLoading && (
                 <div className="text-center py-8">
                   <div className="inline-flex items-center space-x-2 text-gray-500">

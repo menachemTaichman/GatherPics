@@ -57,10 +57,7 @@ const MomentCard = forwardRef(({
       transition={{ delay: 0.1 }}
       className="relative flex"
     >
-      <div className="relative flex-shrink-0">
-        <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10 mt-6"></div>
-      </div>
-      <div className="flex-1 pl-6">
+      <div className="flex-1">
         <motion.div
           className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow duration-300"
           whileHover={{ y: -2 }}
@@ -70,64 +67,60 @@ const MomentCard = forwardRef(({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xl font-bold text-gray-900">{moment.label}</h3>
-                  
-                  {/* Per-moment selection controls - compact design with icons only */}
-                  {photos.length > 0 && selectionMode && (
-                    <div className="flex items-center space-x-2">
-                      {allSelectedInMoment ? (
-                        <button
-                          onClick={() => onClearMomentSelection(moment.momentID)}
-                          className="w-8 h-8 bg-primary-100 text-primary-700 hover:bg-primary-200 rounded transition-colors flex items-center justify-center"
-                          title="Clear selection"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => onSelectAllInMoment(moment.momentID)}
-                          className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
-                            someSelectedInMoment
-                              ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                          title="Select all"
-                        >
-                          <CheckCheck className="w-4 h-4" />
-                        </button>
-                      )}
-                      {someSelectedInMoment && !allSelectedInMoment && (
-                        <button
-                          onClick={() => onClearMomentSelection(moment.momentID)}
-                          className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
-                          title="Clear selection"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                  <div className="flex items-center space-x-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{formatDate(moment.start)}</span>
-                  </div>
-                  {photos.length > 0 && (
-                    <div className="flex items-center space-x-1">
-                      <Image className="w-4 h-4" />
-                      <span>{photos.length} photos</span>
-                      {selectedInMoment.length > 0 && (
-                        <span className="text-primary-600 font-medium">
-                          • {selectedInMoment.length} selected
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                                 <div className="flex items-center space-x-4 text-sm text-gray-500 h-8">
+                   <div className="flex items-center space-x-1">
+                     <Clock className="w-4 h-4" />
+                     <span>{formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}</span>
+                   </div>
+                   <div className="flex items-center space-x-1">
+                     <Calendar className="w-4 h-4" />
+                     <span>{formatDate(moment.start)}</span>
+                   </div>
+                   {photos.length > 0 && (
+                     <div className="flex items-center space-x-1">
+                       <Image className="w-4 h-4" />
+                       <span>{photos.length} photos</span>
+                     </div>
+                   )}
+                   
+                   {/* Per-moment selection controls - moved after photos count with proper spacing */}
+                   {photos.length > 0 && (
+                     <div className="flex items-center space-x-3">
+                       {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
+                       {selectionMode && !allSelectedInMoment && (
+                         <button
+                           onClick={() => onSelectAllInMoment(moment.momentID)}
+                           className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
+                             selectedInMoment.length > 0 
+                               ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                               : 'hover:bg-gray-100 text-gray-700'
+                           }`}
+                           title="Select all"
+                         >
+                           <CheckCheck className="w-4 h-4" />
+                         </button>
+                       )}
+                       
+                       {/* Clear button - always visible when any photos are selected, regardless of checkbox visibility */}
+                       {selectedInMoment.length > 0 && (
+                         <button
+                           onClick={() => onClearMomentSelection(moment.momentID)}
+                           className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
+                           title="Clear selection"
+                         >
+                           <X className="w-4 h-4" />
+                         </button>
+                       )}
+                     </div>
+                   )}
+                   
+                   {selectedInMoment.length > 0 && (
+                     <span className="text-primary-600 font-medium">
+                       • {selectedInMoment.length} selected
+                     </span>
+                   )}
+                 </div>
                 {moment.description && (
                   <p className="text-gray-600 mt-2">{moment.description}</p>
                 )}
@@ -169,20 +162,20 @@ const MomentCard = forwardRef(({
                   >
                     {viewMode === 'grid' ? (
                       <div className="relative group cursor-pointer h-full" onClick={() => onOpenPhotoViewer(photos, photo, index)}>
-                        <input
-                          type="checkbox"
-                          id={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                          name={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                          checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            onPhotoSelect(photo.name, moment.momentID, e);
-                          }}
-                          onClick={e => e.stopPropagation()}
-                          className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                            selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                          }`}
-                        />
+                                                                                                                                                                                                       <input
+                             type="checkbox"
+                             id={`photo-checkbox-${moment.momentID}-${photo.name}`}
+                             name={`photo-checkbox-${moment.momentID}-${photo.name}`}
+                             checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
+                             onChange={() => {}} // Empty handler to satisfy React
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               onPhotoSelect(photo.name, moment.momentID, e);
+                             }}
+                             className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+                               selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                             }`}
+                           />
                         <img
                           src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
                           alt={`Photo ${index + 1}`}
@@ -207,16 +200,17 @@ const MomentCard = forwardRef(({
                       </div>
                     ) : (
                       <>
-                        <input
-                          type="checkbox"
-                          id={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
-                          name={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
-                          checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
-                          onChange={(e) => {
-                            onPhotoSelect(photo.name, moment.momentID, e);
-                          }}
-                          className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                        />
+                                                                                                                                                                                                       <input
+                             type="checkbox"
+                             id={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
+                             name={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
+                             checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
+                             onChange={() => {}} // Empty handler to satisfy React
+                             onClick={(e) => {
+                               onPhotoSelect(photo.name, moment.momentID, e);
+                             }}
+                             className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
+                           />
                         <div className="relative">
                           <img
                             src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
