@@ -879,8 +879,8 @@ export default function Moments() {
           </div>
         ) : (
           <div className="relative">
-            {/* Fixed right sidebar for sticky info */}
-            <div className="fixed right-4 top-100 w-64 z-50 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
+                         {/* Fixed right sidebar for sticky info */}
+             <div className="fixed right-4 top-100 w-64 z-10 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
               {currentVisibleMoment ? (
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
@@ -901,11 +901,11 @@ export default function Moments() {
             
             {/* Timeline line */}
             <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500">
-              {/* Colorful dots for each moment */}
-              {moments.map((moment, index) => (
-                <div
-                  key={moment.momentID}
-                  className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10"
+                             {/* Colorful dots for each moment */}
+               {moments.map((moment, index) => (
+                 <div
+                   key={moment.momentID}
+                   className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-20"
                   style={{
                     left: '-6px'
                   }}
