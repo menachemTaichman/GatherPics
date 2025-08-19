@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -192,6 +192,39 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     setPan({ x: 0, y: 0 });
   };
 
+  const handleWheel = useCallback((e) => {
+    // Prevent default scroll behavior to avoid scrolling the page behind the modal.
+    // The modal focus system allows scroll events to pass through from within the modal
+    // to support naturally scrollable content. Since this component uses the wheel
+    // for custom actions (zoom/pan), we must explicitly prevent default.
+    e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom with Ctrl/Cmd + wheel
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
+    } else {
+      // Pan with wheel
+      setPan(prev => ({
+        x: prev.x - e.deltaX * 0.5,
+        y: prev.y - e.deltaY * 0.5
+      }));
+    }
+  }, []);
+
+  // Manually attach wheel event listener to ensure it's not passive
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleWheel]);
+
   const handleDownload = async () => {
     try {
       const result = await downloadAPI.download([photoMeta.name]);
@@ -261,22 +294,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
 
   // Mouse wheel handler for zoom
-  const handleWheel = (e) => {
-    // Note: preventDefault() removed - modal focus system handles scroll prevention
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom with Ctrl/Cmd + wheel
-      const delta = e.deltaY > 0 ? -0.2 : 0.2;
-      setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
-    } else {
-      // Pan with wheel
-      setPan(prev => ({
-        x: prev.x - e.deltaX * 0.5,
-        y: prev.y - e.deltaY * 0.5
-      }));
-    }
-  };
-
-  // Mouse handlers for dragging
   const handleMouseDown = (e) => {
     // Prevent dragging when clicking on face rectangles
     if (e.target.closest('[data-face-rectangle]')) {
@@ -446,7 +463,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
             <div 
               ref={containerRef}
               className="flex-1 flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
-              onWheel={handleWheel}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
