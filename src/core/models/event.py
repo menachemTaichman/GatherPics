@@ -249,15 +249,6 @@ class Event(JsonModel):
         # Get updated target group data
         updated_target_group = self.groups_model.get(target_group_id)
 
-        # Prepare photos_to_add_to_grid for frontend grid update
-        photos_to_add_to_grid = None
-        if old_group_deleted and updated_target_group and 'image_ids' in updated_target_group:
-            photos_to_add_to_grid = []
-            for img_id in updated_target_group['image_ids']:
-                photo_data = self._build_complete_photo_data(img_id)
-                if photo_data:
-                    photos_to_add_to_grid.append(photo_data)
-
         result = {
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
@@ -265,8 +256,7 @@ class Event(JsonModel):
             'photos_to_remove_from_source': list(photos_to_remove_from_source),
             'photos_to_add_to_target': list(photos_to_add_to_target),
             'updated_source_group': updated_source_group,
-            'updated_target_group': updated_target_group,
-            'photos_to_add_to_grid': photos_to_add_to_grid
+            'updated_target_group': updated_target_group
         }
         
         # Include new group name if a new group was created
@@ -422,81 +412,6 @@ class Event(JsonModel):
         results = self.db.execute_query(query, (start_time, end_time))
         return [row[0] for row in results]
 
-    def _build_complete_photo_data(self, image_id: str, group_filter: str = None) -> Dict:
-        """
-        Build complete photo data with all related information.
-        This is similar to build_complete_photo_data in app.py but as a method.
-        """
-        try:
-            image = self.images_model.get(image_id)
-            if not image:
-                return None
-            
-            # Get face IDs for this image
-            face_ids = self.images_model.get_faces(image_id)
-            
-            # Build faces data
-            faces_data = []
-            for face_id in face_ids:
-                face = self.faces_model.get(face_id)
-                if face:
-                    # Apply group filter if specified
-                    if group_filter and face.get('groupID') != group_filter:
-                        continue
-                    
-                    group = None
-                    if face.get('groupID'):
-                        group = self.groups_model.get(face['groupID'])
-                    
-                    face_data = {
-                        'face_id': face_id,
-                        'face_coords': {
-                            'Left': face['left'],
-                            'Top': face['top'], 
-                            'Width': face['width'],
-                            'Height': face['height']
-                        },
-                        'group_id': face.get('groupID'),
-                        'group_label': group['label'] if group else 'Unknown',
-                        'group_representative': group.get('face_representative') if group else None
-                    }
-                    faces_data.append(face_data)
-            
-            # Get moment info if available
-            moment_info = None
-            if image.get('momentID'):
-                moment = self.moments_model.get(image['momentID'])
-                if moment:
-                    moment_info = {
-                        'id': moment.get('momentID', moment.get('id', 'Unknown')),
-                        'title': moment.get('label', 'Unknown'),  # Always use 'label' from database
-                        'description': moment.get('description', ''),
-                        'start': moment.get('start'),
-                        'end': moment.get('end'),
-                    }
-            
-            # Build complete response
-            photo_data = {
-                'id': image_id,
-                'name': image['name'],
-                'date_taken': image.get('date_taken'),
-                'file_size': image.get('file_size'),
-                'width': image.get('width'),
-                'height': image.get('height'),
-                'faces_count': len(faces_data),
-                'faces': faces_data,
-                'moment': moment_info,
-                'urls': {
-                    'display': f'/api/events/{self.id}/display/{image_id}.webp',
-                    'thumbnail': f'/api/events/{self.id}/thumb/{image_id}.webp',
-                    'high_quality': f'/api/events/{self.id}/high_quality/{image_id}.webp',
-                    'original': f'/api/events/{self.id}/original/{image_id}.webp',
-                }
-            }
-            
-            return photo_data
-        except Exception as e:
-            return None
 
     def delete_image(self, image_id: str) -> None:
         faces = self.images_model.get_faces(image_id)

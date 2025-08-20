@@ -138,6 +138,12 @@ export const momentsAPI = {
     return response.data;
   },
 
+  // Get specific moment
+  getById: async (momentId) => {
+    const response = await api.get(`/api/moments/${momentId}`);
+    return response.data;
+  },
+
   // Create moment
   create: async (momentData) => {
     const response = await api.post('/api/moments', momentData);

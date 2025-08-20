@@ -1270,7 +1270,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     <img
                       src={showCrops && imageCrops[photo.id] 
                         ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
-                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.id}.webp`
+                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${photo.id}.webp`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-full h-full object-cover rounded-lg"
@@ -1317,7 +1317,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       <img
                         src={showCrops && imageCrops[photo.id] 
                           ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photo.id}.webp`
+                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${photo.id}.webp`
                         }
                         alt={`Photo ${index + 1}`}
                         className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"

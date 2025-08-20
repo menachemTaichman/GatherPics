@@ -314,7 +314,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                         const faceId = cropMappings[imageId];
                         const imageSrc = faceId 
                           ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageId}.webp`;
+                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${imageId}.webp`;
                         
                         return (
                           <button

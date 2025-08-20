@@ -257,7 +257,6 @@ def transfer_faces():
             'transferred_photos_data': [],  # Will be populated with full photo data
             'updated_source_group': result.get('updated_source_group'),  # Include updated source group with new representative
             'updated_target_group': result.get('updated_target_group'),  # Include updated target group
-            'photos_to_add_to_grid': result.get('photos_to_add_to_grid'),  # New field for full transfer
         }
         
         # Include new group name if a new group was created
@@ -412,10 +411,10 @@ def get_moments():
         # Add full URLs for representative photos
         for moment in moments:
             if moment.get('representative_photo'):
-                # Assuming representative_photo stores the image name
-                image = event.images_model.get_by_name(moment['representative_photo'])
+                # representative_photo stores the image ID
+                image = event.images_model.get(moment['representative_photo'])
                 if image:
-                    moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/display/{image["imageID"]}.webp'
+                    moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/thumb/{moment["representative_photo"]}.webp'
                 else:
                     moment['representative_photo'] = None
             else:
@@ -424,6 +423,30 @@ def get_moments():
         return jsonify({"moments": moments})
     except Exception as e:
         return bad_request(e)
+
+@app.route("/api/moments/<moment_id>", methods=["GET"])
+@require_auth
+def get_moment(moment_id):
+    """Get a specific moment by ID if accessible."""
+    event = get_event_with_profile()
+    
+    # Check if moment is accessible
+    moment = event.moments_model.get(moment_id)
+    if not moment:
+        return not_found(f"Moment {moment_id} not found or not accessible")
+    
+    # Add full URL for representative photo
+    if moment.get('representative_photo'):
+        # representative_photo stores the image ID
+        image = event.images_model.get(moment['representative_photo'])
+        if image:
+            moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/thumb/{moment["representative_photo"]}.webp'
+        else:
+            moment['representative_photo'] = None
+    else:
+        moment['representative_photo'] = None
+    
+    return jsonify(moment)
 
 @app.route("/api/moments", methods=["POST"])
 @require_auth
@@ -443,34 +466,15 @@ def create_moment():
 def update_moment(moment_id):
     """Update a moment if accessible."""
     event = get_event_with_profile()
-    
+
     # Check if moment is accessible
     if not event.moments_model.get(moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
     
     data = request.json or {}
 
-    try:
-        # Handle photo assignments - only incremental updates are supported
-        if 'photos_to_add' in data or 'photos_to_remove' in data:
-            # Incremental update mode
-            photos_to_add = data.get('photos_to_add', [])
-            photos_to_remove = data.get('photos_to_remove', [])
-                        
-            # Remove the photo fields from data so they don't get saved to moments table
-            if 'photos_to_add' in data:
-                del data['photos_to_add']
-            if 'photos_to_remove' in data:
-                del data['photos_to_remove']
-            # Also remove image_IDs if present (shouldn't happen with new frontend)
-            if 'image_IDs' in data:
-                del data['image_IDs']
-            
-            # Update photos incrementally
-            event.moments_model.update_photos_incrementally(moment_id, photos_to_add, photos_to_remove)
-            
-        if data:  # Only edit if other fields are present
-            event.moments_model.edit(moment_id, data)
+    try:                                    
+        event.moments_model.edit(moment_id, data)
 
         updated = event.moments_model.get(moment_id)
         response_data = add_change_instruction({"moment": updated}, 'MOMENT_UPDATED', updated)

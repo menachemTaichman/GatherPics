@@ -192,9 +192,20 @@ export default function Moments() {
 
   // The timeline manager now handles all scroll detection and URL updates automatically
 
-  const fetchAllMomentPhotos = async () => {
+  const fetchAllMomentPhotos = async (specificMomentId = null, updatedPhotos = null) => {
     try {
       setPhotosLoading(true);
+      
+      // If specific moment and photos are provided, update just that moment
+      if (specificMomentId && updatedPhotos !== null) {
+
+        setMomentPhotosMap(prev => ({
+          ...prev,
+          [specificMomentId]: updatedPhotos
+        }));
+        setPhotosLoading(false);
+        return;
+      }
       
       const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
       

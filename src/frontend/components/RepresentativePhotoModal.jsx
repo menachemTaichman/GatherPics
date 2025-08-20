@@ -70,11 +70,11 @@ export default function RepresentativePhotoModal({
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {photos.map((img) => (
+              {photos.map((img, index) => (
                 <div
-                  key={img.name}
+                  key={img.id || img.name || `photo-${index}`}
                   onClick={() => {
-                    onPhotoSelect(img.name);
+                    onPhotoSelect(img.id);
                     onClose();
                   }}
                   className="cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors relative group"
@@ -92,7 +92,8 @@ export default function RepresentativePhotoModal({
                   <div className="p-2 text-xs text-gray-600 truncate">
                     {img.date_taken ? formatDateTime(img.date_taken) : img.name}
                   </div>
-                  {moment.representative_photo === img.name && (
+                  {(moment.representative_photo === img.id || 
+                    (moment.representative_photo && moment.representative_photo.includes && moment.representative_photo.includes(`/${img.id}.webp`))) && (
                     <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-1 py-0.5 rounded">
                       Current
                     </div>

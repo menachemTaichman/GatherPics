@@ -313,4 +313,4 @@ def clear_moments_images():
 
 # print(event.moments_model.list())
 
-print(event.images_model.get('ba9ca86a-ac92-49e9-b379-63812f355867'))
+print(event.moments_model.list())

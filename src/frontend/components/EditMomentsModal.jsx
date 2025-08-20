@@ -5,6 +5,9 @@ import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const FIXED_EVENT_ID = '75cb6635-879d-4386-b023-366444dc0fb2';
+
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import RepresentativePhotoModal from './RepresentativePhotoModal';
 
@@ -74,7 +77,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       // Save the non-temporary moments first
       if (momentsToSave.length > 0) {
         for (const moment of momentsToSave) {
-          await onSave(moment);
+          // Filter out image-related fields before calling onSave
+          const { momentID, image_IDs, photos, ...momentData } = moment;
+          await onSave({ ...momentData, momentID });
         }
       }
       
@@ -89,7 +94,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     // Save all non-temporary changed moments
     if (momentsToSave.length > 0) {
       for (const moment of momentsToSave) {
-        await onSave(moment);
+        // Filter out image-related fields before calling onSave
+        const { momentID, image_IDs, photos, ...momentData } = moment;
+        await onSave({ ...momentData, momentID });
       }
     }
     
@@ -100,13 +107,15 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     try {
       let savedMoment;
       if (moment.momentID.startsWith('temp-')) {
-        const { momentID, ...momentData } = moment;
+        const { momentID, image_IDs, photos, ...momentData } = moment;
         // Create moment directly without optimistic updates to avoid duplicates
         const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
       } else {
         // Update existing moment directly without optimistic updates to avoid conflicts
-        const result = await momentsAPI.update(moment.momentID, moment);
+        // Filter out image-related fields that the backend doesn't expect
+        const { momentID, image_IDs, photos, ...momentData } = moment;
+        const result = await momentsAPI.update(moment.momentID, momentData);
         savedMoment = result.moment;
       }
       // Remove from changed moments since it's now saved
@@ -175,6 +184,10 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     setEditingMoments(prev => prev.map(m => m.momentID === id ? { ...m, ...updates } : m));
     // Mark this moment as changed
     setChangedMoments(prev => new Set([...prev, id]));
+  };
+
+  const handleEditPhotos = (moment) => {
+    setEditingPhotosForMoment(moment);
   };
 
   const addMoment = () => {
@@ -263,7 +276,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
                       {moment.representative_photo ? (
                         <div className="w-16 h-16 rounded-lg overflow-hidden border">
                           <img 
-                            src={moment.representative_photo}
+                            src={moment.representative_photo.startsWith('/api/') 
+                              ? `${API_BASE}${moment.representative_photo}` 
+                              : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${moment.representative_photo}.webp`}
                             alt="" 
                             className="w-full h-full object-cover"
                             loading="lazy"
@@ -456,9 +471,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         onClose={() => setShowPhotoSelector(false)}
         moment={selectedMoment}
         momentPhotosMap={momentPhotosMap}
-        onPhotoSelect={(photoName) => {
+        onPhotoSelect={(imageID) => {
           if (selectedMoment) {
-            updateMoment(selectedMoment.momentID, { representative_photo: photoName });
+            updateMoment(selectedMoment.momentID, { representative_photo: imageID });
           }
         }}
       />

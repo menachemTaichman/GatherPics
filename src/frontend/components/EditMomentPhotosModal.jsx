@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
-import { imagesAPI, momentsAPI, handleAPIError } from '../utils/apiService';
+import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useDataStore } from '../utils/dataManager';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -24,6 +25,7 @@ function formatDateTime(dateString) {
 }
 
 function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, moments, onClose }) {
+  const { updateMoment } = useDataStore();
   const [photosToAdd, setPhotosToAdd] = useState(new Set());
   const [photosToRemove, setPhotosToRemove] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
@@ -117,15 +119,34 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       const actualAdditions = Array.from(photosToAdd).filter(id => !isPhotoInMoment(id));
       const actualRemovals = Array.from(photosToRemove).filter(id => isPhotoInMoment(id));
       
-      // Update the moment with incremental photo changes
-      const updatedMoment = {
-        ...moment,
+      // Call the API directly
+      await momentsAPI.update(moment.momentID, {
         photos_to_add: actualAdditions,
         photos_to_remove: actualRemovals
-      };
+      });
+      
+      // Get the updated photos for this moment to update the local state
+      const updatedPhotosResult = await momentsAPI.getPhotos(moment.momentID);
+      const updatedPhotos = updatedPhotosResult.photos || [];
+      
 
-      // The API service interceptor will automatically handle the state updates
-      await onSave(updatedMoment);
+      
+      // Update the momentPhotosMap directly in the parent component
+      // This ensures the UI reflects the changes immediately
+      if (onRefreshPhotos) {
+        // Pass the updated photos data to the parent
+        onRefreshPhotos(moment.momentID, updatedPhotos);
+      }
+      
+      // Also trigger a moment update to refresh the moment data
+      // This ensures the representative photo and other moment data is updated
+      // We update the moment directly to avoid triggering change handlers that might conflict
+      const updatedMoment = await momentsAPI.getById(moment.momentID);
+      if (updatedMoment) {
+        // Update the moment data directly without triggering change handlers
+        // This ensures the representative photo and other moment data is updated
+        updateMoment(moment.momentID, updatedMoment);
+      }
       
       handleClose();
     } catch (error) {

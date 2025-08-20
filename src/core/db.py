@@ -292,6 +292,8 @@ class AppDB:
             return []
 
     def update(self, table: str, where: Dict, fields: Dict):
+        if not fields:
+            return
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
