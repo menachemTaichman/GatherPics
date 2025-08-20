@@ -891,7 +891,7 @@ export default function Moments() {
         ) : (
           <div className="relative">
                          {/* Fixed right sidebar for sticky info */}
-             <div className="fixed right-4 top-100 w-64 z-10 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
+             <div className="fixed right-4 top-100 w-64 z-50 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
               {currentVisibleMoment ? (
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
@@ -916,7 +916,7 @@ export default function Moments() {
                {moments.map((moment, index) => (
                  <div
                    key={moment.momentID}
-                   className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-20"
+                   className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10"
                   style={{
                     left: '-6px'
                   }}
