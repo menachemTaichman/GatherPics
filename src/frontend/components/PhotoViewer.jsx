@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -192,6 +192,39 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     setPan({ x: 0, y: 0 });
   };
 
+  const handleWheel = useCallback((e) => {
+    // Prevent default scroll behavior to avoid scrolling the page behind the modal.
+    // The modal focus system allows scroll events to pass through from within the modal
+    // to support naturally scrollable content. Since this component uses the wheel
+    // for custom actions (zoom/pan), we must explicitly prevent default.
+    e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom with Ctrl/Cmd + wheel
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
+    } else {
+      // Pan with wheel
+      setPan(prev => ({
+        x: prev.x - e.deltaX * 0.5,
+        y: prev.y - e.deltaY * 0.5
+      }));
+    }
+  }, []);
+
+  // Manually attach wheel event listener to ensure it's not passive
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleWheel]);
+
   const handleDownload = async () => {
     try {
       const result = await downloadAPI.download([photoMeta.name]);
@@ -232,9 +265,24 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
     } else if (momentInfo) {
-      // If no onJumpToMoment callback, use timeline manager for navigation
-      timelineManager.navigateToMoment(momentInfo.title, momentInfo.title);
+      // Navigate to timeline page with moment parameter
+      navigate(`/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
     }
+    // Close the modal when navigating to moment
+    onClose();
+  };
+
+  const handleMomentLinkClick = (e) => {
+    e.stopPropagation();
+    // Navigate first, then close modal
+    if (momentInfo && onJumpToMoment) {
+      onJumpToMoment(momentInfo);
+    } else if (momentInfo) {
+      // Navigate to timeline page with moment parameter
+      navigate(`/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
+    }
+    // Close the modal after navigation
+    onClose();
   };
 
   const handleTransferFace = (face) => {
@@ -261,22 +309,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
 
   // Mouse wheel handler for zoom
-  const handleWheel = (e) => {
-    // Note: preventDefault() removed - modal focus system handles scroll prevention
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom with Ctrl/Cmd + wheel
-      const delta = e.deltaY > 0 ? -0.2 : 0.2;
-      setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
-    } else {
-      // Pan with wheel
-      setPan(prev => ({
-        x: prev.x - e.deltaX * 0.5,
-        y: prev.y - e.deltaY * 0.5
-      }));
-    }
-  };
-
-  // Mouse handlers for dragging
   const handleMouseDown = (e) => {
     // Prevent dragging when clicking on face rectangles
     if (e.target.closest('[data-face-rectangle]')) {
@@ -446,7 +478,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
             <div 
               ref={containerRef}
               className="flex-1 flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
-              onWheel={handleWheel}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -641,29 +672,22 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     <div><span className="font-semibold">Original resolution:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
                   </div>
                   
-                  {/* Moment Information */}
-                  {momentInfo && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <h4 className="text-xs font-medium text-gray-700 mb-1">Moment</h4>
-                      <div className="text-xs text-gray-500 space-y-0.5">
-                        <div><span className="font-semibold">Title:</span> {momentInfo.title}</div>
-                        {momentInfo.description && (
-                          <div><span className="font-semibold">Description:</span> {momentInfo.description}</div>
-                        )}
-                        <div><span className="font-semibold">Time:</span> {momentInfo.start && momentInfo.end ? 
-                          `${new Date(momentInfo.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${new Date(momentInfo.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}` : 
-                          'Unknown'
-                        }</div>
-                      </div>
-                      <button
-                        onClick={handleJumpToMoment}
-                        className="mt-2 w-full text-xs bg-primary-600 text-white px-3 py-1.5 rounded hover:bg-primary-700 transition-colors flex items-center justify-center space-x-1"
-                      >
-                        <Clock className="w-3 h-3" />
-                        <span>Jump to Moment</span>
-                      </button>
-                    </div>
-                  )}
+                                     {/* Moment Information */}
+                   {momentInfo && (
+                     <div className="mt-3 pt-3 border-t border-gray-200">
+                       <div className="text-xs text-gray-500">
+                         <span className="font-semibold">Moment:</span> 
+                         <a
+                           href={`/timeline?moment=${encodeURIComponent(momentInfo.title)}`}
+                           onClick={handleMomentLinkClick}
+                           className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
+                           title="Jump to moment"
+                         >
+                           {momentInfo.title}
+                         </a>
+                       </div>
+                     </div>
+                   )}
                 </div>
               </div>
 
