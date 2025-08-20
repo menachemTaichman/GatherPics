@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, ArrowDown, Filter, X, CheckCheck } from 'lucide-react';
+import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortPhotosWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { imagesAPI, momentsAPI, handleAPIError } from '../utils/apiService';
@@ -24,7 +24,8 @@ function formatDateTime(dateString) {
 }
 
 function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, moments, onClose }) {
-  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  const [photosToAdd, setPhotosToAdd] = useState(new Set());
+  const [photosToRemove, setPhotosToRemove] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
   const [photosInPeriod, setPhotosInPeriod] = useState([]);
   const [sortOrder, setSortOrder] = useSetting('editMomentPhotos_sortOrder', 'asc');
@@ -38,10 +39,17 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     allowOutsideScroll: false
   });
 
+  // Reset method - creates empty lists and doesn't pre-select anything
+  const handleReset = () => {
+    setPhotosToAdd(new Set());
+    setPhotosToRemove(new Set());
+  };
+
   useEffect(() => {
     if (moment) {
-      const currentPhotos = (momentPhotosMap[moment.momentID] || []).map(p => p.id || p.imageID);
-      setSelectedPhotos(new Set(currentPhotos));
+      // Call reset when modal opens to ensure clean state
+      handleReset();
+      
       fetchPhotosInPeriod();
       fetchAllImagesWithTimestamps();
       setError('');
@@ -99,27 +107,21 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
 
   const handleSavePhotos = async () => {
     try {
-      // Calculate which photos to add and remove instead of sending the full list
-      const currentPhotos = getCurrentMomentPhotos();
-      const newPhotos = Array.from(selectedPhotos);
-      
-      // Find photos to add (in newPhotos but not in currentPhotos)
-      const photosToAdd = newPhotos.filter(photo => !currentPhotos.includes(photo));
-      
-      // Find photos to remove (in currentPhotos but not in newPhotos)
-      const photosToRemove = currentPhotos.filter(photo => !newPhotos.includes(photo));
-      
       // Only proceed if there are actual changes
-      if (photosToAdd.length === 0 && photosToRemove.length === 0) {
+      if (photosToAdd.size === 0 && photosToRemove.size === 0) {
         handleClose();
         return;
       }
       
+      // Filter to ensure only actual changes are sent
+      const actualAdditions = Array.from(photosToAdd).filter(id => !isPhotoInMoment(id));
+      const actualRemovals = Array.from(photosToRemove).filter(id => isPhotoInMoment(id));
+      
       // Update the moment with incremental photo changes
       const updatedMoment = {
         ...moment,
-        photos_to_add: photosToAdd,
-        photos_to_remove: photosToRemove
+        photos_to_add: actualAdditions,
+        photos_to_remove: actualRemovals
       };
 
       // The API service interceptor will automatically handle the state updates
@@ -142,22 +144,64 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
   };
 
   const togglePhoto = (photoId) => {
-    setSelectedPhotos(prev => {
-      const next = new Set(prev);
-      if (next.has(photoId)) {
-        next.delete(photoId);
+    const isCurrentlyInMoment = isPhotoInMoment(photoId);
+    
+    if (isCurrentlyInMoment) {
+      // Photo is currently in the moment
+      if (photosToRemove.has(photoId)) {
+        // Remove from remove list (undo removal)
+        setPhotosToRemove(prev => {
+          const next = new Set(prev);
+          next.delete(photoId);
+          return next;
+        });
       } else {
-        next.add(photoId);
+        // Add to remove list (mark for removal)
+        setPhotosToRemove(prev => new Set(prev).add(photoId));
       }
-      return next;
-    });
+    } else {
+      // Photo is not currently in the moment
+      if (photosToAdd.has(photoId)) {
+        // Remove from add list (undo addition)
+        setPhotosToAdd(prev => {
+          const next = new Set(prev);
+          next.delete(photoId);
+          return next;
+        });
+      } else {
+        // Add to add list (mark for addition)
+        setPhotosToAdd(prev => new Set(prev).add(photoId));
+      }
+    }
   };
 
   const handleToggleSortOrder = () => {
     setSortOrder(prev => toggleSortOrder(prev));
   };
 
+  // Check if a photo is currently in the moment
+  const isPhotoInMoment = (photoId) => {
+    return (momentPhotosMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === photoId);
+  };
 
+  // Get the effective selection state for a photo (considering pending changes)
+  const getPhotoSelectionState = (photoId) => {
+    const isCurrentlyInMoment = isPhotoInMoment(photoId);
+    
+    if (isCurrentlyInMoment) {
+      // Currently in moment
+      if (photosToRemove.has(photoId)) {
+        return 'marked-for-removal'; // Red border, will be removed
+      }
+      return 'in-moment'; // Green border, staying in moment (default state)
+    } else {
+      // Not currently in moment
+      if (photosToAdd.has(photoId)) {
+        return 'marked-for-addition'; // Green border, will be added
+      }
+      return 'not-in-moment'; // No special border
+    }
+  };
 
   // Use moments array to get the title for a moment ID
   const getPhotoMomentInfo = (photoId) => {
@@ -174,14 +218,6 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       }
     }
     return null;
-  };
-
-  // Get current photos from the moment
-  const getCurrentMomentPhotos = () => {
-    if (!moment || !momentPhotosMap[moment.momentID]) {
-      return [];
-    }
-    return momentPhotosMap[moment.momentID].map(p => p.id || p.imageID);
   };
 
   const isPhotoInPeriod = (photoId) => {
@@ -204,6 +240,102 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     
     // Sort using global utility with date priority
     return sortPhotosWithDatePriority(filteredImages, sortOrder);
+  };
+
+  // Get filtered images for selection operations
+  const getFilteredImages = () => {
+    return getFilteredAndSortedImages();
+  };
+
+  // Handle select all for filtered images
+  const handleSelectAllFiltered = () => {
+    const filteredImages = getFilteredImages();
+    const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
+    
+    // Check if all filtered are already effectively selected
+    const allSelected = filteredPhotoIds.every(id => {
+      const state = getPhotoSelectionState(id);
+      return state === 'marked-for-addition' || state === 'in-moment';
+    });
+    
+    if (allSelected) {
+      // Deselect all filtered
+      filteredPhotoIds.forEach(id => {
+        const isCurrentlyInMoment = isPhotoInMoment(id);
+        if (isCurrentlyInMoment) {
+          // Add to remove list (mark for removal)
+          setPhotosToRemove(prev => new Set(prev).add(id));
+        } else {
+          // Remove from add list
+          setPhotosToAdd(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }
+      });
+    } else {
+      // Select all filtered
+      filteredPhotoIds.forEach(id => {
+        const isCurrentlyInMoment = isPhotoInMoment(id);
+        if (isCurrentlyInMoment) {
+          // Remove from remove list (keep in moment)
+          setPhotosToRemove(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        } else {
+          // Add to add list
+          setPhotosToAdd(prev => new Set(prev).add(id));
+        }
+      });
+    }
+  };
+
+  // Handle clear selection for filtered images
+  const handleClearFilteredSelection = () => {
+    const filteredImages = getFilteredImages();
+    const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
+    
+    filteredPhotoIds.forEach(id => {
+      const isCurrentlyInMoment = isPhotoInMoment(id);
+      if (isCurrentlyInMoment) {
+        // Add to remove list (mark for removal)
+        setPhotosToRemove(prev => new Set(prev).add(id));
+      } else {
+        // Remove from add list
+        setPhotosToAdd(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    });
+  };
+
+  // Check if all filtered images are effectively selected
+  const areAllFilteredSelected = () => {
+    const filteredImages = getFilteredImages();
+    if (filteredImages.length === 0) return false;
+    
+    return filteredImages.every(img => {
+      const id = img.id || img.imageID;
+      const state = getPhotoSelectionState(id);
+      return state === 'marked-for-addition' || state === 'in-moment';
+    });
+  };
+
+  // Check if any filtered images are selected
+  const areAnyFilteredSelected = () => {
+    const filteredImages = getFilteredImages();
+    if (filteredImages.length === 0) return false;
+    
+    return filteredImages.some(img => {
+      const id = img.id || img.imageID;
+      const state = getPhotoSelectionState(id);
+      return state === 'marked-for-addition' || state === 'in-moment';
+    });
   };
 
   // Keyboard navigation handler
@@ -318,6 +450,34 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
     return () => clearTimeout(timer);
   }, [filteredImages, focusedPhotoIndex]);
 
+  // Calculate caption text
+  const getCaptionText = () => {
+    // Use the same filtering logic as handleSavePhotos for consistency
+    const actualAdditions = Array.from(photosToAdd).filter(id => !isPhotoInMoment(id));
+    const actualRemovals = Array.from(photosToRemove).filter(id => isPhotoInMoment(id));
+    
+    const addCount = actualAdditions.length;
+    const removeCount = actualRemovals.length;
+    const currentCount = (momentPhotosMap[moment?.momentID] || []).length;
+    const finalCount = currentCount - removeCount + addCount;
+    
+    if (removeCount === 0 && addCount === 0) {
+      return `No changes. Total: ${currentCount}`;
+    }
+    
+    let caption = "";
+    if (removeCount > 0) {
+      caption += `Remove ${removeCount}`;
+    }
+    if (addCount > 0) {
+      if (caption) caption += ", ";
+      caption += `add ${addCount}`;
+    }
+    caption += `. Total: ${finalCount}`;
+    
+    return caption;
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
@@ -333,6 +493,7 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold">Edit Photos: {moment.label}</h3>
             <div className="flex space-x-2">
+              <button onClick={handleReset} className="btn-secondary">Reset</button>
               <button onClick={handleSavePhotos} className="btn-primary">Save Changes</button>
               <button onClick={handleClose} className="btn-secondary">Cancel</button>
             </div>
@@ -340,6 +501,12 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
           {error && (
             <div className="mt-2 text-red-600 text-sm">{error}</div>
           )}
+          
+          {/* Compact caption */}
+          <div className="mt-2 text-sm text-gray-600 font-medium">
+            {getCaptionText()}
+          </div>
+          
           {/* Filter and Sort Controls */}
           <div className="flex items-center justify-between mt-4">
             <div className="flex items-center space-x-2">
@@ -396,56 +563,31 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
               </button>
             </div>
             <div className="flex items-center space-x-2">
-              {selectedPhotos.size > 0 && (
+              {/* Select all button - only visible when not all filtered are selected */}
+              {!areAllFilteredSelected() && (
                 <button
-                  onClick={() => setSelectedPhotos(new Set())}
-                  className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
-                  title="Clear selection"
+                  onClick={handleSelectAllFiltered}
+                  className={`w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center ${
+                    areAnyFilteredSelected() 
+                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                      : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                  title="Select all filtered photos"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                </button>
+              )}
+              
+              {/* Clear button - always visible when any filtered are selected, always red */}
+              {areAnyFilteredSelected() && (
+                <button
+                  onClick={handleClearFilteredSelection}
+                  className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
+                  title="Clear filtered selection"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
-              <button
-                onClick={() => {
-                  const filteredImages = getFilteredAndSortedImages();
-                  const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
-                  const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
-                  
-                  if (allSelected) {
-                    // Deselect all filtered
-                    setSelectedPhotos(prev => {
-                      const next = new Set(prev);
-                      filteredPhotoIds.forEach(id => next.delete(id));
-                      return next;
-                    });
-                  } else {
-                    // Select all filtered
-                    setSelectedPhotos(prev => {
-                      const next = new Set(prev);
-                      filteredPhotoIds.forEach(id => next.add(id));
-                      return next;
-                    });
-                  }
-                }}
-                className={`w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center ${
-                  (() => {
-                    const filteredImages = getFilteredAndSortedImages();
-                    const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
-                    const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
-                    return allSelected
-                      ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-                      : 'hover:bg-gray-100 text-gray-700';
-                  })()
-                }`}
-                title={(() => {
-                  const filteredImages = getFilteredAndSortedImages();
-                  const filteredPhotoIds = filteredImages.map(img => img.id || img.imageID);
-                  const allSelected = filteredPhotoIds.every(id => selectedPhotos.has(id));
-                  return allSelected ? "Deselect all filtered photos" : "Select all filtered photos";
-                })()}
-              >
-                <CheckCheck className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -453,10 +595,26 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {filteredImages.map((photo, index) => {
-              const isSelected = selectedPhotos.has(photo.id || photo.imageID);
+              const selectionState = getPhotoSelectionState(photo.id || photo.imageID);
               const momentInfo = getPhotoMomentInfo(photo.id || photo.imageID);
               const isInPeriod = isPhotoInPeriod(photo.id || photo.imageID);
               const isFocused = index === focusedPhotoIndex;
+              
+              // Determine border color based on selection state
+              let borderClasses = '';
+              switch (selectionState) {
+                case 'marked-for-addition':
+                  borderClasses = 'border-green-500 ring-2 ring-green-200';
+                  break;
+                case 'marked-for-removal':
+                  borderClasses = 'border-red-500 ring-2 ring-red-200';
+                  break;
+                case 'in-moment':
+                  borderClasses = 'border-green-500 ring-2 ring-green-200'; // Green border for photos staying in moment
+                  break;
+                default:
+                  borderClasses = '';
+              }
               
               return (
                 <div
@@ -470,16 +628,12 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
                       togglePhoto(photo.id || photo.imageID);
                     }
                   }}
-                  className={`photo-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${
-                    isSelected ? 'border-green-500 ring-2 ring-green-200' : 
-                    momentInfo && momentInfo.isCurrentMoment ? 'border-red-500 ring-2 ring-red-200' :
-                    isInPeriod && !momentInfo ? 'border-red-500 ring-2 ring-red-200' : ''
-                  } ${
+                  className={`photo-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
                     isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
                   }`}
                   tabIndex={0}
                   role="button"
-                  aria-label={`Photo ${photo.name}${isSelected ? ' (selected)' : ''}`}
+                  aria-label={`Photo ${photo.name}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
                   data-photo-id={photo.id || photo.imageID}
                 >
                   <img
