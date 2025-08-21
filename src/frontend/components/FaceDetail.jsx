@@ -35,7 +35,7 @@ import { useSetting } from '../utils/useSettings';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
-import { groupsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { groupsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { clearTransferredPhotosFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 
@@ -243,13 +243,12 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setShowMergeModal
   } = useGroupNameConflict(group, onRefreshGroups);
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
-    const foundGroup = currentGroups.find(g => g.label === group_name);
+    const groupsArray = currentGroups?.groups || currentGroups;
+    const foundGroup = groupsArray.find(g => g.label === group_name);
     if (foundGroup) {
       setGroup(foundGroup);
     } else if (group && group.groupID) {
@@ -394,42 +393,79 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     try {
       setFilterLoading(true);
       
-      const currentPhotoIds = sortedPhotos.map(p => p.id);
-
-      const response = await groupsAPI.getFilteredPhotos(
-        group.groupID, 
-        filterGroups, 
-        filterMode,
-        onlySelected,
-        currentPhotoIds
-      );
+      // For now, use the basic photos endpoint since the filtered endpoint expects different parameters
+      // TODO: Update backend to support the filtering parameters we need
+      const response = await groupsAPI.getPhotosComplete(group.groupID);
       
-      const { photos_to_add = [], photo_ids_to_remove = [], related_groups = [] } = response;
-      
-      // Update photos incrementally
-      setSortedPhotos(prevPhotos => {
-        // Create a Set for efficient lookup of photos to remove
-        const photosToRemoveSet = new Set(photo_ids_to_remove);
-        // Filter out photos that should be removed
-        const remainingPhotos = prevPhotos.filter(p => !photosToRemoveSet.has(p.id));
-        // Create a Set of remaining photo IDs to prevent duplicates
-        const remainingPhotoIds = new Set(remainingPhotos.map(p => p.id));
-        // Filter photos_to_add to ensure no duplicates are added
-        const newPhotosToAdd = photos_to_add.filter(p => !remainingPhotoIds.has(p.id));
-        // Combine the remaining photos with the new ones
-        const finalPhotos = [...remainingPhotos, ...newPhotosToAdd];
-        return sortPhotos(finalPhotos, sortBy, sortOrder);
-      });
-
-      setRelatedGroups(related_groups);
+      if (response && response.photos) {
+        let filteredPhotos = response.photos;
+        
+        // Apply frontend filtering logic
+        if (filterGroups.length > 0) {
+          if (filterMode === 'and') {
+            // All filter groups must be present
+            filteredPhotos = filteredPhotos.filter(photo => {
+              const photoGroupIds = new Set(photo.faces?.map(f => f.group_id).filter(Boolean) || []);
+              return filterGroups.every(groupId => photoGroupIds.has(groupId));
+            });
+          } else {
+            // Any filter group can be present
+            filteredPhotos = filteredPhotos.filter(photo => {
+              const photoGroupIds = new Set(photo.faces?.map(f => f.group_id).filter(Boolean) || []);
+              return filterGroups.some(groupId => photoGroupIds.has(groupId));
+            });
+          }
+        }
+        
+        // Apply onlySelected filter
+        if (onlySelected) {
+          filteredPhotos = filteredPhotos.filter(photo => 
+            selectedPhotos.has(photo.id)
+          );
+        }
+        
+        // Sort the filtered photos
+        const sortedFilteredPhotos = sortPhotos(filteredPhotos, sortBy, sortOrder);
+        setSortedPhotos(sortedFilteredPhotos);
+        
+        // Extract related groups from the photos
+        const relatedGroupIds = new Set();
+        filteredPhotos.forEach(photo => {
+          photo.faces?.forEach(face => {
+            if (face.group_id && face.group_id !== group.groupID) {
+              relatedGroupIds.add(face.group_id);
+            }
+          });
+        });
+        
+        const relatedGroupObjects = Array.from(relatedGroupIds)
+          .map(id => currentGroups.find(g => g.groupID === id))
+          .filter(Boolean); // Filter out any groups not found
+        
+        setRelatedGroups(relatedGroupObjects);
+      }
 
     } catch (error) {
       console.error('Error fetching filtered photos:', error);
-      // On error, we might want to revert to a safe state, like fetching all photos
-      fetchSortedPhotos();
+      // On error, fall back to basic photos
+      await fetchBasicPhotos();
       setRelatedGroups([]);
     } finally {
       setFilterLoading(false);
+    }
+  };
+
+  const fetchBasicPhotos = async () => {
+    if (!group?.groupID) return;
+    
+    try {
+      const response = await groupsAPI.getPhotosComplete(group.groupID);
+      if (response && response.photos) {
+        const sortedPhotos = sortPhotos(response.photos, sortBy, sortOrder);
+        setSortedPhotos(sortedPhotos);
+      }
+    } catch (error) {
+      console.error('Error fetching basic photos:', error);
     }
   };
 

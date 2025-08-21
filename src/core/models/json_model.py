@@ -38,7 +38,7 @@ class JsonModel(ABC):
         for item in cls._load_all():
             if item.get(cls.ID_FIELD) == obj_id:
                 return item
-        return None
+        return {}
 
     @classmethod
     def list_all(cls: Type[T]) -> List[T]:

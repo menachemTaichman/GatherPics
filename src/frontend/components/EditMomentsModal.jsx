@@ -2,11 +2,8 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
-import { momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { momentsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-const FIXED_EVENT_ID = '75cb6635-879d-4386-b023-366444dc0fb2';
 
 import EditMomentPhotosModal from './EditMomentPhotosModal';
 import RepresentativePhotoModal from './RepresentativePhotoModal';
@@ -111,24 +108,30 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         // Create moment directly without optimistic updates to avoid duplicates
         const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
+        
+        // Replace the temporary moment with the saved one, preserving any additional fields
+        setEditingMoments(prev => prev.map(m => 
+          m.momentID === moment.momentID ? { ...moment, ...savedMoment, momentID: savedMoment.momentID } : m
+        ));
       } else {
         // Update existing moment directly without optimistic updates to avoid conflicts
         // Filter out image-related fields that the backend doesn't expect
         const { momentID, image_IDs, photos, ...momentData } = moment;
         const result = await momentsAPI.update(moment.momentID, momentData);
         savedMoment = result.moment;
+        
+        // Update the moment in editingMoments with the saved data, preserving existing fields
+        setEditingMoments(prev => prev.map(m => 
+          m.momentID === moment.momentID ? { ...moment, ...savedMoment } : m
+        ));
       }
+      
       // Remove from changed moments since it's now saved
       setChangedMoments(prev => {
         const next = new Set(prev);
         next.delete(moment.momentID);
         return next;
       });
-      
-      // Update the moment in editingMoments with the saved data
-      setEditingMoments(prev => prev.map(m => 
-        m.momentID === moment.momentID ? savedMoment : m
-      ));
       
       // Show success message
       if (onToast) {
@@ -273,20 +276,24 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
                   <div className="flex items-center space-x-3 flex-1">
                     {/* Representative Photo */}
                     <div className="relative">
-                      {moment.representative_photo ? (
+                      {moment.representative_photo && moment.representative_photo.trim() !== '' ? (
                         <div className="w-16 h-16 rounded-lg overflow-hidden border">
                           <img 
                             src={moment.representative_photo.startsWith('/api/') 
                               ? `${API_BASE}${moment.representative_photo}` 
-                              : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${moment.representative_photo}.webp`}
+                              : urlHelpers.getThumbnailUrl(moment.representative_photo)}
                             alt="" 
                             className="w-full h-full object-cover"
                             loading="lazy"
                             onError={(e) => {
                               e.target.onerror = null;
-                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
                             }}
                           />
+                          <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-100" style={{display: 'none'}}>
+                            <Image className="w-6 h-6 text-gray-400" />
+                          </div>
                         </div>
                       ) : (
                         <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
@@ -473,9 +480,14 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         momentPhotosMap={momentPhotosMap}
         onPhotoSelect={(imageID) => {
           if (selectedMoment) {
-            // Store the representative photo as a full API path, not just the image ID
-            const representativePhotoPath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
-            updateMoment(selectedMoment.momentID, { representative_photo: representativePhotoPath });
+            if (imageID === '') {
+              // Remove representative photo
+              updateMoment(selectedMoment.momentID, { representative_photo: '' });
+            } else {
+              // Store the representative photo as a full API path, not just the image ID
+              const representativePhotoPath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
+              updateMoment(selectedMoment.momentID, { representative_photo: representativePhotoPath });
+            }
           }
         }}
       />

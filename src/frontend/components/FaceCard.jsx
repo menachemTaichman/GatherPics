@@ -1,16 +1,13 @@
-const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
-
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Edit, MoreVertical, User } from 'lucide-react';
+import { FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 
 export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
   const [showActions, setShowActions] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
-
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =

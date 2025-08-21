@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
-import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { groupsAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 
 export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups, onNameConflict }) {
@@ -62,9 +62,6 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   useEffect(() => {
     currentSelectionRef.current = currentSelection;
   }, [currentSelection]);
-
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =

@@ -135,29 +135,38 @@ def internal_error(error):
 
 # --- API Endpoints ---
 
-@app.route("/api/groups", methods=["GET"])
+# Event-scoped endpoints (recommended pattern)
+@app.route("/api/events/<event_id>/groups", methods=["GET"])
 @require_auth
-def get_groups():
-    """List all accessible groups for the event."""
+def get_groups(event_id):
+    """List all accessible groups for the specific event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     groups = event.groups_model.list()
-    return jsonify(groups)
+    return jsonify({"groups": groups})
 
-@app.route("/api/groups/<group_id>", methods=["GET"])
+@app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
-def get_group(group_id):
-    """Get a specific group by ID if accessible."""
+def get_group(event_id, group_id):
+    """Get a specific group by ID if accessible in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     group = event.groups_model.get(group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     return jsonify(group)
 
-@app.route("/api/groups/<group_id>", methods=["PUT"])
+@app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
 @require_auth
-def update_group(group_id):
-    """Update a group's label or representative if accessible."""
+def update_group(event_id, group_id):
+    """Update a group's label or representative if accessible in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
     
     # Check if group is accessible
     if not event.groups_model.get(group_id):
@@ -184,11 +193,14 @@ def update_group(group_id):
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/groups/check-name", methods=["POST"])
+@app.route("/api/events/<event_id>/groups/check-name", methods=["POST"])
 @require_auth
-def check_group_name():
-    """Check if a group name already exists and return conflict info."""
+def check_group_name(event_id):
+    """Check if a group name already exists in the event and return conflict info."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     data = request.json or {}
     label = data.get('label', '')
     exclude_group_id = data.get('exclude_group_id', '')
@@ -197,416 +209,512 @@ def check_group_name():
         return jsonify({"error": "Label is required"}), 400
     
     try:
-        conflict_info = event.groups_model.check_name_conflict(label, exclude_group_id)
-        return jsonify(conflict_info)
+        # Check for conflicts
+        conflicts = event.groups_model.check_name_conflicts(label, exclude_group_id)
+        
+        if conflicts:
+            return jsonify({
+                "has_conflicts": True,
+                "conflicts": conflicts,
+                "suggestions": event.groups_model.generate_name_suggestions(label, conflicts)
+            })
+        else:
+            return jsonify({"has_conflicts": False, "conflicts": []})
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/groups/<group_id>", methods=["DELETE"])
+@app.route("/api/events/<event_id>/groups/<group_id>", methods=["DELETE"])
 @require_auth
-def delete_group(group_id):
-    """Delete a group if accessible."""
+def delete_group(event_id, group_id):
+    """Delete a group if accessible in the event."""
     event = get_event_with_profile()
-    
-    # Check if group is accessible
-    if not event.groups_model.get(group_id):
-        return not_found(f"Group {group_id} not found or not accessible")
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
     
     try:
+        # Check if group exists and is accessible
+        group = event.groups_model.get(group_id)
+        if not group:
+            return not_found(f"Group {group_id} not found or not accessible")
+        
+        # Delete the group
         event.groups_model.delete(group_id)
-        response_data = add_change_instruction({"success": True}, 'GROUP_DELETED', {"groupID": group_id})
+        
+        # Add change instruction for frontend
+        response_data = {"success": True}
+        response_data = add_change_instruction(response_data, 'GROUP_DELETED', {"group_id": group_id})
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
 
-
-
-@app.route("/api/groups/transfer-faces", methods=["POST"])
+@app.route("/api/events/<event_id>/groups/transfer-faces", methods=["POST"])
 @require_auth
-def transfer_faces():
-    """Transfer faces from one group to another or create a new group."""
+def transfer_faces(event_id):
+    """Transfer faces between groups within the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     data = request.json or {}
+    source_group_id = data.get('source_group_id')
+    target_group_id = data.get('target_group_id')
+    face_ids = data.get('face_ids', [])
+    
+    if not all([source_group_id, target_group_id, face_ids]):
+        return jsonify({"error": "source_group_id, target_group_id, and face_ids are required"}), 400
     
     try:
-        # Validate required fields
-        if 'old_group_id' not in data:
-            return bad_request("Missing old_group_id")
-        if 'face_ids' not in data:
-            return bad_request("Missing face_ids")
-        if not data['face_ids']:
-            return bad_request("face_ids cannot be empty")
+        # Validate groups exist and are accessible
+        source_group = event.groups_model.get(source_group_id)
+        target_group = event.groups_model.get(target_group_id)
         
-        result = event.transfer_faces(
-            old_group_id=data['old_group_id'],
-            face_ids=data['face_ids'],
-            target_group_id=data.get('target_group_id'),
-            new_group_name=data.get('new_group_name')
+        if not source_group or not target_group:
+            return not_found("One or both groups not found or not accessible")
+        
+        # Transfer faces
+        transferred_count = event.groups_model.transfer_faces(source_group_id, target_group_id, face_ids)
+        
+        # Get updated groups
+        updated_source = event.groups_model.get(source_group_id)
+        updated_target = event.groups_model.get(target_group_id)
+        
+        # Add change instructions for frontend
+        response_data = {"success": True, "transferred_count": transferred_count}
+        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_source)
+        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_target)
+        
+        return jsonify(response_data)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/groups/<group_id>/photos", methods=["GET"])
+@require_auth
+def get_group_photos(event_id, group_id):
+    """Get all photos containing faces from a specific group in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        # Get image IDs for this group
+        image_ids = event.groups_model.get_images(group_id)
+        
+        # Get basic image info for each
+        images_data = []
+        for image_id in image_ids:
+            image = event.images_model.get(image_id)
+            if image:
+                images_data.append({
+                    'id': image_id,
+                    'name': image['name'],
+                    'date_taken': image.get('date_taken'),
+                    'width': image.get('width'),
+                    'height': image.get('height'),
+                    'urls': {
+                        'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                        'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                    }
+                })
+        
+        return jsonify({"images": images_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/groups/<group_id>/crops", methods=["GET"])
+@require_auth
+def get_group_crops(event_id, group_id):
+    """Get all face crops from a specific group in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        # Get face IDs for this group
+        face_ids = event.groups_model.get_faces(group_id)
+        
+        # Get face data for each
+        faces_data = []
+        for face_id in face_ids:
+            face = event.faces_model.get(face_id)
+            if face:
+                faces_data.append({
+                    'face_id': face_id,
+                    'image_id': face['imageID'],
+                    'face_coords': {
+                        'Left': face['left'],
+                        'Top': face['top'],
+                        'Width': face['width'],
+                        'Height': face['height']
+                    },
+                    'url': f'/api/events/{event_id}/faces/{face_id}.webp'
+                })
+        
+        return jsonify({"faces": faces_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/groups/<group_id>/related-groups", methods=["GET"])
+@require_auth
+def get_related_groups(event_id, group_id):
+    """Get groups that share photos with the specified group in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        # Get related groups
+        related_groups = event.groups_model.get_related_groups(group_id)
+        
+        # Get basic info for each related group
+        groups_data = []
+        for related_group_id in related_groups:
+            related_group = event.groups_model.get(related_group_id)
+            if related_group:
+                groups_data.append({
+                    'id': related_group_id,
+                    'label': related_group['label'],
+                    'face_count': related_group.get('face_count', 0)
+                })
+        
+        return jsonify({"related_groups": groups_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/groups/<group_id>/filtered-photos", methods=["GET"])
+@require_auth
+def get_group_filtered_photos(event_id, group_id):
+    """Get photos filtered by group with pagination and search in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        # Get query parameters
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        search = request.args.get('search', '').strip()
+        sort_by = request.args.get('sort_by', 'date_taken')
+        sort_order = request.args.get('sort_order', 'desc')
+        
+        # Validate parameters
+        if page < 1 or per_page < 1 or per_page > 100:
+            return jsonify({"error": "Invalid pagination parameters"}), 400
+        
+        # Get filtered photos
+        result = event.groups_model.get_filtered_photos(
+            group_id, page, per_page, search, sort_by, sort_order
         )
-        # Add old_group_id to the response for frontend updates
-        result['old_group_id'] = data['old_group_id']
         
-        # Add change instruction for frontend with explicit change data
-        change_data = {
-            'target_group_id': result.get('target_group_id'),
-            'old_group_id': data['old_group_id'],
-            'old_group_deleted': result.get('old_group_deleted', False),
-            'transferred_faces': result.get('transferred_faces', []),
-            'photos_to_remove_from_source': result.get('photos_to_remove_from_source', []),
-            'photos_to_add_to_target': result.get('photos_to_add_to_target', []),
-            'transferred_photos_data': [],  # Will be populated with full photo data
-            'updated_source_group': result.get('updated_source_group'),  # Include updated source group with new representative
-            'updated_target_group': result.get('updated_target_group'),  # Include updated target group
+        # Build response with pagination info
+        response_data = {
+            "photos": result['photos'],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": result['total'],
+                "pages": (result['total'] + per_page - 1) // per_page
+            }
         }
         
-        # Include new group name if a new group was created
-        if 'new_group_name' in result:
-            change_data['new_group_name'] = result['new_group_name']
-        
-        # Only include photo data for images that are actually being added to the target group
-        moved_photos = set(result.get('photos_to_remove_from_source', []))
-        photos_to_add_to_target = set(result.get('photos_to_add_to_target', []))
-        for photo_id in moved_photos.union(photos_to_add_to_target):
-            photo_data = build_complete_photo_data(event, photo_id)
-            if photo_data:
-                change_data['transferred_photos_data'].append(photo_data)
-        
-        # Also include updated photo data for photos that contain transferred faces but weren't moved
-        # This is needed for PhotoViewer to update face data without reloading
-        transferred_faces = result.get('transferred_faces', [])
-        if transferred_faces:
-            # Get all images that contain the transferred faces
-            face_image_query = '''
-                SELECT DISTINCT imageID 
-                FROM faces 
-                WHERE faceID IN ({})
-            '''.format(','.join(['?'] * len(transferred_faces)))
-            
-            face_image_results = event.db.execute_query(face_image_query, transferred_faces)
-            face_image_ids = [row[0] for row in face_image_results]
-            
-            # Get full photo data for these images
-            for photo_id in face_image_ids:
-                photo_data = build_complete_photo_data(event, photo_id)
-                if photo_data:
-                    change_data['transferred_photos_data'].append(photo_data)
-        
-        response_data = add_change_instruction({"success": True}, 'GROUP_FACES_TRANSFERRED', change_data)
         return jsonify(response_data)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/groups/<group_id>/photos", methods=["GET"])
+@app.route("/api/events/<event_id>/moments", methods=["GET"])
 @require_auth
-def get_group_photos(group_id):
-    """List all accessible photos for a group, with optional sorting."""
+def get_moments(event_id):
+    """List all accessible moments for the specific event."""
     event = get_event_with_profile()
-    group = event.groups_model.get(group_id)
-    if not group:
-        return not_found(f"Group {group_id} not found or not accessible")
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
     
-    # Get all images for the group, but filter by accessible images
-    all_image_ids = event.groups_model.get_images(group_id)
-    accessible_image_ids = [img_id for img_id in all_image_ids if event.images_model.get(img_id)]
-    
-    return jsonify({"photos": accessible_image_ids})
-
-@app.route("/api/groups/<group_id>/crops", methods=["GET"])
-@require_auth
-def get_group_crops(group_id):
-    """Get crop mapping for a group."""
-    event = get_event_with_profile()
-    group = event.groups_model.get(group_id)
-    if not group:
-        return not_found(f"Group {group_id} not found or not accessible")
-    
-    crop_mapping = event.get_crop_mapping(group_id)
-    return jsonify({"crops": crop_mapping})
-
-@app.route("/api/groups/<group_id>/related-groups", methods=["GET"])
-@require_auth
-def get_related_groups(group_id):
-    """Get groups that share images with the given group."""
-    event = get_event_with_profile()
-    group = event.groups_model.get(group_id)
-    if not group:
-        return not_found(f"Group {group_id} not found or not accessible")
-    
-    # Use the new get_related_groups method with just the main group
-    related_group_ids = event.get_related_groups([group_id])
-    
-    # Get the actual group data for related groups
-    related_groups = []
-    for related_group_id in related_group_ids:
-        if related_group_id != group_id:  # Skip main group
-            group_data = event.groups_model.get(related_group_id)
-            if group_data:
-                related_groups.append(group_data)
-    
-    return jsonify({"related_groups": related_groups})
-
-@app.route("/api/groups/<group_id>/filtered-photos", methods=["GET"])
-@require_auth
-def get_filtered_photos(group_id):
-    """Get filtered photos based on filter criteria."""
-    event = get_event_with_profile()
-    group = event.groups_model.get(group_id)
-    if not group:
-        return not_found(f"Group {group_id} not found or not accessible")
-    
-    # Get query parameters
-    mode = request.args.get('mode', 'and')
-    only = request.args.get('only', 'false').lower() == 'true'
-    related_groups_str = request.args.get('related_groups', '')
-    current_photo_ids_str = request.args.get('current_photo_ids', '')
-    
-    current_photo_ids = set(current_photo_ids_str.split(',')) if current_photo_ids_str else set()
-
-    # Start with the main group
-    all_groups = [group_id]
-    
-    # Add related groups if any are provided
-    if related_groups_str:
-        related_groups = related_groups_str.split(',')
-        # Filter out empty strings and duplicates, including the main group
-        all_groups.extend([g for g in related_groups if g and g != group_id])
-        
-    # Get filtered image IDs using the new logic
-    filtered_image_ids = set(event.get_filtered_images(all_groups, mode, only))
-    
-    # Calculate photos to add and remove
-    photo_ids_to_add = list(filtered_image_ids - current_photo_ids)
-    photo_ids_to_remove = list(current_photo_ids - filtered_image_ids)
-
-    # Get related groups sorted by co-occurrence
-    all_related_groups_ids = event.get_related_groups(all_groups, mode, only)
-    
-    # Get full group data for the sorted related groups
-    all_related_groups_data = []
-    for r_group_id in all_related_groups_ids:
-        group_data = event.groups_model.get(r_group_id)
-        if group_data:
-            all_related_groups_data.append(group_data)
-            
-    # Build complete photo data for photos to be added
-    photos_to_add_data = []
-    for image_id in photo_ids_to_add:
-        photo_data = build_complete_photo_data(event, image_id)
-        if photo_data:
-            photos_to_add_data.append(photo_data)
-    
-    return jsonify({
-        "photos_to_add": photos_to_add_data,
-        "photo_ids_to_remove": photo_ids_to_remove,
-        "related_groups": all_related_groups_data,
-    })
-
-@app.route("/api/moments", methods=["GET"])
-@require_auth
-def get_moments():
-    """List all accessible moments for the event."""
-    event = get_event_with_profile()
     try:
         moments = event.moments_model.list()
-        # Add full URLs for representative photos
-        for moment in moments:
-            if moment.get('representative_photo'):
-                # representative_photo stores the image ID
-                image = event.images_model.get(moment['representative_photo'])
-                if image:
-                    moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/thumb/{moment["representative_photo"]}.webp'
-                else:
-                    moment['representative_photo'] = None
-            else:
-                moment['representative_photo'] = None
-        
         return jsonify({"moments": moments})
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/moments/<moment_id>", methods=["GET"])
+@app.route("/api/events/<event_id>/moments/<moment_id>", methods=["GET"])
 @require_auth
-def get_moment(moment_id):
-    """Get a specific moment by ID if accessible."""
+def get_moment(event_id, moment_id):
+    """Get a specific moment by ID if accessible in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
     
-    # Check if moment is accessible
-    moment = event.moments_model.get(moment_id)
-    if not moment:
-        return not_found(f"Moment {moment_id} not found or not accessible")
-    
-    # Add full URL for representative photo
-    if moment.get('representative_photo'):
-        # representative_photo stores the image ID
-        image = event.images_model.get(moment['representative_photo'])
-        if image:
-            moment['representative_photo'] = f'/api/events/{FIXED_EVENT_ID}/thumb/{moment["representative_photo"]}.webp'
-        else:
-            moment['representative_photo'] = None
-    else:
-        moment['representative_photo'] = None
-    
-    return jsonify(moment)
-
-@app.route("/api/moments", methods=["POST"])
-@require_auth
-def create_moment():
-    """Create a new moment."""
-    event = get_event_with_profile()
-    data = request.json or {}
-    try:
-        moment = event.moments_model.add(**data)
-        response_data = add_change_instruction({"moment": moment}, 'MOMENT_CREATED', moment)
-        return jsonify(response_data)
-    except Exception as e:
-        return bad_request(e)
-
-@app.route("/api/moments/<moment_id>", methods=["PUT"])
-@require_auth
-def update_moment(moment_id):
-    """Update a moment if accessible."""
-    event = get_event_with_profile()
-
-    # Check if moment is accessible
-    if not event.moments_model.get(moment_id):
-        return not_found(f"Moment {moment_id} not found or not accessible")
-    
-    data = request.json or {}
-
-    try:                                    
-        event.moments_model.edit(moment_id, data)
-
-        updated = event.moments_model.get(moment_id)
-        response_data = add_change_instruction({"moment": updated}, 'MOMENT_UPDATED', updated)
-        return jsonify(response_data)
-    except Exception as e:
-        return bad_request(e)
-
-@app.route("/api/moments/<moment_id>", methods=["DELETE"])
-@require_auth
-def delete_moment(moment_id):
-    """Delete a moment if accessible."""
-    event = get_event_with_profile()
-    
-    # Check if moment is accessible
-    if not event.moments_model.get(moment_id):
-        return not_found(f"Moment {moment_id} not found or not accessible")
-    
-    try:
-        event.moments_model.delete(moment_id)
-        response_data = add_change_instruction({"success": True}, 'MOMENT_DELETED', {"momentID": moment_id})
-        return jsonify(response_data)
-    except Exception as e:
-        return bad_request(e)
-
-@app.route("/api/moments/<moment_id>/photos", methods=["GET"])
-@require_auth
-def get_moment_photos(moment_id):
-    """List all accessible photos in a moment."""
-    event = get_event_with_profile()
-    
-    # Check if moment is accessible
-    if not event.moments_model.get(moment_id):
-        return not_found(f"Moment {moment_id} not found or not accessible")
-    
-    try:
-        all_image_ids = event.moments_model.get_images(moment_id)
-        accessible_image_ids = [img_id for img_id in all_image_ids if event.images_model.get(img_id)]
-        return jsonify({"photos": accessible_image_ids})
-    except Exception as e:
-        return bad_request(e)
-
-@app.route("/api/moments/<moment_id>/photos-in-period", methods=["GET"])
-@require_auth
-def get_moment_photos_in_period(moment_id):
-    """Get photos in a time period for a moment."""
-    event = get_event_with_profile()
     try:
         moment = event.moments_model.get(moment_id)
-        if not moment or not moment.get('start') or not moment.get('end'):
-            return jsonify({"photos": []})
-
-        start_time = moment['start']
-        end_time = moment['end']
-        
-        photo_ids = event.get_photos_in_period(start_time, end_time)
-        
-        photos_data = []
-        for photo_id in photo_ids:
-            photo_data = build_complete_photo_data(event, photo_id)
-            if photo_data:
-                photos_data.append(photo_data)
-                
-        return jsonify({"photos": photos_data})
+        if not moment:
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        return jsonify(moment)
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/photos/<image_id>/faces", methods=["GET"])
+@app.route("/api/events/<event_id>/moments", methods=["POST"])
 @require_auth
-def get_photo_faces(image_id):
-    """Get face bounding boxes for a photo."""
+def create_moment(event_id):
+    """Create a new moment in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
     
-    # Get face IDs for this image
-    face_ids = event.images_model.get_faces(image_id)
+    data = request.json or {}
     
-    # Build faces data
-    faces_data = []
-    for face_id in face_ids:
-        face = event.faces_model.get(face_id)
-        if face:
-            # Get group information
-            group = None
-            if face.get('groupID'):
-                group = event.groups_model.get(face['groupID'])
-            
-            face_data = {
-                'face_id': face_id,
-                'face_coords': {
-                    'Left': face['left'],
-                    'Top': face['top'], 
-                    'Width': face['width'],
-                    'Height': face['height']
-                },
-                'group_id': face.get('groupID'),
-                'group_label': group['label'] if group else 'Unknown',
-                'group_representative': group.get('face_representative') if group else None
-            }
-            faces_data.append(face_data)
-    
-    return jsonify({"faces": faces_data})
+    try:
+        # Create the moment
+        moment_id = event.moments_model.create(data)
+        
+        # Get the created moment
+        created_moment = event.moments_model.get(moment_id)
+        
+        # Add change instruction for frontend
+        response_data = {"success": True, "moment_id": moment_id}
+        response_data = add_change_instruction(response_data, 'MOMENT_CREATED', created_moment)
+        return jsonify(response_data)
+    except Exception as e:
+        return bad_request(e)
 
-@app.route("/api/photos/<image_id>/info", methods=["GET"])
+@app.route("/api/events/<event_id>/moments/<moment_id>", methods=["PUT"])
 @require_auth
-def get_photo_info(image_id):
-    """Get metadata for a photo."""
+def update_moment(event_id, moment_id):
+    """Update a moment if accessible in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    try:
+        # Check if moment exists and is accessible
+        if not event.moments_model.get(moment_id):
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        
+        data = request.json or {}
+        
+        # Update the moment
+        event.moments_model.edit(moment_id, data)
+        
+        # Get the updated moment
+        updated_moment = event.moments_model.get(moment_id)
+        
+        # Add change instruction for frontend
+        response_data = {"success": True}
+        response_data = add_change_instruction(response_data, 'MOMENT_UPDATED', updated_moment)
+        return jsonify(response_data)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/moments/<moment_id>", methods=["DELETE"])
+@require_auth
+def delete_moment(event_id, moment_id):
+    """Delete a moment if accessible in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    try:
+        # Check if moment exists and is accessible
+        if not event.moments_model.get(moment_id):
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        
+        # Delete the moment
+        event.moments_model.delete(moment_id)
+        
+        # Add change instruction for frontend
+        response_data = {"success": True}
+        response_data = add_change_instruction(response_data, 'MOMENT_DELETED', {"moment_id": moment_id})
+        return jsonify(response_data)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/moments/<moment_id>/photos", methods=["GET"])
+@require_auth
+def get_moment_photos(event_id, moment_id):
+    """Get all photos in a specific moment within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    try:
+        # Check if moment exists and is accessible
+        if not event.moments_model.get(moment_id):
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        
+        # Get image IDs for this moment
+        image_ids = event.moments_model.get_images(moment_id)
+        
+        # Get basic image info for each
+        images_data = []
+        for image_id in image_ids:
+            image = event.images_model.get(image_id)
+            if image:
+                images_data.append({
+                    'id': image_id,
+                    'name': image['name'],
+                    'date_taken': image.get('date_taken'),
+                    'width': image.get('width'),
+                    'height': image.get('height'),
+                    'urls': {
+                        'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                        'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                    }
+                })
+        
+        return jsonify({"photos": images_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/moments/<moment_id>/photos-in-period", methods=["GET"])
+@require_auth
+def get_moment_photos_in_period(event_id, moment_id):
+    """Get photos within a moment's time period in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    try:
+        # Check if moment exists and is accessible
+        moment = event.moments_model.get(moment_id)
+        if not moment:
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        
+        # Get photos in the moment's time period
+        start_date = moment.get('start')
+        end_date = moment.get('end')
+        
+        if not start_date or not end_date:
+            return jsonify({"error": "Moment must have start and end dates"}), 400
+        
+        # Get photos in period
+        photos_in_period = event.get_photos_in_period(start_date, end_date)
+        
+        return jsonify({"photos": photos_in_period})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/photos/<image_id>/faces", methods=["GET"])
+@require_auth
+def get_photo_faces(event_id, image_id):
+    """Get all faces detected in a specific photo within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    try:
+        # Check if image exists and is accessible
+        if not event.images_model.get(image_id):
+            return not_found(f"Image {image_id} not found or not accessible")
+        
+        # Get face IDs for this image
+        face_ids = event.images_model.get_faces(image_id)
+        
+        # Build faces data
+        faces_data = []
+        for face_id in face_ids:
+            face = event.faces_model.get(face_id)
+            if face:
+                group = None
+                if face.get('groupID'):
+                    group = event.groups_model.get(face['groupID'])
+                
+                face_data = {
+                    'face_id': face_id,
+                    'face_coords': {
+                        'Left': face['left'],
+                        'Top': face['top'],
+                        'Width': face['width'],
+                        'Height': face['height']
+                    },
+                    'group_id': face.get('groupID'),
+                    'group_label': group['label'] if group else 'Unknown',
+                    'url': f'/api/events/{event_id}/faces/{face_id}.webp'
+                }
+                faces_data.append(face_data)
+        
+        return jsonify({"faces": faces_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/photos/<image_id>/info", methods=["GET"])
+@require_auth
+def get_photo_info(event_id, image_id):
+    """Get basic photo information within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     try:
         image = event.images_model.get(image_id)
         if not image:
             return not_found(f"Image {image_id} not found or not accessible")
-        return jsonify(image)
+        
+        # Return basic image info
+        photo_info = {
+            'id': image_id,
+            'name': image['name'],
+            'date_taken': image.get('date_taken'),
+            'file_size': image.get('file_size'),
+            'width': image.get('width'),
+            'height': image.get('height'),
+            'urls': {
+                'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+            }
+        }
+        
+        return jsonify(photo_info)
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/photos/<image_id>/complete", methods=["GET"])
+@app.route("/api/events/<event_id>/photos/<image_id>/complete", methods=["GET"])
 @require_auth
-def get_photo_complete(image_id):
-    """Get complete photo data including metadata, faces, and URLs."""
+def get_photo_complete(event_id, image_id):
+    """Get complete photo data including metadata, faces, and URLs within the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     try:
         photo_data = build_complete_photo_data(event, image_id)
         if not photo_data:
             return not_found(f"Image {image_id} not found or not accessible")
+        
+        # Update URLs to use event-scoped endpoints
+        photo_data['urls'] = {
+            'display': f'/api/events/{event_id}/display/{image_id}.webp',
+            'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+            'high_quality': f'/api/events/{event_id}/high_quality/{image_id}.webp',
+            'original': f'/api/events/{event_id}/original/{image_id}.webp',
+        }
+        
         return jsonify(photo_data)
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/groups/<group_id>/photos-complete", methods=["GET"])
+@app.route("/api/events/<event_id>/groups/<group_id>/photos-complete", methods=["GET"])
 @require_auth
-def get_group_photos_complete(group_id):
-    """Get complete photo data for all photos in a group."""
+def get_group_photos_complete(event_id, group_id):
+    """Get complete photo data for all photos in a group within the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     group = event.groups_model.get(group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
@@ -619,16 +727,30 @@ def get_group_photos_complete(group_id):
     for image_id in image_ids:
         photo_data = build_complete_photo_data(event, image_id)
         if photo_data:
+            # Update URLs to use event-scoped endpoints
+            photo_data['urls'] = {
+                'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                'high_quality': f'/api/events/{event_id}/high_quality/{image_id}.webp',
+                'original': f'/api/events/{event_id}/original/{image_id}.webp',
+            }
             photos_data.append(photo_data)
     
     return jsonify({"photos": photos_data})
 
-@app.route("/api/moments/<moment_id>/photos-complete", methods=["GET"])
+@app.route("/api/events/<event_id>/moments/<moment_id>/photos-complete", methods=["GET"])
 @require_auth
-def get_moment_photos_complete(moment_id):
-    """Get complete photo data for all photos in a moment."""
+def get_moment_photos_complete(event_id, moment_id):
+    """Get complete photo data for all photos in a moment within the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     try:
+        # Check if moment exists and is accessible
+        if not event.moments_model.get(moment_id):
+            return not_found(f"Moment {moment_id} not found or not accessible")
+        
         # Get image IDs for this moment
         image_ids = event.moments_model.get_images(moment_id)
         
@@ -637,17 +759,27 @@ def get_moment_photos_complete(moment_id):
         for image_id in image_ids:
             photo_data = build_complete_photo_data(event, image_id)
             if photo_data:
+                # Update URLs to use event-scoped endpoints
+                photo_data['urls'] = {
+                    'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                    'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                    'high_quality': f'/api/events/{event_id}/high_quality/{image_id}.webp',
+                    'original': f'/api/events/{event_id}/original/{image_id}.webp',
+                }
                 photos_data.append(photo_data)
         
         return jsonify({"photos": photos_data})
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/download", methods=["POST"])
+@app.route("/api/events/<event_id>/download", methods=["POST"])
 @require_auth
-def download_images():
-    """Download images as a ZIP file."""
+def download_images(event_id):
+    """Download images as a ZIP file from the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     
@@ -678,10 +810,14 @@ def download_images():
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/images.json", methods=["GET"])
-def get_images_json():
-    """Return accessible images metadata (for frontend compatibility)."""
+@app.route("/api/events/<event_id>/images.json", methods=["GET"])
+@require_auth
+def get_images_json(event_id):
+    """Return accessible images metadata for the event (for frontend compatibility)."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     try:
         images = event.images_model.list()
         
@@ -689,17 +825,27 @@ def get_images_json():
         for image in images:
             photo_data = build_complete_photo_data(event, image['imageID'])
             if photo_data:
+                # Update URLs to use event-scoped endpoints
+                photo_data['urls'] = {
+                    'display': f'/api/events/{event_id}/display/{image["imageID"]}.webp',
+                    'thumbnail': f'/api/events/{event_id}/thumb/{image["imageID"]}.webp',
+                    'high_quality': f'/api/events/{event_id}/high_quality/{image["imageID"]}.webp',
+                    'original': f'/api/events/{event_id}/original/{image["imageID"]}.webp',
+                }
                 photos_data.append(photo_data)
                 
         return jsonify({"images": photos_data})
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/profile/permissions", methods=["GET"])
+@app.route("/api/events/<event_id>/profile/permissions", methods=["GET"])
 @require_auth
-def get_profile_permissions():
-    """Get permissions for the current profile."""
+def get_profile_permissions(event_id):
+    """Get permissions for the current profile in the event."""
     event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
     try:
         profile_id = event.get_profile_id()
         if not profile_id:
@@ -724,6 +870,24 @@ def get_profile_permissions():
         return jsonify(profile)
     except Exception as e:
         return bad_request(e)
+
+# Legacy endpoints (for backward compatibility - should be deprecated)
+@app.route("/api/groups", methods=["GET"])
+@require_auth
+def get_groups_legacy():
+    """Legacy endpoint - redirects to event-scoped version."""
+    return get_groups(FIXED_EVENT_ID)
+
+@app.route("/api/photos/<image_id>/complete", methods=["GET"])
+@require_auth
+def get_photo_complete_legacy(image_id):
+    """Legacy endpoint - redirects to event-scoped version."""
+    return get_photo_complete(FIXED_EVENT_ID, image_id)
+
+@app.route("/api/images.json", methods=["GET"])
+def get_images_json_legacy():
+    """Legacy endpoint - redirects to event-scoped version."""
+    return get_images_json(FIXED_EVENT_ID)
 
 @app.route('/api/events/<event_id>/display/<image_id>.webp')
 @require_auth
@@ -765,6 +929,20 @@ def get_thumbnail_image_webp(event_id, image_id):
     if image_id not in event.profile_model.get_accessible_images(profile_id):
         return abort(403)
     file_path = os.path.join(event.thumb_dir, f'{image_id}.webp')
+    if not os.path.exists(file_path):
+        return abort(404)
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
+
+@app.route('/api/events/<event_id>/high_quality/<image_id>.webp')
+@require_auth
+def get_high_quality_image_webp(event_id, image_id):
+    event = Event(event_id)
+    profile_id = g.profile_id
+    if image_id not in event.profile_model.get_accessible_images(profile_id):
+        return abort(403)
+    file_path = os.path.join(event.high_quality_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
     resp = make_response(send_file(file_path, mimetype='image/webp'))

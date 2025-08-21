@@ -33,7 +33,7 @@ export default function App() {
       setLoading(true);
       setLocalLoading(true);
       const response = await groupsAPI.getAll();
-      setGroups(response);
+      setGroups(response.groups);
       setError(null);
     } catch (err) {
       console.error('Error fetching groups:', err);

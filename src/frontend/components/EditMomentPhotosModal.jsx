@@ -228,19 +228,6 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         }
       }
       
-      // Call onSave callback if provided to ensure parent component updates
-      if (onSave) {
-        console.log('Calling onSave callback...');
-        try {
-          onSave();
-          console.log('onSave callback completed successfully');
-        } catch (saveError) {
-          console.error('Error in onSave callback:', saveError);
-        }
-      } else {
-        console.log('No onSave callback provided');
-      }
-      
       // Force a refresh of the data store to ensure all components get the latest data
       // This is especially important for representative photos in carousels and other components
       try {

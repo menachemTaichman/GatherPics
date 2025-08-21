@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
-import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { groupsAPI, handleAPIError, FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
+
+
 
 export default function MergeConflictModal({ 
   isOpen, 
@@ -84,9 +84,9 @@ export default function MergeConflictModal({
       // Use transfer logic instead of merge
       const result = await groupsAPI.transferFaces(
         currentGroup.groupID,
-        allFaceIds,
         conflictingGroup.groupID,
-        null // No new group name since we're transferring to existing group
+        allFaceIds,
+        FIXED_EVENT_ID
       );
       
       // The API service interceptor will automatically handle state updates
@@ -123,7 +123,7 @@ export default function MergeConflictModal({
 
   const getRepresentativeImageSrc = (faceId) => {
     if (!faceId) return null;
-    return `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`;
+    return urlHelpers.getFaceCropUrl(faceId);
   };
 
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';

@@ -7,7 +7,7 @@ import EditMomentPhotosModal from './EditMomentPhotosModal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
-import { momentsAPI, imagesAPI } from '../utils/apiService';
+import { momentsAPI, imagesAPI, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import { getSetting, setSetting } from '../utils/settings';
@@ -848,8 +848,18 @@ export default function Moments() {
                     }}
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                      {moment.representative_photo ? (
-                        <img src={moment.representative_photo} alt="" className="object-cover w-full h-full" loading="lazy" />
+                      {moment.representative_photo && moment.representative_photo.trim() !== '' ? (
+                        <img 
+                          src={moment.representative_photo.startsWith('/api/') 
+                            ? `${API_BASE}${moment.representative_photo}` 
+                            : moment.representative_photo.startsWith('http') 
+                              ? moment.representative_photo 
+                              : urlHelpers.getThumbnailUrl(moment.representative_photo)
+                          } 
+                          alt="" 
+                          className="object-cover w-full h-full" 
+                          loading="lazy" 
+                        />
                       ) : photosLoading ? (
                         <div className="animate-pulse bg-gray-300 w-full h-full rounded"></div>
                       ) : (

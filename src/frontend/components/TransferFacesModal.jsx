@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
-import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { groupsAPI, handleAPIError, FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
 import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore } from '../utils/dataManager';
@@ -26,8 +26,8 @@ export default function TransferFacesModal({
   const [sortBy, setSortBy] = useSetting('transferModal_sortBy', 'name');
   const [sortOrder, setSortOrder] = useSetting('transferModal_sortOrder', 'asc');
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
+
+
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   
   // Custom keyboard handler for TransferFacesModal
@@ -151,9 +151,9 @@ export default function TransferFacesModal({
     try {
       const result = await groupsAPI.transferFaces(
         currentGroup.groupID,
-        selectedFaces,
         selectedGroupId || null,
-        newGroupName.trim() || null
+        selectedFaces,
+        FIXED_EVENT_ID
       );
 
       // Determine if this is a new group
@@ -289,10 +289,10 @@ export default function TransferFacesModal({
                   <div className="flex flex-col items-center space-y-1">
                     {/* Representative Photo - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
-                      <img
-                                        src={group.face_representative
-                  ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`
-                          : PLACEHOLDER_DATA_URL}
+                                             <img
+                         src={group.face_representative
+                   ? urlHelpers.getFaceCropUrl(group.face_representative)
+                           : PLACEHOLDER_DATA_URL}
                         alt={group.label || `Person ${group.groupID}`}
                         className="w-full h-full object-cover"
                         loading="lazy"

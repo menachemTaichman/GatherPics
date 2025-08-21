@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
-import { photosAPI, downloadAPI, handleAPIError } from '../utils/apiService';
+import { photosAPI, downloadAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -64,8 +64,6 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [showRectangles, setShowRectangles] = useState(false);

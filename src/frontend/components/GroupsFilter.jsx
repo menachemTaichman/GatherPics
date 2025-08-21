@@ -1,6 +1,5 @@
-const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
-
 import { useState, useEffect } from 'react';
+import { FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -83,6 +82,7 @@ export default function GroupsFilter({
       <AnimatePresence>
         {hoveredGroup && (
           <motion.div 
+            key={`tooltip-${hoveredGroup}`}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
@@ -104,18 +104,20 @@ export default function GroupsFilter({
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: 'auto' }}
-        exit={{ opacity: 0, height: 0 }}
-        transition={{ 
-          duration: 0.3, 
-          ease: "easeInOut",
-          height: { duration: 0.3, ease: "easeInOut" },
-          opacity: { duration: 0.2, ease: "easeInOut" }
-        }}
-        className="px-5 py-4"
-      >
+      <AnimatePresence>
+        <motion.div
+          key="groups-filter-content"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ 
+            duration: 0.3, 
+            ease: "easeInOut",
+            height: { duration: 0.3, ease: "easeInOut" },
+            opacity: { duration: 0.2, ease: "easeInOut" }
+          }}
+          className="px-5 py-4"
+        >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
             <Filter className="w-4 h-4 text-gray-600" />
@@ -164,6 +166,7 @@ export default function GroupsFilter({
         <div className="flex items-center space-x-3 overflow-x-auto pb-2">
           {/* Main Group (always selected) */}
           <div 
+            key={`main-${group.groupID}`}
             className="flex-shrink-0 relative group"
             onMouseEnter={(event) => handleMouseEnter(group.groupID, event)}
             onMouseLeave={handleMouseLeave}
@@ -172,7 +175,7 @@ export default function GroupsFilter({
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
               {group.face_representative ? (
                 <img
-                  src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`}
+                  src={urlHelpers.getFaceCropUrl(group.face_representative)}
                   alt={getGroupDisplayName(group)}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -207,7 +210,7 @@ export default function GroupsFilter({
                 }`}>
                   {relatedGroup.face_representative ? (
                     <img
-                      src={`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/events/${FIXED_EVENT_ID}/faces/${relatedGroup.face_representative}.webp`}
+                      src={urlHelpers.getFaceCropUrl(relatedGroup.face_representative)}
                       alt={getGroupDisplayName(relatedGroup)}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -243,7 +246,8 @@ export default function GroupsFilter({
             Filtering by {selectedGroups.length} additional group{selectedGroups.length !== 1 ? 's' : ''} ({filterMode.toUpperCase()} mode{onlySelected ? ', only selected groups' : ''})
           </div>
         )}
-      </motion.div>
+        </motion.div>
+      </AnimatePresence>
     </>
   );
 } 
