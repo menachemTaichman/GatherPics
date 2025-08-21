@@ -60,6 +60,14 @@ class Moments(BaseModel):
         if (representative_photo == '' or representative_photo is None) and image_ids:
             self.edit(moment_id, {'representative_photo': image_ids[0]})
 
+        for moment in self.list():
+            if moment['representative_photo'] in image_ids:
+                if len(moment['image_IDs']) > 0:
+                    new_representative_photo = moment['image_IDs'][0]
+                else:
+                    new_representative_photo = ''
+                self.edit(moment['momentID'], {'representative_photo': new_representative_photo})
+
     def remove_image_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
         if not image_ids:  # Guard against empty lists
             return

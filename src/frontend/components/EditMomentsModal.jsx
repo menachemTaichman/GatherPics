@@ -473,7 +473,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         momentPhotosMap={momentPhotosMap}
         onPhotoSelect={(imageID) => {
           if (selectedMoment) {
-            updateMoment(selectedMoment.momentID, { representative_photo: imageID });
+            // Store the representative photo as a full API path, not just the image ID
+            const representativePhotoPath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
+            updateMoment(selectedMoment.momentID, { representative_photo: representativePhotoPath });
           }
         }}
       />

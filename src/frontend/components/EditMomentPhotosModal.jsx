@@ -129,8 +129,6 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       const updatedPhotosResult = await momentsAPI.getPhotos(moment.momentID);
       const updatedPhotos = updatedPhotosResult.photos || [];
       
-
-      
       // Update the momentPhotosMap directly in the parent component
       // This ensures the UI reflects the changes immediately
       if (onRefreshPhotos) {
@@ -138,14 +136,156 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
         onRefreshPhotos(moment.momentID, updatedPhotos);
       }
       
+      // Handle photos that were moved from other moments
+      // We need to remove them from those moments in the local state
+      const photosMovedFromOtherMoments = actualAdditions.filter(id => {
+        const momentInfo = getPhotoMomentInfo(id);
+        return momentInfo && !momentInfo.isCurrentMoment;
+      });
+      
+      // Store moment info for moved photos before making changes
+      // This is needed because getPhotoMomentInfo won't work after momentPhotosMap is updated
+      const movedPhotosMomentInfo = photosMovedFromOtherMoments.map(id => {
+        const momentInfo = getPhotoMomentInfo(id);
+        return { photoId: id, momentInfo };
+      }).filter(item => item.momentInfo && !item.momentInfo.isCurrentMoment);
+      
+      // Update the momentPhotosMap for moments that lost photos
+      for (const { photoId, momentInfo } of movedPhotosMomentInfo) {
+        // Remove this photo from the other moment in the local state
+        if (onRefreshPhotos) {
+          // Get the current photos for that moment and remove the moved photo
+          const otherMomentPhotos = momentPhotosMap[momentInfo.momentId] || [];
+          const updatedOtherMomentPhotos = otherMomentPhotos.filter(p => 
+            (p.id || p.imageID) !== photoId
+          );
+          // Update the other moment's photos
+          onRefreshPhotos(momentInfo.momentId, updatedOtherMomentPhotos);
+        }
+      }
+      
+      // Wait a bit for photos to be updated, then update moment data
+      // This ensures representative photos are calculated with the latest photo data
+      // Increased delay to ensure backend has fully processed representative photo calculation
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      console.log('Updating moment data for representative photos...');
+      
       // Also trigger a moment update to refresh the moment data
       // This ensures the representative photo and other moment data is updated
       // We update the moment directly to avoid triggering change handlers that might conflict
-      const updatedMoment = await momentsAPI.getById(moment.momentID);
+      let updatedMoment = await momentsAPI.getById(moment.momentID);
       if (updatedMoment) {
+        console.log('Updating current moment:', moment.momentID, 'with representative photo:', updatedMoment.representative_photo);
+        console.log('Previous representative photo was:', moment.representative_photo);
+        
+        // If the representative photo hasn't changed, wait a bit more and try again
+        // This handles cases where the backend needs more time to calculate
+        if (updatedMoment.representative_photo === moment.representative_photo) {
+          console.log('Representative photo unchanged, waiting a bit more...');
+          await new Promise(resolve => setTimeout(resolve, 200));
+          updatedMoment = await momentsAPI.getById(moment.momentID);
+          if (updatedMoment) {
+            console.log('After retry - representative photo:', updatedMoment.representative_photo);
+          }
+        }
+        
         // Update the moment data directly without triggering change handlers
         // This ensures the representative photo and other moment data is updated
         updateMoment(moment.momentID, updatedMoment);
+      } else {
+        console.warn('Could not get updated moment data for:', moment.momentID);
+      }
+      
+      // Also update the moment data for moments that lost photos
+      // This ensures the representative photo is recalculated
+      for (const { photoId, momentInfo } of movedPhotosMomentInfo) {
+        try {
+          let otherMoment = await momentsAPI.getById(momentInfo.momentId);
+          if (otherMoment) {
+            console.log('Updating moment that lost photos:', momentInfo.momentId, 'with representative photo:', otherMoment.representative_photo);
+            // Get the current moment data to compare
+            const currentMoment = useDataStore.getState().moments.find(m => m.momentID === momentInfo.momentId);
+            if (currentMoment) {
+              console.log('Previous representative photo for', momentInfo.momentId, 'was:', currentMoment.representative_photo);
+              
+              // If the representative photo hasn't changed, wait a bit more and try again
+              if (otherMoment.representative_photo === currentMoment.representative_photo) {
+                console.log('Representative photo unchanged for', momentInfo.momentId, ', waiting a bit more...');
+                await new Promise(resolve => setTimeout(resolve, 200));
+                otherMoment = await momentsAPI.getById(momentInfo.momentId);
+                if (otherMoment) {
+                  console.log('After retry - representative photo for', momentInfo.momentId, ':', otherMoment.representative_photo);
+                }
+              }
+            }
+            updateMoment(momentInfo.momentId, otherMoment);
+          } else {
+            console.warn('Could not get updated moment data for:', momentInfo.momentId);
+          }
+        } catch (error) {
+          console.error(`Error updating moment ${momentInfo.momentId}:`, error);
+        }
+      }
+      
+      // Call onSave callback if provided to ensure parent component updates
+      if (onSave) {
+        console.log('Calling onSave callback...');
+        try {
+          onSave();
+          console.log('onSave callback completed successfully');
+        } catch (saveError) {
+          console.error('Error in onSave callback:', saveError);
+        }
+      } else {
+        console.log('No onSave callback provided');
+      }
+      
+      // Force a refresh of the data store to ensure all components get the latest data
+      // This is especially important for representative photos in carousels and other components
+      try {
+        // Trigger a small delay to ensure all updates are processed
+        await new Promise(resolve => setTimeout(resolve, 50));
+        console.log('Forcing data store refresh...');
+        
+        // Also try to refresh the moments data to ensure representative photos are up to date
+        // This is a fallback in case the individual moment updates didn't work
+        try {
+          const allMoments = await momentsAPI.getAll();
+          if (allMoments && allMoments.moments) {
+            console.log('Refreshing all moments data...');
+            // Update the data store with all moments to ensure consistency
+            allMoments.moments.forEach(momentData => {
+              updateMoment(momentData.momentID, momentData);
+            });
+          }
+        } catch (refreshError) {
+          console.warn('Could not refresh all moments:', refreshError);
+        }
+        
+        // Also try to force a re-render by updating a non-critical field
+        // This can help trigger re-renders in components that might be stuck
+        try {
+          const currentMoments = useDataStore.getState().moments;
+          if (currentMoments.length > 0) {
+            // Update the first moment with a timestamp to force re-renders
+            const firstMoment = currentMoments[0];
+            updateMoment(firstMoment.momentID, { 
+              ...firstMoment, 
+              _last_updated: new Date().toISOString() 
+            });
+          }
+        } catch (forceUpdateError) {
+          console.warn('Could not force update:', forceUpdateError);
+        }
+        
+        console.log('Data store refresh completed. Summary of updates:');
+        console.log('- Current moment updated:', moment.momentID);
+        console.log('- Moments that lost photos:', movedPhotosMomentInfo.map(item => item.momentInfo.momentId));
+        console.log('- All moments refreshed from backend');
+        
+      } catch (error) {
+        console.error('Error during data store refresh:', error);
       }
       
       handleClose();
@@ -486,13 +626,23 @@ function EditPhotosModal({ moment, momentPhotosMap, onRefreshPhotos, onSave, mom
       return `No changes. Total: ${currentCount}`;
     }
     
+    // Count how many additions are "shifted" from other moments
+    const shiftedCount = actualAdditions.filter(id => {
+      const momentInfo = getPhotoMomentInfo(id);
+      return momentInfo && !momentInfo.isCurrentMoment;
+    }).length;
+    
     let caption = "";
     if (removeCount > 0) {
       caption += `Remove ${removeCount}`;
     }
     if (addCount > 0) {
       if (caption) caption += ", ";
-      caption += `add ${addCount}`;
+      if (shiftedCount > 0) {
+        caption += `add ${addCount} (inc. ${shiftedCount} shifted)`;
+      } else {
+        caption += `add ${addCount}`;
+      }
     }
     caption += `. Total: ${finalCount}`;
     
