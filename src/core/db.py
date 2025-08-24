@@ -47,6 +47,7 @@ TABLES = {
     'profiles': '''
         profileID TEXT PRIMARY KEY,
         label TEXT,
+        is_manager BOOLEAN,
         all_images BOOLEAN,
         can_edit_groups BOOLEAN,
         can_upload_photos BOOLEAN,
@@ -60,6 +61,61 @@ TABLES = {
         FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE CASCADE,
         PRIMARY KEY (profileID, imageID)
     '''
+}
+
+VIEWS = {
+    'accessible_images_helper': '''
+        SELECT images.imageID
+        FROM images left join (profile_images inner join profiles on profile_images.profileID = profiles.profileID) on images.imageID = profile_images.imageID
+        WHERE profiles.profileID = get_profile_id()
+        AND ((profiles.all_images = 1 and profile_images.accessible is NULL)
+        OR (profiles.all_images = 0 and profile_images.accessible = 1))
+    ''',
+    'accessible_groups': '''
+        SELECT groups.* FROM groups
+        WHERE NOT EXISTS (
+            SELECT 1 FROM faces WHERE faces.groupID = groups.groupID
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM faces 
+            INNER JOIN accessible_images_helper ON faces.imageID = accessible_images_helper.imageID
+            WHERE faces.groupID = groups.groupID
+        )
+    ''',
+    'accessible_faces': '''
+        SELECT faces.*
+        FROM faces 
+        WHERE EXISTS (
+            SELECT 1 FROM accessible_images_helper WHERE accessible_images_helper.imageID = faces.imageID
+        )
+        OR EXISTS (
+            SELECT 1 FROM accessible_groups 
+            WHERE accessible_groups.groupID = faces.groupID 
+            AND accessible_groups.face_representative = faces.faceID
+        )
+    ''',
+    'accessible_moments': '''
+        SELECT moments.* FROM moments
+        WHERE NOT EXISTS (
+            SELECT 1 FROM images WHERE images.momentID = moments.momentID
+        )
+        OR EXISTS (
+            SELECT 1 FROM accessible_images_helper 
+            INNER JOIN images ON accessible_images_helper.imageID = images.imageID
+            WHERE images.momentID = moments.momentID
+        )
+    ''',
+    'accessible_images': '''
+        SELECT images.*
+        FROM images 
+        WHERE EXISTS (
+            SELECT 1 FROM accessible_images_helper WHERE accessible_images_helper.imageID = images.imageID
+        )
+        OR EXISTS (
+            SELECT 1 FROM accessible_moments WHERE accessible_moments.representative_photo = images.imageID
+        )
+    ''',
 }
 
 class AppDB:
