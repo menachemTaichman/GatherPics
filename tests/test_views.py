@@ -105,7 +105,7 @@ def test_performance(db):
         return False
 
 def test_data_consistency(db):
-    """Test that the views return consistent data."""
+    """Test that the views return consistent data compared to actual tables."""
     print("\n=== Testing Data Consistency ===")
     
     # Set a test profile ID
@@ -114,46 +114,98 @@ def test_data_consistency(db):
     
     try:
         with db.get_connection() as conn:
-            # Test that accessible_faces only contains faces from accessible images
-            print("Testing face accessibility consistency...")
+            # Since we're in a profile with all_images = 1 and no restrictions,
+            # all images should be accessible except those explicitly excluded in profile_images
+            
+            print("Testing accessible_images_helper consistency...")
             cursor = conn.execute("""
-                SELECT COUNT(*) FROM accessible_faces f
-                WHERE NOT EXISTS (
+                SELECT COUNT(*) FROM accessible_images_helper
+            """)
+            accessible_count = cursor.fetchone()[0]
+            
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM images
+            """)
+            total_images = cursor.fetchone()[0]
+            
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM images i
+                INNER JOIN profile_images pi ON i.imageID = pi.imageID
+                WHERE pi.profileID = get_profile_id() AND pi.accessible = 0
+            """)
+            explicitly_excluded = cursor.fetchone()[0]
+            
+            expected_accessible = total_images - explicitly_excluded
+            print(f"  Total images: {total_images}")
+            print(f"  Explicitly excluded: {explicitly_excluded}")
+            print(f"  Expected accessible: {expected_accessible}")
+            print(f"  Actual accessible: {accessible_count}")
+            
+            if accessible_count == expected_accessible:
+                print("✓ accessible_images_helper count matches expected")
+            else:
+                print(f"✗ accessible_images_helper count mismatch: expected {expected_accessible}, got {accessible_count}")
+            
+            print("\nTesting accessible_faces consistency...")
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM accessible_faces
+            """)
+            accessible_faces = cursor.fetchone()[0]
+            
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM faces f
+                WHERE EXISTS (
                     SELECT 1 FROM accessible_images_helper aih 
                     WHERE aih.imageID = f.imageID
                 )
-                AND NOT EXISTS (
-                    SELECT 1 FROM accessible_groups ag 
-                    WHERE ag.groupID = f.groupID 
-                    AND ag.face_representative = f.faceID
+                OR EXISTS (
+                    SELECT 1 FROM groups g
+                    WHERE g.groupID = f.groupID 
+                    AND g.face_representative = f.faceID
+                    AND EXISTS (
+                        SELECT 1 FROM accessible_images_helper aih2
+                        WHERE aih2.imageID IN (
+                            SELECT imageID FROM faces WHERE groupID = g.groupID
+                        )
+                    )
                 )
             """)
-            inconsistent_faces = cursor.fetchone()[0]
+            expected_faces = cursor.fetchone()[0]
             
-            if inconsistent_faces == 0:
-                print("✓ All accessible faces are properly accessible")
+            print(f"  Expected accessible faces: {expected_faces}")
+            print(f"  Actual accessible faces: {accessible_faces}")
+            
+            if accessible_faces == expected_faces:
+                print("✓ accessible_faces count matches expected")
             else:
-                print(f"✗ Found {inconsistent_faces} faces that shouldn't be accessible")
+                print(f"✗ accessible_faces count mismatch: expected {expected_faces}, got {accessible_faces}")
             
-            # Test that accessible_images only contains accessible images
-            print("Testing image accessibility consistency...")
+            print("\nTesting accessible_groups consistency...")
             cursor = conn.execute("""
-                SELECT COUNT(*) FROM accessible_images i
+                SELECT COUNT(*) FROM accessible_groups
+            """)
+            accessible_groups = cursor.fetchone()[0]
+            
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM groups g
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM accessible_images_helper aih 
-                    WHERE aih.imageID = i.imageID
+                    SELECT 1 FROM faces WHERE faces.groupID = g.groupID
                 )
-                AND NOT EXISTS (
-                    SELECT 1 FROM accessible_moments am 
-                    WHERE am.representative_photo = i.imageID
+                OR EXISTS (
+                    SELECT 1 FROM faces f
+                    INNER JOIN accessible_images_helper aih ON f.imageID = aih.imageID
+                    WHERE f.groupID = g.groupID
                 )
             """)
-            inconsistent_images = cursor.fetchone()[0]
+            expected_groups = cursor.fetchone()[0]
             
-            if inconsistent_images == 0:
-                print("✓ All accessible images are properly accessible")
+            print(f"  Expected accessible groups: {expected_groups}")
+            print(f"  Actual accessible groups: {accessible_groups}")
+            
+            if accessible_groups == expected_groups:
+                print("✓ accessible_groups count matches expected")
             else:
-                print(f"✗ Found {inconsistent_images} images that shouldn't be accessible")
+                print(f"✗ accessible_groups count mismatch: expected {expected_groups}, got {accessible_groups}")
                 
         return True
         
@@ -161,7 +213,7 @@ def test_data_consistency(db):
         print(f"✗ Error testing data consistency: {e}")
         return False
 
-def test_custom_queries(db):
+def test_custom_queries(db, query = None):
     """Test custom queries to find the right view logic."""
     print("\n=== Testing Custom Queries ===")
     
@@ -173,40 +225,17 @@ def test_custom_queries(db):
         with db.get_connection() as conn:
             print("Testing different view logic approaches...")
 
-            cursor = conn.execute("""
-                SELECT i.imageID
-                FROM images i
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM profiles p
-                    LEFT JOIN profile_images pi
-                        ON pi.profileID = p.profileID AND pi.imageID = i.imageID
-                    WHERE p.profileID = get_profile_id()
-                    AND (
-                        (p.all_images = 1 AND pi.profileID IS NULL)
-                    OR (p.all_images = 0 AND pi.accessible = 1)
-                    )
-                );
-            """)
+            if query is None:
+                cursor = conn.execute("""
+                    SELECT *
+                    FROM profiles
+                """)
+            else:
+                cursor = conn.execute(query)
             result = cursor.fetchall()
-            print(f"  Image accessible helper: {result}")
-
-            cursor = conn.execute("""
-                SELECT images.imageID
-                FROM images
-                LEFT JOIN profile_images
-                    ON images.imageID = profile_images.imageID
-                LEFT JOIN profiles
-                    ON profiles.profileID = profile_images.profileID
-                    AND profiles.profileID = get_profile_id()
-                    AND (
-                        (profiles.all_images = 1 AND profile_images.accessible IS NULL)
-                        OR (profiles.all_images = 0 AND profile_images.accessible = 1)
-                )
-                WHERE profiles.profileID IS NOT NULL;
-            """)
-            result = cursor.fetchall()
-            print(f"  Image accessible helper: {result}")
+            # print the result as a table
+            print(f"  {cursor.description}")
+            print(f"  {result}")
 
         return True
         
@@ -247,6 +276,108 @@ def test_profile_function(db):
         print(f"✗ Error testing profile function: {e}")
         return False
 
+def recreate_views_and_indexes(db):
+    """Drop and recreate all database views and indexes using the VIEWS and INDEXES from db.py."""
+    print("\n=== Recreating Database Views and Indexes ===")
+    
+    try:
+        with db.get_connection() as conn:
+            # Import the VIEWS and INDEXES from db.py
+            from src.core.db import VIEWS, INDEXES
+            
+            # Drop existing views if they exist
+            views_to_drop = list(VIEWS.keys())
+            
+            print("Dropping existing views...")
+            for view_name in views_to_drop:
+                try:
+                    conn.execute(f"DROP VIEW IF EXISTS {view_name}")
+                    print(f"✓ Dropped view: {view_name}")
+                except Exception as e:
+                    print(f"  Note: Could not drop {view_name}: {e}")
+            
+            # Drop existing indexes if they exist
+            print("\nDropping existing indexes...")
+            for index_sql in INDEXES:
+                # Extract index name from CREATE INDEX statement
+                if index_sql.startswith('CREATE INDEX IF NOT EXISTS'):
+                    index_name = index_sql.split('CREATE INDEX IF NOT EXISTS ')[1].split(' ')[0]
+                    try:
+                        conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+                        print(f"✓ Dropped index: {index_name}")
+                    except Exception as e:
+                        print(f"  Note: Could not drop {index_name}: {e}")
+            
+            # Recreate the views using the VIEWS dictionary
+            print("\nRecreating views...")
+            
+            for view_name, view_sql in VIEWS.items():
+                try:
+                    # Create the view with CREATE VIEW statement
+                    create_sql = f"CREATE VIEW {view_name} AS {view_sql}"
+                    conn.execute(create_sql)
+                    print(f"✓ Created {view_name} view")
+                except Exception as e:
+                    print(f"✗ Error creating {view_name} view: {e}")
+                    return False
+            
+            # Recreate the indexes using the INDEXES list
+            print("\nRecreating indexes...")
+            
+            for index_sql in INDEXES:
+                try:
+                    conn.execute(index_sql)
+                    # Extract index name for logging
+                    if index_sql.startswith('CREATE INDEX IF NOT EXISTS'):
+                        index_name = index_sql.split('CREATE INDEX IF NOT EXISTS ')[1].split(' ')[0]
+                        print(f"✓ Created index: {index_name}")
+                    else:
+                        print(f"✓ Created index")
+                except Exception as e:
+                    print(f"✗ Error creating index: {e}")
+                    return False
+            
+            # Commit the changes
+            conn.commit()
+            print(f"\n✓ All {len(VIEWS)} views and {len(INDEXES)} indexes recreated successfully")
+            
+        return True
+        
+    except Exception as e:
+        print(f"✗ Error recreating views and indexes: {e}")
+        return False
+
+def update_database_structure(db):
+    """Update the database structure according to the new requirements."""
+    print("\n=== Updating Database Structure ===")
+    
+    try:
+        with db.get_connection() as conn:
+            # add all_albums to the profiles table
+            conn.execute("ALTER TABLE profiles ADD COLUMN all_albums BOOLEAN")
+            print("✓ Added all_albums to profiles table")
+            # set all_albums to TRUE for all profiles
+            conn.execute("UPDATE profiles SET all_albums = 1")
+            print("✓ Set all_albums to TRUE for all profiles")
+            # add profile_albums table
+            conn.execute("""
+                CREATE TABLE profile_albums (
+                    profileID TEXT,
+                    albumID TEXT,
+                    FOREIGN KEY (profileID) REFERENCES profiles(profileID) ON DELETE CASCADE,
+                    FOREIGN KEY (albumID) REFERENCES albums(albumID) ON DELETE CASCADE,
+                    PRIMARY KEY (profileID, albumID)
+                )
+            """)   
+            print("✓ Created profile_albums table")
+            conn.commit()
+        
+        return True
+        
+    except Exception as e:
+        print(f"✗ Error updating database structure: {e}")
+        return False
+
 def main():
     """Run all tests."""
     print("Starting Database Views and Performance Tests\n")
@@ -260,17 +391,12 @@ def main():
         return
     
     db = AppDB(db_path)
-    
+
     # Test 1: Test profile function
     if not test_profile_function(db):
         print("Profile function test failed.")
         return
 
-    # Test 2: Test custom queries to find right view logic
-    if not test_custom_queries(db):
-        print("Custom queries test failed.")
-        return
-    
     # Test 3: Test views functionality
     if not test_views_functionality(db):
         print("Views functionality test failed.")

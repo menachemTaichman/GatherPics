@@ -3,16 +3,16 @@
  */
 
 /**
- * Sort photos by various criteria
- * @param {Array} photos - Array of photo objects
+ * Sort images by various criteria
+ * @param {Array} images - Array of image objects
  * @param {string} sortBy - 'date' or 'name'
  * @param {string} sortOrder - 'asc' or 'desc'
- * @returns {Array} Sorted photos array
+ * @returns {Array} Sorted images array
  */
-export const sortPhotos = (photos, sortBy = 'date', sortOrder = 'asc') => {
-  if (!photos || !photos.length) return [];
+export const sortImages = (images, sortBy = 'date', sortOrder = 'asc') => {
+  if (!images || !images.length) return [];
   
-  return [...photos].sort((a, b) => {
+  return [...images].sort((a, b) => {
     let comparison = 0;
     
     if (sortBy === 'date') {
@@ -28,15 +28,15 @@ export const sortPhotos = (photos, sortBy = 'date', sortOrder = 'asc') => {
 };
 
 /**
- * Sort photos with complex date handling (prioritizes photos with dates)
- * @param {Array} photos - Array of photo objects
+ * Sort images with complex date handling (prioritizes images with dates)
+ * @param {Array} images - Array of image objects
  * @param {string} sortOrder - 'asc' or 'desc'
- * @returns {Array} Sorted photos array
+ * @returns {Array} Sorted images array
  */
-export const sortPhotosWithDatePriority = (photos, sortOrder = 'asc') => {
-  if (!photos || !photos.length) return [];
+export const sortImagesWithDatePriority = (images, sortOrder = 'asc') => {
+  if (!images || !images.length) return [];
   
-  return [...photos].sort((a, b) => {
+  return [...images].sort((a, b) => {
     const hasDateA = !!a.date_taken;
     const hasDateB = !!b.date_taken;
     

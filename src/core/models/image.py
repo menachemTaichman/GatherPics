@@ -27,5 +27,7 @@ class Images(BaseModel):
         return []
     
     def get_faces(self, image_id: str) -> List[str]:
-        results = self.db.execute_query('SELECT faceID FROM faces WHERE imageID=?', (image_id,))
+        # Use accessible_faces view for read operations
+        accessible_table = self.db._get_accessible_table_name('faces')
+        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE imageID=?', (image_id,))
         return [row[0] for row in results]

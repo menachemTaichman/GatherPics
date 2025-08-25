@@ -26,67 +26,67 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
-import PhotoViewer from './PhotoViewer';
+import ImageViewer from './ImageViewer';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
 import GroupsFilter from './GroupsFilter';
-import { sortPhotos, toggleSortOrder } from '../utils/sorting';
+import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
-import { clearTransferredPhotosFromCache } from '../utils/selection';
+import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 
-export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
+export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [group, setGroup] = useState(null);
   const skipNextFetch = useRef(false);
-  const [viewMode, setViewMode] = useSetting('faceDetail_viewMode', 'grid');
+  const [viewMode, setViewMode] = useSetting('groupDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
-  const [lastSelectedPhoto, setLastSelectedPhoto] = useState(null);
+  const [selectedImages, setSelectedImages] = useState(new Set());
+  const [lastSelectedImage, setLastSelectedImage] = useState(null);
   
-  // Load selected photos from cache when group changes
+  // Load selected images from cache when group changes
   useEffect(() => {
     if (group?.groupID) {
-      const cachedSelection = getSetting(`faceDetail_selection_${group.groupID}`);
+      const cachedSelection = getSetting(`groupDetail_selection_${group.groupID}`);
       if (cachedSelection && Array.isArray(cachedSelection)) {
-        setSelectedPhotos(new Set(cachedSelection));
+        setSelectedImages(new Set(cachedSelection));
       } else {
-        setSelectedPhotos(new Set());
+        setSelectedImages(new Set());
       }
-      setLastSelectedPhoto(null);
+      setLastSelectedImage(null);
     }
   }, [group?.groupID]);
   
   // Save selection to cache whenever it changes
   useEffect(() => {
-    if (group?.groupID && selectedPhotos.size > 0) {
-      setSetting(`faceDetail_selection_${group.groupID}`, Array.from(selectedPhotos));
-    } else if (group?.groupID && selectedPhotos.size === 0) {
+    if (group?.groupID && selectedImages.size > 0) {
+      setSetting(`groupDetail_selection_${group.groupID}`, Array.from(selectedImages));
+    } else if (group?.groupID && selectedImages.size === 0) {
       // Clear cache when selection is empty
       try {
-        localStorage.removeItem(`face_gallery_settings_faceDetail_selection_${group.groupID}`);
+        localStorage.removeItem(`face_gallery_settings_groupDetail_selection_${group.groupID}`);
       } catch (error) {
         console.warn('Failed to clear selection cache:', error);
       }
     }
-  }, [selectedPhotos, group?.groupID]);
-  const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0 });
-  const [photoClasses, setPhotoClasses] = useState({});
-  const [sortedPhotos, setSortedPhotos] = useState([]);
-  const [sortBy, setSortBy] = useSetting('faceDetail_sortBy', 'date');
-  const [sortOrder, setSortOrder] = useSetting('faceDetail_sortOrder', 'asc');
+  }, [selectedImages, group?.groupID]);
+  const [imageViewer, setImageViewer] = useState({ show: false, image: null, index: 0 });
+  const [imageClasses, setImageClasses] = useState({});
+  const [sortedImages, setSortedImages] = useState([]);
+  const [sortBy, setSortBy] = useSetting('groupDetail_sortBy', 'date');
+  const [sortOrder, setSortOrder] = useSetting('groupDetail_sortOrder', 'asc');
   const [loading, setLoading] = useState(false);
-  const [photoSize, setPhotoSize] = useSetting('faceDetail_photoSize', 1.0);
+  const [imageSize, setImageSize] = useSetting('groupDetail_imageSize', 1.0);
   const [showCrops, setShowCrops] = useState(false);
   const [imageCrops, setImageCrops] = useState({});
-  const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
+  const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
@@ -97,7 +97,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   const [filterMode, setFilterMode] = useState('and');
   const [onlySelected, setOnlySelected] = useState(false);
   const [relatedGroups, setRelatedGroups] = useState([]);
-  const [filterVisible, setFilterVisible] = useSetting('faceDetail_filterVisible', true);
+  const [filterVisible, setFilterVisible] = useSetting('groupDetail_filterVisible', true);
   const [filterLoading, setFilterLoading] = useState(false);
   
   // No complex flag checking needed - the data store handles everything
@@ -266,12 +266,12 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   }, [group]);
 
-  // Re-sort photos when sort settings change
+  // Re-sort images when sort settings change
   useEffect(() => {
-    setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, sortBy, sortOrder));
+            setSortedImages(prevImages => sortImages(prevImages, sortBy, sortOrder));
   }, [sortBy, sortOrder]);
 
-  // Subscribe to global groups state changes to keep local photos in sync
+  // Subscribe to global groups state changes to keep local images in sync
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
@@ -284,53 +284,53 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           if (transferResult.old_group_deleted) {
             // No-op here; handled in handleTransferComplete
           } else {
-          // If this is the source group, remove photos that should be removed
-          if (transferResult.old_group_id === group?.groupID && transferResult.photos_to_remove_from_source) {
-            setSortedPhotos(prevPhotos => {
-              const removedSet = new Set(transferResult.photos_to_remove_from_source);
-              const updatedPhotos = prevPhotos.filter(photo => !removedSet.has(photo.id));
+          // If this is the source group, remove images that should be removed
+          if (transferResult.old_group_id === group?.groupID && transferResult.images_to_remove_from_source) {
+            setSortedImages(prevImages => {
+              const removedSet = new Set(transferResult.images_to_remove_from_source);
+              const updatedImages = prevImages.filter(image => !removedSet.has(image.id));
 
-              // If viewer is open and current photo was removed, move to the next logical photo
-              if (photoViewer.show && removedSet.has(photoViewer.photo)) {
-                if (updatedPhotos.length === 0) {
-                  setPhotoViewer({ show: false, photo: null, index: 0 });
+              // If viewer is open and current image was removed, move to the next logical image
+              if (imageViewer.show && removedSet.has(imageViewer.image)) {
+                if (updatedImages.length === 0) {
+                  setImageViewer({ show: false, image: null, index: 0 });
                 } else {
-                  const newIndex = Math.min(photoViewer.index, updatedPhotos.length - 1);
-                  const newPhotoId = updatedPhotos[newIndex].id;
-                  setPhotoViewer({ show: true, photo: newPhotoId, index: newIndex });
+                  const newIndex = Math.min(imageViewer.index, updatedImages.length - 1);
+                  const newImageId = updatedImages[newIndex].id;
+                  setImageViewer({ show: true, image: newImageId, index: newIndex });
                 }
               }
 
-              return updatedPhotos;
+              return updatedImages;
             });
-            // Update crop data by removing crops for transferred photos
+            // Update crop data by removing crops for transferred images
             setImageCrops(prevCrops => {
               const newCrops = { ...prevCrops };
-              transferResult.photos_to_remove_from_source.forEach(photoId => {
-                delete newCrops[photoId];
-              });
+                           transferResult.images_to_remove_from_source.forEach(imageId => {
+               delete newCrops[imageId];
+             });
               return newCrops;
             });
           }
-          // If this is the target group, add photos that should be added
-          else if (transferResult.target_group_id === group?.groupID && transferResult.photos_to_add_to_target) {
-            // Use the full photo data from the transfer result
-            if (transferResult.transferred_photos_data && transferResult.transferred_photos_data.length > 0) {
-              setSortedPhotos(prevPhotos => {
-                // Create a map of existing photo IDs for efficient lookup
-                const existingPhotoIds = new Set(prevPhotos.map(photo => photo.id));
+          // If this is the target group, add images that should be added
+          else if (transferResult.target_group_id === group?.groupID && transferResult.images_to_add_to_target) {
+            // Use the full image data from the transfer result
+            if (transferResult.transferred_images_data && transferResult.transferred_images_data.length > 0) {
+              setSortedImages(prevImages => {
+                // Create a map of existing image IDs for efficient lookup
+                const existingImageIds = new Set(prevImages.map(image => image.id));
                 
-                // Filter out photos that already exist in the current array
-                const newPhotos = transferResult.transferred_photos_data.filter(
-                  photo => !existingPhotoIds.has(photo.id) && transferResult.photos_to_add_to_target.includes(photo.id)
-                );
+                              // Filter out images that already exist in the current array
+              const newImages = transferResult.transferred_images_data.filter(
+                image => !existingImageIds.has(image.id) && transferResult.images_to_add_to_target.includes(image.id)
+              );
                 
-                            // Add only new photos and sort them
-            const updatedPhotos = [...prevPhotos, ...newPhotos];
-            return sortPhotos(updatedPhotos, sortBy, sortOrder);
+                            // Add only new images and sort them
+            const updatedImages = [...prevImages, ...newImages];
+            return sortImages(updatedImages, sortBy, sortOrder);
           });
         }
-        // Update crop data by adding crops for new photos if available in transfer result
+        // Update crop data by adding crops for new images if available in transfer result
         if (transferResult.crop_mapping) {
           setImageCrops(prevCrops => ({
             ...prevCrops,
@@ -361,7 +361,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate, photoViewer]); // include photoViewer for accurate updates
+  }, [group?.groupID, sortBy, sortOrder, navigate, imageViewer]); // include imageViewer for accurate updates
 
   // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
@@ -385,7 +385,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     }
   };
 
-  const fetchFilteredPhotos = async () => {
+  const fetchFilteredImages = async () => {
     if (!group?.groupID) {
       return;
     }
@@ -393,45 +393,45 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     try {
       setFilterLoading(true);
       
-      // For now, use the basic photos endpoint since the filtered endpoint expects different parameters
+             // For now, use the basic images endpoint since the filtered endpoint expects different parameters
       // TODO: Update backend to support the filtering parameters we need
-      const response = await groupsAPI.getPhotosComplete(group.groupID);
+      const response = await groupsAPI.getImagesComplete(group.groupID);
       
-      if (response && response.photos) {
-        let filteredPhotos = response.photos;
+      if (response && response.images) {
+        let filteredImages = response.images;
         
         // Apply frontend filtering logic
         if (filterGroups.length > 0) {
           if (filterMode === 'and') {
             // All filter groups must be present
-            filteredPhotos = filteredPhotos.filter(photo => {
-              const photoGroupIds = new Set(photo.faces?.map(f => f.group_id).filter(Boolean) || []);
-              return filterGroups.every(groupId => photoGroupIds.has(groupId));
+            filteredImages = filteredImages.filter(image => {
+              const imageGroupIds = new Set(image.faces?.map(f => f.group_id).filter(Boolean) || []);
+              return filterGroups.every(groupId => imageGroupIds.has(groupId));
             });
           } else {
             // Any filter group can be present
-            filteredPhotos = filteredPhotos.filter(photo => {
-              const photoGroupIds = new Set(photo.faces?.map(f => f.group_id).filter(Boolean) || []);
-              return filterGroups.some(groupId => photoGroupIds.has(groupId));
+            filteredImages = filteredImages.filter(image => {
+              const imageGroupIds = new Set(image.faces?.map(f => f.group_id).filter(Boolean) || []);
+              return filterGroups.some(groupId => imageGroupIds.has(groupId));
             });
           }
         }
         
         // Apply onlySelected filter
         if (onlySelected) {
-          filteredPhotos = filteredPhotos.filter(photo => 
-            selectedPhotos.has(photo.id)
+          filteredImages = filteredImages.filter(image => 
+            selectedImages.has(image.id)
           );
         }
         
-        // Sort the filtered photos
-        const sortedFilteredPhotos = sortPhotos(filteredPhotos, sortBy, sortOrder);
-        setSortedPhotos(sortedFilteredPhotos);
+        // Sort the filtered images
+        const sortedFilteredImages = sortImages(filteredImages, sortBy, sortOrder);
+        setSortedImages(sortedFilteredImages);
         
-        // Extract related groups from the photos
+        // Extract related groups from the images
         const relatedGroupIds = new Set();
-        filteredPhotos.forEach(photo => {
-          photo.faces?.forEach(face => {
+        filteredImages.forEach(image => {
+          image.faces?.forEach(face => {
             if (face.group_id && face.group_id !== group.groupID) {
               relatedGroupIds.add(face.group_id);
             }
@@ -446,26 +446,26 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       }
 
     } catch (error) {
-      console.error('Error fetching filtered photos:', error);
-      // On error, fall back to basic photos
-      await fetchBasicPhotos();
+      console.error('Error fetching filtered images:', error);
+      // On error, fall back to basic images
+      await fetchBasicImages();
       setRelatedGroups([]);
     } finally {
       setFilterLoading(false);
     }
   };
 
-  const fetchBasicPhotos = async () => {
+  const fetchBasicImages = async () => {
     if (!group?.groupID) return;
     
     try {
-      const response = await groupsAPI.getPhotosComplete(group.groupID);
-      if (response && response.photos) {
-        const sortedPhotos = sortPhotos(response.photos, sortBy, sortOrder);
-        setSortedPhotos(sortedPhotos);
+      const response = await groupsAPI.getImagesComplete(group.groupID);
+      if (response && response.images) {
+        const sortedImages = sortImages(response.images, sortBy, sortOrder);
+        setSortedImages(sortedImages);
       }
     } catch (error) {
-      console.error('Error fetching basic photos:', error);
+      console.error('Error fetching basic images:', error);
     }
   };
 
@@ -504,19 +504,19 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     setFilterVisible(!filterVisible);
   };
 
-  // Centralized effect for fetching all photo and group data
+  // Centralized effect for fetching all image and group data
   useEffect(() => {
     if (!group?.groupID) return;
 
-    fetchFilteredPhotos();
+    fetchFilteredImages();
 
   }, [filterGroups, filterMode, onlySelected, group?.groupID]); // Re-run whenever filters or the main group changes
 
-  const getSortedPhotos = () => {
-    return sortedPhotos;
+  const getSortedImages = () => {
+    return sortedImages;
   };
 
-  const handleImageLoad = (photoId, e) => {
+  const handleImageLoad = (imageId, e) => {
     const img = e.target;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
     
@@ -527,17 +527,17 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       imageClass = 'portrait';
     }
     
-    setPhotoClasses(prev => ({
+    setImageClasses(prev => ({
       ...prev,
-      [photoId]: imageClass
+      [imageId]: imageClass
     }));
   };
 
   const handleToggleSortOrder = () => {
     const newOrder = toggleSortOrder(sortOrder);
     setSortOrder(newOrder);
-    // Re-sort current photos with new order
-    setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, sortBy, newOrder));
+    // Re-sort current images with new order
+            setSortedImages(prevImages => sortImages(prevImages, sortBy, newOrder));
   };
 
   const formatDate = (dateString) => {
@@ -558,15 +558,15 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
   const handleAddSelectedToBucket = async () => {
     // TODO: Implement add selected to bucket functionality
-    alert(`Add ${selectedPhotos.size} selected photos to bucket functionality will be implemented later`);
+            alert(`Add ${selectedImages.size} selected images to bucket functionality will be implemented later`);
   };
 
   const getSelectedFaceIds = () => {
     const selectedFaceIds = new Set();
-    for (const photoId of selectedPhotos) {
-      const photo = sortedPhotos.find(p => p.id === photoId);
-      if (photo && photo.faces) {
-        photo.faces.forEach(face => {
+          for (const imageId of selectedImages) {
+      const image = sortedImages.find(p => p.id === imageId);
+      if (image && image.faces) {
+        image.faces.forEach(face => {
           if (face.group_id === group.groupID) {
             selectedFaceIds.add(face.face_id);
           }
@@ -577,7 +577,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
   };
 
   const handleTransferFaces = () => {
-    if (selectedPhotos.size === 0) {
+          if (selectedImages.size === 0) {
       showToast('Please select photos to transfer', 'error');
       return;
     }
@@ -588,12 +588,12 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
     const isCompleteTransfer = transferData?.old_group_deleted;
 
-    // Clear selection and remove transferred photos from cache
-    setSelectedPhotos(new Set());
+    // Clear selection and remove transferred images from cache
+    setSelectedImages(new Set());
     
-    // If photos were transferred away from this group, remove them from the cached selection
+    // If images were transferred away from this group, remove them from the cached selection
     if (transferData) {
-      clearTransferredPhotosFromCache(transferData.old_group_id, transferData.photos_to_remove_from_source);
+      clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
     }
 
     if (isCompleteTransfer) {
@@ -611,11 +611,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       setGroup(newGroup);
       // 4. Fetch full, authoritative data for the target group to avoid client-side drift
       try {
-        const response = await groupsAPI.getPhotosComplete(newGroup.groupID);
-        const photos = response.photos || [];
-        setSortedPhotos(sortPhotos(photos, sortBy, sortOrder));
+        const response = await groupsAPI.getImagesComplete(newGroup.groupID);
+        const images = response.images || [];
+        setSortedImages(sortImages(images, sortBy, sortOrder));
       } catch (err) {
-        console.error('Error fetching target group photos after merge:', err);
+        console.error('Error fetching target group images after merge:', err);
       }
       try {
         const cropsResp = await groupsAPI.getCrops(newGroup.groupID);
@@ -647,7 +647,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         const isNewGroup = transferData.new_group_name;
         showToast(
           <span>
-            Transferred {transferData.photos_to_remove_from_source?.length || 0} faces to{' '}
+            Transferred {transferData.images_to_remove_from_source?.length || 0} faces to{' '}
             {isNewGroup && 'a new group '}
             <Link to={link} className="underline hover:text-gray-100">
               {targetGroup.label}
@@ -663,47 +663,47 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
     // will process the GROUP_FACES_TRANSFERRED change instruction
   };
 
-  const togglePhotoSelection = (photoId, event) => {
-    const newSelected = new Set(selectedPhotos);
+  const toggleImageSelection = (imageId, event) => {
+    const newSelected = new Set(selectedImages);
     
     // Handle shift-click for range selection
-    if (event?.shiftKey && lastSelectedPhoto && lastSelectedPhoto !== photoId) {
-      const lastIndex = sortedPhotos.findIndex(p => p.id === lastSelectedPhoto);
-      const currentIndex = sortedPhotos.findIndex(p => p.id === photoId);
+    if (event?.shiftKey && lastSelectedImage && lastSelectedImage !== imageId) {
+          const lastIndex = sortedImages.findIndex(p => p.id === lastSelectedImage);
+    const currentIndex = sortedImages.findIndex(p => p.id === imageId);
       
       if (lastIndex !== -1 && currentIndex !== -1) {
         const startIndex = Math.min(lastIndex, currentIndex);
         const endIndex = Math.max(lastIndex, currentIndex);
         
-        // Add all photos in the range
+        // Add all images in the range
         for (let i = startIndex; i <= endIndex; i++) {
-          newSelected.add(sortedPhotos[i].id);
+          newSelected.add(sortedImages[i].id);
         }
-        setSelectedPhotos(newSelected);
-        setLastSelectedPhoto(photoId);
+        setSelectedImages(newSelected);
+        setLastSelectedImage(imageId);
         return;
       }
     }
     
-    // Regular click - toggle the photo
-    if (newSelected.has(photoId)) {
-      newSelected.delete(photoId);
+    // Regular click - toggle the image
+    if (newSelected.has(imageId)) {
+      newSelected.delete(imageId);
     } else {
-      newSelected.add(photoId);
+      newSelected.add(imageId);
     }
     
-    setSelectedPhotos(newSelected);
-    setLastSelectedPhoto(photoId);
+            setSelectedImages(newSelected);
+    setLastSelectedImage(imageId);
   };
 
-  const selectAllPhotos = () => {
-    setSelectedPhotos(new Set(sortedPhotos.map(p => p.id)));
-    setLastSelectedPhoto(sortedPhotos.length > 0 ? sortedPhotos[sortedPhotos.length - 1].id : null);
+  const selectAllImages = () => {
+    setSelectedImages(new Set(sortedImages.map(p => p.id)));
+    setLastSelectedImage(sortedImages.length > 0 ? sortedImages[sortedImages.length - 1].id : null);
   };
 
   const clearSelection = () => {
-    setSelectedPhotos(new Set());
-    setLastSelectedPhoto(null);
+    setSelectedImages(new Set());
+    setLastSelectedImage(null);
   };
 
   // Handle keyboard shortcuts
@@ -712,9 +712,9 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
       // Ctrl+A or Cmd+A for select all
       if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
         event.preventDefault();
-        if (sortedPhotos.length > 0) {
-          selectAllPhotos();
-        }
+               if (sortedImages.length > 0) {
+         selectAllImages();
+       }
       }
       // Escape to clear selection
       if (event.key === 'Escape') {
@@ -725,34 +725,34 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedPhotos]);
+  }, [sortedImages]);
 
-  const openPhotoViewer = (photoId, index) => {
-    // Use the photo data directly since it comes from the API
-    setPhotoViewer({
+  const openImageViewer = (imageId, index) => {
+    // Use the image data directly since it comes from the API
+    setImageViewer({
       show: true,
-      photo: photoId, // Store just the photo_id string for consistency
+      image: imageId, // Store just the image_id string for consistency
       index: index
     });
   };
 
-  const closePhotoViewer = () => {
-    setPhotoViewer({ show: false, photo: null, index: 0 });
+  const closeImageViewer = () => {
+    setImageViewer({ show: false, image: null, index: 0 });
   };
 
-  const navigatePhoto = (direction, index) => {
-    const currentIndex = photoViewer.index;
+  const navigateImage = (direction, index) => {
+    const currentIndex = imageViewer.index;
     let newIndex;
     if (direction === 'jump' && typeof index === 'number') {
       newIndex = index;
     } else if (direction === 'next') {
-      newIndex = Math.min(currentIndex + 1, sortedPhotos.length - 1);
+              newIndex = Math.min(currentIndex + 1, sortedImages.length - 1);
     } else {
       newIndex = Math.max(currentIndex - 1, 0);
     }
-    setPhotoViewer({
+    setImageViewer({
       show: true,
-      photo: sortedPhotos[newIndex].id, // This is already correct
+              image: sortedImages[newIndex].id, // This is already correct
       index: newIndex
     });
   };
@@ -939,16 +939,16 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedPhotos.length} of {group.image_ids?.length || 0} photos
+                  {sortedImages.length} of {group.image_ids?.length || 0} images
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops
                     </span>
                   )}
                 </p>
-                {selectedPhotos.size > 0 && (
+                {selectedImages.size > 0 && (
                   <p className="text-sm text-primary-600 font-medium absolute top-full left-0">
-                    {selectedPhotos.size} selected
+                    {selectedImages.size} selected
                   </p>
                 )}
               </div>
@@ -969,9 +969,9 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  id="search-photos"
-                  name="search-photos"
-                  placeholder="Search photos..."
+                  id="search-images"
+                  name="search-images"
+                  placeholder="Search images..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
@@ -985,7 +985,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value);
-                  setSortedPhotos(prevPhotos => sortPhotos(prevPhotos, e.target.value, sortOrder));
+                  setSortedImages(prevImages => sortImages(prevImages, e.target.value, sortOrder));
                 }}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
               >
@@ -1024,14 +1024,14 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 <>
                   <button
                     onClick={() => {
-                      const currentPercent = Math.round(photoSize * 100);
+                      const currentPercent = Math.round(imageSize * 100);
                       const next25 = Math.ceil(currentPercent / 25) * 25;
                       const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
                       const subtract25 = currentPercent - 25;
                       const newPercent = Math.max(50, Math.max(subtract25, prev25));
-                      setPhotoSize(newPercent / 100);
+                      setimageSize(newPercent / 100);
                     }}
-                    disabled={photoSize <= 0.5}
+                    disabled={imageSize <= 0.5}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Decrease size"
                   >
@@ -1039,24 +1039,24 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   </button>
                   <input
                     type="text"
-                    id="face-detail-photo-size"
-                    name="face-detail-photo-size"
+                    id="face-detail-image-size"
+                    name="face-detail-image-size"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
-                    onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
+                    onChange={e => setimageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
                     onBlur={e => {
                       let val = parseInt(e.target.value, 10);
-                      if (isNaN(val)) val = Math.round(photoSize * 100);
+                      if (isNaN(val)) val = Math.round(imageSize * 100);
                       val = Math.max(50, Math.min(300, val));
-                      setPhotoSize(val / 100);
-                      setPhotoSizeInputValue(undefined);
+                      setimageSize(val / 100);
+                      setimageSizeInputValue(undefined);
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         e.target.blur();
                       } else if (e.key === 'Escape') {
-                        setPhotoSizeInputValue(undefined);
+                        setimageSizeInputValue(undefined);
                       }
                     }}
                     className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
@@ -1064,13 +1064,13 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   />
                   <button
                     onClick={() => {
-                      const currentPercent = Math.round(photoSize * 100);
+                      const currentPercent = Math.round(imageSize * 100);
                       const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
                       const add25 = currentPercent + 25;
                       const newPercent = Math.min(300, Math.min(add25, next25));
-                      setPhotoSize(newPercent / 100);
+                      setimageSize(newPercent / 100);
                     }}
-                    disabled={photoSize >= 3}
+                    disabled={imageSize >= 3}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Increase size"
                   >
@@ -1101,7 +1101,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             </div>
 
                         {/* Group 3: Selection Controls */}
-            {sortedPhotos.length > 0 && viewMode === 'grid' && (
+            {sortedImages.length > 0 && viewMode === 'grid' && (
               <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
@@ -1115,11 +1115,11 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
                 {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
-                {selectionMode && selectedPhotos.size < sortedPhotos.length && (
+                {selectionMode && selectedImages.size < sortedImages.length && (
                   <button
                     onClick={selectAllPhotos}
                     className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                      selectedPhotos.size > 0 
+                      selectedImages.size > 0 
                         ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
@@ -1129,8 +1129,8 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   </button>
                 )}
                 
-                {/* Clear button - always visible when any photos are selected, always red */}
-                {selectedPhotos.size > 0 && (
+                {/* Clear button - always visible when any images are selected, always red */}
+                {selectedImages.size > 0 && (
                   <button
                     onClick={clearSelection}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center bg-red-100 text-red-700 hover:bg-red-200"
@@ -1143,7 +1143,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             )}
 
             {/* Group 4: Actions on Selection */}
-            {sortedPhotos.length > 0 && viewMode === 'grid' && selectedPhotos.size > 0 && (
+            {sortedImages.length > 0 && viewMode === 'grid' && selectedImages.size > 0 && (
               <div className="flex items-center space-x-3 px-4">
                 {filterMode !== 'or' && (
                   <button
@@ -1165,27 +1165,27 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             )}
             
             {/* List View Selection Controls - Always show when in list mode */}
-            {sortedPhotos.length > 0 && viewMode === 'list' && (
+            {sortedImages.length > 0 && viewMode === 'list' && (
               <>
                 {/* Group 3: Selection Controls */}
                 <div className="flex items-center space-x-3 px-4">
                   {/* Select all button - only visible when not all are selected */}
-                  {selectedPhotos.size < sortedPhotos.length && (
+                  {selectedImages.size < sortedImages.length && (
                     <button
-                      onClick={selectAllPhotos}
-                      className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
-                        selectedPhotos.size > 0 
-                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                          : 'hover:bg-gray-100 text-gray-700'
-                      }`}
+                      onClick={selectAllImages}
+                                              className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
+                          selectedImages.size > 0 
+                            ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                            : 'hover:bg-gray-100 text-gray-700'
+                        }`}
                       title="Select all photos (Ctrl+A)"
                     >
                       <CheckCheck className="w-4 h-4" />
                     </button>
                   )}
                   
-                  {/* Clear button - always visible when any photos are selected, always red */}
-                  {selectedPhotos.size > 0 && (
+                  {/* Clear button - always visible when any images are selected, always red */}
+                  {selectedImages.size > 0 && (
                     <button
                       onClick={clearSelection}
                       className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
@@ -1197,7 +1197,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                 </div>
 
                 {/* Group 4: Actions on Selection */}
-                {selectedPhotos.size > 0 && (
+                {selectedImages.size > 0 && (
                   <div className="flex items-center space-x-3 px-4">
                     {filterMode !== 'or' && (
                       <button
@@ -1211,10 +1211,10 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                     <button
                       onClick={handleAddSelectedToBucket}
                       className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                      title="Add selected photos to bucket"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                    </button>
+                                          title="Add selected photos to bucket"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                  </button>
                   </div>
                 )}
               </>
@@ -1249,7 +1249,7 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
             <p className="text-gray-500 mt-2">Loading photos...</p>
           </div>
-        ) : sortedPhotos.length === 0 ? (
+        ) : sortedImages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1267,51 +1267,51 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
           <motion.div
             className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
             style={viewMode === 'grid' ? {
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * photoSize)}px, 1fr))`,
-              gridAutoRows: `${Math.max(100, 266 * photoSize)}px`
+              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
+              gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
             } : {}}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            {sortedPhotos.map((photo, index) => (
+            {sortedImages.map((image, index) => (
               <motion.div
-                key={`${photo.id || 'unknown'}-${index}`}
+                key={`${image.id || 'unknown'}-${index}`}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className={`${viewMode === 'grid' ? `photo-card ${photoClasses[photo.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
+                className={`${viewMode === 'grid' ? `photo-card ${imageClasses[image.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
               >
                 {viewMode === 'grid' ? (
                   <div className="relative group cursor-pointer h-full" onClick={(e) => {
                     if (!e.target.closest('input[type="checkbox"]')) {
-                      openPhotoViewer(photo.id, index);
+                      openImageViewer(image.id, index);
                     }
                   }}>
                     <input
                       type="checkbox"
-                      id={`photo-checkbox-grid-${photo.id}`}
-                      name={`photo-checkbox-grid-${photo.id}`}
-                      checked={selectedPhotos.has(photo.id)}
+                      id={`image-checkbox-grid-${image.id}`}
+                      name={`image-checkbox-grid-${image.id}`}
+                      checked={selectedImages.has(image.id)}
                       onChange={() => {}} // Empty handler to satisfy React
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePhotoSelection(photo.id, e);
-                      }}
+                                             onClick={(e) => {
+                         e.stopPropagation();
+                         toggleImageSelection(image.id, e);
+                       }}
                       className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
                         viewMode === 'list' || selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}
                     />
                     <img
-                      src={showCrops && imageCrops[photo.id] 
-                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
-                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${photo.id}.webp`
+                      src={showCrops && imageCrops[image.id] 
+                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[image.id]}.webp`
+                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${image.id}.webp`
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-full h-full object-cover rounded-lg"
                       loading="lazy"
-                      onLoad={(e) => handleImageLoad(photo.id, e)}
+                      onLoad={(e) => handleImageLoad(image.id, e)}
                       onError={(e) => {
                         e.target.onerror = null;
                         e.target.src = PLACEHOLDER_DATA_URL;
@@ -1324,13 +1324,13 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                       </div>
                     </div>
                     {/* Date overlay */}
-                    {photo.date_taken && (
+                    {image.date_taken && (
                       <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                        {formatDate(photo.date_taken)}
+                        {formatDate(image.date_taken)}
                       </div>
                     )}
                     {/* Crop indicator */}
-                    {showCrops && imageCrops[photo.id] && (
+                    {showCrops && imageCrops[image.id] && (
                       <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
                         Crop
                       </div>
@@ -1340,27 +1340,27 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                   <>
                     <input
                       type="checkbox"
-                      id={`photo-checkbox-list-${photo.id}`}
-                      name={`photo-checkbox-list-${photo.id}`}
-                      checked={selectedPhotos.has(photo.id)}
+                      id={`image-checkbox-list-${image.id}`}
+                      name={`image-checkbox-list-${image.id}`}
+                      checked={selectedImages.has(image.id)}
                       onChange={() => {}} // Empty handler to satisfy React
-                      onClick={(e) => {
-                        togglePhotoSelection(photo.id, e);
-                      }}
+                                             onClick={(e) => {
+                         toggleImageSelection(image.id, e);
+                       }}
                       className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                     />
                     <div className="relative">
                       <img
-                        src={showCrops && imageCrops[photo.id] 
-                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[photo.id]}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${photo.id}.webp`
+                        src={showCrops && imageCrops[image.id] 
+                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[image.id]}.webp`
+                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${image.id}.webp`
                         }
                         alt={`Photo ${index + 1}`}
                         className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                         loading="lazy"
                         onClick={(e) => {
                           if (!e.target.closest('input[type="checkbox"]')) {
-                            openPhotoViewer(photo.id, index);
+                            openImageViewer(image.id, index);
                           }
                         }}
                         onError={(e) => {
@@ -1369,16 +1369,16 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
                         }}
                       />
                       {/* Crop indicator for list view */}
-                      {showCrops && imageCrops[photo.id] && (
+                      {showCrops && imageCrops[image.id] && (
                         <div className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">
                           C
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900">{photo.name}</p>
+                      <p className="font-medium text-gray-900">{image.name}</p>
                       <p className="text-sm text-gray-500">
-                        {photo.date_taken ? formatDate(photo.date_taken) : 'Unknown date'}
+                        {image.date_taken ? formatDate(image.date_taken) : 'Unknown date'}
                       </p>
                     </div>
                   </>
@@ -1415,14 +1415,14 @@ export default function FaceDetail({ groups, onDeleteGroup, showToast, onRefresh
         />
       )}
 
-             {/* Photo Viewer */}
-       {photoViewer.show && (
-         <PhotoViewer
-           photo={photoViewer.photo}
-           onClose={closePhotoViewer}
-           onNavigate={navigatePhoto}
-           totalPhotos={sortedPhotos.length}
-           currentIndex={photoViewer.index}
+             {/* Image Viewer */}
+       {imageViewer.show && (
+         <ImageViewer
+           image={imageViewer.image}
+           onClose={closeImageViewer}
+           onNavigate={navigateImage}
+           totalImages={sortedImages.length}
+           currentIndex={imageViewer.index}
            currentGroupId={group.groupID}
            onJumpToMoment={handleJumpToMoment}
            groups={currentGroups}

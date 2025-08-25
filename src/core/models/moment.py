@@ -12,7 +12,7 @@ class Moments(BaseModel):
             'description': description,
             'start': start,
             'end': end,
-            'representative_photo': ''
+            'representative_image': ''
         }
 
     def add(self, label: str = '', description: str = '', start: str = '', end: str = '', image_IDs: List[str] = []) -> Dict:
@@ -33,17 +33,17 @@ class Moments(BaseModel):
                 raise ValueError(f"Moment with label '{fields['label']}' already exists")
         
         try:
-            photos_to_add = fields.get('photos_to_add', [])
-            photos_to_remove = fields.get('photos_to_remove', [])
+            images_to_add = fields.get('images_to_add', [])
+            images_to_remove = fields.get('images_to_remove', [])
             
-            if 'photos_to_add' in fields:
-                del fields['photos_to_add']
-            if 'photos_to_remove' in fields:
-                del fields['photos_to_remove']
+            if 'images_to_add' in fields:
+                del fields['images_to_add']
+            if 'images_to_remove' in fields:
+                del fields['images_to_remove']
 
             super().edit(entity_id, fields)            
-            self.add_image_to_moment(entity_id, photos_to_add)
-            self.remove_image_from_moment(entity_id, photos_to_remove)
+            self.add_image_to_moment(entity_id, images_to_add)
+            self.remove_image_from_moment(entity_id, images_to_remove)
                 
         except Exception:
             raise
@@ -55,18 +55,18 @@ class Moments(BaseModel):
         query = 'UPDATE images SET momentID=? WHERE imageID IN ({})'.format(image_placeholders)
         self.db.execute_query(query, (moment_id, *image_ids))
 
-        representative_photo = self.get(moment_id)['representative_photo']
-        # Set the first image ID as representative photo if none exists
-        if (representative_photo == '' or representative_photo is None) and image_ids:
-            self.edit(moment_id, {'representative_photo': image_ids[0]})
+        representative_image = self.get(moment_id)['representative_image']
+        # Set the first image ID as representative image if none exists
+        if (representative_image == '' or representative_image is None) and image_ids:
+            self.edit(moment_id, {'representative_image': image_ids[0]})
 
         for moment in self.list():
-            if moment['representative_photo'] in image_ids:
+            if moment['representative_image'] in image_ids:
                 if len(moment['image_IDs']) > 0:
-                    new_representative_photo = moment['image_IDs'][0]
+                    new_representative_image = moment['image_IDs'][0]
                 else:
-                    new_representative_photo = ''
-                self.edit(moment['momentID'], {'representative_photo': new_representative_photo})
+                    new_representative_image = ''
+                self.edit(moment['momentID'], {'representative_image': new_representative_image})
 
     def remove_image_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
         if not image_ids:  # Guard against empty lists
@@ -75,19 +75,21 @@ class Moments(BaseModel):
         query = 'UPDATE images SET momentID=NULL WHERE imageID IN ({}) AND momentID=?'.format(image_placeholders)
         self.db.execute_query(query, (*image_ids, moment_id))
 
-        # Check if the current representative photo is being removed
-        current_representative_photo = self.get(moment_id)['representative_photo']
-        if current_representative_photo and current_representative_photo in image_ids:
-            # Find a new representative photo from remaining images
+        # Check if the current representative image is being removed
+        current_representative_image = self.get(moment_id)['representative_image']
+        if current_representative_image and current_representative_image in image_ids:
+            # Find a new representative image from remaining images
             remaining_images = self.get_images(moment_id)
             if remaining_images:
-                self.edit(moment_id, {'representative_photo': remaining_images[0]})
+                self.edit(moment_id, {'representative_image': remaining_images[0]})
             else:
-                # No images left, clear representative photo
-                self.edit(moment_id, {'representative_photo': ''})
+                # No images left, clear representative image
+                self.edit(moment_id, {'representative_image': ''})
 
     def get_images(self, moment_id: str) -> List[str]:
-        results = self.db.execute_query('SELECT imageID FROM images WHERE momentID=?', (moment_id,))
+        # Use accessible_images view for read operations
+        accessible_table = self.db._get_accessible_table_name('images')
+        results = self.db.execute_query(f'SELECT imageID FROM {accessible_table} WHERE momentID=?', (moment_id,))
         return [row[0] for row in results]
 
     def get(self, moment_id: str) -> Optional[Dict]:
@@ -102,11 +104,11 @@ class Moments(BaseModel):
             moment['image_IDs'] = self.get_images(moment['momentID'])
         return moments
 
-    def set_photos(self, moment_id: str, image_ids: List[str]):
-        """Set the photos for a given moment, removing old ones."""
-        # First, remove all existing photos from the moment
+    def set_images(self, moment_id: str, image_ids: List[str]):
+        """Set the images for a given moment, removing old ones."""
+        # First, remove all existing images from the moment
         self.db.execute_query('UPDATE images SET momentID = NULL WHERE momentID = ?', (moment_id,))
-        # Then, add the new photos
+        # Then, add the new images
         if image_ids:  # Only add if there are new images
             self.add_image_to_moment(moment_id, image_ids)
 

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Header from './Header';
 import Gallery from './Gallery';
-import FaceDetail from './FaceDetail';
+import GroupDetail from './GroupDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
@@ -153,7 +153,7 @@ export default function App() {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <FaceDetail 
+                  <GroupDetail 
                     groups={groups}
                     onUpdateGroup={updateGroupHandler}
                     onDeleteGroup={deleteGroupHandler}

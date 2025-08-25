@@ -78,7 +78,7 @@ class Event(JsonModel):
             label="Main Manager",
             all_images=True,
             can_edit_groups=True,
-            can_upload_photos=True,
+            can_upload_images=True,
             can_edit_moments=True
         )
         
@@ -87,7 +87,7 @@ class Event(JsonModel):
             label="Event Manager", 
             all_images=True,
             can_edit_groups=True,
-            can_upload_photos=True,
+            can_upload_images=True,
             can_edit_moments=True
         )
 
@@ -120,9 +120,11 @@ class Event(JsonModel):
         Get mapping from image_id to face_id for crop display.
         For each image in the group, returns the first face that belongs to this group.
         """
-        query = '''
+        # Use accessible_faces view for read operations
+        accessible_table = self.db._get_accessible_table_name('faces')
+        query = f'''
             SELECT DISTINCT f.imageID, f.faceID
-            FROM faces f 
+            FROM {accessible_table} f 
             WHERE f.groupID = ?
             GROUP BY f.imageID
         '''
@@ -131,7 +133,7 @@ class Event(JsonModel):
 
     def get_faces_by_image_and_group(self, image_id: str, group_id: str) -> List[str]:
         """
-        Get all face IDs that belong to a specific group in a specific image.
+        Get face IDs that belong to a specific group in a specific image.
         
         Args:
             image_id: The image ID
@@ -140,7 +142,9 @@ class Event(JsonModel):
         Returns:
             List of face IDs that belong to the specified group in the specified image
         """
-        query = 'SELECT faceID FROM faces WHERE imageID=? AND groupID=?'
+        # Use accessible_faces view for read operations
+        accessible_table = self.db._get_accessible_table_name('faces')
+        query = f'SELECT faceID FROM {accessible_table} WHERE imageID=? AND groupID=?'
         results = self.db.execute_query(query, (image_id, group_id))
         return [row[0] for row in results]
     
@@ -190,23 +194,26 @@ class Event(JsonModel):
             )
             target_group_id = target_group_data['groupID']
         
-        # Get all photos that will be added to target group (photos containing transferred faces)
-        query = '''
+        # Get all images that will be added to target group (images containing transferred faces)
+        # Use accessible_faces view for read operations
+        accessible_table = self.db._get_accessible_table_name('faces')
+        placeholders = ','.join(['?'] * len(face_ids))
+        query = f'''
             SELECT DISTINCT imageID 
-            FROM faces 
-            WHERE faceID IN ({}) AND groupID = ?
-        '''.format(','.join(['?'] * len(face_ids)))
+            FROM {accessible_table} 
+            WHERE faceID IN ({placeholders}) AND groupID = ?
+        '''
         
-        photos_to_add_to_target = set()
+        images_to_add_to_target = set()
         results = self.db.execute_query(query, (*face_ids, old_group_id))
         for row in results:
-            photos_to_add_to_target.add(row[0])
+            images_to_add_to_target.add(row[0])
 
         # Remove any images already in the target group before the transfer
         target_group = self.groups_model.get(target_group_id)
         if target_group and 'image_ids' in target_group:
             existing_target_images = set(target_group['image_ids'])
-            photos_to_add_to_target = photos_to_add_to_target - existing_target_images
+            images_to_add_to_target = images_to_add_to_target - existing_target_images
 
         # Transfer faces to target group
         self.groups_model.add_faces(target_group_id, face_ids)
@@ -217,13 +224,13 @@ class Event(JsonModel):
         if new_representative:
             self.groups_model.edit(target_group_id, {'face_representative': new_representative})
         
-        # Check which photos no longer belong to source group after transfer
-        photos_to_remove_from_source = set()
-        for photo_id in photos_to_add_to_target:
-            # Check if source group still has faces in this photo
-            source_faces_in_photo = self.get_faces_by_image_and_group(photo_id, old_group_id)
-            if not source_faces_in_photo:
-                photos_to_remove_from_source.add(photo_id)
+        # Check which images no longer belong to source group after transfer
+        images_to_remove_from_source = set()
+        for image_id in images_to_add_to_target:
+            # Check if source group still has faces in this image
+            source_faces_in_image = self.get_faces_by_image_and_group(image_id, old_group_id)
+            if not source_faces_in_image:
+                images_to_remove_from_source.add(image_id)
         
         # Check if any transferred face was the representative of the old group
         old_representative = old_group.get('face_representative', '')
@@ -253,8 +260,8 @@ class Event(JsonModel):
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
             'transferred_faces': face_ids,
-            'photos_to_remove_from_source': list(photos_to_remove_from_source),
-            'photos_to_add_to_target': list(photos_to_add_to_target),
+            'images_to_remove_from_source': list(images_to_remove_from_source),
+            'images_to_add_to_target': list(images_to_add_to_target),
             'updated_source_group': updated_source_group,
             'updated_target_group': updated_target_group
         }
@@ -302,13 +309,16 @@ class Event(JsonModel):
         
         if mode == 'or':
             # OR mode: Get all other groups, ordered by co-occurrence with ANY of the selected groups.
+            # Use accessible views for read operations
+            accessible_groups = self.db._get_accessible_table_name('groups')
+            accessible_faces = self.db._get_accessible_table_name('faces')
             query = f'''
                 SELECT 
                     g.groupID,
                     g.label,
-                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM faces WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
-                FROM groups g
-                LEFT JOIN faces f ON g.groupID = f.groupID
+                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM {accessible_faces} WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
+                FROM {accessible_groups} g
+                LEFT JOIN {accessible_faces} f ON g.groupID = f.groupID
                 WHERE g.groupID NOT IN ({group_id_placeholders})
                 GROUP BY g.groupID, g.label
                 ORDER BY common_images_count DESC, g.label ASC
@@ -323,13 +333,16 @@ class Event(JsonModel):
                 related_group_rows = []
             else:
                 image_placeholders = ','.join(['?'] * len(base_image_ids))
+                # Use accessible views for read operations
+                accessible_groups = self.db._get_accessible_table_name('groups')
+                accessible_faces = self.db._get_accessible_table_name('faces')
                 query = f'''
                     SELECT
                         g.groupID,
                         g.label,
                         COUNT(DISTINCT f.imageID) AS common_images_count
-                    FROM groups g
-                    JOIN faces f ON g.groupID = f.groupID
+                    FROM {accessible_groups} g
+                    JOIN {accessible_faces} f ON g.groupID = f.groupID
                     WHERE f.imageID IN ({image_placeholders})
                     AND g.groupID NOT IN ({group_id_placeholders})
                     GROUP BY g.groupID, g.label
@@ -363,11 +376,14 @@ class Event(JsonModel):
 
         group_placeholders = ','.join(['?'] * len(groups_ids))
 
+        # Use accessible views for read operations
+        accessible_faces = self.db._get_accessible_table_name('faces')
+
         if mode == 'and':
             # Images must contain faces from ALL groups in the list
             base_query = f'''
                 SELECT imageID
-                FROM faces
+                FROM {accessible_faces}
                 WHERE groupID IN ({group_placeholders})
                 GROUP BY imageID
                 HAVING COUNT(DISTINCT groupID) = ?
@@ -377,7 +393,7 @@ class Event(JsonModel):
             # Images must contain faces from AT LEAST ONE of the groups in the list
             base_query = f'''
                 SELECT DISTINCT imageID
-                FROM faces
+                FROM {accessible_faces}
                 WHERE groupID IN ({group_placeholders})
             '''
             image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids)]
@@ -389,7 +405,7 @@ class Event(JsonModel):
             # Find all images from the current set that ALSO have faces from other groups
             images_with_other_groups_query = f'''
                 SELECT DISTINCT imageID
-                FROM faces
+                FROM {accessible_faces}
                 WHERE imageID IN ({image_placeholders})
                 AND groupID NOT IN ({group_placeholders})
             '''
@@ -403,10 +419,12 @@ class Event(JsonModel):
 
         return image_ids
 
-    def get_photos_in_period(self, start_time: str, end_time: str) -> list:
-        """Get all photos within a given time period."""
-        query = """
-            SELECT imageID FROM images
+    def get_images_in_period(self, start_time: str, end_time: str) -> list:
+        """Get all images within a given time period."""
+        # Use accessible_images view for read operations
+        accessible_table = self.db._get_accessible_table_name('images')
+        query = f"""
+            SELECT imageID FROM {accessible_table}
             WHERE date_taken BETWEEN ? AND ?
         """
         results = self.db.execute_query(query, (start_time, end_time))
@@ -582,8 +600,6 @@ class Event(JsonModel):
             print(f"  - Faces detected: {summary['faces_detected']}")
             print(f"  - Groups created: {summary['groups_created']}")
         return summary
-
-
 
 # Convenience functions for compatibility
 add_event = Event.add

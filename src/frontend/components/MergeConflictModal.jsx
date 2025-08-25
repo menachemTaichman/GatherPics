@@ -64,10 +64,10 @@ export default function MergeConflictModal({
       }
       if (!allFaceIds || allFaceIds.length === 0) {
         try {
-          const photosResp = await groupsAPI.getPhotosComplete(currentGroup.groupID);
-          const photos = photosResp?.photos || [];
+          const imagesResp = await groupsAPI.getImagesComplete(currentGroup.groupID);
+                      const images = imagesResp?.images || [];
           const ids = new Set();
-          photos.forEach((p) => {
+                      images.forEach((p) => {
             (p.faces || []).forEach((f) => {
               if (f.group_id === currentGroup.groupID && f.face_id) ids.add(f.face_id);
             });

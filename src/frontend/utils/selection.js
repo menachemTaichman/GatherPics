@@ -1,7 +1,7 @@
-export const getSelectionCacheKey = (groupId) => `faceDetail_selection_${groupId}`;
+export const getSelectionCacheKey = (groupId) => `groupDetail_selection_${groupId}`;
 
-export const clearTransferredPhotosFromCache = (sourceGroupId, transferredPhotoIds) => {
-  if (!sourceGroupId || !transferredPhotoIds || transferredPhotoIds.length === 0) {
+export const clearTransferredImagesFromCache = (sourceGroupId, transferredImageIds) => {
+  if (!sourceGroupId || !transferredImageIds || transferredImageIds.length === 0) {
     return;
   }
 
@@ -14,8 +14,8 @@ export const clearTransferredPhotosFromCache = (sourceGroupId, transferredPhotoI
       const cachedSelection = JSON.parse(cachedSelectionJSON);
       
       if (cachedSelection && Array.isArray(cachedSelection.value)) {
-        const removedSet = new Set(transferredPhotoIds);
-        const updatedSelection = cachedSelection.value.filter(photoId => !removedSet.has(photoId));
+        const removedSet = new Set(transferredImageIds);
+        const updatedSelection = cachedSelection.value.filter(imageId => !removedSet.has(imageId));
 
         if (updatedSelection.length > 0) {
           cachedSelection.value = updatedSelection;

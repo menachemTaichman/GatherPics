@@ -145,7 +145,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
         const conflictResult = await groupsAPI.checkName(editingName.trim(), group.groupID);
         
         if (conflictResult.conflict) {
-          // Close this modal and pass conflict data to parent (FaceDetail)
+          // Close this modal and pass conflict data to parent (GroupDetail)
           if (onNameConflict) {
             onNameConflict(editingName.trim(), conflictResult.conflicting_group);
           }

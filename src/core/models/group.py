@@ -58,13 +58,17 @@ class Groups(BaseModel):
         self.db.execute_query(query, (group_id, *face_ids))
 
     def get_faces(self, group_id: str) -> List[str]:
-        results = self.db.execute_query('SELECT faceID FROM faces WHERE groupID=?', (group_id,))
+        # Use accessible_faces view for read operations
+        accessible_table = self.db._get_accessible_table_name('faces')
+        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID=?', (group_id,))
         return [row[0] for row in results]
 
     def get_images(self, group_id: str) -> List[str]:
-        query = '''
+        # Use accessible_faces view joined with accessible_images for read operations
+        accessible_faces = self.db._get_accessible_table_name('faces')
+        query = f'''
             SELECT DISTINCT f.imageID 
-            FROM faces f 
+            FROM {accessible_faces} f 
             WHERE f.groupID = ?
         '''
         results = self.db.execute_query(query, (group_id,))

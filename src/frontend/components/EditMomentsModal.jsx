@@ -5,8 +5,8 @@ import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 
-import EditMomentPhotosModal from './EditMomentPhotosModal';
-import RepresentativePhotoModal from './RepresentativePhotoModal';
+import EditMomentImagesModal from './EditMomentImagesModal';
+import RepresentativeImageModal from './RepresentativeImageModal';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -25,13 +25,13 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, onRefreshPhotos, onToast, onClose }) {
+function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
   const [editingMoments, setEditingMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
-  const [showPhotoSelector, setShowPhotoSelector] = useState(false);
+  const [showImageSelector, setShowImageSelector] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
   const [changedMoments, setChangedMoments] = useState(new Set());
-  const [editingPhotosForMoment, setEditingPhotosForMoment] = useState(null);
+  const [editingImagesForMoment, setEditingImagesForMoment] = useState(null);
   const [tempMomentCounter, setTempMomentCounter] = useState(0);
 
   // Use modal focus hook
@@ -67,7 +67,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     // Check if any moment was just created or updated with time range
     const momentsWithTimeRange = editingMoments.filter(m => 
       m.start && m.end && 
-      (m.momentID.startsWith('temp-') || m.photos === undefined)
+      (m.momentID.startsWith('temp-') || m.images === undefined)
     );
     
     if (momentsWithTimeRange.length > 0) {
@@ -75,16 +75,16 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       if (momentsToSave.length > 0) {
         for (const moment of momentsToSave) {
           // Filter out image-related fields before calling onSave
-          const { momentID, image_IDs, photos, ...momentData } = moment;
+          const { momentID, image_IDs, images, ...momentData } = moment;
           await onSave({ ...momentData, momentID });
         }
       }
       
-      // Then auto-open edit photos for the first moment with time range
+      // Then auto-open edit images for the first moment with time range
       const momentToEdit = momentsWithTimeRange[0];
-      await handleEditPhotos(momentToEdit);
+      await handleEditImages(momentToEdit);
       
-      // Don't close the modal yet, let the user edit photos
+      // Don't close the modal yet, let the user edit images
       return;
     }
     
@@ -92,7 +92,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     if (momentsToSave.length > 0) {
       for (const moment of momentsToSave) {
         // Filter out image-related fields before calling onSave
-        const { momentID, image_IDs, photos, ...momentData } = moment;
+        const { momentID, image_IDs, images, ...momentData } = moment;
         await onSave({ ...momentData, momentID });
       }
     }
@@ -104,7 +104,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     try {
       let savedMoment;
       if (moment.momentID.startsWith('temp-')) {
-        const { momentID, image_IDs, photos, ...momentData } = moment;
+        const { momentID, image_IDs, images, ...momentData } = moment;
         // Create moment directly without optimistic updates to avoid duplicates
         const result = await momentsAPI.create(momentData);
         savedMoment = result.moment;
@@ -116,7 +116,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       } else {
         // Update existing moment directly without optimistic updates to avoid conflicts
         // Filter out image-related fields that the backend doesn't expect
-        const { momentID, image_IDs, photos, ...momentData } = moment;
+        const { momentID, image_IDs, images, ...momentData } = moment;
         const result = await momentsAPI.update(moment.momentID, momentData);
         savedMoment = result.moment;
         
@@ -189,8 +189,8 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
     setChangedMoments(prev => new Set([...prev, id]));
   };
 
-  const handleEditPhotos = (moment) => {
-    setEditingPhotosForMoment(moment);
+  const handleEditImages = (moment) => {
+    setEditingImagesForMoment(moment);
   };
 
   const addMoment = () => {
@@ -215,12 +215,6 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
       }
     }, 100);
   };
-
-
-
-
-
-
 
   const handleTitleEdit = (momentId, newTitle) => {
     updateMoment(momentId, { label: newTitle });
@@ -274,14 +268,14 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
               <div key={moment.momentID} data-moment-id={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
-                    {/* Representative Photo */}
+                    {/* Representative image */}
                     <div className="relative">
-                      {moment.representative_photo && moment.representative_photo.trim() !== '' ? (
+                      {moment.representative_image && moment.representative_image.trim() !== '' ? (
                         <div className="w-16 h-16 rounded-lg overflow-hidden border">
                           <img 
-                            src={moment.representative_photo.startsWith('/api/') 
-                              ? `${API_BASE}${moment.representative_photo}` 
-                              : urlHelpers.getThumbnailUrl(moment.representative_photo)}
+                            src={moment.representative_image.startsWith('/api/') 
+                              ? `${API_BASE}${moment.representative_image}` 
+                              : urlHelpers.getThumbnailUrl(moment.representative_image)}
                             alt="" 
                             className="w-full h-full object-cover"
                             loading="lazy"
@@ -303,7 +297,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
                       <button
                         onClick={() => {
                           setSelectedMoment(moment);
-                          setShowPhotoSelector(true);
+                          setShowImageSelector(true);
                         }}
                         className="absolute -bottom-1 -right-1 w-7 h-7 bg-white border-2 border-gray-400 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-600 transition-colors shadow-md"
                         title="Edit representative photo"
@@ -387,9 +381,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
                       </>
                     )}
                     <button
-                      onClick={() => setEditingPhotosForMoment(moment)}
+                      onClick={() => setEditingImagesForMoment(moment)}
                       className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
-                      title="Edit Photos"
+                      title="Edit photos"
                     >
                       <Image className="w-4 h-4" />
                     </button>
@@ -460,33 +454,33 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentPhotosMap, 
         </div>
       </motion.div>
 
-      {/* Edit Photos Modal - Render as child modal */}
-      {editingPhotosForMoment && (
-        <EditMomentPhotosModal
-          moment={editingPhotosForMoment}
-          momentPhotosMap={momentPhotosMap}
-          onRefreshPhotos={onRefreshPhotos}
+      {/* Edit Images Modal - Render as child modal */}
+      {editingImagesForMoment && (
+        <EditMomentImagesModal
+                      moment={editingImagesForMoment}
+          momentImagesMap={momentImagesMap}
+          onRefreshImages={onRefreshImages}
           onSave={onSave}
           moments={moments}
-          onClose={() => setEditingPhotosForMoment(null)}
+          onClose={() => setEditingImagesForMoment(null)}
         />
       )}
 
-      {/* Representative Photo Modal */}
-      <RepresentativePhotoModal
-        isOpen={showPhotoSelector}
-        onClose={() => setShowPhotoSelector(false)}
+      {/* Representative Image Modal */}
+      <RepresentativeImageModal
+        isOpen={showImageSelector}
+        onClose={() => setShowImageSelector(false)}
         moment={selectedMoment}
-        momentPhotosMap={momentPhotosMap}
-        onPhotoSelect={(imageID) => {
+        momentImagesMap={momentImagesMap}
+        onImageSelect={(imageID) => {
           if (selectedMoment) {
             if (imageID === '') {
-              // Remove representative photo
-              updateMoment(selectedMoment.momentID, { representative_photo: '' });
+              // Remove representative image
+              updateMoment(selectedMoment.momentID, { representative_image: '' });
             } else {
-              // Store the representative photo as a full API path, not just the image ID
-              const representativePhotoPath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
-              updateMoment(selectedMoment.momentID, { representative_photo: representativePhotoPath });
+              // Store the representative image as a full API path, not just the image ID
+              const representativeImagePath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
+              updateMoment(selectedMoment.momentID, { representative_image: representativeImagePath });
             }
           }
         }}

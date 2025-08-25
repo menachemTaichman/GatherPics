@@ -13,17 +13,17 @@ export const CHANGE_TYPES = {
   MOMENT_CREATED: 'MOMENT_CREATED',
   MOMENT_UPDATED: 'MOMENT_UPDATED',
   MOMENT_DELETED: 'MOMENT_DELETED',
-  MOMENT_PHOTOS_ADDED: 'MOMENT_PHOTOS_ADDED',
-  MOMENT_PHOTOS_REMOVED: 'MOMENT_PHOTOS_REMOVED',
+  MOMENT_IMAGES_ADDED: 'MOMENT_IMAGES_ADDED',
+  MOMENT_IMAGES_REMOVED: 'MOMENT_IMAGES_REMOVED',
   
-  // Photo changes
-  PHOTO_SELECTION_CHANGED: 'PHOTO_SELECTION_CHANGED',
-  PHOTO_VIEWER_UPDATED: 'PHOTO_VIEWER_UPDATED',
+  // Image changes
+  IMAGE_SELECTION_CHANGED: 'IMAGE_SELECTION_CHANGED',
+  IMAGE_VIEWER_UPDATED: 'IMAGE_VIEWER_UPDATED',
   
   // Global changes
   GROUPS_REFRESH: 'GROUPS_REFRESH',
   MOMENTS_REFRESH: 'MOMENTS_REFRESH',
-  PHOTOS_REFRESH: 'PHOTOS_REFRESH'
+  IMAGES_REFRESH: 'IMAGES_REFRESH'
 };
 
 // Data store using Zustand for centralized state management
@@ -31,8 +31,8 @@ export const useDataStore = create((set, get) => ({
   // State
   groups: [],
   moments: [],
-  selectedPhotos: new Set(),
-  photoViewer: { show: false, photo: null, index: 0 },
+  selectedImages: new Set(),
+  imageViewer: { show: false, image: null, index: 0 },
   loading: false,
   error: null,
   
@@ -89,16 +89,16 @@ export const useDataStore = create((set, get) => ({
         } else {
           const sourceGroup = { ...newGroups[sourceGroupIndex] };
           
-          // Update photo count by subtracting photos that need to be removed
-          if (result.photos_to_remove_from_source) {
-            const currentCount = sourceGroup.photo_count || sourceGroup.photoCount || sourceGroup.image_ids?.length || 0;
-            sourceGroup.photo_count = Math.max(0, currentCount - result.photos_to_remove_from_source.length);
-            if (sourceGroup.photoCount !== undefined) {
-              sourceGroup.photoCount = sourceGroup.photo_count;
+          // Update image count by subtracting images that need to be removed
+          if (result.images_to_remove_from_source) {
+            const currentCount = sourceGroup.image_count || sourceGroup.imageCount || sourceGroup.image_ids?.length || 0;
+            sourceGroup.image_count = Math.max(0, currentCount - result.images_to_remove_from_source.length);
+            if (sourceGroup.imageCount !== undefined) {
+              sourceGroup.imageCount = sourceGroup.image_count;
             }
             if (sourceGroup.image_ids) {
               sourceGroup.image_ids = sourceGroup.image_ids.filter(id => 
-                !result.photos_to_remove_from_source.includes(id)
+                !result.images_to_remove_from_source.includes(id)
               );
             }
           }
@@ -120,20 +120,20 @@ export const useDataStore = create((set, get) => ({
         } else {
           const targetGroup = { ...newGroups[targetGroupIndex] };
           
-          // Update photo count by adding photos that need to be added
-          if (result.photos_to_add_to_target) {
-            const currentCount = targetGroup.photo_count || targetGroup.photoCount || targetGroup.image_ids?.length || 0;
-            targetGroup.photo_count = currentCount + result.photos_to_add_to_target.length;
-            if (targetGroup.photoCount !== undefined) {
-              targetGroup.photoCount = targetGroup.photo_count;
+          // Update image count by adding images that need to be added
+          if (result.images_to_add_to_target) {
+            const currentCount = targetGroup.image_count || targetGroup.imageCount || targetGroup.image_ids?.length || 0;
+            targetGroup.image_count = currentCount + result.images_to_add_to_target.length;
+            if (targetGroup.imageCount !== undefined) {
+              targetGroup.imageCount = targetGroup.image_count;
             }
             if (targetGroup.image_ids) {
               // Create a set of existing image IDs to avoid duplicates
               const existingImageIds = new Set(targetGroup.image_ids);
-              const newImageIds = result.photos_to_add_to_target.filter(id => !existingImageIds.has(id));
+              const newImageIds = result.images_to_add_to_target.filter(id => !existingImageIds.has(id));
               targetGroup.image_ids = [...targetGroup.image_ids, ...newImageIds];
             } else {
-              targetGroup.image_ids = [...result.photos_to_add_to_target];
+              targetGroup.image_ids = [...result.images_to_add_to_target];
             }
           }
           
@@ -152,8 +152,8 @@ export const useDataStore = create((set, get) => ({
           const newGroup = {
             groupID: result.updated_target_group.groupID,
             label: result.updated_target_group.label,
-            photo_count: result.updated_target_group.image_ids?.length || 0,
-            photoCount: result.updated_target_group.image_ids?.length || 0,
+            image_count: result.updated_target_group.image_ids?.length || 0,
+            imageCount: result.updated_target_group.image_ids?.length || 0,
             image_ids: result.updated_target_group.image_ids || [],
             face_representative: result.updated_target_group.face_representative || '',
             created_at: result.updated_target_group.created_at || new Date().toISOString(),
@@ -167,9 +167,9 @@ export const useDataStore = create((set, get) => ({
           const newGroup = {
             groupID: result.target_group_id,
             label: result.new_group_name,
-            photo_count: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
-            photoCount: result.photos_to_add_to_target ? result.photos_to_add_to_target.length : 0,
-            image_ids: result.photos_to_add_to_target || [],
+            image_count: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
+            imageCount: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
+            image_ids: result.images_to_add_to_target || [],
             // Do not set face_representative heuristically; wait for backend-provided value
             face_representative: '',
             created_at: new Date().toISOString(),
@@ -194,7 +194,7 @@ export const useDataStore = create((set, get) => ({
         groups: uniqueGroups,
         lastTransferResult: {
           ...result,
-          transferred_photos_data: result.transferred_photos_data || [] // Include full photo data
+          transferred_images_data: result.transferred_images_data || [] // Include full image data
         }
       };
     });
@@ -223,16 +223,16 @@ export const useDataStore = create((set, get) => ({
     }));
   },
   
-  // Photo operations
-  setSelectedPhotos: (selectedPhotos) => set({ selectedPhotos }),
-  setPhotoViewer: (photoViewer) => set({ photoViewer }),
+  // Image operations
+  setSelectedImages: (selectedImages) => set({ selectedImages }),
+  setImageViewer: (imageViewer) => set({ imageViewer }),
   
   // Clear all data
   clearData: () => set({
     groups: [],
     moments: [],
-    selectedPhotos: new Set(),
-    photoViewer: { show: false, photo: null, index: 0 },
+    selectedImages: new Set(),
+    imageViewer: { show: false, image: null, index: 0 },
     loading: false,
     error: null
   })

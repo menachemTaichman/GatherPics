@@ -287,7 +287,7 @@ export default function TransferFacesModal({
                   }}
                 >
                   <div className="flex flex-col items-center space-y-1">
-                    {/* Representative Photo - Circular and previous size */}
+                    {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                                              <img
                          src={group.face_representative
@@ -307,7 +307,7 @@ export default function TransferFacesModal({
                         {group.label || `Person ${group.groupID}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {group.image_ids?.length || 0} photos
+                        {group.image_ids?.length || 0} images
                       </p>
                     </div>
                   </div>

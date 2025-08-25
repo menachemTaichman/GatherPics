@@ -33,21 +33,21 @@ function formatDate(dateString) {
 
 const MomentCard = forwardRef(({
   moment,
-  photos,
+  images,
   viewMode,
-  photoSize,
+  imageSize,
   globalSelection,
-  onPhotoSelect,
-  onOpenPhotoViewer,
+  onimageSelect,
+  onOpenImageViewer,
   selectionMode,
   onSelectAllInMoment,
   onClearMomentSelection
 }, ref) => {
   // Calculate selection stats for this moment
-  const momentPhotoKeys = photos.map(photo => `${moment.momentID}:${photo.name}`);
-  const selectedInMoment = momentPhotoKeys.filter(key => globalSelection.has(key));
-  const allSelectedInMoment = photos.length > 0 && selectedInMoment.length === photos.length;
-  const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < photos.length;
+  const momentimageKeys = images.map(image => `${moment.momentID}:${image.name}`);
+  const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
+  const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
+  const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
 
   return (
     <motion.div
@@ -77,15 +77,15 @@ const MomentCard = forwardRef(({
                      <Calendar className="w-4 h-4" />
                      <span>{formatDate(moment.start)}</span>
                    </div>
-                   {photos.length > 0 && (
+                   {images.length > 0 && (
                      <div className="flex items-center space-x-1">
                        <Image className="w-4 h-4" />
-                       <span>{photos.length} photos</span>
+                       <span>{images.length} photos</span>
                      </div>
                    )}
                    
-                   {/* Per-moment selection controls - moved after photos count with proper spacing */}
-                   {photos.length > 0 && (
+                   {/* Per-moment selection controls - moved after images count with proper spacing */}
+                   {images.length > 0 && (
                      <div className="flex items-center space-x-3">
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                        {selectionMode && !allSelectedInMoment && (
@@ -102,7 +102,7 @@ const MomentCard = forwardRef(({
                          </button>
                        )}
                        
-                       {/* Clear button - always visible when any photos are selected, regardless of checkbox visibility */}
+                       {/* Clear button - always visible when any images are selected, regardless of checkbox visibility */}
                        {selectedInMoment.length > 0 && (
                          <button
                            onClick={() => onClearMomentSelection(moment.momentID)}
@@ -131,29 +131,29 @@ const MomentCard = forwardRef(({
             <motion.div
               className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
               style={viewMode === 'grid' ? {
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * photoSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(100, 266 * photoSize)}px`
+                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
+                gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
               } : {}}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
-              {photos.map((photo, index) => {
+              {images.map((image, index) => {
                 // Determine aspect ratio class for masonry layout
                 let aspectRatioClass = 'square';
-                if (photo.width && photo.height) {
-                  const ratio = photo.width / photo.height;
+                if (image.width && image.height) {
+                  const ratio = image.width / image.height;
                   if (ratio > 1.2) aspectRatioClass = 'landscape';
                   else if (ratio < 0.8) aspectRatioClass = 'portrait';
-                } else if (photo.aspect_ratio) {
-                  const ratio = photo.aspect_ratio;
+                } else if (image.aspect_ratio) {
+                  const ratio = image.aspect_ratio;
                   if (ratio > 1.2) aspectRatioClass = 'landscape';
                   else if (ratio < 0.8) aspectRatioClass = 'portrait';
                 }
                 
                 return (
                   <motion.div
-                    key={photo.id}
+                    key={image.id}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
@@ -161,23 +161,23 @@ const MomentCard = forwardRef(({
                     className={`${viewMode === 'grid' ? `photo-card ${aspectRatioClass}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
                   >
                     {viewMode === 'grid' ? (
-                      <div className="relative group cursor-pointer h-full" onClick={() => onOpenPhotoViewer(photos, photo, index)}>
+                      <div className="relative group cursor-pointer h-full" onClick={() => onOpenImageViewer(images, image, index)}>
                                                                                                                                                                                                        <input
                              type="checkbox"
-                             id={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                             name={`photo-checkbox-${moment.momentID}-${photo.name}`}
-                             checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
+                             id={`image-checkbox-${moment.momentID}-${image.name}`}
+                             name={`image-checkbox-${moment.momentID}-${image.name}`}
+                             checked={globalSelection.has(`${moment.momentID}:${image.name}`)}
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
                                e.stopPropagation();
-                               onPhotoSelect(photo.name, moment.momentID, e);
+                               onimageSelect(image.name, moment.momentID, e);
                              }}
                              className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
                                selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                              }`}
                            />
                         <img
-                          src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
+                          src={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
                           alt={`Photo ${index + 1}`}
                           className="w-full h-full object-cover rounded-lg"
                           loading="lazy"
@@ -189,12 +189,12 @@ const MomentCard = forwardRef(({
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
                             <Image className="w-8 h-8 mx-auto mb-1" />
-                            <span className="text-sm">Click to view</span>
+                            <span className="text-sm">Click to view photo</span>
                           </div>
                         </div>
-                        {photo.date_taken && (
+                        {image.date_taken && (
                           <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            {formatTimeOnly(photo.date_taken)}
+                            {formatTimeOnly(image.date_taken)}
                           </div>
                         )}
                       </div>
@@ -202,32 +202,32 @@ const MomentCard = forwardRef(({
                       <>
                                                                                                                                                                                                        <input
                              type="checkbox"
-                             id={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
-                             name={`photo-checkbox-list-${moment.momentID}-${photo.name}`}
-                             checked={globalSelection.has(`${moment.momentID}:${photo.name}`)}
+                             id={`image-checkbox-list-${moment.momentID}-${image.name}`}
+                             name={`image-checkbox-list-${moment.momentID}-${image.name}`}
+                             checked={globalSelection.has(`${moment.momentID}:${image.name}`)}
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
-                               onPhotoSelect(photo.name, moment.momentID, e);
+                               onimageSelect(image.name, moment.momentID, e);
                              }}
                              className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                            />
                         <div className="relative">
                           <img
-                            src={photo.urls?.thumbnail || `/${photo.thumbFilename || photo.id}.webp`}
+                            src={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
                             alt={`Photo ${index + 1}`}
                             className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                             loading="lazy"
-                            onClick={() => onOpenPhotoViewer(photos, photo, index)}
+                            onClick={() => onOpenImageViewer(images, image, index)}
                             onError={(e) => {
                               e.target.onerror = null;
-                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
+                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50\%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
                             }}
                           />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{photo.name}</p>
+                          <p className="font-medium text-gray-900">{image.name}</p>
                           <p className="text-sm text-gray-500">
-                            {photo.date_taken ? formatTimeOnly(photo.date_taken) : 'Unknown date'}
+                            {image.date_taken ? formatTimeOnly(image.date_taken) : 'Unknown date'}
                           </p>
                         </div>
                       </>

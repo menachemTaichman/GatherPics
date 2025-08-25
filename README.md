@@ -95,7 +95,7 @@ face-recognition-website/
 │   │   ├── components/
 │   │   │   ├── App.jsx         # Main application component
 │   │   │   ├── Gallery.jsx     # Gallery view component
-│   │   │   ├── FaceDetail.jsx  # Individual face view
+│   │   │   ├── GroupDetail.jsx  # Individual group view
 │   │   │   ├── Header.jsx      # Navigation header
 │   │   │   ├── FaceCard.jsx    # Individual face card
 │   │   │   ├── LoadingSpinner.jsx

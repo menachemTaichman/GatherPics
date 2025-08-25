@@ -104,15 +104,15 @@ export const groupsAPI = {
     return response.data;
   },
 
-  // Get group photos
-  getPhotos: async (groupId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/photos`);
+  // Get group images
+  getImages: async (groupId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images`);
     return response.data;
   },
 
-  // Get group photos complete
-  getPhotosComplete: async (groupId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/photos-complete`);
+  // Get group images complete
+  getImagesComplete: async (groupId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete`);
     return response.data;
   },
 
@@ -128,8 +128,8 @@ export const groupsAPI = {
     return response.data;
   },
 
-  // Get filtered photos
-  getFilteredPhotos: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentPhotoIds = [], eventId = FIXED_EVENT_ID) => {
+  // Get filtered images
+  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventId = FIXED_EVENT_ID) => {
     const params = new URLSearchParams();
     
     params.append('mode', filterMode);
@@ -139,11 +139,11 @@ export const groupsAPI = {
       params.append('related_groups', filterGroups.join(','));
     }
 
-    if (currentPhotoIds.length > 0) {
-      params.append('current_photo_ids', currentPhotoIds.join(','));
+    if (currentImageIds.length > 0) {
+      params.append('current_image_ids', currentImageIds.join(','));
     }
     
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-photos?${params.toString()}`);
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-images?${params.toString()}`);
     return response.data;
   }
 };
@@ -180,42 +180,48 @@ export const momentsAPI = {
     return response.data;
   },
 
-  // Get moment photos
-  getPhotos: async (momentId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/photos`);
+  // Get moment images
+  getImages: async (momentId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images`);
     return response.data;
   },
 
-  // Get moment photos complete
-  getPhotosComplete: async (momentId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/photos-complete`);
+  // Get moment images complete
+  getImagesComplete: async (momentId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images-complete`);
     return response.data;
   },
 
-  // Get moment photos in period
-  getPhotosInPeriod: async (momentId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/photos-in-period`);
+  // Get moment images in period
+  getImagesInPeriod: async (momentId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images-in-period`);
     return response.data;
   }
 };
 
-// Photos API
-export const photosAPI = {
-  // Get photo faces
+// Images API
+export const imagesAPI = {
+  // Get image faces
   getFaces: async (imageId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/photos/${imageId}/faces`);
+    const response = await api.get(`/api/events/${eventId}/images/${imageId}/faces`);
     return response.data;
   },
 
-  // Get photo info
+  // Get image info
   getInfo: async (imageId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/photos/${imageId}/info`);
+    const response = await api.get(`/api/events/${eventId}/images/${imageId}/info`);
     return response.data;
   },
 
-  // Get photo complete
+  // Get image complete
   getComplete: async (imageId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/photos/${imageId}/complete`);
+    const response = await api.get(`/api/events/${eventId}/images/${imageId}/complete`);
+    return response.data;
+  },
+
+  // Get all images
+  getAll: async (eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/images.json`);
     return response.data;
   }
 };
@@ -232,14 +238,7 @@ export const downloadAPI = {
   }
 };
 
-// Images API
-export const imagesAPI = {
-  // Get all images
-  getAll: async (eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/images.json`);
-    return response.data;
-  }
-};
+
 
 // Profile API
 export const profileAPI = {

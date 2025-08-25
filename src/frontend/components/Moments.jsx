@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil, Square, CheckSquare } from 'lucide-react';
-import PhotoViewer from './PhotoViewer';
+import ImageViewer from './ImageViewer';
 import EditMomentsModal from './EditMomentsModal';
-import EditMomentPhotosModal from './EditMomentPhotosModal';
+import EditMomentImagesModal from './EditMomentImagesModal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
@@ -59,23 +59,23 @@ export default function Moments() {
   
   const [images, setImages] = useState([]);
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
-  const [photoSize, setPhotoSize] = useSetting('moments_photoSize', 1.0);
-  const [photoSizeInputValue, setPhotoSizeInputValue] = useState();
-  const [momentPhotosMap, setMomentPhotosMap] = useState({});
-  const [photosLoading, setPhotosLoading] = useState(false);
+  const [imageSize, setImageSize] = useSetting('moments_imageSize', 1.0);
+  const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  const [momentImagesMap, setMomentImagesMap] = useState({});
+  const [imagesLoading, setImagesLoading] = useState(false);
   const [globalSelection, setGlobalSelection] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
   const [carouselVisible, setCarouselVisible] = useSetting('moments_carouselVisible', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
-  const [photoViewer, setPhotoViewer] = useState({ show: false, photo: null, index: 0, photos: [] });
+  const [imageViewer, setImageViewer] = useState({ show: false, image: null, index: 0, images: [] });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   
   // New state for checkbox visibility and selection mode
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
-  const [lastSelectedPhoto, setLastSelectedPhoto] = useState(null);
+  const [lastSelectedImage, setLastSelectedImage] = useState(null);
 
-  // Load selected photos from cache when component mounts
+  // Load selected images from cache when component mounts
   useEffect(() => {
     const cachedSelection = getSetting('moments_selection');
     if (cachedSelection && Array.isArray(cachedSelection)) {
@@ -192,65 +192,65 @@ export default function Moments() {
 
   // The timeline manager now handles all scroll detection and URL updates automatically
 
-  const fetchAllMomentPhotos = async (specificMomentId = null, updatedPhotos = null) => {
+  const fetchAllMomentImages = async (specificMomentId = null, updatedImages = null) => {
     try {
-      setPhotosLoading(true);
+      setImagesLoading(true);
       
-      // If specific moment and photos are provided, update just that moment
-      if (specificMomentId && updatedPhotos !== null) {
+      // If specific moment and images are provided, update just that moment
+      if (specificMomentId && updatedImages !== null) {
 
-        setMomentPhotosMap(prev => ({
+        setMomentImagesMap(prev => ({
           ...prev,
-          [specificMomentId]: updatedPhotos
+          [specificMomentId]: updatedImages
         }));
-        setPhotosLoading(false);
+        setImagesLoading(false);
         return;
       }
       
       const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
       
-      // Check which moments need photos fetched
-      const momentsToFetch = validMoments.filter(moment => !momentPhotosMap[moment.momentID]);
+      // Check which moments need images fetched
+      const momentsToFetch = validMoments.filter(moment => !momentImagesMap[moment.momentID]);
       
       if (momentsToFetch.length === 0) {
-        // All photos are already loaded
-        setPhotosLoading(false);
+        // All images are already loaded
+        setImagesLoading(false);
         return;
       }
       
-      // Use parallel API calls for moments that need photos fetched
-      const photoPromises = momentsToFetch.map(async (moment) => {
+      // Use parallel API calls for moments that need images fetched
+      const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getPhotos(moment.momentID);
-          return { momentId: moment.momentID, photos: result.photos || [] };
+          const result = await momentsAPI.getImages(moment.momentID);
+          return { momentId: moment.momentID, images: result.images || [] };
         } catch (error) {
-          console.error(`Error fetching photos for moment ${moment.momentID}:`, error);
-          return { momentId: moment.momentID, photos: [] };
+          console.error(`Error fetching images for moment ${moment.momentID}:`, error);
+          return { momentId: moment.momentID, images: [] };
         }
       });
 
-      // Wait for all photo requests to complete in parallel
-      const results = await Promise.all(photoPromises);
+      // Wait for all image requests to complete in parallel
+      const results = await Promise.all(imagePromises);
       
-      // Update the photos map
-      setMomentPhotosMap(prev => {
+      // Update the images map
+      setMomentImagesMap(prev => {
         const newMap = { ...prev };
-        results.forEach(({ momentId, photos }) => {
-          newMap[momentId] = photos;
+        results.forEach(({ momentId, images }) => {
+          newMap[momentId] = images;
         });
         return newMap;
       });
       
     } catch (error) {
-      console.error('Error fetching moment photos:', error);
+      console.error('Error fetching moment images:', error);
     } finally {
-      setPhotosLoading(false);
+      setImagesLoading(false);
     }
   };
 
   useEffect(() => {
     if (moments.length > 0) {
-      fetchAllMomentPhotos();
+      fetchAllMomentImages();
     }
   }, [moments]);
 
@@ -285,16 +285,16 @@ export default function Moments() {
         response.changes.forEach(change => {
           handleDataChange(change.type, change.data);
 
-          // If this is a moment update, also update the momentPhotosMap
+          // If this is a moment update, also update the momentImagesMap
           if (change.type === CHANGE_TYPES.MOMENT_UPDATED) {
-            updateMomentPhotosMap(change.data.momentID);
+            updateMomentImagesMap(change.data.momentID);
           }
         });
       } else {
         // Fallback to direct update if no change instructions
         updateMoment(updatedMoment.momentID, response.moment || response);
-        // Also update the momentPhotosMap
-        updateMomentPhotosMap(updatedMoment.momentID);
+        // Also update the momentImagesMap
+        updateMomentImagesMap(updatedMoment.momentID);
       }
 
       // Return the response so the caller knows the operation succeeded
@@ -307,18 +307,18 @@ export default function Moments() {
     }
   };
 
-  // Function to update the momentPhotosMap for a specific moment
-  const updateMomentPhotosMap = async (momentId) => {
+  // Function to update the momentImagesMap for a specific moment
+  const updateMomentImagesMap = async (momentId) => {
     try {
-      const result = await momentsAPI.getPhotos(momentId);
+      const result = await momentsAPI.getImages(momentId);
       
-      setMomentPhotosMap(prev => ({
+      setMomentImagesMap(prev => ({
         ...prev,
-        [momentId]: result.photos || []
+        [momentId]: result.images || []
       }));
       
     } catch (error) {
-      console.error('Error updating moment photos map:', error);
+      console.error('Error updating moment images map:', error);
     }
   };
 
@@ -340,39 +340,39 @@ export default function Moments() {
     }
   };
 
-  const handlePhotoSelect = (photoName, momentId, event) => {
-    const key = `${momentId}:${photoName}`;
+  const handleImageSelect = (imageName, momentId, event) => {
+    const key = `${momentId}:${imageName}`;
     
     // Handle shift-click for range selection
-    if (event?.shiftKey && lastSelectedPhoto && lastSelectedPhoto !== key) {
-      const [lastMomentId, lastPhotoName] = lastSelectedPhoto.split(':');
+    if (event?.shiftKey && lastSelectedImage && lastSelectedImage !== key) {
+      const [lastMomentId, lastImageName] = lastSelectedImage.split(':');
       
       // Only allow range selection within the same moment
       if (lastMomentId === momentId) {
-        const currentPhotos = momentPhotosMap[momentId] || [];
-        const lastIndex = currentPhotos.findIndex(p => p.name === lastPhotoName);
-        const currentIndex = currentPhotos.findIndex(p => p.name === photoName);
+        const currentImages = momentImagesMap[momentId] || [];
+        const lastIndex = currentImages.findIndex(p => p.name === lastImageName);
+        const currentIndex = currentImages.findIndex(p => p.name === imageName);
         
         if (lastIndex !== -1 && currentIndex !== -1) {
           const startIndex = Math.min(lastIndex, currentIndex);
           const endIndex = Math.max(lastIndex, currentIndex);
           
-          // Add all photos in the range
+          // Add all images in the range
           setGlobalSelection(prev => {
             const next = new Set(prev);
             for (let i = startIndex; i <= endIndex; i++) {
-              const photo = currentPhotos[i];
-              next.add(`${momentId}:${photo.name}`);
+              const image = currentImages[i];
+              next.add(`${momentId}:${image.name}`);
             }
             return next;
           });
-          setLastSelectedPhoto(key);
+          setLastSelectedImage(key);
           return;
         }
       }
     }
     
-    // Regular click - toggle the photo
+    // Regular click - toggle the image
     setGlobalSelection(prev => {
       const next = new Set(prev);
       if (next.has(key)) {
@@ -382,29 +382,29 @@ export default function Moments() {
       }
       return next;
     });
-    setLastSelectedPhoto(key);
+    setLastSelectedImage(key);
   };
 
-  // Helper function to get all current photo keys
-  const getAllCurrentPhotoKeys = () => {
-    const allCurrentPhotos = new Set();
-    Object.entries(momentPhotosMap).forEach(([momentId, photos]) => {
-      photos.forEach(photo => {
-        allCurrentPhotos.add(`${momentId}:${photo.name}`);
+  // Helper function to get all current image keys
+  const getAllCurrentImageKeys = () => {
+    const allCurrentImages = new Set();
+    Object.entries(momentImagesMap).forEach(([momentId, images]) => {
+      images.forEach(image => {
+        allCurrentImages.add(`${momentId}:${image.name}`);
       });
     });
-    return allCurrentPhotos;
+    return allCurrentImages;
   };
 
 
 
-  const selectAllPhotos = () => {
-    // Button always selects all photos from all moments
-    const allCurrentPhotos = getAllCurrentPhotoKeys();
+  const selectAllImages = () => {
+    // Button always selects all images from all moments
+    const allCurrentImages = getAllCurrentImageKeys();
     
     // Use the global allCurrentSelected variable that's calculated at render time
     if (allCurrentSelected) {
-      // All current photos are selected, clear selection
+      // All current images are selected, clear selection
       setGlobalSelection(new Set());
       // Clear cache when selection is cleared
       try {
@@ -412,10 +412,10 @@ export default function Moments() {
       } catch (error) {
         console.warn('Failed to clear selection cache:', error);
       }
-      // Don't reset lastSelectedPhoto here to preserve shift+click functionality
+      // Don't reset lastSelectedImage here to preserve shift+click functionality
     } else {
-      // Select all photos
-      setGlobalSelection(allCurrentPhotos);
+      // Select all images
+      setGlobalSelection(allCurrentImages);
     }
   };
 
@@ -425,62 +425,62 @@ export default function Moments() {
     const currentMoment = currentVisibleMoment;
     
     if (currentMoment) {
-      const currentMomentPhotos = momentPhotosMap[currentMoment.momentID] || [];
-      const currentMomentPhotoKeys = currentMomentPhotos.map(photo => `${currentMoment.momentID}:${photo.name}`);
+      const currentMomentImages = momentImagesMap[currentMoment.momentID] || [];
+              const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image.name}`);
       
-      // Check if all photos in current moment are already selected
-      const allCurrentMomentSelected = currentMomentPhotoKeys.length > 0 && 
-        currentMomentPhotoKeys.every(key => globalSelection.has(key));
-      
-      if (allCurrentMomentSelected) {
-        // Current moment is fully selected, now select all from all moments
-        const allCurrentPhotos = getAllCurrentPhotoKeys();
-        setGlobalSelection(allCurrentPhotos);
-      } else {
-        // Select all photos from current moment
-        setGlobalSelection(prev => {
-          const next = new Set(prev);
-          currentMomentPhotoKeys.forEach(key => next.add(key));
-          return next;
-        });
-      }
+              // Check if all images in current moment are already selected
+        const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
+          currentMomentImageKeys.every(key => globalSelection.has(key));
+        
+        if (allCurrentMomentSelected) {
+          // Current moment is fully selected, now select all from all moments
+          const allCurrentImages = getAllCurrentImageKeys();
+          setGlobalSelection(allCurrentImages);
+        } else {
+          // Select all images from current moment
+          setGlobalSelection(prev => {
+            const next = new Set(prev);
+            currentMomentImageKeys.forEach(key => next.add(key));
+            return next;
+          });
+        }
     } else {
       // No current moment focused, use the same logic as button
-      selectAllPhotos();
+      selectAllImages();
     }
   };
 
   const selectAllInMoment = (momentId) => {
-    const momentPhotos = momentPhotosMap[momentId] || [];
-    const momentPhotoKeys = momentPhotos.map(photo => `${momentId}:${photo.name}`);
+    const momentImages = momentImagesMap[momentId] || [];
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image.name}`);
     
-    // Check if all photos in this moment are already selected
-    const allSelected = momentPhotoKeys.every(key => globalSelection.has(key));
+    // Check if all images in this moment are already selected
+    const allSelected = momentImageKeys.every(key => globalSelection.has(key));
     
     if (allSelected) {
       // Clear selection for this moment
       setGlobalSelection(prev => {
         const next = new Set(prev);
-        momentPhotoKeys.forEach(key => next.delete(key));
+        momentImageKeys.forEach(key => next.delete(key));
         return next;
       });
     } else {
-      // Select all photos in this moment
+      // Select all images in this moment
       setGlobalSelection(prev => {
         const next = new Set(prev);
-        momentPhotoKeys.forEach(key => next.add(key));
+        momentImageKeys.forEach(key => next.add(key));
         return next;
       });
     }
   };
 
   const clearMomentSelection = (momentId) => {
-    const momentPhotos = momentPhotosMap[momentId] || [];
-    const momentPhotoKeys = momentPhotos.map(photo => `${momentId}:${photo.name}`);
+    const momentImages = momentImagesMap[momentId] || [];
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image.name}`);
     
     setGlobalSelection(prev => {
       const next = new Set(prev);
-      momentPhotoKeys.forEach(key => next.delete(key));
+      momentImageKeys.forEach(key => next.delete(key));
       return next;
     });
     
@@ -489,7 +489,7 @@ export default function Moments() {
 
   const clearGlobalSelection = () => {
     setGlobalSelection(new Set());
-    setLastSelectedPhoto(null);
+    setLastSelectedImage(null);
     // Clear cache when selection is cleared
     try {
       localStorage.removeItem('face_gallery_settings_moments_selection');
@@ -516,25 +516,25 @@ export default function Moments() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [momentPhotosMap, globalSelection]);
+  }, [momentImagesMap, globalSelection]);
 
   const handleGlobalAddToBucket = async () => {
     if (globalSelection.size === 0) return;
     
-    // TODO: Implement add selected photos to bucket functionality
-    alert(`Add ${globalSelection.size} selected photos to bucket functionality will be implemented later`);
+    // TODO: Implement add selected images to bucket functionality
+          alert(`Add ${globalSelection.size} selected photos to bucket functionality will be implemented later`);
   };
 
   const handleRemoveFromMoment = async () => {
-    // This would require backend support to remove photos from moments
-    alert('Remove from moment functionality would be implemented here');
+    // This would require backend support to remove images from moments
+          alert('Remove photos from moment functionality would be implemented here');
   };
 
   const handleMoveToMoment = async () => {
     if (!targetMoment || globalSelection.size === 0) return;
     
     try {
-      // This would require backend support to move photos between moments
+      // This would require backend support to move images between moments
       alert(`Moving ${globalSelection.size} photos to ${targetMoment.label}`);
       setShowMoveModal(false);
       clearGlobalSelection();
@@ -547,34 +547,34 @@ export default function Moments() {
 
 
 
-  const openPhotoViewer = (photos, photo, index) => {
-    setPhotoViewer({
+  const openImageViewer = (images, image, index) => {
+    setImageViewer({
       show: true,
-      photo: photo.id, // Pass the photo ID instead of the photo object
+      image: image.id, // Pass the image ID instead of the image object
       index: index,
-      photos: photos
+      images: images
     });
   };
 
-  const closePhotoViewer = () => {
-    setPhotoViewer({ show: false, photo: null, index: 0, photos: [] });
+  const closeImageViewer = () => {
+    setImageViewer({ show: false, image: null, index: 0, images: [] });
   };
 
-  const navigatePhoto = (direction, index) => {
-    const currentIndex = photoViewer.index;
+  const navigateImage = (direction, index) => {
+    const currentIndex = imageViewer.index;
     let newIndex;
     if (direction === 'jump' && typeof index === 'number') {
       newIndex = index;
     } else if (direction === 'next') {
-      newIndex = Math.min(currentIndex + 1, photoViewer.photos.length - 1);
+      newIndex = Math.min(currentIndex + 1, imageViewer.images.length - 1);
     } else {
       newIndex = Math.max(currentIndex - 1, 0);
     }
-    setPhotoViewer({
+    setImageViewer({
       show: true,
-      photo: photoViewer.photos[newIndex].id, // Use photo.id instead of photo.name
+      image: imageViewer.images[newIndex].id, // Use image.id instead of image.name
       index: newIndex,
-      photos: photoViewer.photos
+      images: imageViewer.images
     });
   };
 
@@ -590,10 +590,10 @@ export default function Moments() {
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
 
-  // Calculate if all current photos are selected for the select all button
-  const allCurrentPhotos = getAllCurrentPhotoKeys();
-  const allCurrentSelected = allCurrentPhotos.size > 0 && 
-    Array.from(allCurrentPhotos).every(key => globalSelection.has(key));
+  // Calculate if all current images are selected for the select all button
+  const allCurrentImages = getAllCurrentImageKeys();
+  const allCurrentSelected = allCurrentImages.size > 0 && 
+    Array.from(allCurrentImages).every(key => globalSelection.has(key));
 
   return (
     <div className="w-full bg-gray-50 min-h-screen">
@@ -624,7 +624,7 @@ export default function Moments() {
             <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
             <div className="flex items-center space-x-4">
               <p className="text-gray-600">
-                {allCurrentPhotos.size} photos
+                {allCurrentImages.size} photos
               </p>
               {globalSelection.size > 0 && (
                 <span className="text-sm text-primary-600 font-medium">
@@ -649,7 +649,7 @@ export default function Moments() {
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: View and Size Controls */}
             <div className="flex items-center space-x-3 px-4">
-              {photosLoading && (
+              {imagesLoading && (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 h-4 border-b-2 border-primary-600"></div>
                   <span>Loading photos...</span>
@@ -668,12 +668,12 @@ export default function Moments() {
                 <>
                   <button
                     onClick={() => {
-                      const currentPercent = Math.round(photoSize * 100);
+                      const currentPercent = Math.round(imageSize * 100);
                       const subtractValue = currentPercent > 100 ? 25 : 10;
                       const newPercent = Math.max(50, currentPercent - subtractValue);
-                      setPhotoSize(newPercent / 100);
+                      setImageSize(newPercent / 100);
                     }}
-                    disabled={photoSize <= 0.5}
+                    disabled={imageSize <= 0.5}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Decrease size"
                   >
@@ -683,30 +683,30 @@ export default function Moments() {
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    value={photoSizeInputValue !== undefined ? photoSizeInputValue : Math.round(photoSize * 100)}
-                    onChange={e => setPhotoSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
+                    onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
                     onBlur={e => {
                       let val = parseInt(e.target.value, 10);
-                      if (isNaN(val)) val = Math.round(photoSize * 100);
+                      if (isNaN(val)) val = Math.round(imageSize * 100);
                       val = Math.max(50, Math.min(300, val));
-                      setPhotoSize(val / 100);
-                      setPhotoSizeInputValue(undefined);
+                      setImageSize(val / 100);
+                                              setImageSizeInputValue(undefined);
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter') e.target.blur();
-                      else if (e.key === 'Escape') setPhotoSizeInputValue(undefined);
+                                              else if (e.key === 'Escape') setImageSizeInputValue(undefined);
                     }}
                     className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                     style={{width: '3rem'}}
                   />
                   <button
                     onClick={() => {
-                      const currentPercent = Math.round(photoSize * 100);
+                      const currentPercent = Math.round(imageSize * 100);
                       const addValue = currentPercent >= 100 ? 25 : 10;
                       const newPercent = Math.min(300, currentPercent + addValue);
-                      setPhotoSize(newPercent / 100);
+                      setImageSize(newPercent / 100);
                     }}
-                    disabled={photoSize >= 3}
+                    disabled={imageSize >= 3}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Increase size"
                   >
@@ -718,7 +718,7 @@ export default function Moments() {
 
             {/* Group 2: Selection Controls */}
             <div className="flex items-center space-x-3 px-4">
-              {photosLoading ? (
+              {imagesLoading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                   <span>Loading...</span>
@@ -738,9 +738,9 @@ export default function Moments() {
                   </button>
                   
                   {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
-                  {selectionMode && allCurrentPhotos.size > 0 && !allCurrentSelected && (
+                  {selectionMode && allCurrentImages.size > 0 && !allCurrentSelected && (
                     <button
-                      onClick={selectAllPhotos}
+                      onClick={selectAllImages}
                       className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                         globalSelection.size > 0 
                           ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
@@ -752,7 +752,7 @@ export default function Moments() {
                     </button>
                   )}
                   
-                  {/* Clear button - always visible when any photos are selected, always red */}
+                  {/* Clear button - always visible when any images are selected, always red */}
                   {globalSelection.size > 0 && (
                     <button
                       onClick={clearGlobalSelection}
@@ -767,7 +767,7 @@ export default function Moments() {
             </div>
 
             {/* Group 3: Actions on Selection */}
-            {globalSelection.size > 0 && !photosLoading && (
+            {globalSelection.size > 0 && !imagesLoading && (
               <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={handleGlobalAddToBucket}
@@ -828,7 +828,7 @@ export default function Moments() {
                     No moments yet
                   </div>
                 )}
-                {photosLoading && moments.length > 0 && (
+                {imagesLoading && moments.length > 0 && (
                   <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
                     <div className="flex items-center space-x-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
@@ -848,19 +848,19 @@ export default function Moments() {
                     }}
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                      {moment.representative_photo && moment.representative_photo.trim() !== '' ? (
+                      {moment.representative_image && moment.representative_image.trim() !== '' ? (
                         <img 
-                          src={moment.representative_photo.startsWith('/api/') 
-                            ? `${API_BASE}${moment.representative_photo}` 
-                            : moment.representative_photo.startsWith('http') 
-                              ? moment.representative_photo 
-                              : urlHelpers.getThumbnailUrl(moment.representative_photo)
+                          src={moment.representative_image.startsWith('/api/') 
+                            ? `${API_BASE}${moment.representative_image}` 
+                            : moment.representative_image.startsWith('http') 
+                              ? moment.representative_image 
+                              : urlHelpers.getThumbnailUrl(moment.representative_image)
                           } 
                           alt="" 
                           className="object-cover w-full h-full" 
                           loading="lazy" 
                         />
-                      ) : photosLoading ? (
+                      ) : imagesLoading ? (
                         <div className="animate-pulse bg-gray-300 w-full h-full rounded"></div>
                       ) : (
                         <Image className="w-8 h-8 text-white" />
@@ -890,7 +890,7 @@ export default function Moments() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No moments yet</h3>
             <p className="text-gray-500">Create your first moment to start building your timeline.</p>
           </div>
-        ) : photosLoading && Object.keys(momentPhotosMap).length === 0 ? (
+        ) : imagesLoading && Object.keys(momentImagesMap).length === 0 ? (
           <div className="text-center py-12">
             <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600"></div>
@@ -944,7 +944,7 @@ export default function Moments() {
             
             {/* Timeline items */}
             <div className="space-y-12 pr-4">
-              {photosLoading && (
+              {imagesLoading && (
                 <div className="text-center py-8">
                   <div className="inline-flex items-center space-x-2 text-gray-500">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
@@ -956,12 +956,12 @@ export default function Moments() {
                 <MomentCard
                   key={moment.momentID}
                   moment={moment}
-                  photos={momentPhotosMap[moment.momentID] || []}
+                  images={momentImagesMap[moment.momentID] || []}
                   viewMode={viewMode}
-                  photoSize={photoSize}
+                  imageSize={imageSize}
                   globalSelection={globalSelection}
-                  onPhotoSelect={handlePhotoSelect}
-                  onOpenPhotoViewer={openPhotoViewer}
+                  onImageSelect={handleImageSelect}
+                  onOpenImageViewer={openImageViewer}
                   selectionMode={selectionMode}
                   onSelectAllInMoment={selectAllInMoment}
                   onClearMomentSelection={clearMomentSelection}
@@ -979,8 +979,8 @@ export default function Moments() {
           onDelete={handleDeleteMoment}
           moments={moments}
           images={images}
-          momentPhotosMap={momentPhotosMap}
-          onRefreshPhotos={fetchAllMomentPhotos}
+                          momentImagesMap={momentImagesMap}
+                      onRefreshImages={fetchAllMomentImages}
           onClose={() => setShowEditMomentsModal(false)}
           onToast={showToast}
         />
@@ -1002,13 +1002,13 @@ export default function Moments() {
             exit={{ scale: 0.9, opacity: 0 }}
             className="bg-white rounded-lg shadow-lg w-full max-w-md p-6"
           >
-            <h4 className="font-semibold mb-4">Move to Moment</h4>
+            <h4 className="font-semibold mb-4">Move Photos to Moment</h4>
             <select
               value={targetMoment?.momentID || ''}
               onChange={(e) => setTargetMoment(moments.find(m => m.momentID === e.target.value))}
               className="w-full border rounded px-3 py-2 mb-4"
             >
-              <option value="">Select a moment...</option>
+              <option value="">Select a moment for photos...</option>
               {moments.map(m => (
                 <option key={m.momentID} value={m.momentID}>{m.label}</option>
               ))}
@@ -1021,14 +1021,14 @@ export default function Moments() {
         </motion.div>
       )}
 
-      {/* Photo Viewer */}
-      {photoViewer.show && (
-        <PhotoViewer
-          photo={photoViewer.photo}
-          onClose={closePhotoViewer}
-          onNavigate={navigatePhoto}
-          totalPhotos={photoViewer.photos.length}
-          currentIndex={photoViewer.index}
+      {/* image Viewer */}
+              {imageViewer.show && (
+          <ImageViewer
+            image={imageViewer.image}
+            onClose={closeImageViewer}
+            onNavigate={navigateImage}
+            totalImages={imageViewer.images.length}
+            currentIndex={imageViewer.index}
           currentGroupId={null}
           onJumpToMoment={handleJumpToMoment}
         />

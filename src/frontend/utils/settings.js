@@ -11,23 +11,23 @@ const DEFAULT_SETTINGS = {
   gallery_sortOrder: 'desc',
   gallery_cardSize: 1.0,
   
-  // FaceDetail settings
-  faceDetail_viewMode: 'grid',
-  faceDetail_photoSize: 1.0,
-  faceDetail_sortBy: 'date',
-  faceDetail_sortOrder: 'asc',
+  // GroupDetail settings
+  groupDetail_viewMode: 'grid',
+  groupDetail_imageSize: 1.0,
+  groupDetail_sortBy: 'date',
+  groupDetail_sortOrder: 'asc',
   
   // Shared selection settings
   selectionMode: false,
   
   // Moments settings
   moments_viewMode: 'grid',
-  moments_photoSize: 1.0,
+  moments_imageSize: 1.0,
   moments_carouselVisible: true,
   
-  // EditMomentPhotosModal settings
-  editMomentPhotos_sortOrder: 'asc',
-  editMomentPhotos_filterType: 'all',
+  // EditMomentImagesModal settings
+  editMomentImages_sortOrder: 'asc',
+  editMomentImages_filterType: 'all',
   
   // TransferFacesModal settings
   transferModal_sortBy: 'name',

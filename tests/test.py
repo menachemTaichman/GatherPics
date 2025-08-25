@@ -282,12 +282,12 @@ def copy_moments_to_database():
         start = old_moment.get('start_datetime', '').replace('T', ' ')
         end = old_moment.get('end_datetime', '').replace('T', ' ')
         
-        # Map old photo filenames to new image IDs
-        old_photos = old_moment.get('photos', [])
+        # Map old image filenames to new image IDs
+        old_images = old_moment.get('images', [])
         image_ids = []
         
-        for photo_filename in old_photos:
-            image_record = event.db.get_one('images', {'name': photo_filename})
+        for image_filename in old_images:
+            image_record = event.db.get_one('images', {'name': image_filename})
             if image_record:
                 image_ids.append(image_record['imageID'])
         

@@ -3,34 +3,34 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
-import { photosAPI, downloadAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { imagesAPI, downloadAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
-import { clearTransferredPhotosFromCache } from '../utils/selection';
+import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 
-export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
+export default function ImageViewer({ image, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Custom keyboard handler for PhotoViewer-specific shortcuts
-  const handlePhotoViewerKeys = (e) => {
+  // Custom keyboard handler for ImageViewer-specific shortcuts
+  const handleImageViewerKeys = (e) => {
     // If the event is coming from one of our specific inputs, let it be handled locally.
     const targetId = e.target.id;
-    if ((targetId === 'photo-viewer-index' || targetId === 'photo-viewer-zoom') && e.key === 'Enter') {
+    if ((targetId === 'image-viewer-index' || targetId === 'image-viewer-zoom') && e.key === 'Enter') {
         return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
     }
       
     switch (e.key) {
       case 'ArrowLeft':
-        if (totalPhotos > 1 && currentIndex > 0) {
+        if (totalImages > 1 && currentIndex > 0) {
           handleNavigate('prev');
           return true; // Mark as handled
         }
         break;
       case 'ArrowRight':
-        if (totalPhotos > 1 && currentIndex < totalPhotos - 1) {
+        if (totalImages > 1 && currentIndex < totalImages - 1) {
           handleNavigate('next');
           return true; // Mark as handled
         }
@@ -51,13 +51,13 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
   
   // Use modal focus hook
   const { modalRef } = useModalFocus(true, onClose, {
-    customKeyHandler: handlePhotoViewerKeys,
+    customKeyHandler: handleImageViewerKeys,
     allowOutsideScroll: true
   });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [faces, setFaces] = useState([]);
-  const [photoInfo, setPhotoInfo] = useState(null);
+  const [imageInfo, setImageInfo] = useState(null);
   const [momentInfo, setMomentInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -92,12 +92,12 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     if (!onNavigate) return;
     if (direction === 'prev') {
       if (currentIndex === 0) {
-        onNavigate('jump', totalPhotos - 1);
+        onNavigate('jump', totalImages - 1);
       } else {
         onNavigate('prev');
       }
     } else if (direction === 'next') {
-      if (currentIndex === totalPhotos - 1) {
+      if (currentIndex === totalImages - 1) {
         onNavigate('jump', 0);
       } else {
         onNavigate('next');
@@ -107,62 +107,62 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     }
   };
 
-  // Use the photo object directly since it comes from the API
-  let photoMeta = photo;
-  if (typeof photo === 'string') {
-    photoMeta = { name: photo };
+  // Use the image object directly since it comes from the API
+  let imageMeta = image;
+  if (typeof image === 'string') {
+    imageMeta = { name: image };
   }
-  // Use the photo data directly
-  const displayFilename = photoMeta.display_path || photoMeta.thumb_path || photoMeta.original_path || photoMeta.name;
+  // Use the image data directly
+  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.name;
 
   useEffect(() => {
-    if (photo) {
-      loadPhotoInfo();
-      // Reset selected face when photo changes
+    if (image) {
+      loadImageInfo();
+      // Reset selected face when image changes
       setSelectedFaceIndex(null);
-      // Reset image loaded state when photo changes
+      // Reset image loaded state when image changes
       setImageLoaded(false);
     }
-  }, [photo]);
+  }, [image]);
 
   // Subscribe to data store changes to update face data when transfers happen
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
         const transferResult = state.lastTransferResult;
-        if (transferResult && transferResult.transferred_photos_data && photo) {
-          // Check if the current photo was affected by the transfer
-          const updatedPhotoData = transferResult.transferred_photos_data.find(
-            photoData => photoData.id === photo || photoData.name === photo
+        if (transferResult && transferResult.transferred_images_data && image) {
+          // Check if the current image was affected by the transfer
+          const updatedImageData = transferResult.transferred_images_data.find(
+            imageData => imageData.id === image || imageData.name === image
           );
           
-          if (updatedPhotoData) {
+          if (updatedImageData) {
             // Update face data without reloading
-            setFaces(updatedPhotoData.faces || []);
-            setPhotoInfo(updatedPhotoData);
-            setMomentInfo(updatedPhotoData.moment || null);
+            setFaces(updatedImageData.faces || []);
+            setImageInfo(updatedImageData);
+            setMomentInfo(updatedImageData.moment || null);
           }
         }
       }
     );
     
     return unsubscribe;
-  }, [photo]);
+  }, [image]);
 
-  const loadPhotoInfo = async () => {
+  const loadImageInfo = async () => {
     try {
       setLoading(true);
       
-      // Use the new complete photo endpoint instead of multiple calls
-      const photoData = await photosAPI.getComplete(photoMeta.name);
+      // Use the new complete image endpoint instead of multiple calls
+      const imageData = await imagesAPI.getComplete(imageMeta.name);
       
-      setFaces(photoData.faces || []);
-      setPhotoInfo(photoData);
-      setMomentInfo(photoData.moment || null);
+      setFaces(imageData.faces || []);
+      setImageInfo(imageData);
+      setMomentInfo(imageData.moment || null);
     } catch (error) {
-      console.error('Error loading photo info:', error);
+      console.error('Error loading image info:', error);
       setFaces([]);
-      setPhotoInfo({ filename: photoMeta.name, faces_count: 0, groups: [] });
+      setImageInfo({ filename: imageMeta.name, faces_count: 0, groups: [] });
       setMomentInfo(null);
     } finally {
       setLoading(false);
@@ -225,18 +225,18 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   const handleDownload = async () => {
     try {
-      const result = await downloadAPI.download([photoMeta.name]);
+      const result = await downloadAPI.download([imageMeta.name]);
       
       // Create a temporary link to download the file
       const link = document.createElement('a');
       link.href = `${API_BASE}${result.download_url}`;
-      link.download = photoMeta.name;
+      link.download = imageMeta.name;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error('Error downloading photo:', error);
-      const errorInfo = handleAPIError(error, 'Failed to download photo');
+      console.error('Error downloading image:', error);
+      const errorInfo = handleAPIError(error, 'Failed to download image');
       alert(errorInfo.message);
     }
   };
@@ -292,10 +292,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
 
     if (transferData) {
-      clearTransferredPhotosFromCache(transferData.old_group_id, transferData.photos_to_remove_from_source);
+      clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
     }
     
-    // The parent component (FaceDetail) is responsible for all state and cache updates.
+    // The parent component (GroupDetail) is responsible for all state and cache updates.
     if (onTransferComplete) {
       onTransferComplete(result);
     }
@@ -375,10 +375,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
   return (
     <AnimatePresence>
-      <div key="photo-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <motion.div
           ref={modalRef}
-          className="bg-white rounded-lg shadow-xl max-w-7xl w-full mx-4 photo-viewer-modal"
+          className="bg-white rounded-lg shadow-xl max-w-7xl w-full mx-4 image-viewer-modal"
           style={{ 
             maxHeight: '92vh',
             height: '92vh'
@@ -389,7 +389,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           tabIndex={-1}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white photo-viewer-header">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white image-viewer-header">
             <div className="flex items-center space-x-4">
               <button
                 onClick={onClose}
@@ -399,10 +399,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </button>
               
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{photoInfo?.name || photoMeta.name}</h2>
-                {photoInfo && (
+                <h2 className="text-lg font-semibold text-gray-900">{imageInfo?.name || imageMeta.name}</h2>
+                {imageInfo && (
                   <p className="text-sm text-gray-500">
-                    {photoInfo.faces_count || 0} faces • {new Set(photoInfo.faces?.map(f => f.group_id) || []).size} groups
+                    {imageInfo.faces_count || 0} faces • {new Set(imageInfo.faces?.map(f => f.group_id) || []).size} groups
                   </p>
                 )}
               </div>
@@ -410,7 +410,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
             {/* Navigation */}
             <div className="flex items-center space-x-2">
-              {totalPhotos > 1 && (
+              {totalImages > 1 && (
                 <>
                   <button
                     onClick={() => handleNavigate('prev')}
@@ -422,8 +422,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     {isEditingIndex ? (
                       <input
                         type="text"
-                        id="photo-viewer-index"
-                        name="photo-viewer-index"
+                        id="image-viewer-index"
+                        name="image-viewer-index"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
@@ -431,7 +431,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                         onBlur={e => {
                           let val = parseInt(e.target.value, 10);
                           if (isNaN(val)) val = currentIndex + 1;
-                          val = Math.max(1, Math.min(totalPhotos, val));
+                          val = Math.max(1, Math.min(totalImages, val));
                           handleNavigate('jump', val - 1);
                           setIsEditingIndex(false);
                           setEditIndexValue(undefined);
@@ -452,12 +452,12 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       <span
                         className="cursor-pointer hover:underline w-12 inline-block text-center"
                         style={{width: '3rem'}}
-                        title="Jump to photo"
+                        title="Jump to image"
                         onClick={() => setIsEditingIndex(true)}
                       >
                         {currentIndex + 1}
                       </span>
-                    )} / {totalPhotos}
+                    )} / {totalImages}
                   </span>
                   <button
                     onClick={() => handleNavigate('next')}
@@ -472,7 +472,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
 
           {/* Content */}
           <div className="flex h-full overflow-hidden">
-            {/* Photo Viewer */}
+            {/* Image Viewer */}
             <div 
               ref={containerRef}
               className="flex-1 flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
@@ -496,8 +496,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
-                      src={photoInfo?.urls?.display ? `${API_BASE}${photoInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${photoMeta.name}.webp`}
-                      alt={photoMeta.name}
+                                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageMeta.name}.webp`}
+                alt={imageMeta.name}
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
                       loading="lazy"
@@ -536,7 +536,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                       }
                       return (
                         <div
-                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${photoMeta.name}`}
+                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageMeta.name}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -570,10 +570,10 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               )}
             </div>
 
-            {/* Sidebar */}
-            <div className="w-80 bg-white border-l border-gray-200 photo-viewer-sidebar">
-              {/* Controls */}
-              <div className="p-3 border-b border-gray-200 photo-viewer-controls">
+                    {/* Sidebar */}
+        <div className="w-80 bg-white border-l border-gray-200 image-viewer-sidebar">
+          {/* Controls */}
+          <div className="p-3 border-b border-gray-200 image-viewer-controls">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
                   <div className="flex items-center space-x-2">
@@ -595,8 +595,8 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                     </button>
                     <input
                       type="text"
-                      id="photo-viewer-zoom"
-                      name="photo-viewer-zoom"
+                      id="image-viewer-zoom"
+                      name="image-viewer-zoom"
                       inputMode="numeric"
                       pattern="[0-9]*"
                       value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
@@ -656,18 +656,18 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
+                  <h4 className="text-xs font-medium text-gray-700 mb-1">Image Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {photoInfo?.name || photoMeta.name}</div>
-                    <div><span className="font-semibold">Date:</span> {photoInfo?.date_taken || 'Unknown'}</div>
+                    <div><span className="font-semibold">Name:</span> {imageInfo?.name || imageMeta.name}</div>
+                    <div><span className="font-semibold">Date:</span> {imageInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Original size:</span> {(() => {
-                      const size = photoInfo?.file_size;
+                      const size = imageInfo?.file_size;
                       if (!size) return 'Unknown';
                       if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
                       if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
                       return (size / 1024).toFixed(1) + ' KB';
                     })()}</div>
-                    <div><span className="font-semibold">Original resolution:</span> {photoInfo?.width && photoInfo?.height ? `${photoInfo.width} x ${photoInfo.height}` : 'Unknown'}</div>
+                    <div><span className="font-semibold">Original resolution:</span> {imageInfo?.width && imageInfo?.height ? `${imageInfo.width} x ${imageInfo.height}` : 'Unknown'}</div>
                   </div>
                   
                                      {/* Moment Information */}
@@ -690,19 +690,19 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
               </div>
 
               {/* Faces Info */}
-              <div className="photo-viewer-faces p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
-                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Photo</h3>
+              <div className="image-viewer-faces p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Image</h3>
                 
                 <div 
                   className="faces-list-container overflow-y-auto flex-1"
                 >
                   {faces.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
+                    <p className="text-gray-500 text-sm">No faces detected in this image.</p>
                   ) : (
                     <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
-                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${photoMeta.name}`}
+                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageMeta.name}`}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >
@@ -757,7 +757,7 @@ export default function PhotoViewer({ photo, onClose, onNavigate, totalPhotos, c
           }}
           groups={groups}
           currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
-          selectedFaces={selectedFaceForTransfer.all_faces_in_photo || [selectedFaceForTransfer.face_id]}
+                          selectedFaces={selectedFaceForTransfer.all_faces_in_image || [selectedFaceForTransfer.face_id]}
           onTransferComplete={handleTransferComplete}
           showToast={showToast}
         />

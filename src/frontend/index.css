@@ -33,7 +33,7 @@
   
 
   
-  /* Photo grid for FaceDetail - masonry layout */
+  /* Photo grid for GroupDetail - masonry layout */
   .photo-gallery-grid {
     @apply w-full grid gap-4;
     grid-auto-flow: dense;

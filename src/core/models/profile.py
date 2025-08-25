@@ -6,12 +6,12 @@ class Profiles(BaseModel):
     def __init__(self, db: AppDB):
         super().__init__(db, table_name='profiles', id_field='profileID')
 
-    def get_add_data(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_photos: bool = False, can_edit_moments: bool = False) -> Dict:
+    def get_add_data(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_images: bool = False, can_edit_moments: bool = False) -> Dict:
         return {
             'label': label,
             'all_images': all_images,
             'can_edit_groups': can_edit_groups,
-            'can_upload_photos': can_upload_photos,
+            'can_upload_images': can_upload_images,
             'can_edit_moments': can_edit_moments
         }
 
@@ -25,10 +25,10 @@ class Profiles(BaseModel):
             for image_id in image_ids if image_id not in existing_ids
         ]
         if to_insert:
-            self.db.insert_many('profile_images', to_insert)
+            self.db.secure_insert('profile_images', to_insert)
 
-    def add(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_photos: bool = False, can_edit_moments: bool = False) -> Dict:
-        profile_data = super().add(label, all_images, accessible_image_IDs, can_edit_groups, can_upload_photos, can_edit_moments)
+    def add(self, label: str = '', all_images: bool = False, accessible_image_IDs: List[str] = [], can_edit_groups: bool = False, can_upload_images: bool = False, can_edit_moments: bool = False) -> Dict:
+        profile_data = super().add(label, all_images, accessible_image_IDs, can_edit_groups, can_upload_images, can_edit_moments)
         if not all_images:
             profile_id = profile_data['profileID']
             self.add_accessible_images(profile_id, accessible_image_IDs)
@@ -46,10 +46,12 @@ class Profiles(BaseModel):
     def get_accessible_images(self, profile_id: str) -> List[str]:
         if self.is_all_images(profile_id):
             # Return all images except those explicitly excluded (accessible=0) for this profile
-            query = '''
-                SELECT images.imageID
-                FROM images
-                LEFT JOIN profile_images ON images.imageID = profile_images.imageID AND profile_images.profileID = ?
+            # Use accessible_images view for read operations
+            accessible_table = self.db._get_accessible_table_name('images')
+            query = f'''
+                SELECT {accessible_table}.imageID
+                FROM {accessible_table}
+                LEFT JOIN profile_images ON {accessible_table}.imageID = profile_images.imageID AND profile_images.profileID = ?
                 WHERE profile_images.accessible IS NULL OR profile_images.accessible != 0
             '''
             results = self.db.execute_query(query, (profile_id,))
@@ -62,9 +64,8 @@ class Profiles(BaseModel):
         profile = super().get(profile_id)
         if profile:
             profile['all_images'] = profile.get('all_images', False)
-            profile['accessible_image_IDs'] = self.get_accessible_images(profile_id)
             profile['can_edit_groups'] = profile.get('can_edit_groups', False)
-            profile['can_upload_photos'] = profile.get('can_upload_photos', False)
+            profile['can_upload_images'] = profile.get('can_upload_images', False)
             profile['can_edit_moments'] = profile.get('can_edit_moments', False)
         return profile
 
@@ -72,9 +73,8 @@ class Profiles(BaseModel):
         profiles = super().list()
         for profile in profiles:
             profile_id = profile['profileID']
-            profile['accessible_image_IDs'] = self.get_accessible_images(profile_id)
             profile['can_edit_groups'] = profile.get('can_edit_groups', False)
-            profile['can_upload_photos'] = profile.get('can_upload_photos', False)
+            profile['can_upload_images'] = profile.get('can_upload_images', False)
             profile['can_edit_moments'] = profile.get('can_edit_moments', False)
         return profiles
 

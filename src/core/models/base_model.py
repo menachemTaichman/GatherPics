@@ -23,21 +23,21 @@ class BaseModel(ABC):
         # Ensure ID is generated if not provided
         if self.id_field not in data:
             data[self.id_field] = self.generate_id()
-        self.db.insert(self.table_name, data)
+        self.db.secure_insert(self.table_name, [data])
         return data
 
     def add_many(self, data_list: List[Dict]) -> List[Dict]:
         for data in data_list:
             if self.id_field not in data:
                 data[self.id_field] = self.generate_id()
-        self.db.insert_many(self.table_name, data_list)
+        self.db.secure_insert(self.table_name, data_list)
         return data_list
 
     def delete(self, entity_id: str) -> None:
-        self.db.delete(self.table_name, {self.id_field: entity_id})
+        self.db.secure_delete(self.table_name, {self.id_field: entity_id})
 
     def edit(self, entity_id: str, fields: Dict) -> None:
-        self.db.update(self.table_name, {self.id_field: entity_id}, fields)
+        self.db.secure_update(self.table_name, {self.id_field: entity_id}, fields)
 
     def get(self, entity_id: str) -> Dict | None:
         entity = self.db.get_one(self.table_name, {self.id_field: entity_id})
