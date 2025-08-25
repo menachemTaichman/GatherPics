@@ -10,6 +10,17 @@ RESTRICTED_TABLES = {
     'moments': 'momentID'  # Moments are restricted if they have no accessible images
 }
 
+# Performance indexes for the access control views
+INDEXES = [
+    'CREATE INDEX IF NOT EXISTS idx_faces_imageid ON faces(imageID)',
+    'CREATE INDEX IF NOT EXISTS idx_faces_groupid ON faces(groupID)',
+    'CREATE INDEX IF NOT EXISTS idx_profile_images_profileid ON profile_images(profileID)',
+    'CREATE INDEX IF NOT EXISTS idx_profile_images_imageid ON profile_images(imageID)',
+    'CREATE INDEX IF NOT EXISTS idx_images_momentid ON images(momentID)',
+    'CREATE INDEX IF NOT EXISTS idx_groups_face_representative ON groups(face_representative)',
+    'CREATE INDEX IF NOT EXISTS idx_moments_representative_photo ON moments(representative_photo)',
+]
+
 TABLES = {
     'faces': '''
         faceID TEXT PRIMARY KEY,
@@ -66,10 +77,17 @@ TABLES = {
 VIEWS = {
     'accessible_images_helper': '''
         SELECT images.imageID
-        FROM images left join (profile_images inner join profiles on profile_images.profileID = profiles.profileID) on images.imageID = profile_images.imageID
-        WHERE profiles.profileID = get_profile_id()
-        AND ((profiles.all_images = 1 and profile_images.accessible is NULL)
-        OR (profiles.all_images = 0 and profile_images.accessible = 1))
+        FROM images
+        LEFT JOIN profile_images
+            ON images.imageID = profile_images.imageID
+        LEFT JOIN profiles
+            ON profiles.profileID = profile_images.profileID
+            AND profiles.profileID = get_profile_id()
+            AND (
+                (profiles.all_images = 1 AND profile_images.accessible IS NULL)
+                OR (profiles.all_images = 0 AND profile_images.accessible = 1)
+        )
+        WHERE profiles.profileID IS NOT NULL;
     ''',
     'accessible_groups': '''
         SELECT groups.* FROM groups
@@ -253,6 +271,8 @@ class AppDB:
         conn = sqlite3.connect(self.db_path)
         # Enable foreign key constraints
         conn.execute("PRAGMA foreign_keys = ON")
+        # Register the get_profile_id function on every connection
+        conn.create_function("get_profile_id", 0, self.get_profile_id)
         try:
             yield conn
         finally:
@@ -379,8 +399,18 @@ class AppDB:
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         try:
+            # Create tables
             for table, schema in TABLES.items():
                 conn.execute(f'''CREATE TABLE IF NOT EXISTS {table} ({schema})''')
+            
+            # Create indexes
+            for index_sql in INDEXES:
+                conn.execute(index_sql)
+            
+            # Create views
+            for view_name, view_sql in VIEWS.items():
+                conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
+            
             conn.commit()
         finally:
             conn.close()
