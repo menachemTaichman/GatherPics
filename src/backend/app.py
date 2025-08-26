@@ -893,9 +893,8 @@ def get_images_json_legacy():
 @require_auth
 def get_display_image_webp(event_id, image_id):
     event = Event(event_id)
-    profile_id = g.profile_id
-    if image_id not in event.profile_model.get_accessible_images(profile_id):
-        return abort(403)
+    if not event.images_model.get(image_id):
+        return abort(404)
     file_path = os.path.join(event.display_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
@@ -907,13 +906,9 @@ def get_display_image_webp(event_id, image_id):
 @require_auth
 def get_face_crop_webp(event_id, face_id):
     event = Event(event_id)
-    profile_id = g.profile_id
     face = event.faces_model.get(face_id)
     if not face:
         return abort(404)
-    image_id = face['imageID']
-    if image_id not in event.profile_model.get_accessible_images(profile_id):
-        return abort(403)
     file_path = os.path.join(event.faces_dir, f'{face_id}.webp')
     if not os.path.exists(file_path):
         return abort(404)
@@ -925,8 +920,7 @@ def get_face_crop_webp(event_id, face_id):
 @require_auth
 def get_thumbnail_image_webp(event_id, image_id):
     event = Event(event_id)
-    profile_id = g.profile_id
-    if image_id not in event.profile_model.get_accessible_images(profile_id):
+    if not event.images_model.get(image_id):
         return abort(403)
     file_path = os.path.join(event.thumb_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -939,8 +933,7 @@ def get_thumbnail_image_webp(event_id, image_id):
 @require_auth
 def get_high_quality_image_webp(event_id, image_id):
     event = Event(event_id)
-    profile_id = g.profile_id
-    if image_id not in event.profile_model.get_accessible_images(profile_id):
+    if not event.images_model.get(image_id):
         return abort(403)
     file_path = os.path.join(event.high_quality_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -953,8 +946,7 @@ def get_high_quality_image_webp(event_id, image_id):
 @require_auth
 def get_original_image_webp(event_id, image_id):
     event = Event(event_id)
-    profile_id = g.profile_id
-    if image_id not in event.profile_model.get_accessible_images(profile_id):
+    if not event.images_model.get(image_id):
         return abort(403)
     file_path = os.path.join(event.original_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):

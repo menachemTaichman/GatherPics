@@ -9,9 +9,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.db import AppDB
-import sqlite3
 import time
-
+from src.core.models.event import Event
 
 
 def test_views_functionality(db):
@@ -247,10 +246,6 @@ def test_profile_function(db):
     """Test that the get_profile_id() function is properly registered and working."""
     print("\n=== Testing Profile Function ===")
     
-    # Set a test profile ID
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
-    
     try:
         with db.get_connection() as conn:
             # Test that the function is registered and returns the correct value
@@ -353,25 +348,25 @@ def update_database_structure(db):
     
     try:
         with db.get_connection() as conn:
-            # add all_albums to the profiles table
-            conn.execute("ALTER TABLE profiles ADD COLUMN all_albums BOOLEAN")
-            print("✓ Added all_albums to profiles table")
-            # set all_albums to TRUE for all profiles
-            conn.execute("UPDATE profiles SET all_albums = 1")
-            print("✓ Set all_albums to TRUE for all profiles")
-            # add profile_albums table
-            conn.execute("""
-                CREATE TABLE profile_albums (
-                    profileID TEXT,
-                    albumID TEXT,
-                    FOREIGN KEY (profileID) REFERENCES profiles(profileID) ON DELETE CASCADE,
-                    FOREIGN KEY (albumID) REFERENCES albums(albumID) ON DELETE CASCADE,
-                    PRIMARY KEY (profileID, albumID)
-                )
-            """)   
-            print("✓ Created profile_albums table")
+            # remove is_manager column and add hierarchy_rank column
+            profile_id = db.get_profile_id()
+            # drop profiles table and recreate it with hierarchy_rank column
+            conn.execute("DROP TABLE IF EXISTS profiles")
+            from src.core.db import TABLES
+            profiles_table = TABLES['profiles']
+            conn.execute(f'''CREATE TABLE IF NOT EXISTS profiles ({profiles_table})''')
             conn.commit()
-        
+            event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
+            event = Event(event_id)
+            profiles = event._initialize_default_profiles()
+            developer_profile = profiles[0]
+            conn.execute(f"""
+                UPDATE profiles SET profileID = '{profile_id}'
+                WHERE profileID = '{developer_profile['profileID']}'
+            """)
+            conn.commit()
+            print("✓ Profiles table recreated")
+
         return True
         
     except Exception as e:
@@ -392,10 +387,10 @@ def main():
     
     db = AppDB(db_path)
 
-    # Test 1: Test profile function
-    if not test_profile_function(db):
-        print("Profile function test failed.")
-        return
+    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
+    db.set_profile_id(test_profile_id)
+
+    test_custom_queries(db)
 
     # Test 3: Test views functionality
     if not test_views_functionality(db):

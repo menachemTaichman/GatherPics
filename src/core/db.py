@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from contextlib import contextmanager
 
 ACCESSIBLE_VIEWS = {
@@ -60,7 +60,8 @@ TABLES = {
     'profiles': '''
         profileID TEXT PRIMARY KEY,
         label TEXT,
-        is_manager BOOLEAN,
+        password TEXT DEFAULT '',
+        hierarchy_rank INTEGER DEFAULT 0,
         all_images BOOLEAN,
         can_upload_images BOOLEAN,
         can_delete_images BOOLEAN,
@@ -301,7 +302,8 @@ class AppDB:
             return False
             
         # Check profile permissions first
-        if not self._check_profile_permissions(action_type, table):
+        is_allowed, fields, data_list = self._check_profile_permissions(action_type, table, where, fields, data_list)
+        if not is_allowed:
             return False
             
         # Execute the action
@@ -340,7 +342,7 @@ class AppDB:
         """Securely update records with permission and accessibility checks."""
         return self.secure_action_query('UPDATE', table, where, fields)
 
-    def secure_delete(self, table: str, where: Dict) -> bool:
+    def secure_delete(self, table: str, where: Union[Dict, List[Dict]]) -> bool:
         """Securely delete records with permission and accessibility checks."""
         return self.secure_action_query('DELETE', table, where)
 
@@ -357,18 +359,33 @@ class AppDB:
             return table
         return ACCESSIBLE_VIEWS[table]
 
-    def _get_secure_where_clause(self, table: str, where: Dict) -> tuple:
+    def _get_secure_where_clause(self, table: str, where: Union[Dict, List[Dict]]) -> tuple:
         """
         Get a WHERE clause that restricts operations to accessible records only.
         If any records in the `where` scope are restricted, it adds a filter
         to ensure the operation only applies to records accessible by the current profile.
         """
-        if where:
+        where_clause = "1=1"
+        where_params = ()
+
+        if isinstance(where, list):
+            if not where:
+                return ('1=0', ()) # Nothing to delete
+            
+            conditions = []
+            params = []
+            for item in where:
+                item_conditions = []
+                for k, v in item.items():
+                    item_conditions.append(f'{k}=?')
+                    params.append(v)
+                conditions.append('(' + ' AND '.join(item_conditions) + ')')
+            where_clause = ' OR '.join(conditions)
+            where_params = tuple(params)
+
+        elif isinstance(where, dict) and where:
             where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
             where_params = tuple(where.values())
-        else:
-            where_clause = "1=1"
-            where_params = ()
 
         if not self._current_profile_id:
             # No profile, allow if not a restricted table for actions
@@ -412,12 +429,112 @@ class AppDB:
         # All records are accessible, no extra filter needed
         return (where_clause, where_params)
 
-    def _check_profile_permissions(self, action_type: str, table: str) -> bool:
+    def _check_hierarchy_permissions(self, action_type: str, table: str, where: Dict = None, fields: Dict = None, data_list: List[Dict] = None) -> tuple:
+        current_profile = self.get_one('profiles', {'profileID': self._current_profile_id})
+        if not current_profile:
+            return False, fields, data_list
+
+        current_rank = current_profile['hierarchy_rank']
+
+        if action_type.upper() == 'UPDATE':
+            if table == 'profiles':
+                target_profile_id = where.get('profileID')
+                if not target_profile_id or len(where.keys()) > 1:
+                    return False, fields, data_list
+
+                if target_profile_id == self._current_profile_id:
+                    if current_rank == 0:
+                        return True, fields, data_list
+                    else:
+                        allowed_fields = {'label', 'password'}
+                        new_fields = {}
+                        if fields:
+                            for field, value in fields.items():
+                                if field in allowed_fields:
+                                    new_fields[field] = value
+                        return True, new_fields, data_list
+                else:
+                    target_profile = self.get_one('profiles', {'profileID': target_profile_id})
+                    if not target_profile:
+                        return False, fields, data_list
+                    
+                    if target_profile['hierarchy_rank'] < current_rank:
+                        return True, fields, data_list
+                    else:
+                        return False, fields, data_list
+            
+            elif table in ['profile_images', 'profile_albums']:
+                target_profile_id = where.get('profileID')
+                if not target_profile_id:
+                    return False, fields, data_list
+
+                if target_profile_id == self._current_profile_id:
+                    return True, fields, data_list
+                
+                target_profile = self.get_one('profiles', {'profileID': target_profile_id})
+                if not target_profile: return False, fields, data_list
+                
+                if target_profile['hierarchy_rank'] < current_rank:
+                    return True, fields, data_list
+                
+                return False, fields, data_list
+
+        if action_type.upper() == 'DELETE':
+            if isinstance(where, list):
+                target_profile_ids = {item.get('profileID') for item in where}
+            else:
+                target_profile_ids = {where.get('profileID')}
+
+            for target_profile_id in target_profile_ids:
+                if not target_profile_id:
+                    return False, fields, data_list
+
+                if target_profile_id == self._current_profile_id:
+                    return False, fields, data_list
+
+                target_profile = self.get_one('profiles', {'profileID': target_profile_id})
+                if not target_profile:
+                    continue
+
+                if target_profile['hierarchy_rank'] >= current_rank:
+                    return False, fields, data_list
+            return True, fields, data_list
+
+        if action_type.upper() == 'INSERT':
+            if table == 'profiles':
+                if not all(item.get('hierarchy_rank', 0) < current_rank for item in data_list):
+                    return False, fields, data_list
+                return True, fields, data_list
+
+            elif table in ['profile_images', 'profile_albums']:
+                target_profile_ids = {item.get('profileID') for item in data_list if item.get('profileID') != self._current_profile_id}
+                if target_profile_ids:
+                    placeholders = ','.join(['?'] * len(target_profile_ids))
+                    query = f"SELECT profileID, hierarchy_rank FROM profiles WHERE profileID IN ({placeholders})"
+                    results = self.execute_query(query, tuple(target_profile_ids))
+                    ranks = {row[0]: row[1] for row in results}
+                    
+                    if len(ranks) != len(target_profile_ids):
+                        return False, fields, data_list
+
+                    for pid in target_profile_ids:
+                        if ranks[pid] >= current_rank:
+                            return False, fields, data_list
+                return True, fields, data_list
+        
+        return False, fields, data_list
+
+    def _check_profile_permissions(self, action_type: str, table: str, where: Dict = None, fields: Dict = None, data_list: List[Dict] = None) -> tuple:
         """
         Check if the current profile has permission to perform the action on the table.
+        For profiles, it also modifies fields based on hierarchy.
+        Returns: (is_allowed, modified_fields, modified_data_list)
         """
         if not self._current_profile_id:
-            return False
+            return False, fields, data_list
+        
+        if table in ['profiles', 'profile_images', 'profile_albums']:
+            return self._check_hierarchy_permissions(action_type, table, where, fields, data_list)
             
         # Get profile permissions
         profile_query = """
@@ -428,7 +545,7 @@ class AppDB:
         """
         result = self.execute_query(profile_query, (self._current_profile_id,))
         if not result:
-            return False
+            return False, fields, data_list
             
         profile = result[0]
         
@@ -441,27 +558,27 @@ class AppDB:
             'faces': profile[0],       # can_edit_groups (faces are part of groups)
         }
         
-        # For DELETE operations, check delete permission for images
+        # For DELETE operations, check delete permission
         if action_type.upper() == 'DELETE':
+            allow = False
             if table == 'images':
-                return bool(profile[4])  # can_delete_images
+                allow = bool(profile[4])  # can_delete_images
             elif table == 'albums':
-                return bool(profile[2])  # can_edit_albums
+                allow = bool(profile[2])  # can_edit_albums
             elif table == 'moments':
-                return bool(profile[1])  # can_edit_moments
+                allow = bool(profile[1])  # can_edit_moments
             elif table == 'groups':
-                return bool(profile[0])  # can_edit_groups
-            else:
-                return False
+                allow = bool(profile[0])  # can_edit_groups
+            return allow, fields, data_list
             
         # For INSERT operations, check appropriate permission
         if action_type.upper() == 'INSERT':
+            allow = True
             if table == 'images':
-                return bool(profile[3])  # can_upload_images
+                allow = bool(profile[3])  # can_upload_images
             elif table in ['groups', 'moments', 'albums']:
-                return bool(table_permissions.get(table, False))
-            else:
-                return True  # Allow inserts to other tables
+                allow = bool(table_permissions.get(table, False))
+            return allow, fields, data_list
             
         # For other operations, check edit permission for the table
-        return bool(table_permissions.get(table, False))
+        return bool(table_permissions.get(table, True)), fields, data_list

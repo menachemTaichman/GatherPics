@@ -31,7 +31,7 @@ class Event(JsonModel):
         self.faces_model = Faces(self.db)
         self.moments_model = Moments(self.db)
         self.profile_model = Profiles(self.db)
-        self.face_utils = FaceUtils(self.id)
+        self.face_utils = None
         self.display_dir = os.path.join(self.event_dir, 'display')
         self.original_dir = os.path.join(self.event_dir, 'original')
         self.thumb_dir = os.path.join(self.event_dir, 'thumb')
@@ -73,23 +73,21 @@ class Event(JsonModel):
         if existing_profiles:
             return  # Profiles already exist, don't create duplicates
         
-        # Create Main Manager profile (full permissions)
-        main_manager_profile = self.profile_model.add(
-            label="Main Manager",
-            all_images=True,
-            can_edit_groups=True,
-            can_upload_images=True,
-            can_edit_moments=True
-        )
-        
-        # Create Event Manager profile (limited permissions)
-        event_manager_profile = self.profile_model.add(
-            label="Event Manager", 
-            all_images=True,
-            can_edit_groups=True,
-            can_upload_images=True,
-            can_edit_moments=True
-        )
+        developer_id = self.profile_model.generate_id()
+        event_manager_id = self.profile_model.generate_id()
+        main_manager_id = self.profile_model.generate_id()
+
+        # create directly in db, include password and id
+        self.db.execute_query(f'''
+            INSERT INTO profiles (label, hierarchy_rank, all_images, can_upload_images, can_delete_images, can_edit_groups, can_edit_moments, all_albums, can_edit_albums, save_preferences, profileID)
+            VALUES ('Developer', 3, 1, 1, 1, 1, 1, 1, 1, 1, ?),
+                   ('Event Manager', 2, 1, 1, 1, 1, 1, 1, 1, 1, ?),
+                   ('Main Manager', 1, 1, 1, 1, 1, 1, 1, 1, 1, ?)
+        ''', (developer_id, event_manager_id, main_manager_id))
+
+        self.set_profile_id(developer_id)
+
+        return self.profile_model.list()
 
     def add(self, **fields) -> 'Event':
         super().add(**fields)
@@ -433,6 +431,9 @@ class Event(JsonModel):
 
     def delete_image(self, image_id: str) -> None:
         faces = self.images_model.get_faces(image_id)
+        if not self.face_utils:
+            self.face_utils = FaceUtils(self.id)
+        
         self.face_utils.rek_helper.delete_faces(faces)
         for face in faces:
             try:
@@ -552,6 +553,10 @@ class Event(JsonModel):
 
         if verbose:
             print(f"Starting image processing for event: {self.name}")
+        
+        if not self.face_utils:
+            self.face_utils = FaceUtils(self.id)
+
         image_files = _get_images_to_process()
         if not image_files:
             if verbose:
@@ -606,6 +611,9 @@ add_event = Event.add
 def delete_event(event_id: str) -> None:
     # Remove from JSON
     event = Event(event_id)
+    if not event.face_utils:
+        event.face_utils = FaceUtils(event_id)
+
     event.face_utils.rek_helper.delete_collection()
     Event.delete(event_id)
     # Remove the event directory and its contents

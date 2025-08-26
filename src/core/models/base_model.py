@@ -18,26 +18,36 @@ class BaseModel(ABC):
         """Return a dict of data to insert for add()."""
         pass
 
-    def add(self, *args, **kwargs) -> Dict:
+    def add(self, *args, **kwargs) -> Dict | None:
         data = self.get_add_data(*args, **kwargs)
         # Ensure ID is generated if not provided
         if self.id_field not in data:
             data[self.id_field] = self.generate_id()
-        self.db.secure_insert(self.table_name, [data])
-        return data
+        result = self.db.secure_insert(self.table_name, [data])
+        if result:
+            return self.get(data[self.id_field])
+        
+        return None
 
-    def add_many(self, data_list: List[Dict]) -> List[Dict]:
+    def add_many(self, data_list: List[Dict]) -> List[Dict] | None:
         for data in data_list:
             if self.id_field not in data:
                 data[self.id_field] = self.generate_id()
-        self.db.secure_insert(self.table_name, data_list)
-        return data_list
+        result = self.db.secure_insert(self.table_name, data_list)
+        if result:
+            return [self.get(data[self.id_field]) for data in data_list]
+        
+        return None
 
-    def delete(self, entity_id: str) -> None:
-        self.db.secure_delete(self.table_name, {self.id_field: entity_id})
+    def delete(self, entity_id: str) -> bool:
+        return self.db.secure_delete(self.table_name, {self.id_field: entity_id})
 
-    def edit(self, entity_id: str, fields: Dict) -> None:
-        self.db.secure_update(self.table_name, {self.id_field: entity_id}, fields)
+    def edit(self, entity_id: str, fields: Dict) -> Dict | None:
+        result = self.db.secure_update(self.table_name, {self.id_field: entity_id}, fields)
+        if result:
+            return self.get(entity_id)
+        
+        return None
 
     def get(self, entity_id: str) -> Dict | None:
         entity = self.db.get_one(self.table_name, {self.id_field: entity_id})
