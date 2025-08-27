@@ -281,7 +281,8 @@ def recreate_views_and_indexes(db):
             from src.core.db import VIEWS, INDEXES
             
             # Drop existing views if they exist
-            views_to_drop = list(VIEWS.keys())
+            views_to_drop = conn.execute("SELECT name FROM sqlite_master WHERE type='view'").fetchall()
+            views_to_drop = [view[0] for view in views_to_drop]
             
             print("Dropping existing views...")
             for view_name in views_to_drop:
@@ -292,16 +293,17 @@ def recreate_views_and_indexes(db):
                     print(f"  Note: Could not drop {view_name}: {e}")
             
             # Drop existing indexes if they exist
+            indexes_to_drop = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
+            indexes_to_drop = [index[0] for index in indexes_to_drop]
+
             print("\nDropping existing indexes...")
-            for index_sql in INDEXES:
+            for index_name in indexes_to_drop:
                 # Extract index name from CREATE INDEX statement
-                if index_sql.startswith('CREATE INDEX IF NOT EXISTS'):
-                    index_name = index_sql.split('CREATE INDEX IF NOT EXISTS ')[1].split(' ')[0]
-                    try:
-                        conn.execute(f"DROP INDEX IF EXISTS {index_name}")
-                        print(f"✓ Dropped index: {index_name}")
-                    except Exception as e:
-                        print(f"  Note: Could not drop {index_name}: {e}")
+                try:
+                    conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+                    print(f"✓ Dropped index: {index_name}")
+                except Exception as e:
+                    print(f"  Note: Could not drop {index_name}: {e}")
             
             # Recreate the views using the VIEWS dictionary
             print("\nRecreating views...")
@@ -321,13 +323,10 @@ def recreate_views_and_indexes(db):
             
             for index_sql in INDEXES:
                 try:
-                    conn.execute(index_sql)
+                    conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
                     # Extract index name for logging
-                    if index_sql.startswith('CREATE INDEX IF NOT EXISTS'):
-                        index_name = index_sql.split('CREATE INDEX IF NOT EXISTS ')[1].split(' ')[0]
-                        print(f"✓ Created index: {index_name}")
-                    else:
-                        print(f"✓ Created index")
+                    index_name = index_sql.split(' ')[0]
+                    print(f"✓ Created index: {index_name}")
                 except Exception as e:
                     print(f"✗ Error creating index: {e}")
                     return False
@@ -364,6 +363,7 @@ def update_database_structure(db):
                 UPDATE profiles SET profileID = '{profile_id}'
                 WHERE profileID = '{developer_profile['profileID']}'
             """)
+            conn.execute("ALTER TABLE profile_albums ADD COLUMN accessible BOOLEAN")
             conn.commit()
             print("✓ Profiles table recreated")
 

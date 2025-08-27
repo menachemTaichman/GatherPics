@@ -20,6 +20,7 @@ TABLES = {
         top REAL,
         groupID TEXT,
         FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE SET NULL
+        FOREIGN KEY (groupID) REFERENCES groups(groupID) ON DELETE SET NULL
     ''',
     'images': '''
         imageID TEXT PRIMARY KEY,
@@ -42,13 +43,15 @@ TABLES = {
         description TEXT,
         start TEXT,
         end TEXT,
-        representative_image TEXT
+        representative_image TEXT,
+        FOREIGN KEY (representative_image) REFERENCES images(imageID) ON DELETE SET NULL
     ''',
     'albums': '''
         albumID TEXT PRIMARY KEY,
         label TEXT,
         description TEXT,
-        representative_image TEXT
+        representative_image TEXT,
+        FOREIGN KEY (representative_image) REFERENCES images(imageID) ON DELETE SET NULL
     ''',
     'album_images': '''
         albumID TEXT,
@@ -62,13 +65,10 @@ TABLES = {
         label TEXT,
         password TEXT DEFAULT '',
         hierarchy_rank INTEGER DEFAULT 0,
+        is_profiles_manager BOOLEAN DEFAULT 0,
+        can_edit BOOLEAN DEFAULT 0,
         all_images BOOLEAN,
-        can_upload_images BOOLEAN,
-        can_delete_images BOOLEAN,
-        can_edit_groups BOOLEAN,
-        can_edit_moments BOOLEAN,
         all_albums BOOLEAN,
-        can_edit_albums BOOLEAN,
         save_preferences BOOLEAN
     ''',
     'profile_images': '''
@@ -82,6 +82,7 @@ TABLES = {
     'profile_albums': '''
         profileID TEXT,
         albumID TEXT,
+        accessible BOOLEAN,
         FOREIGN KEY (profileID) REFERENCES profiles(profileID) ON DELETE CASCADE,
         FOREIGN KEY (albumID) REFERENCES albums(albumID) ON DELETE CASCADE,
         PRIMARY KEY (profileID, albumID)
@@ -89,26 +90,26 @@ TABLES = {
 }
 
 INDEXES = [
-    'CREATE INDEX IF NOT EXISTS idx_faces_imageid ON faces(imageID)',
-    'CREATE INDEX IF NOT EXISTS idx_faces_groupid ON faces(groupID)',
-    'CREATE INDEX IF NOT EXISTS idx_profile_images_imageid ON profile_images(imageID)',
-    'CREATE INDEX IF NOT EXISTS idx_images_momentid ON images(momentID)',
-    'CREATE INDEX IF NOT EXISTS idx_groups_face_representative ON groups(face_representative)',
-    'CREATE INDEX IF NOT EXISTS idx_moments_representative_image ON moments(representative_image)',
-    'CREATE INDEX IF NOT EXISTS idx_faces_groupid_imageid ON faces(groupID, imageID)',
-    'CREATE INDEX IF NOT EXISTS idx_images_date_taken ON images(date_taken)',
-    'CREATE INDEX IF NOT EXISTS idx_albums_representative_image ON albums(representative_image)',
+    'idx_faces_imageid ON faces(imageID)',
+    'idx_faces_groupid ON faces(groupID)',
+    'idx_profile_images_imageid ON profile_images(imageID)',
+    'idx_images_momentid ON images(momentID)',
+    'idx_groups_face_representative ON groups(face_representative)',
+    'idx_moments_representative_image ON moments(representative_image)',
+    'idx_faces_groupid_imageid ON faces(groupID, imageID)',
+    'idx_images_date_taken ON images(date_taken)',
+    'idx_albums_representative_image ON albums(representative_image)',
 ]
 
 VIEWS = {
-    'accessible_images_helper': '''
-        SELECT images.imageID
+    'accessible_images': '''
+        SELECT images.*
         FROM images
         WHERE EXISTS (
-            SELECT 1 FROM profiles LEFT JOIN profile_images
-            ON profiles.profileID = profile_images.profileID
-            AND profiles.profileID = get_profile_id()
-            WHERE (
+            SELECT 1
+            FROM profiles LEFT JOIN profile_images
+            ON profiles.profileID = profile_images.profileID AND images.imageID = profile_images.imageID
+            WHERE profiles.profileID = cur_profile('profileID') AND (
                 (profiles.all_images = 1 AND (profile_images.imageID IS NULL OR profile_images.accessible = 1))
                 OR (profiles.all_images = 0 AND profile_images.accessible = 1)
             )
@@ -122,7 +123,7 @@ VIEWS = {
         OR EXISTS (
             SELECT 1
             FROM faces 
-            INNER JOIN accessible_images_helper ON faces.imageID = accessible_images_helper.imageID
+            INNER JOIN accessible_images ON faces.imageID = accessible_images.imageID
             WHERE faces.groupID = groups.groupID
         )
     ''',
@@ -130,7 +131,7 @@ VIEWS = {
         SELECT faces.*
         FROM faces 
         WHERE EXISTS (
-            SELECT 1 FROM accessible_images_helper WHERE accessible_images_helper.imageID = faces.imageID
+            SELECT 1 FROM accessible_images WHERE accessible_images.imageID = faces.imageID
         )
         OR EXISTS (
             SELECT 1 FROM accessible_groups 
@@ -144,42 +145,355 @@ VIEWS = {
             SELECT 1 FROM images WHERE images.momentID = moments.momentID
         )
         OR EXISTS (
-            SELECT 1 FROM accessible_images_helper 
-            INNER JOIN images ON accessible_images_helper.imageID = images.imageID
+            SELECT 1 FROM accessible_images 
+            INNER JOIN images ON accessible_images.imageID = images.imageID
             WHERE images.momentID = moments.momentID
         )
     ''',
     'accessible_albums': '''
         SELECT albums.* FROM albums
-        WHERE NOT EXISTS (
-            SELECT 1 FROM album_images WHERE album_images.albumID = albums.albumID
-        )
-        OR EXISTS (
-            SELECT 1 FROM accessible_images_helper 
-            INNER JOIN album_images ON accessible_images_helper.imageID = album_images.imageID
-            WHERE album_images.albumID = albums.albumID
-        )
-    ''',
-    'accessible_images': '''
-        SELECT images.*
-        FROM images 
         WHERE EXISTS (
-            SELECT 1 FROM accessible_images_helper WHERE accessible_images_helper.imageID = images.imageID
-        )
-        OR EXISTS (
-            SELECT 1 FROM accessible_moments WHERE accessible_moments.representative_image = images.imageID
-        )
-        OR EXISTS (
-            SELECT 1 FROM accessible_albums WHERE accessible_albums.representative_image = images.imageID
+            SELECT 1
+            FROM profiles LEFT JOIN profile_albums
+            ON profiles.profileID = profile_albums.profileID
+            AND profiles.profileID = cur_profile('profileID')
+            WHERE (
+                (profiles.all_albums = 1 AND (profile_albums.albumID IS NULL))
+                OR (profiles.all_albums = 0 AND profile_albums.accessible = 1)
+            )
         )
     ''',
+    'accessible_albums_images': '''
+        SELECT album_images.*
+        FROM album_images
+        INNER JOIN accessible_images ON album_images.imageID = accessible_images.imageID
+        INNER JOIN accessible_albums ON album_images.albumID = accessible_albums.albumID
+    ''',
+    'representative_images': '''
+        SELECT DISTINCT images.imageID
+        FROM images
+        LEFT JOIN accessible_moments ON images.imageID = accessible_moments.representative_image
+        LEFT JOIN accessible_albums ON images.imageID = accessible_albums.representative_image
+        WHERE (accessible_moments.representative_image IS NOT NULL OR accessible_albums.representative_image IS NOT NULL)
+    ''',
+    'representative_faces': '''
+        SELECT faces.faceID
+        FROM faces INNER JOIN accessible_groups ON faces.faceID = accessible_groups.face_representative
+    ''',
+    'editable_profiles_details': '''
+        SELECT profileID, label, password FROM profiles
+        WHERE (profileID = cur_profile('profileID') AND hierarchy_rank > 0)
+        OR (cur_profile('is_profiles_manager') = 1 AND cur_profile('hierarchy_rank') > hierarchy_rank)
+    ''',
+    'editable_full_profiles': '''
+        SELECT * FROM profiles
+        WHERE (cur_profile('is_profiles_manager') = 1 AND cur_profile('hierarchy_rank') > hierarchy_rank)
+    ''',
+    'editable_profile_images': '''
+        SELECT profile_images.*
+        FROM profile_images
+    ''',
+    'editable_profile_albums': '''
+        SELECT profile_albums.*
+        FROM profile_albums
+    ''',
+}
+
+TRIGGERS = {
+    # accessible_faces
+    'trg_update_accessible_faces': """
+    INSTEAD OF UPDATE ON accessible_faces
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE faces
+        SET groupID = NEW.groupID
+        WHERE faceID = OLD.faceID;
+    END;
+    """,
+
+    # accessible_images
+    'trg_update_accessible_images': """
+    INSTEAD OF UPDATE ON accessible_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE images
+        SET momentID = NEW.momentID
+        WHERE imageID = OLD.imageID;
+    END;
+    """,
+    'trg_delete_accessible_images': """
+    INSTEAD OF DELETE ON accessible_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM images
+        WHERE imageID = OLD.imageID;
+    END;
+    """,
+
+    # accessible_groups
+    'trg_update_accessible_groups': """
+    INSTEAD OF UPDATE ON accessible_groups
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE groups
+        SET label = NEW.label,
+            face_representative = NEW.face_representative
+        WHERE groupID = OLD.groupID;
+    END;
+    """,
+    'trg_delete_accessible_groups': """
+    INSTEAD OF DELETE ON accessible_groups
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM groups
+        WHERE groupID = OLD.groupID;
+    END;
+    """,
+
+    # accessible_moments
+    'trg_update_accessible_moments': """
+    INSTEAD OF UPDATE ON accessible_moments
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE moments
+        SET label = NEW.label,
+            description = NEW.description,
+            start = NEW.start,
+            end = NEW.end,
+            representative_image = NEW.representative_image
+        WHERE momentID = OLD.momentID;
+    END;
+    """,
+    'trg_delete_accessible_moments': """
+    INSTEAD OF DELETE ON accessible_moments
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM moments
+        WHERE momentID = OLD.momentID;
+    END;
+    """,
+
+    # accessible_albums
+    'trg_update_accessible_albums': """
+    INSTEAD OF UPDATE ON accessible_albums
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE albums
+        SET label = NEW.label,
+            description = NEW.description,
+            representative_image = NEW.representative_image
+        WHERE albumID = OLD.albumID;
+    END;
+    """,
+    'trg_delete_accessible_albums': """
+    INSTEAD OF DELETE ON accessible_albums
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM albums
+        WHERE albumID = OLD.albumID;
+    END;
+    """,
+
+    # accessible_albums_images
+    'trg_insert_accessible_albums_images': """
+    INSTEAD OF INSERT ON accessible_albums_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+            WHEN NOT EXISTS (SELECT 1 FROM accessible_albums WHERE albumID = NEW.albumID) THEN
+                RAISE(ABORT, 'Album not accessible')
+            WHEN NOT EXISTS (SELECT 1 FROM accessible_images WHERE imageID = NEW.imageID) THEN
+                RAISE(ABORT, 'Image not accessible')
+        END;
+
+        INSERT INTO album_images (albumID, imageID)
+        VALUES (NEW.albumID, NEW.imageID);
+    END;
+    """,
+    
+    # editable_full_profiles
+    'trg_insert_editable_full_profiles': """
+    INSTEAD OF INSERT ON editable_full_profiles
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('is_profiles_manager') = 0 THEN
+                RAISE(ABORT, 'Permission denied: not a profiles manager')
+            WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
+            WHEN NEW.all_images = 1 and cur_profile('all_images') = 0 THEN
+                RAISE(ABORT, 'Permission denied: cannot create profile with all_images=1 if current profile does not have all_images=1')
+            WHEN NEW.all_albums = 1 and cur_profile('all_albums') = 0 THEN
+                RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
+        END;
+
+        INSERT INTO profiles (profileID, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
+        VALUES (NEW.profileID, NEW.label, NEW.password, NEW.hierarchy_rank, NEW.is_profiles_manager, NEW.can_edit, NEW.all_images, NEW.all_albums, NEW.save_preferences);
+
+        -- Create the profile_images and profile_albums tables
+        INSERT INTO profile_images (profileID, imageID, accessible)
+        SELECT NEW.profileID, imageID, accessible
+        FROM profile_images
+        WHERE profileID = cur_profile('profileID');
+
+        INSERT INTO profile_albums (profileID, albumID, accessible)
+        SELECT NEW.profileID, albumID, accessible
+        FROM profile_albums
+        WHERE profileID = cur_profile('profileID');
+    END;
+    """,
+    'trg_update_editable_full_profiles': """
+    INSTEAD OF UPDATE ON editable_full_profiles
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('is_profiles_manager') = 0 THEN
+                RAISE(ABORT, 'Permission denied: not a profiles manager')
+            WHEN OLD.profileID = cur_profile('profileID') THEN
+                RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+            WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                RAISE(ABORT, 'Permission denied: cannot edit profile with higher or equal rank')
+            WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                RAISE(ABORT, 'Permission denied: cannot set profile rank higher or equal to own rank')
+            WHEN NEW.all_images = 1 and cur_profile('all_images') = 0 THEN
+                RAISE(ABORT, 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1')
+            WHEN NEW.all_albums = 1 and cur_profile('all_albums') = 0 THEN
+                RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
+        END;
+
+        -- Update the profiles table
+        UPDATE profiles
+        SET label = NEW.label,
+            password = NEW.password,
+            hierarchy_rank = NEW.hierarchy_rank,
+            is_profiles_manager = NEW.is_profiles_manager,
+            can_edit = NEW.can_edit,
+            all_images = NEW.all_images,
+            all_albums = NEW.all_albums,
+            save_preferences = NEW.save_preferences
+        WHERE profileID = OLD.profileID;
+
+    END;
+    """,
+    'trg_delete_editable_full_profiles': """
+    INSTEAD OF DELETE ON editable_full_profiles
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('is_profiles_manager') = 0 THEN
+                RAISE(ABORT, 'Permission denied: not a profiles manager')
+            WHEN OLD.profileID = cur_profile('profileID') THEN
+                RAISE(ABORT, 'Permission denied: cannot delete own profile')
+            WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                RAISE(ABORT, 'Permission denied: cannot delete profile with higher or equal rank')
+        END;
+
+        DELETE FROM profiles WHERE profileID = OLD.profileID;
+    END;
+    """,
+
+    # editable_profiles_details
+    'trg_update_editable_profiles_details': """
+    INSTEAD OF UPDATE ON editable_profiles_details
+    BEGIN
+        SELECT CASE
+            WHEN (cur_profile('hierarchy_rank') = 0 OR OLD.hierarchy_rank > cur_profile('hierarchy_rank')) THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        UPDATE profiles
+        SET label = NEW.label,
+            password = NEW.password
+        WHERE profileID = OLD.profileID;
+    END;
+    """,
+
+    # editable_profile_images
+    'trg_insert_editable_profile_images': """
+    INSTEAD OF INSERT ON editable_profile_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('is_profiles_manager') = 0 THEN
+                RAISE(ABORT, 'Permission denied: not a profiles manager')
+            WHEN NOT EXISTS ( -- Check rank of target profile
+                SELECT 1 FROM profiles
+                WHERE profileID = NEW.profileID AND hierarchy_rank < cur_profile('hierarchy_rank')
+            ) THEN
+                RAISE(ABORT, 'Permission denied: cannot edit permissions for this profile')
+            WHEN NOT EXISTS ( -- Check if image is accessible to current manager
+                SELECT 1 FROM accessible_images WHERE imageID = NEW.imageID
+            ) THEN
+                RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible image')
+        END;
+
+        INSERT INTO profile_images (profileID, imageID, accessible)
+        VALUES (NEW.profileID, NEW.imageID, NEW.accessible);
+    END;
+    """,
+
+    # editable_profile_albums
+    'trg_insert_editable_profile_albums': """
+    INSTEAD OF INSERT ON editable_profile_albums
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('is_profiles_manager') = 0 THEN
+                RAISE(ABORT, 'Permission denied: not a profiles manager')
+            WHEN NOT EXISTS (
+                SELECT 1 FROM profiles
+                WHERE profileID = NEW.profileID AND hierarchy_rank < cur_profile('hierarchy_rank')
+            ) THEN
+                RAISE(ABORT, 'Permission denied: cannot edit permissions for this profile')
+            WHEN NOT EXISTS (
+                SELECT 1 FROM accessible_albums WHERE albumID = NEW.albumID
+            ) THEN
+                RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible album')
+        END;
+
+        INSERT INTO profile_albums (profileID, albumID, accessible)
+        VALUES (NEW.profileID, NEW.albumID, NEW.accessible);
+    END;
+    """,
 }
 
 class AppDB:
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, profile_id: str | None = None):
         self.db_path = db_path
-        self._current_profile_id = None
+        self.set_profile_id(profile_id)
 
     def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):
         """Create a new SQLite DB in the given directory, initializing all tables and settings."""
@@ -198,12 +512,16 @@ class AppDB:
             
             # Create indexes
             for index_sql in INDEXES:
-                conn.execute(index_sql)
+                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
             
             # Create views
             for view_name, view_sql in VIEWS.items():
                 conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
             
+            # Create triggers
+            for trigger_sql in TRIGGERS:
+                conn.execute(trigger_sql)
+
             conn.commit()
         finally:
             conn.close()
@@ -211,20 +529,28 @@ class AppDB:
 
     def set_profile_id(self, profile_id: Optional[str]):
         """Set the current profile ID for access control."""
-        self._current_profile_id = profile_id
-
-    def get_profile_id(self) -> Optional[str]:
-        """Get the current profile ID."""
-        return self._current_profile_id
+        
+        fields = {'profileID': '', 'hierarchy_rank': 0, 'is_profiles_manager': False, 'can_edit': False, 'all_images': False, 'all_albums': False}
+        self.profile_context = {}
+        if profile_id:
+            profile = self.get_one('profiles', {'profileID': profile_id})
+        
+        for field, default_val in fields.items():
+            val = default_val
+            if profile:
+                val = profile.get(field, default_val)
+            self.profile_context[field] = val
 
     @contextmanager
     def get_connection(self):
         """Context manager for database connections."""
+
         conn = sqlite3.connect(self.db_path)
         # Enable foreign key constraints
         conn.execute("PRAGMA foreign_keys = ON")
-        # Register the get_profile_id function on every connection
-        conn.create_function("get_profile_id", 0, self.get_profile_id)
+        # Register the current profile context on every connection
+        conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
+
         try:
             yield conn
         finally:
@@ -268,6 +594,14 @@ class AppDB:
                 id_field = [col for col in columns if col.endswith('ID') or col == 'id'][0]
                 return record[id_field]
             return None
+
+    def is_representative_image(self, image_id: str) -> bool:
+        """Check if an image is a representative image."""
+        return self.execute_query(f'SELECT 1 FROM representative_images WHERE imageID = ?', (image_id,))
+    
+    def is_representative_face(self, face_id: str) -> bool:
+        """Check if a face is a representative face."""
+        return self.execute_query(f'SELECT 1 FROM representative_faces WHERE faceID = ?', (face_id,))
 
     def execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
         """Execute a custom query and return results."""
