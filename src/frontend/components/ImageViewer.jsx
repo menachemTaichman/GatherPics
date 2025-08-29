@@ -113,7 +113,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     imageMeta = { name: image };
   }
   // Use the image data directly
-  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.name;
+  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.label;
 
   useEffect(() => {
     if (image) {
@@ -133,7 +133,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
         if (transferResult && transferResult.transferred_images_data && image) {
           // Check if the current image was affected by the transfer
           const updatedImageData = transferResult.transferred_images_data.find(
-            imageData => imageData.id === image || imageData.name === image
+            imageData => imageData.id === image || imageData.label === image
           );
           
           if (updatedImageData) {
@@ -154,7 +154,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
       setLoading(true);
       
       // Use the new complete image endpoint instead of multiple calls
-      const imageData = await imagesAPI.getComplete(imageMeta.name);
+      const imageData = await imagesAPI.getComplete(imageMeta.label);
       
       setFaces(imageData.faces || []);
       setImageInfo(imageData);
@@ -162,7 +162,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     } catch (error) {
       console.error('Error loading image info:', error);
       setFaces([]);
-      setImageInfo({ filename: imageMeta.name, faces_count: 0, groups: [] });
+      setImageInfo({ filename: imageMeta.label, faces_count: 0, groups: [] });
       setMomentInfo(null);
     } finally {
       setLoading(false);
@@ -225,12 +225,12 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
 
   const handleDownload = async () => {
     try {
-      const result = await downloadAPI.download([imageMeta.name]);
+      const result = await downloadAPI.download([imageMeta.label]);
       
       // Create a temporary link to download the file
       const link = document.createElement('a');
       link.href = `${API_BASE}${result.download_url}`;
-      link.download = imageMeta.name;
+      link.download = imageMeta.label;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -399,7 +399,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
               </button>
               
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{imageInfo?.name || imageMeta.name}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{imageInfo?.label || imageMeta.label}</h2>
                 {imageInfo && (
                   <p className="text-sm text-gray-500">
                     {imageInfo.faces_count || 0} faces • {new Set(imageInfo.faces?.map(f => f.group_id) || []).size} groups
@@ -496,8 +496,8 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
-                                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageMeta.name}.webp`}
-                alt={imageMeta.name}
+                                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageMeta.label}.webp`}
+                alt={imageMeta.label}
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
                       loading="lazy"
@@ -536,7 +536,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                       }
                       return (
                         <div
-                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageMeta.name}`}
+                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageMeta.label}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -658,7 +658,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Image Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {imageInfo?.name || imageMeta.name}</div>
+                    <div><span className="font-semibold">Name:</span> {imageInfo?.label || imageMeta.label}</div>
                     <div><span className="font-semibold">Date:</span> {imageInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Original size:</span> {(() => {
                       const size = imageInfo?.file_size;
@@ -702,7 +702,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                     <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
-                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageMeta.name}`}
+                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageMeta.label}`}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >

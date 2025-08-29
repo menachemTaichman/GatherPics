@@ -791,12 +791,12 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
                   }`}
                   tabIndex={0}
                   role="button"
-                  aria-label={`Image ${image.name}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
+                  aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
                   data-image-id={image.id || image.imageID}
                 >
                   <img
                     src={image.urls.thumbnail}
-                    alt={image.name}
+                    alt={image.label}
                     className="w-full h-24 object-cover"
                     loading="lazy"
                     onError={(e) => {
@@ -805,7 +805,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
                     }}
                   />
                   <div className="p-2 text-xs text-gray-600 truncate">
-                    {image.date_taken ? formatDateTime(image.date_taken) : image.name}
+                    {image.date_taken ? formatDateTime(image.date_taken) : image.label}
                   </div>
                   {momentInfo && (
                     <div className={`absolute top-2 right-2 text-white text-xs px-1 py-0.5 rounded ${

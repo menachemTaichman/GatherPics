@@ -173,9 +173,9 @@ export default function GroupsFilter({
             onMouseMove={handleMouseMove}
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-              {group.face_representative ? (
+              {group.representative_face ? (
                 <img
-                  src={urlHelpers.getFaceCropUrl(group.face_representative)}
+                  src={urlHelpers.getFaceCropUrl(group.representative_face)}
                   alt={getGroupDisplayName(group)}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -208,9 +208,9 @@ export default function GroupsFilter({
                     ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                     : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                 }`}>
-                  {relatedGroup.face_representative ? (
+                  {relatedGroup.representative_face ? (
                     <img
-                      src={urlHelpers.getFaceCropUrl(relatedGroup.face_representative)}
+                      src={urlHelpers.getFaceCropUrl(relatedGroup.representative_face)}
                       alt={getGroupDisplayName(relatedGroup)}
                       className="w-full h-full object-cover"
                       onError={(e) => {

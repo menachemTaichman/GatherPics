@@ -242,10 +242,10 @@ def recrop_faces(image_ids: list):
             face_pil = crop_image(original_pil, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
             face_pil.save(face_path)
 
-def print_group_face_representative(group_id):
+def print_group_representative_face(group_id):
     group = event.groups_model.get(group_id)
     if group:
-        print(f"Group {group_id} face_representative: {group.get('face_representative')}")
+        print(f"Group {group_id} representative_face: {group.get('representative_face')}")
     else:
         print(f"Group {group_id} not found.")
 
@@ -287,7 +287,7 @@ def copy_moments_to_database():
         image_ids = []
         
         for image_filename in old_images:
-            image_record = event.db.get_one('images', {'name': image_filename})
+            image_record = event.db.get_one('images', {'label': image_filename})
             if image_record:
                 image_ids.append(image_record['imageID'])
         

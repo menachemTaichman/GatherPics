@@ -155,7 +155,7 @@ export const useDataStore = create((set, get) => ({
             image_count: result.updated_target_group.image_ids?.length || 0,
             imageCount: result.updated_target_group.image_ids?.length || 0,
             image_ids: result.updated_target_group.image_ids || [],
-            face_representative: result.updated_target_group.face_representative || '',
+            representative_face: result.updated_target_group.representative_face || '',
             created_at: result.updated_target_group.created_at || new Date().toISOString(),
             updated_at: result.updated_target_group.updated_at || new Date().toISOString()
           };
@@ -170,8 +170,8 @@ export const useDataStore = create((set, get) => ({
             image_count: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
             imageCount: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
             image_ids: result.images_to_add_to_target || [],
-            // Do not set face_representative heuristically; wait for backend-provided value
-            face_representative: '',
+            // Do not set representative_face heuristically; wait for backend-provided value
+            representative_face: '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };

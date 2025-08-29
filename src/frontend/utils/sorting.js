@@ -20,7 +20,7 @@ export const sortImages = (images, sortBy = 'date', sortOrder = 'asc') => {
       const dateB = b.date_taken ? new Date(b.date_taken).getTime() : 0;
       comparison = dateA - dateB;
     } else if (sortBy === 'name') {
-      comparison = (a.id || a.name || '').localeCompare(b.id || b.name || '');
+      comparison = (a.id || a.label || '').localeCompare(b.id || b.label || '');
     }
     
     return sortOrder === 'asc' ? comparison : -comparison;
@@ -53,8 +53,8 @@ export const sortImagesWithDatePriority = (images, sortOrder = 'asc') => {
     
     // If neither has a date, sort by filename
     return sortOrder === 'asc' 
-      ? (a.name || '').localeCompare(b.name || '') 
-      : (b.name || '').localeCompare(a.name || '');
+      ? (a.label || '').localeCompare(b.label || '') 
+      : (b.label || '').localeCompare(a.label || '');
   });
 };
 

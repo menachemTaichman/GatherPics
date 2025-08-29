@@ -155,7 +155,7 @@ export default function MergeConflictModal({
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
-                    src={getRepresentativeImageSrc(currentGroup?.face_representative) || PLACEHOLDER_DATA_URL}
+                    src={getRepresentativeImageSrc(currentGroup?.representative_face) || PLACEHOLDER_DATA_URL}
                     alt="Current group"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -172,7 +172,7 @@ export default function MergeConflictModal({
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
-                    src={getRepresentativeImageSrc(conflictingGroup?.face_representative) || PLACEHOLDER_DATA_URL}
+                    src={getRepresentativeImageSrc(conflictingGroup?.representative_face) || PLACEHOLDER_DATA_URL}
                     alt="Target group"
                     className="w-full h-full object-cover"
                     onError={(e) => {

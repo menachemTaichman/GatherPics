@@ -50,7 +50,7 @@ def test_secure_actions():
         data_list=[{
             'groupID': 'new-group-123',
             'label': 'New Group',
-            'face_representative': None
+            'representative_face': None
         }]
     )
     print(f"   Result: {'SUCCESS' if success else 'FAILED (permission denied)'}\n")
@@ -61,7 +61,7 @@ def test_secure_actions():
         table='images',
         data_list=[{
             'imageID': 'new-image-123',
-            'name': 'example.jpg',
+            'label': 'example.jpg',
             'date_taken': '2024-01-01',
             'file_size': 1024000,
             'width': 1920,

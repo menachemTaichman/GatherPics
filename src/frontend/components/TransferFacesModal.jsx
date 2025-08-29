@@ -290,8 +290,8 @@ export default function TransferFacesModal({
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                                              <img
-                         src={group.face_representative
-                   ? urlHelpers.getFaceCropUrl(group.face_representative)
+                         src={group.representative_face
+                   ? urlHelpers.getFaceCropUrl(group.representative_face)
                            : PLACEHOLDER_DATA_URL}
                         alt={group.label || `Person ${group.groupID}`}
                         className="w-full h-full object-cover"

@@ -50,7 +50,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
                     },
                     'group_id': face.get('groupID'),
                     'group_label': group['label'] if group else 'Unknown',
-                    'group_representative': group.get('face_representative') if group else None
+                    'group_representative': group.get('representative_face') if group else None
                 }
                 faces_data.append(face_data)
         
@@ -70,7 +70,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Build complete response
         image_data = {
             'id': image_id,
-            'name': image['name'],
+            'label': image['label'],
             'date_taken': image.get('date_taken'),
             'file_size': image.get('file_size'),
             'width': image.get('width'),

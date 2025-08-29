@@ -344,9 +344,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         // Handle group updates (including name and representative changes)
         const updatedGroup = state.groups.find(g => g.groupID === group?.groupID);
         if (updatedGroup && group) {
-          const hasChanges = 
-            updatedGroup.label !== group.label ||
-            updatedGroup.face_representative !== group.face_representative;
+                  const hasChanges = 
+          updatedGroup.label !== group.label ||
+          updatedGroup.representative_face !== group.representative_face;
           
           if (hasChanges) {
             setGroup(updatedGroup);
@@ -863,9 +863,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 title="Edit group details"
               >
                 <img
-                  key={group.face_representative || 'no-representative'}
-                  src={group.face_representative && group.face_representative.trim() !== ''
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.face_representative}.webp`
+                  key={group.representative_face || 'no-representative'}
+                  src={group.representative_face && group.representative_face.trim() !== ''
+                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.representative_face}.webp`
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"
@@ -1376,7 +1376,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900">{image.name}</p>
+                      <p className="font-medium text-gray-900">{image.label}</p>
                       <p className="text-sm text-gray-500">
                         {image.date_taken ? formatDate(image.date_taken) : 'Unknown date'}
                       </p>

@@ -76,14 +76,18 @@ class Event(JsonModel):
         developer_id = self.profile_model.generate_id()
         event_manager_id = self.profile_model.generate_id()
         main_manager_id = self.profile_model.generate_id()
+        developer_password = ''
+        event_manager_password = ''
+        main_manager_password = ''
 
         # create directly in db, include password and id
+
         self.db.execute_query(f'''
-            INSERT INTO profiles (label, hierarchy_rank, all_images, can_upload_images, can_delete_images, can_edit_groups, can_edit_moments, all_albums, can_edit_albums, save_preferences, profileID)
-            VALUES ('Developer', 3, 1, 1, 1, 1, 1, 1, 1, 1, ?),
-                   ('Event Manager', 2, 1, 1, 1, 1, 1, 1, 1, 1, ?),
-                   ('Main Manager', 1, 1, 1, 1, 1, 1, 1, 1, 1, ?)
-        ''', (developer_id, event_manager_id, main_manager_id))
+            INSERT INTO profiles (profileID, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
+            VALUES (?, 'Developer', ?, 3, 1, 1, 1, 1, 1),
+                   (?, 'Event Manager', ?, 2, 1, 1, 1, 1, 1),
+                   (?, 'Main Manager', ?, 1, 1, 1, 1, 1, 1)
+        ''', (developer_id, developer_password, event_manager_id, event_manager_password, main_manager_id, main_manager_password))
 
         self.set_profile_id(developer_id)
 
@@ -100,7 +104,7 @@ class Event(JsonModel):
 
     def get_profile_id(self) -> Optional[str]:
         """Get the current profile ID."""
-        return self.db.get_profile_id()
+        return self.db.profile_context.get('profileID')
 
     def get_info(self) -> dict:
         return {
@@ -188,7 +192,7 @@ class Event(JsonModel):
             representative_face = self.faces_model.get_biggest_face(face_ids) if face_ids else ''
             target_group_data = self.groups_model.add(
                 label=new_group_name,
-                face_representative=representative_face
+                representative_face=representative_face
             )
             target_group_id = target_group_data['groupID']
         
@@ -220,7 +224,7 @@ class Event(JsonModel):
         target_group_faces = self.groups_model.get_faces(target_group_id)
         new_representative = self.faces_model.get_biggest_face(target_group_faces)
         if new_representative:
-            self.groups_model.edit(target_group_id, {'face_representative': new_representative})
+            self.groups_model.edit(target_group_id, {'representative_face': new_representative})
         
         # Check which images no longer belong to source group after transfer
         images_to_remove_from_source = set()
@@ -231,7 +235,7 @@ class Event(JsonModel):
                 images_to_remove_from_source.add(image_id)
         
         # Check if any transferred face was the representative of the old group
-        old_representative = old_group.get('face_representative', '')
+        old_representative = old_group.get('representative_face', '')
         representative_transferred = old_representative in face_ids
         
         # Check if old group is now empty and delete it if so
@@ -244,7 +248,7 @@ class Event(JsonModel):
             old_group_faces = self.groups_model.get_faces(old_group_id)
             new_representative = self.faces_model.get_biggest_face(old_group_faces)
             if new_representative:
-                self.groups_model.edit(old_group_id, {'face_representative': new_representative})
+                self.groups_model.edit(old_group_id, {'representative_face': new_representative})
         
         # Get updated source group data if it wasn't deleted
         updated_source_group = None
@@ -494,7 +498,7 @@ class Event(JsonModel):
                 representative_face_id = self.faces_model.get_biggest_face(cluster)
                 group_data = self.groups_model.add(
                     label=f"Person {group_num}",
-                    face_representative=representative_face_id
+                    representative_face=representative_face_id
                 )
                 group_id = group_data['groupID']
                 self.groups_model.add_faces(group_id, cluster)

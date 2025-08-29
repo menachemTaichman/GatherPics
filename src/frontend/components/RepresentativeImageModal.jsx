@@ -72,7 +72,7 @@ export default function RepresentativeImageModal({
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {images.map((img, index) => (
                 <div
-                  key={img.id || img.name || `image-${index}`}
+                  key={img.id || img.label || `image-${index}`}
                   onClick={() => {
                     onImageSelect(img.id);
                     onClose();
@@ -81,7 +81,7 @@ export default function RepresentativeImageModal({
                 >
                   <img
                     src={img.urls.thumbnail}
-                    alt={img.name}
+                    alt={img.label}
                     className="w-full h-24 object-cover"
                     loading="lazy"
                     onError={(e) => {
@@ -90,7 +90,7 @@ export default function RepresentativeImageModal({
                     }}
                   />
                   <div className="p-2 text-xs text-gray-600 truncate">
-                    {img.date_taken ? formatDateTime(img.date_taken) : img.name}
+                    {img.date_taken ? formatDateTime(img.date_taken) : img.label}
                   </div>
                   {(moment.representative_image === img.id || 
                     (moment.representative_image && moment.representative_image.includes && moment.representative_image.includes(`/${img.id}.webp`))) && (

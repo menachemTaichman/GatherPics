@@ -160,7 +160,7 @@ def test_data_consistency(db):
                 OR EXISTS (
                     SELECT 1 FROM groups g
                     WHERE g.groupID = f.groupID 
-                    AND g.face_representative = f.faceID
+                    AND g.representative_face = f.faceID
                     AND EXISTS (
                         SELECT 1 FROM accessible_images_helper aih2
                         WHERE aih2.imageID IN (
@@ -348,8 +348,8 @@ def update_database_structure(db):
     try:
         with db.get_connection() as conn:
             # remove is_manager column and add hierarchy_rank column
-            profile_id = db.get_profile_id()
-            # drop profiles table and recreate it with hierarchy_rank column
+            profile_id = db.profile_context['profileID']
+            # drop profiles table and recreate it with hierarchy_rank column            
             conn.execute("DROP TABLE IF EXISTS profiles")
             from src.core.db import TABLES
             profiles_table = TABLES['profiles']
@@ -385,10 +385,7 @@ def main():
         print(f"Database not found at {db_path}")
         return
     
-    db = AppDB(db_path)
-
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
+    db = AppDB(db_path, '89cb4967-0eba-48af-99cc-5e87407fb639')
 
     test_custom_queries(db)
 

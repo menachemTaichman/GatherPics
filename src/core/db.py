@@ -24,7 +24,7 @@ TABLES = {
     ''',
     'images': '''
         imageID TEXT PRIMARY KEY,
-        name TEXT,
+        label TEXT,
         date_taken TEXT,
         file_size INTEGER,
         width INTEGER,
@@ -35,7 +35,7 @@ TABLES = {
     'groups': '''
         groupID TEXT PRIMARY KEY,
         label TEXT UNIQUE,
-        face_representative TEXT
+        representative_face TEXT
     ''',
     'moments': '''
         momentID TEXT PRIMARY KEY,
@@ -94,7 +94,7 @@ INDEXES = [
     'idx_faces_groupid ON faces(groupID)',
     'idx_profile_images_imageid ON profile_images(imageID)',
     'idx_images_momentid ON images(momentID)',
-    'idx_groups_face_representative ON groups(face_representative)',
+    'idx_groups_representative_face ON groups(representative_face)',
     'idx_moments_representative_image ON moments(representative_image)',
     'idx_faces_groupid_imageid ON faces(groupID, imageID)',
     'idx_images_date_taken ON images(date_taken)',
@@ -136,7 +136,7 @@ VIEWS = {
         OR EXISTS (
             SELECT 1 FROM accessible_groups 
             WHERE accessible_groups.groupID = faces.groupID 
-            AND accessible_groups.face_representative = faces.faceID
+            AND accessible_groups.representative_face = faces.faceID
         )
     ''',
     'accessible_moments': '''
@@ -168,17 +168,6 @@ VIEWS = {
         FROM album_images
         INNER JOIN accessible_images ON album_images.imageID = accessible_images.imageID
         INNER JOIN accessible_albums ON album_images.albumID = accessible_albums.albumID
-    ''',
-    'representative_images': '''
-        SELECT DISTINCT images.imageID
-        FROM images
-        LEFT JOIN accessible_moments ON images.imageID = accessible_moments.representative_image
-        LEFT JOIN accessible_albums ON images.imageID = accessible_albums.representative_image
-        WHERE (accessible_moments.representative_image IS NOT NULL OR accessible_albums.representative_image IS NOT NULL)
-    ''',
-    'representative_faces': '''
-        SELECT faces.faceID
-        FROM faces INNER JOIN accessible_groups ON faces.faceID = accessible_groups.face_representative
     ''',
     'editable_profiles_details': '''
         SELECT profileID, label, password FROM profiles
@@ -253,7 +242,7 @@ TRIGGERS = {
 
         UPDATE groups
         SET label = NEW.label,
-            face_representative = NEW.face_representative
+            representative_face = NEW.representative_face
         WHERE groupID = OLD.groupID;
     END;
     """,
@@ -520,7 +509,7 @@ class AppDB:
             
             # Create triggers
             for trigger_sql in TRIGGERS:
-                conn.execute(trigger_sql)
+                conn.execute(f'CREATE TRIGGER IF NOT EXISTS {trigger_sql}')
 
             conn.commit()
         finally:
@@ -532,13 +521,15 @@ class AppDB:
         
         fields = {'profileID': '', 'hierarchy_rank': 0, 'is_profiles_manager': False, 'can_edit': False, 'all_images': False, 'all_albums': False}
         self.profile_context = {}
+        profile = {}
         if profile_id:
-            profile = self.get_one('profiles', {'profileID': profile_id})
+            profile = self.get_one('profiles', {'profileID': profile_id}, bypass_access_control=True)
+
+        if not profile:
+            profile = {}
         
         for field, default_val in fields.items():
-            val = default_val
-            if profile:
-                val = profile.get(field, default_val)
+            val = profile.get(field, default_val)
             self.profile_context[field] = val
 
     @contextmanager
@@ -564,11 +555,16 @@ class AppDB:
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    def get_one(self, table: str, where: Dict) -> Dict | None:
+    def get_one(self, table: str, where: Dict, bypass_access_control: bool = False) -> Dict | None:
 
-        accessible_table = self._get_accessible_table_name(table)
-        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-        where_params = tuple(where.values())
+        if bypass_access_control:
+            accessible_table = table
+            where_clause = '1=1'
+            where_params = ()
+        else:
+            accessible_table = self._get_accessible_table_name(table)
+            where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+            where_params = tuple(where.values())
         
         with self.get_connection() as conn:
             cursor = conn.execute(f'SELECT * FROM {accessible_table} WHERE {where_clause}', where_params)
@@ -632,7 +628,7 @@ class AppDB:
         1. Profile has permission to perform the action
         2. Target records are accessible to the profile
         """
-        if not self._current_profile_id:
+        if not self.profile_context['profileID']:
             return False
             
         # Check profile permissions first
@@ -689,7 +685,7 @@ class AppDB:
         Get the accessible view name for a table if it exists and profile filtering is enabled.
         Returns the original table name if no accessible view exists or profile filtering is disabled.
         """
-        if not self._current_profile_id or table not in ACCESSIBLE_VIEWS:
+        if not self.profile_context['profileID'] or table not in ACCESSIBLE_VIEWS:
             return table
         return ACCESSIBLE_VIEWS[table]
 
@@ -721,7 +717,7 @@ class AppDB:
             where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
             where_params = tuple(where.values())
 
-        if not self._current_profile_id:
+        if not self.profile_context['profileID']:
             # No profile, allow if not a restricted table for actions
             if table in ['images', 'faces', 'albums']:
                 return ('1=0', ())  # No access
@@ -764,7 +760,7 @@ class AppDB:
         return (where_clause, where_params)
 
     def _check_hierarchy_permissions(self, action_type: str, table: str, where: Dict = None, fields: Dict = None, data_list: List[Dict] = None) -> tuple:
-        current_profile = self.get_one('profiles', {'profileID': self._current_profile_id})
+        current_profile = self.get_one('profiles', {'profileID': self.profile_context['profileID']})
         if not current_profile:
             return False, fields, data_list
 
@@ -776,7 +772,7 @@ class AppDB:
                 if not target_profile_id or len(where.keys()) > 1:
                     return False, fields, data_list
 
-                if target_profile_id == self._current_profile_id:
+                if target_profile_id == self.profile_context['profileID']:
                     if current_rank == 0:
                         return True, fields, data_list
                     else:
@@ -802,7 +798,7 @@ class AppDB:
                 if not target_profile_id:
                     return False, fields, data_list
 
-                if target_profile_id == self._current_profile_id:
+                if target_profile_id == self.profile_context['profileID']:
                     return True, fields, data_list
                 
                 target_profile = self.get_one('profiles', {'profileID': target_profile_id})
@@ -823,7 +819,7 @@ class AppDB:
                 if not target_profile_id:
                     return False, fields, data_list
 
-                if target_profile_id == self._current_profile_id:
+                if target_profile_id == self.profile_context['profileID']:
                     return False, fields, data_list
 
                 target_profile = self.get_one('profiles', {'profileID': target_profile_id})
@@ -841,7 +837,7 @@ class AppDB:
                 return True, fields, data_list
 
             elif table in ['profile_images', 'profile_albums']:
-                target_profile_ids = {item.get('profileID') for item in data_list if item.get('profileID') != self._current_profile_id}
+                target_profile_ids = {item.get('profileID') for item in data_list if item.get('profileID') != self.profile_context['profileID']}
                 if target_profile_ids:
                     placeholders = ','.join(['?'] * len(target_profile_ids))
                     query = f"SELECT profileID, hierarchy_rank FROM profiles WHERE profileID IN ({placeholders})"
@@ -864,7 +860,7 @@ class AppDB:
         For profiles, it also modifies fields based on hierarchy.
         Returns: (is_allowed, modified_fields, modified_data_list)
         """
-        if not self._current_profile_id:
+        if not self.profile_context['profileID']:
             return False, fields, data_list
         
         if table in ['profiles', 'profile_images', 'profile_albums']:
@@ -877,7 +873,7 @@ class AppDB:
             FROM profiles 
             WHERE profileID = ?
         """
-        result = self.execute_query(profile_query, (self._current_profile_id,))
+        result = self.execute_query(profile_query, (self.profile_context['profileID'],))
         if not result:
             return False, fields, data_list
             

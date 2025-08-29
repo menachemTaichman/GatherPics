@@ -350,8 +350,8 @@ export default function Moments() {
       // Only allow range selection within the same moment
       if (lastMomentId === momentId) {
         const currentImages = momentImagesMap[momentId] || [];
-        const lastIndex = currentImages.findIndex(p => p.name === lastImageName);
-        const currentIndex = currentImages.findIndex(p => p.name === imageName);
+        const lastIndex = currentImages.findIndex(p => p.label === lastImageName);
+        const currentIndex = currentImages.findIndex(p => p.label === imageName);
         
         if (lastIndex !== -1 && currentIndex !== -1) {
           const startIndex = Math.min(lastIndex, currentIndex);
@@ -362,7 +362,7 @@ export default function Moments() {
             const next = new Set(prev);
             for (let i = startIndex; i <= endIndex; i++) {
               const image = currentImages[i];
-              next.add(`${momentId}:${image.name}`);
+              next.add(`${momentId}:${image.label}`);
             }
             return next;
           });
@@ -390,7 +390,7 @@ export default function Moments() {
     const allCurrentImages = new Set();
     Object.entries(momentImagesMap).forEach(([momentId, images]) => {
       images.forEach(image => {
-        allCurrentImages.add(`${momentId}:${image.name}`);
+        allCurrentImages.add(`${momentId}:${image.label}`);
       });
     });
     return allCurrentImages;
@@ -426,7 +426,7 @@ export default function Moments() {
     
     if (currentMoment) {
       const currentMomentImages = momentImagesMap[currentMoment.momentID] || [];
-              const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image.name}`);
+              const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image.label}`);
       
               // Check if all images in current moment are already selected
         const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 

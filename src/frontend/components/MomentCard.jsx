@@ -44,7 +44,7 @@ const MomentCard = forwardRef(({
   onClearMomentSelection
 }, ref) => {
   // Calculate selection stats for this moment
-  const momentimageKeys = images.map(image => `${moment.momentID}:${image.name}`);
+  const momentimageKeys = images.map(image => `${moment.momentID}:${image.label}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
@@ -164,13 +164,13 @@ const MomentCard = forwardRef(({
                       <div className="relative group cursor-pointer h-full" onClick={() => onOpenImageViewer(images, image, index)}>
                                                                                                                                                                                                        <input
                              type="checkbox"
-                             id={`image-checkbox-${moment.momentID}-${image.name}`}
-                             name={`image-checkbox-${moment.momentID}-${image.name}`}
-                             checked={globalSelection.has(`${moment.momentID}:${image.name}`)}
+                             id={`image-checkbox-${moment.momentID}-${image.label}`}
+                             name={`image-checkbox-${moment.momentID}-${image.label}`}
+                             checked={globalSelection.has(`${moment.momentID}:${image.label}`)}
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
                                e.stopPropagation();
-                               onimageSelect(image.name, moment.momentID, e);
+                               onimageSelect(image.label, moment.momentID, e);
                              }}
                              className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
                                selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -202,12 +202,12 @@ const MomentCard = forwardRef(({
                       <>
                                                                                                                                                                                                        <input
                              type="checkbox"
-                             id={`image-checkbox-list-${moment.momentID}-${image.name}`}
-                             name={`image-checkbox-list-${moment.momentID}-${image.name}`}
-                             checked={globalSelection.has(`${moment.momentID}:${image.name}`)}
+                             id={`image-checkbox-list-${moment.momentID}-${image.label}`}
+                             name={`image-checkbox-list-${moment.momentID}-${image.label}`}
+                             checked={globalSelection.has(`${moment.momentID}:${image.label}`)}
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
-                               onimageSelect(image.name, moment.momentID, e);
+                               onimageSelect(image.label, moment.momentID, e);
                              }}
                              className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                            />
@@ -225,7 +225,7 @@ const MomentCard = forwardRef(({
                           />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{image.name}</p>
+                          <p className="font-medium text-gray-900">{image.label}</p>
                           <p className="text-sm text-gray-500">
                             {image.date_taken ? formatTimeOnly(image.date_taken) : 'Unknown date'}
                           </p>
