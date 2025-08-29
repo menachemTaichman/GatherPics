@@ -107,33 +107,41 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     }
   };
 
-  // Use the image object directly since it comes from the API
+  // Handle both image objects and image IDs
   let imageMeta = image;
+  let imageId = null;
+  
   if (typeof image === 'string') {
-    imageMeta = { name: image };
+    // If image is a string, treat it as an image ID
+    imageId = image;
+    imageMeta = { id: image, label: image };
+  } else if (image && typeof image === 'object') {
+    // If image is an object, extract the ID
+    imageId = image.id || image.label || image.name;
   }
+  
   // Use the image data directly
-  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.label;
+  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.label || imageMeta.id || imageMeta.name;
 
   useEffect(() => {
-    if (image) {
+    if (image && imageId) {
       loadImageInfo();
       // Reset selected face when image changes
       setSelectedFaceIndex(null);
       // Reset image loaded state when image changes
       setImageLoaded(false);
     }
-  }, [image]);
+  }, [image, imageId]);
 
   // Subscribe to data store changes to update face data when transfers happen
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
         const transferResult = state.lastTransferResult;
-        if (transferResult && transferResult.transferred_images_data && image) {
+        if (transferResult && transferResult.transferred_images_data && imageId) {
           // Check if the current image was affected by the transfer
           const updatedImageData = transferResult.transferred_images_data.find(
-            imageData => imageData.id === image || imageData.label === image
+            imageData => imageData.id === imageId || imageData.label === imageId
           );
           
           if (updatedImageData) {
@@ -147,14 +155,23 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     );
     
     return unsubscribe;
-  }, [image]);
+  }, [imageId]);
 
   const loadImageInfo = async () => {
     try {
       setLoading(true);
       
+      // Check if we have a valid image ID
+      if (!imageId) {
+        console.error('No valid image ID found:', image);
+        setFaces([]);
+        setImageInfo({ filename: displayFilename, faces_count: 0, groups: [] });
+        setMomentInfo(null);
+        return;
+      }
+      
       // Use the new complete image endpoint instead of multiple calls
-      const imageData = await imagesAPI.getComplete(imageMeta.label);
+      const imageData = await imagesAPI.getComplete(imageId);
       
       setFaces(imageData.faces || []);
       setImageInfo(imageData);
@@ -162,7 +179,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     } catch (error) {
       console.error('Error loading image info:', error);
       setFaces([]);
-      setImageInfo({ filename: imageMeta.label, faces_count: 0, groups: [] });
+      setImageInfo({ filename: displayFilename, faces_count: 0, groups: [] });
       setMomentInfo(null);
     } finally {
       setLoading(false);
@@ -225,12 +242,17 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
 
   const handleDownload = async () => {
     try {
-      const result = await downloadAPI.download([imageMeta.label]);
+      if (!imageId) {
+        console.error('No valid image ID for download');
+        return;
+      }
+      
+      const result = await downloadAPI.download([imageId]);
       
       // Create a temporary link to download the file
       const link = document.createElement('a');
       link.href = `${API_BASE}${result.download_url}`;
-      link.download = imageMeta.label;
+      link.download = imageId;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -496,8 +518,8 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
-                                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageMeta.label}.webp`}
-                alt={imageMeta.label}
+                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageId}.webp`}
+                      alt={imageId}
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
                       loading="lazy"
@@ -536,7 +558,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                       }
                       return (
                         <div
-                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageMeta.label}`}
+                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageId}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -702,7 +724,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                     <div className="space-y-3">
                       {faces.map((face, index) => (
                         <div
-                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageMeta.label}`}
+                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
                           className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                           onClick={() => handleFaceClick(index)}
                         >

@@ -153,7 +153,8 @@ export default function TransferFacesModal({
         currentGroup.groupID,
         selectedGroupId || null,
         selectedFaces,
-        FIXED_EVENT_ID
+        FIXED_EVENT_ID,
+        !selectedGroupId ? newGroupName.trim() : null
       );
 
       // Determine if this is a new group
@@ -163,6 +164,8 @@ export default function TransferFacesModal({
       // Add new_group_name to the transfer data
       const modifiedResult = {
         ...result,
+        // Also expose on top-level so callers that use the full result can access it
+        new_group_name: newGroupNameValue,
         changes: result.changes?.map(change => ({
           ...change,
           data: {

@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional
 from contextlib import contextmanager
 
 ACCESSIBLE_VIEWS = {
@@ -130,14 +130,7 @@ VIEWS = {
     'accessible_faces': '''
         SELECT faces.*
         FROM faces 
-        WHERE EXISTS (
-            SELECT 1 FROM accessible_images WHERE accessible_images.imageID = faces.imageID
-        )
-        OR EXISTS (
-            SELECT 1 FROM accessible_groups 
-            WHERE accessible_groups.groupID = faces.groupID 
-            AND accessible_groups.representative_face = faces.faceID
-        )
+        INNER JOIN accessible_images ON faces.imageID = accessible_images.imageID
     ''',
     'accessible_moments': '''
         SELECT moments.* FROM moments
@@ -191,6 +184,7 @@ VIEWS = {
 TRIGGERS = {
     # accessible_faces
     'trg_update_accessible_faces': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_accessible_faces
     INSTEAD OF UPDATE ON accessible_faces
     BEGIN
         SELECT CASE
@@ -206,6 +200,7 @@ TRIGGERS = {
 
     # accessible_images
     'trg_update_accessible_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_accessible_images
     INSTEAD OF UPDATE ON accessible_images
     BEGIN
         SELECT CASE
@@ -219,6 +214,7 @@ TRIGGERS = {
     END;
     """,
     'trg_delete_accessible_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_images
     INSTEAD OF DELETE ON accessible_images
     BEGIN
         SELECT CASE
@@ -233,6 +229,7 @@ TRIGGERS = {
 
     # accessible_groups
     'trg_update_accessible_groups': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_accessible_groups
     INSTEAD OF UPDATE ON accessible_groups
     BEGIN
         SELECT CASE
@@ -247,6 +244,7 @@ TRIGGERS = {
     END;
     """,
     'trg_delete_accessible_groups': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_groups
     INSTEAD OF DELETE ON accessible_groups
     BEGIN
         SELECT CASE
@@ -258,9 +256,23 @@ TRIGGERS = {
         WHERE groupID = OLD.groupID;
     END;
     """,
+    'trg_insert_accessible_groups': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_groups
+    INSTEAD OF INSERT ON accessible_groups
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        INSERT INTO groups (groupID, label, representative_face)
+        VALUES (NEW.groupID, NEW.label, NEW.representative_face);
+    END;
+    """,
 
     # accessible_moments
     'trg_update_accessible_moments': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_accessible_moments
     INSTEAD OF UPDATE ON accessible_moments
     BEGIN
         SELECT CASE
@@ -278,6 +290,7 @@ TRIGGERS = {
     END;
     """,
     'trg_delete_accessible_moments': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_moments
     INSTEAD OF DELETE ON accessible_moments
     BEGIN
         SELECT CASE
@@ -289,9 +302,23 @@ TRIGGERS = {
         WHERE momentID = OLD.momentID;
     END;
     """,
+    'trg_insert_accessible_moments': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_moments
+    INSTEAD OF INSERT ON accessible_moments
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        INSERT INTO moments (momentID, label, description, start, end, representative_image)
+        VALUES (NEW.momentID, NEW.label, NEW.description, NEW.start, NEW.end, NEW.representative_image);
+    END;
+    """,
 
     # accessible_albums
     'trg_update_accessible_albums': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_accessible_albums
     INSTEAD OF UPDATE ON accessible_albums
     BEGIN
         SELECT CASE
@@ -307,6 +334,7 @@ TRIGGERS = {
     END;
     """,
     'trg_delete_accessible_albums': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_albums
     INSTEAD OF DELETE ON accessible_albums
     BEGIN
         SELECT CASE
@@ -318,27 +346,41 @@ TRIGGERS = {
         WHERE albumID = OLD.albumID;
     END;
     """,
+    'trg_insert_accessible_albums': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_albums
+    INSTEAD OF INSERT ON accessible_albums
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+        INSERT INTO albums (albumID, label, description, representative_image)
+        VALUES (NEW.albumID, NEW.label, NEW.description, NEW.representative_image);
+    END;
+    """,
 
     # accessible_albums_images
     'trg_insert_accessible_albums_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_albums_images
     INSTEAD OF INSERT ON accessible_albums_images
     BEGIN
         SELECT CASE
             WHEN cur_profile('can_edit') = 0 THEN
                 RAISE(ABORT, 'Permission denied')
-            WHEN NOT EXISTS (SELECT 1 FROM accessible_albums WHERE albumID = NEW.albumID) THEN
-                RAISE(ABORT, 'Album not accessible')
-            WHEN NOT EXISTS (SELECT 1 FROM accessible_images WHERE imageID = NEW.imageID) THEN
-                RAISE(ABORT, 'Image not accessible')
         END;
 
         INSERT INTO album_images (albumID, imageID)
-        VALUES (NEW.albumID, NEW.imageID);
+        SELECT accessible_albums.albumID, accessible_images.imageID
+        FROM accessible_albums
+        JOIN accessible_images
+        WHERE accessible_albums.albumID = NEW.albumID
+        AND accessible_images.imageID = NEW.imageID;
     END;
     """,
     
     # editable_full_profiles
     'trg_insert_editable_full_profiles': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_editable_full_profiles
     INSTEAD OF INSERT ON editable_full_profiles
     BEGIN
         SELECT CASE
@@ -368,6 +410,7 @@ TRIGGERS = {
     END;
     """,
     'trg_update_editable_full_profiles': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_editable_full_profiles
     INSTEAD OF UPDATE ON editable_full_profiles
     BEGIN
         SELECT CASE
@@ -397,9 +440,28 @@ TRIGGERS = {
             save_preferences = NEW.save_preferences
         WHERE profileID = OLD.profileID;
 
+        -- Update the profile_images and profile_albums tables
+        DELETE FROM profile_images WHERE profileID = OLD.profileID AND NEW.all_images <> OLD.all_images;
+        
+        INSERT INTO profile_images (profileID, imageID, accessible)
+        SELECT OLD.profileID, imageID, accessible
+        FROM profile_images 
+        WHERE profileID = cur_profile('profileID')
+          AND NEW.all_images = 1 
+          AND NEW.all_images <> OLD.all_images;
+
+        DELETE FROM profile_albums WHERE profileID = OLD.profileID AND NEW.all_albums <> OLD.all_albums;
+        
+        INSERT INTO profile_albums (profileID, albumID, accessible)
+        SELECT OLD.profileID, albumID, accessible
+        FROM profile_albums 
+        WHERE profileID = cur_profile('profileID')
+          AND NEW.all_albums = 1
+          AND NEW.all_albums <> OLD.all_albums;
     END;
     """,
     'trg_delete_editable_full_profiles': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_editable_full_profiles
     INSTEAD OF DELETE ON editable_full_profiles
     BEGIN
         SELECT CASE
@@ -417,6 +479,7 @@ TRIGGERS = {
 
     # editable_profiles_details
     'trg_update_editable_profiles_details': """
+    CREATE TRIGGER IF NOT EXISTS trg_update_editable_profiles_details
     INSTEAD OF UPDATE ON editable_profiles_details
     BEGIN
         SELECT CASE
@@ -433,16 +496,19 @@ TRIGGERS = {
 
     # editable_profile_images
     'trg_insert_editable_profile_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_editable_profile_images
     INSTEAD OF INSERT ON editable_profile_images
     BEGIN
         SELECT CASE
             WHEN cur_profile('is_profiles_manager') = 0 THEN
                 RAISE(ABORT, 'Permission denied: not a profiles manager')
-            WHEN NOT EXISTS ( -- Check rank of target profile
+            WHEN NEW.profileID = cur_profile('profileID') THEN
+                RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+            WHEN EXISTS (
                 SELECT 1 FROM profiles
-                WHERE profileID = NEW.profileID AND hierarchy_rank < cur_profile('hierarchy_rank')
+                WHERE profileID = NEW.profileID AND hierarchy_rank >= cur_profile('hierarchy_rank')
             ) THEN
-                RAISE(ABORT, 'Permission denied: cannot edit permissions for this profile')
+                RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
             WHEN NOT EXISTS ( -- Check if image is accessible to current manager
                 SELECT 1 FROM accessible_images WHERE imageID = NEW.imageID
             ) THEN
@@ -456,16 +522,19 @@ TRIGGERS = {
 
     # editable_profile_albums
     'trg_insert_editable_profile_albums': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_editable_profile_albums
     INSTEAD OF INSERT ON editable_profile_albums
     BEGIN
         SELECT CASE
             WHEN cur_profile('is_profiles_manager') = 0 THEN
                 RAISE(ABORT, 'Permission denied: not a profiles manager')
-            WHEN NOT EXISTS (
+            WHEN NEW.profileID = cur_profile('profileID') THEN
+                RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+            WHEN EXISTS (
                 SELECT 1 FROM profiles
-                WHERE profileID = NEW.profileID AND hierarchy_rank < cur_profile('hierarchy_rank')
+                WHERE profileID = NEW.profileID AND hierarchy_rank >= cur_profile('hierarchy_rank')
             ) THEN
-                RAISE(ABORT, 'Permission denied: cannot edit permissions for this profile')
+                RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
             WHEN NOT EXISTS (
                 SELECT 1 FROM accessible_albums WHERE albumID = NEW.albumID
             ) THEN
@@ -484,7 +553,8 @@ class AppDB:
         self.db_path = db_path
         self.set_profile_id(profile_id)
 
-    def create_new_db_in_dir(self, dir_path: str, db_name: str | None = None):
+    @staticmethod
+    def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
         """Create a new SQLite DB in the given directory, initializing all tables and settings."""
         import os
         if db_name is None:
@@ -508,8 +578,20 @@ class AppDB:
                 conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
             
             # Create triggers
-            for trigger_sql in TRIGGERS:
-                conn.execute(f'CREATE TRIGGER IF NOT EXISTS {trigger_sql}')
+            trigger_sql = f"""
+            CREATE TRIGGER IF NOT EXISTS trg_insert_images_count_limit
+            BEFORE INSERT ON images
+            BEGIN
+                SELECT CASE
+                    WHEN (SELECT COUNT(*) FROM images) >= {images_count_limit} THEN
+                        RAISE(ABORT, 'Images count limit reached')
+                END;
+            END;
+            """
+            conn.execute(trigger_sql)
+            
+            for trigger_name, trigger_sql in TRIGGERS.items():
+                conn.execute(trigger_sql)
 
             conn.commit()
         finally:
@@ -610,305 +692,60 @@ class AppDB:
             conn.commit()
             return []
 
-    def secure_action_query(self, action_type: str, table: str, where: Dict, fields: Dict = None, data_list: List[Dict] = None) -> bool:
-        """
-        Execute an action query (UPDATE, DELETE, INSERT) with security checks.
+    def insert(self, table: str, data_list: List[Dict], bypass_access_control: bool = False) -> List[Dict]:
+        """Insert multiple records into a table/view and return the inserted records."""
+        if not data_list:
+            return []
         
-        Args:
-            action_type: 'UPDATE', 'DELETE', or 'INSERT'
-            table: Table name to operate on
-            where: WHERE clause conditions (for UPDATE/DELETE)
-            fields: For UPDATE operations, the fields to update
-            data_list: For INSERT operations, list of records to insert
-            
-        Returns:
-            bool: True if action was executed successfully, False if security check failed
-            
-        Security checks:
-        1. Profile has permission to perform the action
-        2. Target records are accessible to the profile
-        """
-        if not self.profile_context['profileID']:
-            return False
-            
-        # Check profile permissions first
-        is_allowed, fields, data_list = self._check_profile_permissions(action_type, table, where, fields, data_list)
-        if not is_allowed:
-            return False
-            
-        # Execute the action
-        try:
-            with self.get_connection() as conn:
-                if action_type.upper() == 'UPDATE':
-                    if not fields:
-                        return True
-                    final_where, final_params = self._get_secure_where_clause(table, where)
-                    set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
-                    values = tuple(fields.values()) + final_params
-                    query = f'UPDATE {table} SET {set_clause} WHERE {final_where}'
-                    conn.execute(query, values)
-                elif action_type.upper() == 'DELETE':
-                    final_where, final_params = self._get_secure_where_clause(table, where)
-                    query = f'DELETE FROM {table} WHERE {final_where}'
-                    conn.execute(query, final_params)
-                elif action_type.upper() == 'INSERT':
-                    if not data_list:
-                        return True
-                    keys = list(data_list[0].keys())
-                    keys_str = ', '.join(keys)
-                    placeholders = '(' + ', '.join(['?'] * len(keys)) + ')'
-                    all_placeholders = ', '.join([placeholders] * len(data_list))
-                    values = [v for row in data_list for v in row.values()]
-                    sql = f'INSERT INTO {table} ({keys_str}) VALUES {all_placeholders}'
-                    conn.execute(sql, values)
-                else:
-                    raise ValueError(f"Unsupported action type: {action_type}")
-                conn.commit()
-            return True
-        except Exception:
-            return False
+        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        
+        keys = list(data_list[0].keys())
+        keys_str = ', '.join(keys)
+        placeholders = '(' + ', '.join(['?'] * len(keys)) + ')'
+        
+        sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
+        values = [tuple(row[k] for k in keys) for row in data_list]
 
-    def secure_update(self, table: str, where: Dict, fields: Dict) -> bool:
-        """Securely update records with permission and accessibility checks."""
-        return self.secure_action_query('UPDATE', table, where, fields)
+        with self.get_connection() as conn:
+            conn.executemany(sql, values)
+            conn.commit()
+        return data_list
 
-    def secure_delete(self, table: str, where: Union[Dict, List[Dict]]) -> bool:
-        """Securely delete records with permission and accessibility checks."""
-        return self.secure_action_query('DELETE', table, where)
+    def update(self, table: str, where: Dict, fields: Dict, bypass_access_control: bool = False):
+        """Update records in a table/view."""
+        if not fields:
+            return
 
-    def secure_insert(self, table: str, data_list: List[Dict]) -> bool:
-        """Securely insert multiple records with permission checks."""
-        return self.secure_action_query('INSERT', table, {}, data_list=data_list)
+        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        
+        set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        
+        values = tuple(fields.values()) + tuple(where.values())
+        sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
+
+        with self.get_connection() as conn:
+            conn.execute(sql, values)
+            conn.commit()
+
+    def delete(self, table: str, where: Dict, bypass_access_control: bool = False):
+        """Delete records from a table/view."""
+        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        
+        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
+        values = tuple(where.values())
+        
+        sql = f'DELETE FROM {target_table} WHERE {where_clause}'
+
+        with self.get_connection() as conn:
+            conn.execute(sql, values)
+            conn.commit()
 
     def _get_accessible_table_name(self, table: str) -> str:
         """
         Get the accessible view name for a table if it exists and profile filtering is enabled.
         Returns the original table name if no accessible view exists or profile filtering is disabled.
         """
-        if not self.profile_context['profileID'] or table not in ACCESSIBLE_VIEWS:
+        if not self.profile_context.get('profileID') or table not in ACCESSIBLE_VIEWS:
             return table
         return ACCESSIBLE_VIEWS[table]
-
-    def _get_secure_where_clause(self, table: str, where: Union[Dict, List[Dict]]) -> tuple:
-        """
-        Get a WHERE clause that restricts operations to accessible records only.
-        If any records in the `where` scope are restricted, it adds a filter
-        to ensure the operation only applies to records accessible by the current profile.
-        """
-        where_clause = "1=1"
-        where_params = ()
-
-        if isinstance(where, list):
-            if not where:
-                return ('1=0', ()) # Nothing to delete
-            
-            conditions = []
-            params = []
-            for item in where:
-                item_conditions = []
-                for k, v in item.items():
-                    item_conditions.append(f'{k}=?')
-                    params.append(v)
-                conditions.append('(' + ' AND '.join(item_conditions) + ')')
-            where_clause = ' OR '.join(conditions)
-            where_params = tuple(params)
-
-        elif isinstance(where, dict) and where:
-            where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-            where_params = tuple(where.values())
-
-        if not self.profile_context['profileID']:
-            # No profile, allow if not a restricted table for actions
-            if table in ['images', 'faces', 'albums']:
-                return ('1=0', ())  # No access
-            return (where_clause, where_params)
-
-        # Groups and moments only need permission checks, no accessibility restrictions on actions
-        if table not in ['images', 'faces', 'albums']:
-            return (where_clause, where_params)
-
-        pk_map = {'images': 'imageID', 'faces': 'faceID', 'albums': 'albumID'}
-        pk_col = pk_map.get(table)
-        if not pk_col:
-            return ('1=0', ())  # Fail safe
-
-        accessible_table = self._get_accessible_table_name(table)
-
-        # Check if there are any records in scope that are not accessible
-        restricted_query = f"""
-            SELECT EXISTS(
-                SELECT 1 FROM {table} t
-                WHERE {where_clause}
-                AND NOT EXISTS (
-                    SELECT 1 FROM {accessible_table} a
-                    WHERE a.{pk_col} = t.{pk_col}
-                )
-            )
-        """
-        restricted_result = self.execute_query(restricted_query, where_params)
-        has_restricted = bool(restricted_result and restricted_result[0][0])
-
-        if has_restricted:
-            # Restrict to accessible records within the original scope
-            if where:
-                secure_where_clause = f"({where_clause}) AND {pk_col} IN (SELECT {pk_col} FROM {accessible_table})"
-            else:
-                secure_where_clause = f"{pk_col} IN (SELECT {pk_col} FROM {accessible_table})"
-            return (secure_where_clause, where_params)
-
-        # All records are accessible, no extra filter needed
-        return (where_clause, where_params)
-
-    def _check_hierarchy_permissions(self, action_type: str, table: str, where: Dict = None, fields: Dict = None, data_list: List[Dict] = None) -> tuple:
-        current_profile = self.get_one('profiles', {'profileID': self.profile_context['profileID']})
-        if not current_profile:
-            return False, fields, data_list
-
-        current_rank = current_profile['hierarchy_rank']
-
-        if action_type.upper() == 'UPDATE':
-            if table == 'profiles':
-                target_profile_id = where.get('profileID')
-                if not target_profile_id or len(where.keys()) > 1:
-                    return False, fields, data_list
-
-                if target_profile_id == self.profile_context['profileID']:
-                    if current_rank == 0:
-                        return True, fields, data_list
-                    else:
-                        allowed_fields = {'label', 'password'}
-                        new_fields = {}
-                        if fields:
-                            for field, value in fields.items():
-                                if field in allowed_fields:
-                                    new_fields[field] = value
-                        return True, new_fields, data_list
-                else:
-                    target_profile = self.get_one('profiles', {'profileID': target_profile_id})
-                    if not target_profile:
-                        return False, fields, data_list
-                    
-                    if target_profile['hierarchy_rank'] < current_rank:
-                        return True, fields, data_list
-                    else:
-                        return False, fields, data_list
-            
-            elif table in ['profile_images', 'profile_albums']:
-                target_profile_id = where.get('profileID')
-                if not target_profile_id:
-                    return False, fields, data_list
-
-                if target_profile_id == self.profile_context['profileID']:
-                    return True, fields, data_list
-                
-                target_profile = self.get_one('profiles', {'profileID': target_profile_id})
-                if not target_profile: return False, fields, data_list
-                
-                if target_profile['hierarchy_rank'] < current_rank:
-                    return True, fields, data_list
-                
-                return False, fields, data_list
-
-        if action_type.upper() == 'DELETE':
-            if isinstance(where, list):
-                target_profile_ids = {item.get('profileID') for item in where}
-            else:
-                target_profile_ids = {where.get('profileID')}
-
-            for target_profile_id in target_profile_ids:
-                if not target_profile_id:
-                    return False, fields, data_list
-
-                if target_profile_id == self.profile_context['profileID']:
-                    return False, fields, data_list
-
-                target_profile = self.get_one('profiles', {'profileID': target_profile_id})
-                if not target_profile:
-                    continue
-
-                if target_profile['hierarchy_rank'] >= current_rank:
-                    return False, fields, data_list
-            return True, fields, data_list
-
-        if action_type.upper() == 'INSERT':
-            if table == 'profiles':
-                if not all(item.get('hierarchy_rank', 0) < current_rank for item in data_list):
-                    return False, fields, data_list
-                return True, fields, data_list
-
-            elif table in ['profile_images', 'profile_albums']:
-                target_profile_ids = {item.get('profileID') for item in data_list if item.get('profileID') != self.profile_context['profileID']}
-                if target_profile_ids:
-                    placeholders = ','.join(['?'] * len(target_profile_ids))
-                    query = f"SELECT profileID, hierarchy_rank FROM profiles WHERE profileID IN ({placeholders})"
-                    results = self.execute_query(query, tuple(target_profile_ids))
-                    ranks = {row[0]: row[1] for row in results}
-                    
-                    if len(ranks) != len(target_profile_ids):
-                        return False, fields, data_list
-
-                    for pid in target_profile_ids:
-                        if ranks[pid] >= current_rank:
-                            return False, fields, data_list
-                return True, fields, data_list
-        
-        return False, fields, data_list
-
-    def _check_profile_permissions(self, action_type: str, table: str, where: Dict = None, fields: Dict = None, data_list: List[Dict] = None) -> tuple:
-        """
-        Check if the current profile has permission to perform the action on the table.
-        For profiles, it also modifies fields based on hierarchy.
-        Returns: (is_allowed, modified_fields, modified_data_list)
-        """
-        if not self.profile_context['profileID']:
-            return False, fields, data_list
-        
-        if table in ['profiles', 'profile_images', 'profile_albums']:
-            return self._check_hierarchy_permissions(action_type, table, where, fields, data_list)
-            
-        # Get profile permissions
-        profile_query = """
-            SELECT can_edit_groups, can_edit_moments, can_edit_albums, 
-                   can_upload_images, can_delete_images
-            FROM profiles 
-            WHERE profileID = ?
-        """
-        result = self.execute_query(profile_query, (self.profile_context['profileID'],))
-        if not result:
-            return False, fields, data_list
-            
-        profile = result[0]
-        
-        # Map table names to permission flags
-        table_permissions = {
-            'groups': profile[0],      # can_edit_groups
-            'moments': profile[1],     # can_edit_moments
-            'albums': profile[2],      # can_edit_albums
-            'images': profile[3],      # can_upload_images (for updates)
-            'faces': profile[0],       # can_edit_groups (faces are part of groups)
-        }
-        
-        # For DELETE operations, check delete permission
-        if action_type.upper() == 'DELETE':
-            allow = False
-            if table == 'images':
-                allow = bool(profile[4])  # can_delete_images
-            elif table == 'albums':
-                allow = bool(profile[2])  # can_edit_albums
-            elif table == 'moments':
-                allow = bool(profile[1])  # can_edit_moments
-            elif table == 'groups':
-                allow = bool(profile[0])  # can_edit_groups
-            return allow, fields, data_list
-            
-        # For INSERT operations, check appropriate permission
-        if action_type.upper() == 'INSERT':
-            allow = True
-            if table == 'images':
-                allow = bool(profile[3])  # can_upload_images
-            elif table in ['groups', 'moments', 'albums']:
-                allow = bool(table_permissions.get(table, False))
-            return allow, fields, data_list
-            
-        # For other operations, check edit permission for the table
-        return bool(table_permissions.get(table, True)), fields, data_list

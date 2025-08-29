@@ -378,7 +378,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     
     try {
       const response = await groupsAPI.getCrops(group.groupID);
-      setImageCrops(response.crops || {});
+      setImageCrops(response.crop_mapping || {});
     } catch (error) {
       console.error('Error fetching group crops:', error);
       setImageCrops({});
@@ -585,8 +585,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
   const handleTransferComplete = async (result) => {
-    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
-    const isCompleteTransfer = transferData?.old_group_deleted;
+    // Use the full API result which contains transfer metadata
+    const transferData = { ...(result || {}) };
+    // Ensure old_group_id is present for downstream logic
+    transferData.old_group_id = transferData.old_group_id || group?.groupID || null;
+    // Push transfer result into the global store to trigger grid updates
+    try {
+      useDataStore.getState().transferFaces(transferData);
+    } catch (e) {
+      console.warn('Failed to update store after transfer:', e);
+    }
+    const isCompleteTransfer = !!transferData.old_group_deleted;
 
     // Clear selection and remove transferred images from cache
     setSelectedImages(new Set());
@@ -1117,7 +1126,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                 {selectionMode && selectedImages.size < sortedImages.length && (
                   <button
-                    onClick={selectAllPhotos}
+                    onClick={selectAllImages}
                     className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                       selectedImages.size > 0 
                         ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 

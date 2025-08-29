@@ -23,31 +23,21 @@ class BaseModel(ABC):
         # Ensure ID is generated if not provided
         if self.id_field not in data:
             data[self.id_field] = self.generate_id()
-        result = self.db.secure_insert(self.table_name, [data])
-        if result:
-            return self.get(data[self.id_field])
-        
-        return None
+        inserted = self.db.insert(self.table_name, [data])
+        return inserted[0] if inserted else None
 
     def add_many(self, data_list: List[Dict]) -> List[Dict] | None:
         for data in data_list:
             if self.id_field not in data:
                 data[self.id_field] = self.generate_id()
-        result = self.db.secure_insert(self.table_name, data_list)
-        if result:
-            return [self.get(data[self.id_field]) for data in data_list]
-        
-        return None
+        return self.db.insert(self.table_name, data_list)
 
-    def delete(self, entity_id: str) -> bool:
-        return self.db.secure_delete(self.table_name, {self.id_field: entity_id})
+    def delete(self, entity_id: str):
+        self.db.delete(self.table_name, {self.id_field: entity_id})
 
     def edit(self, entity_id: str, fields: Dict) -> Dict | None:
-        result = self.db.secure_update(self.table_name, {self.id_field: entity_id}, fields)
-        if result:
-            return self.get(entity_id)
-        
-        return None
+        self.db.update(self.table_name, {self.id_field: entity_id}, fields)
+        return self.get(entity_id)
 
     def get(self, entity_id: str) -> Dict | None:
         entity = self.db.get_one(self.table_name, {self.id_field: entity_id})

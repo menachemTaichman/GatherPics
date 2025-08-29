@@ -77,13 +77,13 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
       try {
         setCropsLoading(true);
         const response = await groupsAPI.getCrops(group.groupID);
-        setCropMappings(response.crops || {});
+        setCropMappings(response.crop_mapping || {});
         
         // After loading crop mappings, check if we need to set a default representative
         // if none is currently selected
-        if (!currentSelection && response.crops) {
+        if (!currentSelection && response.crop_mapping) {
           // Find the first image that has a face ID
-          const firstFaceId = Object.values(response.crops).find(faceId => faceId);
+          const firstFaceId = Object.values(response.crop_mapping).find(faceId => faceId);
           if (firstFaceId) {
             setCurrentSelection(firstFaceId);
             setFormData(prev => ({ ...prev, representative_face: firstFaceId }));

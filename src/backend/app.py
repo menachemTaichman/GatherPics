@@ -210,16 +210,15 @@ def check_group_name(event_id):
     
     try:
         # Check for conflicts
-        conflicts = event.groups_model.check_name_conflicts(label, exclude_group_id)
+        conflict_result = event.groups_model.check_name_conflict(label, exclude_group_id)
         
-        if conflicts:
+        if conflict_result.get('conflict'):
             return jsonify({
-                "has_conflicts": True,
-                "conflicts": conflicts,
-                "suggestions": event.groups_model.generate_name_suggestions(label, conflicts)
+                "conflict": True,
+                "conflicting_group": conflict_result['conflicting_group']
             })
         else:
-            return jsonify({"has_conflicts": False, "conflicts": []})
+            return jsonify({"conflict": False})
     except Exception as e:
         return bad_request(e)
 
@@ -259,29 +258,42 @@ def transfer_faces(event_id):
     source_group_id = data.get('source_group_id')
     target_group_id = data.get('target_group_id')
     face_ids = data.get('face_ids', [])
+    new_group_name = data.get('new_group_name', '')
     
-    if not all([source_group_id, target_group_id, face_ids]):
-        return jsonify({"error": "source_group_id, target_group_id, and face_ids are required"}), 400
+    if not source_group_id or not face_ids:
+        return jsonify({"error": "source_group_id and face_ids are required"}), 400
+    
+    # If target_group_id is not provided, new_group_name is required
+    if not target_group_id and not new_group_name:
+        return jsonify({"error": "Either target_group_id or new_group_name is required"}), 400
     
     try:
-        # Validate groups exist and are accessible
+        # Validate source group exists and is accessible
         source_group = event.groups_model.get(source_group_id)
-        target_group = event.groups_model.get(target_group_id)
+        if not source_group:
+            return not_found("Source group not found or not accessible")
         
-        if not source_group or not target_group:
-            return not_found("One or both groups not found or not accessible")
+        # Use the Event model's transfer_faces method which handles both existing and new groups
+        result = event.transfer_faces(source_group_id, face_ids, target_group_id, new_group_name)
         
-        # Transfer faces
-        transferred_count = event.groups_model.transfer_faces(source_group_id, target_group_id, face_ids)
+        # Get updated groups for change instructions
+        updated_source = None
+        updated_target = None
         
-        # Get updated groups
-        updated_source = event.groups_model.get(source_group_id)
-        updated_target = event.groups_model.get(target_group_id)
+        if not result.get('old_group_deleted'):
+            updated_source = event.groups_model.get(source_group_id)
+        
+        if result.get('target_group_id'):
+            updated_target = event.groups_model.get(result['target_group_id'])
         
         # Add change instructions for frontend
-        response_data = {"success": True, "transferred_count": transferred_count}
-        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_source)
-        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_target)
+        response_data = {"success": True, "transferred_count": len(face_ids)}
+        response_data.update(result)  # Include all result data from the transfer
+        
+        if updated_source:
+            response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_source)
+        if updated_target:
+            response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_target)
         
         return jsonify(response_data)
     except Exception as e:
@@ -310,7 +322,7 @@ def get_group_images(event_id, group_id):
             if image:
                 images_data.append({
                     'id': image_id,
-                    'name': image['name'],
+                    'label': image.get('label', ''),
                     'date_taken': image.get('date_taken'),
                     'width': image.get('width'),
                     'height': image.get('height'),
@@ -337,27 +349,10 @@ def get_group_crops(event_id, group_id):
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
-        # Get face IDs for this group
-        face_ids = event.groups_model.get_faces(group_id)
+        # Get crop mapping from image_id to face_id
+        crop_mapping = event.get_crop_mapping(group_id)
         
-        # Get face data for each
-        faces_data = []
-        for face_id in face_ids:
-            face = event.faces_model.get(face_id)
-            if face:
-                faces_data.append({
-                    'face_id': face_id,
-                    'image_id': face['imageID'],
-                    'face_coords': {
-                        'Left': face['left'],
-                        'Top': face['top'],
-                        'Width': face['width'],
-                        'Height': face['height']
-                    },
-                    'url': f'/api/events/{event_id}/faces/{face_id}.webp'
-                })
-        
-        return jsonify({"faces": faces_data})
+        return jsonify({"crop_mapping": crop_mapping})
     except Exception as e:
         return bad_request(e)
 
@@ -566,7 +561,7 @@ def get_moment_images(event_id, moment_id):
             if image:
                 images_data.append({
                     'id': image_id,
-                    'name': image['name'],
+                    'label': image.get('label', ''),
                     'date_taken': image.get('date_taken'),
                     'width': image.get('width'),
                     'height': image.get('height'),
@@ -577,34 +572,6 @@ def get_moment_images(event_id, moment_id):
                 })
         
         return jsonify({"images": images_data})
-    except Exception as e:
-        return bad_request(e)
-
-@app.route("/api/events/<event_id>/moments/<moment_id>/images-in-period", methods=["GET"])
-@require_auth
-def get_moment_images_in_period(event_id, moment_id):
-    """Get images within a moment's time period in the event."""
-    event = get_event_with_profile()
-    if str(event.id) != event_id:
-        return not_found(f"Event {event_id} not found or not accessible")
-    
-    try:
-        # Check if moment exists and is accessible
-        moment = event.moments_model.get(moment_id)
-        if not moment:
-            return not_found(f"Moment {moment_id} not found or not accessible")
-        
-        # Get images in the moment's time period
-        start_date = moment.get('start')
-        end_date = moment.get('end')
-        
-        if not start_date or not end_date:
-            return jsonify({"error": "Moment must have start and end dates"}), 400
-        
-        # Get images in period
-        images_in_period = event.get_images_in_period(start_date, end_date)
-        
-        return jsonify({"images": images_in_period})
     except Exception as e:
         return bad_request(e)
 
@@ -667,7 +634,7 @@ def get_image_info(event_id, image_id):
         # Return basic image info
         image_info = {
             'id': image_id,
-            'name': image['name'],
+            'label': image.get('label', ''),
             'date_taken': image.get('date_taken'),
             'file_size': image.get('file_size'),
             'width': image.get('width'),
@@ -954,6 +921,80 @@ def get_original_image_webp(event_id, image_id):
     resp = make_response(send_file(file_path, mimetype='image/webp'))
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
+
+@app.route("/api/events/<event_id>/groups/<group_id>/representative", methods=["GET"])
+@require_auth
+def get_group_representative(event_id, group_id):
+    """Get the representative face for a group within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    group = event.groups_model.get(group_id)
+    if not group:
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    representative_face_id = group.get('representative_face')
+    if not representative_face_id:
+        return jsonify({"representative_face": None})
+    
+    # Get the face data
+    face = event.faces_model.get(representative_face_id)
+    if not face:
+        return jsonify({"representative_face": None})
+    
+    # Return face data with image context
+    face_data = {
+        'face_id': representative_face_id,
+        'image_id': face['imageID'],
+        'face_coords': {
+            'Left': face['left'],
+            'Top': face['top'],
+            'Width': face['width'],
+            'Height': face['height']
+        },
+        'url': f'/api/events/{event_id}/faces/{representative_face_id}.webp'
+    }
+    
+    return jsonify({"representative_face": face_data})
+
+@app.route("/api/events/<event_id>/moments/<moment_id>/representative", methods=["GET"])
+@require_auth
+def get_moment_representative(event_id, moment_id):
+    """Get the representative image for a moment within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+    
+    moment = event.moments_model.get(moment_id)
+    if not moment:
+        return not_found(f"Moment {moment_id} not found or not accessible")
+    
+    representative_image_id = moment.get('representative_image')
+    if not representative_image_id:
+        return jsonify({"representative_image": None})
+    
+    # Get the image data
+    image = event.images_model.get(representative_image_id)
+    if not image:
+        return jsonify({"representative_image": None})
+    
+    # Return image data
+    image_data = {
+        'id': representative_image_id,
+        'label': image.get('label', ''),
+        'date_taken': image.get('date_taken'),
+        'width': image.get('width'),
+        'height': image.get('height'),
+        'urls': {
+            'display': f'/api/events/{event_id}/display/{representative_image_id}.webp',
+            'thumbnail': f'/api/events/{event_id}/thumb/{representative_image_id}.webp',
+            'high_quality': f'/api/events/{event_id}/high_quality/{representative_image_id}.webp',
+            'original': f'/api/events/{event_id}/original/{representative_image_id}.webp',
+        }
+    }
+    
+    return jsonify({"representative_image": image_data})
 
 if __name__ == "__main__":
     app.run(debug=True)

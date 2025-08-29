@@ -1,411 +1,414 @@
-#!/usr/bin/env python3
-"""
-Test script for database views, indexes, and performance analysis.
-This script tests the access control views and analyzes their performance.
-"""
-
-import sys
+import unittest
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.core.db import AppDB
+import shutil
 import time
-from src.core.models.event import Event
+import random
+import uuid
+from datetime import datetime, timedelta
 
+from src.core.db import AppDB as DB
 
-def test_views_functionality(db):
-    """Test that the views are working correctly."""
-    print("\n=== Testing Views Functionality ===")
-    
-    # Set a test profile ID
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
-    
-    try:
-        with db.get_connection() as conn:
-            # Test accessible_images_helper view
-            print("Testing accessible_images_helper view...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_images_helper")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_images_helper: {count} accessible images")
-            
-            # Test accessible_groups view
-            print("Testing accessible_groups view...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_groups")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_groups: {count} accessible groups")
-            
-            # Test accessible_faces view
-            print("Testing accessible_faces view...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_faces")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_faces: {count} accessible faces")
-            
-            # Test accessible_moments view
-            print("Testing accessible_moments view...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_moments")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_moments: {count} accessible moments")
-            
-            # Test accessible_images view
-            print("Testing accessible_images view...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_images")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_images: {count} accessible images")
-            
-        return True
+class TestDBPerformance(unittest.TestCase):
+    DB_PATH = "tests/test_performance.db"
+    DB_DIR = "tests/test_db_dir"
+    PROFILE_ID = "test_profile"
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up the database and generate data once for all tests."""
+        if os.path.exists(cls.DB_DIR):
+            shutil.rmtree(cls.DB_DIR)
         
-    except Exception as e:
-        print(f"✗ Error testing views: {e}")
-        return False
-
-def test_performance(db):
-    """Test the performance of the views with EXPLAIN QUERY PLAN."""
-    print("\n=== Testing Views Performance ===")
-    
-    # Set a test profile ID
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
-    
-    try:
-        with db.get_connection() as conn:
-            views_to_test = [
-                'accessible_images_helper',
-                'accessible_groups', 
-                'accessible_faces',
-                'accessible_moments',
-                'accessible_images'
-            ]
-            
-            for view_name in views_to_test:
-                print(f"\n--- {view_name} ---")
-                
-                # Get the query plan
-                cursor = conn.execute(f"EXPLAIN QUERY PLAN SELECT * FROM {view_name}")
-                plan = cursor.fetchall()
-                
-                print("Query Plan:")
-                for step in plan:
-                    print(f"  {step[3]}")
-                
-                # Test execution time
-                start_time = time.time()
-                cursor = conn.execute(f"SELECT COUNT(*) FROM {view_name}")
-                count = cursor.fetchone()[0]
-                execution_time = time.time() - start_time
-                
-                print(f"Execution time: {execution_time:.4f}s")
-                print(f"Result count: {count}")
-                
-        return True
+        cls.db_path = DB.create_new_db_in_dir(cls.DB_DIR, db_name="test_performance.db")
+        cls.db = DB(cls.db_path)
         
-    except Exception as e:
-        print(f"✗ Error testing performance: {e}")
-        return False
+        print("Setting up test database and generating data...")
+        cls.generate_data()
+        print("Data generation complete.")
 
-def test_data_consistency(db):
-    """Test that the views return consistent data compared to actual tables."""
-    print("\n=== Testing Data Consistency ===")
+    @classmethod
+    def tearDownClass(cls):
+        """Remove the test database."""
+        if hasattr(cls, 'db'):
+            # cls.db.close() # No close method in DB class
+            pass
+        if os.path.exists(cls.DB_DIR):
+            shutil.rmtree(cls.DB_DIR)
+        print(f"Test database directory {cls.DB_DIR} removed.")
+
+    @classmethod
+    def generate_data(cls):
+        """Generates the test data."""
+        cls._generate_moments_and_images()
+        cls._generate_faces()
+        cls._generate_groups()
+        cls._generate_profiles()
+        cls._generate_albums()
     
-    # Set a test profile ID
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
-    
-    try:
-        with db.get_connection() as conn:
-            # Since we're in a profile with all_images = 1 and no restrictions,
-            # all images should be accessible except those explicitly excluded in profile_images
-            
-            print("Testing accessible_images_helper consistency...")
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM accessible_images_helper
-            """)
-            accessible_count = cursor.fetchone()[0]
-            
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM images
-            """)
-            total_images = cursor.fetchone()[0]
-            
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM images i
-                INNER JOIN profile_images pi ON i.imageID = pi.imageID
-                WHERE pi.profileID = get_profile_id() AND pi.accessible = 0
-            """)
-            explicitly_excluded = cursor.fetchone()[0]
-            
-            expected_accessible = total_images - explicitly_excluded
-            print(f"  Total images: {total_images}")
-            print(f"  Explicitly excluded: {explicitly_excluded}")
-            print(f"  Expected accessible: {expected_accessible}")
-            print(f"  Actual accessible: {accessible_count}")
-            
-            if accessible_count == expected_accessible:
-                print("✓ accessible_images_helper count matches expected")
-            else:
-                print(f"✗ accessible_images_helper count mismatch: expected {expected_accessible}, got {accessible_count}")
-            
-            print("\nTesting accessible_faces consistency...")
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM accessible_faces
-            """)
-            accessible_faces = cursor.fetchone()[0]
-            
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM faces f
-                WHERE EXISTS (
-                    SELECT 1 FROM accessible_images_helper aih 
-                    WHERE aih.imageID = f.imageID
-                )
-                OR EXISTS (
-                    SELECT 1 FROM groups g
-                    WHERE g.groupID = f.groupID 
-                    AND g.representative_face = f.faceID
-                    AND EXISTS (
-                        SELECT 1 FROM accessible_images_helper aih2
-                        WHERE aih2.imageID IN (
-                            SELECT imageID FROM faces WHERE groupID = g.groupID
-                        )
-                    )
-                )
-            """)
-            expected_faces = cursor.fetchone()[0]
-            
-            print(f"  Expected accessible faces: {expected_faces}")
-            print(f"  Actual accessible faces: {accessible_faces}")
-            
-            if accessible_faces == expected_faces:
-                print("✓ accessible_faces count matches expected")
-            else:
-                print(f"✗ accessible_faces count mismatch: expected {expected_faces}, got {accessible_faces}")
-            
-            print("\nTesting accessible_groups consistency...")
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM accessible_groups
-            """)
-            accessible_groups = cursor.fetchone()[0]
-            
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM groups g
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM faces WHERE faces.groupID = g.groupID
-                )
-                OR EXISTS (
-                    SELECT 1 FROM faces f
-                    INNER JOIN accessible_images_helper aih ON f.imageID = aih.imageID
-                    WHERE f.groupID = g.groupID
-                )
-            """)
-            expected_groups = cursor.fetchone()[0]
-            
-            print(f"  Expected accessible groups: {expected_groups}")
-            print(f"  Actual accessible groups: {accessible_groups}")
-            
-            if accessible_groups == expected_groups:
-                print("✓ accessible_groups count matches expected")
-            else:
-                print(f"✗ accessible_groups count mismatch: expected {expected_groups}, got {accessible_groups}")
-                
-        return True
-        
-    except Exception as e:
-        print(f"✗ Error testing data consistency: {e}")
-        return False
-
-def test_custom_queries(db, query = None):
-    """Test custom queries to find the right view logic."""
-    print("\n=== Testing Custom Queries ===")
-    
-    # Set a test profile ID
-    test_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-    db.set_profile_id(test_profile_id)
-    
-    try:
-        with db.get_connection() as conn:
-            print("Testing different view logic approaches...")
-
-            if query is None:
-                cursor = conn.execute("""
-                    SELECT *
-                    FROM profiles
-                """)
-            else:
-                cursor = conn.execute(query)
-            result = cursor.fetchall()
-            # print the result as a table
-            print(f"  {cursor.description}")
-            print(f"  {result}")
-
-        return True
-        
-    except Exception as e:
-        print(f"✗ Error testing custom queries: {e}")
-        return False
-
-def test_profile_function(db):
-    """Test that the get_profile_id() function is properly registered and working."""
-    print("\n=== Testing Profile Function ===")
-    
-    try:
-        with db.get_connection() as conn:
-            # Test that the function is registered and returns the correct value
-            print("Testing get_profile_id() function...")
-            cursor = conn.execute("SELECT get_profile_id()")
-            result = cursor.fetchone()[0]
-            
-            if result == test_profile_id:
-                print(f"✓ get_profile_id() function working correctly: {result}")
-            else:
-                print(f"✗ get_profile_id() function returned wrong value: {result} (expected: {test_profile_id})")
-                return False
-            
-            # Test that the function is used in the views
-            print("Testing function usage in views...")
-            cursor = conn.execute("SELECT COUNT(*) FROM accessible_images_helper")
-            count = cursor.fetchone()[0]
-            print(f"✓ accessible_images_helper view using get_profile_id(): {count} results")
-            
-        return True
-        
-    except Exception as e:
-        print(f"✗ Error testing profile function: {e}")
-        return False
-
-def recreate_views_and_indexes(db):
-    """Drop and recreate all database views and indexes using the VIEWS and INDEXES from db.py."""
-    print("\n=== Recreating Database Views and Indexes ===")
-    
-    try:
-        with db.get_connection() as conn:
-            # Import the VIEWS and INDEXES from db.py
-            from src.core.db import VIEWS, INDEXES
-            
-            # Drop existing views if they exist
-            views_to_drop = conn.execute("SELECT name FROM sqlite_master WHERE type='view'").fetchall()
-            views_to_drop = [view[0] for view in views_to_drop]
-            
-            print("Dropping existing views...")
-            for view_name in views_to_drop:
-                try:
-                    conn.execute(f"DROP VIEW IF EXISTS {view_name}")
-                    print(f"✓ Dropped view: {view_name}")
-                except Exception as e:
-                    print(f"  Note: Could not drop {view_name}: {e}")
-            
-            # Drop existing indexes if they exist
-            indexes_to_drop = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
-            indexes_to_drop = [index[0] for index in indexes_to_drop]
-
-            print("\nDropping existing indexes...")
-            for index_name in indexes_to_drop:
-                # Extract index name from CREATE INDEX statement
-                try:
-                    conn.execute(f"DROP INDEX IF EXISTS {index_name}")
-                    print(f"✓ Dropped index: {index_name}")
-                except Exception as e:
-                    print(f"  Note: Could not drop {index_name}: {e}")
-            
-            # Recreate the views using the VIEWS dictionary
-            print("\nRecreating views...")
-            
-            for view_name, view_sql in VIEWS.items():
-                try:
-                    # Create the view with CREATE VIEW statement
-                    create_sql = f"CREATE VIEW {view_name} AS {view_sql}"
-                    conn.execute(create_sql)
-                    print(f"✓ Created {view_name} view")
-                except Exception as e:
-                    print(f"✗ Error creating {view_name} view: {e}")
-                    return False
-            
-            # Recreate the indexes using the INDEXES list
-            print("\nRecreating indexes...")
-            
-            for index_sql in INDEXES:
-                try:
-                    conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
-                    # Extract index name for logging
-                    index_name = index_sql.split(' ')[0]
-                    print(f"✓ Created index: {index_name}")
-                except Exception as e:
-                    print(f"✗ Error creating index: {e}")
-                    return False
-            
-            # Commit the changes
+    @classmethod
+    def _execute_many(cls, table_name, data_list):
+        if not data_list:
+            return
+        keys = ', '.join(data_list[0].keys())
+        placeholders = ', '.join(['?'] * len(data_list[0]))
+        sql = f"INSERT INTO {table_name} ({keys}) VALUES ({placeholders})"
+        with cls.db.get_connection() as conn:
+            conn.executemany(sql, [tuple(d.values()) for d in data_list])
             conn.commit()
-            print(f"\n✓ All {len(VIEWS)} views and {len(INDEXES)} indexes recreated successfully")
+
+    @classmethod
+    def _generate_moments_and_images(cls):
+        """Generate moments and images."""
+        print("Generating moments and images...")
+        moments = []
+        for i in range(12):
+            moment = {
+                "momentID": str(uuid.uuid4()),
+                "label": f"Wedding Moment {i+1}",
+                "description": f"Description for moment {i+1}",
+                "start": (datetime.now() - timedelta(days=1)).isoformat(),
+                "end": datetime.now().isoformat(),
+                "representative_image": None
+            }
+            moments.append(moment)
+        cls._execute_many('moments', moments)
+        cls.moment_ids = [m['momentID'] for m in moments]
+
+        images = []
+        for i in range(5000):
+            image = {
+                "imageID": str(uuid.uuid4()),
+                "label": f"image_{i}.jpg",
+                "date_taken": (datetime.now() - timedelta(hours=random.randint(0, 24))).isoformat(),
+                "file_size": random.randint(100000, 5000000),
+                "width": 1920,
+                "height": 1080,
+                "momentID": random.choice(cls.moment_ids)
+            }
+            images.append(image)
+        
+        cls._execute_many('images', images)
+        cls.image_ids = [img['imageID'] for img in images]
+        print(f"Generated {len(moments)} moments and {len(images)} images.")
+
+    @classmethod
+    def _generate_faces(cls):
+        """Generate faces based on the specified distribution."""
+        print("Generating faces...")
+        face_distribution = {
+            1: 634, 2: 386, 4: 2165, 8: 166, 10: 854, 20: 785
+        }
+        
+        images_with_faces = random.sample(cls.image_ids, sum(face_distribution.values()))
+        
+        faces = []
+        image_idx = 0
+        for num_faces, num_images in face_distribution.items():
+            for _ in range(num_images):
+                if image_idx < len(images_with_faces):
+                    image_id = images_with_faces[image_idx]
+                    for _ in range(num_faces):
+                        face = {
+                            "faceID": str(uuid.uuid4()),
+                            "imageID": image_id,
+                            "width": random.uniform(0.05, 0.2),
+                            "height": random.uniform(0.05, 0.2),
+                            "left": random.uniform(0.0, 0.8),
+                            "top": random.uniform(0.0, 0.8),
+                            "groupID": None
+                        }
+                        faces.append(face)
+                    image_idx += 1
+        
+        cls._execute_many('faces', faces)
+        cls.face_ids = [f['faceID'] for f in faces]
+        print(f"Generated {len(faces)} faces.")
+
+    @classmethod
+    def _generate_groups(cls):
+        """Generate groups and assign faces to them."""
+        print("Generating groups...")
+        groups = []
+        for i in range(300):
+            group_label = f"Group {i+1}"
+            if i == 0:
+                group_label = "Bride"
+            elif i == 1:
+                group_label = "Groom"
+            elif 2 <= i < 12:
+                group_label = f"Family {i-1}"
+            else:
+                group_label = f"Guest {i-11}"
+
+            group = {
+                "groupID": str(uuid.uuid4()),
+                "label": group_label,
+                "representative_face": None
+            }
+            groups.append(group)
+        
+        cls._execute_many('groups', groups)
+        
+        shuffled_faces = random.sample(cls.face_ids, len(cls.face_ids))
+        
+        updates_to_make = []
+        
+        total_faces = len(shuffled_faces)
+        couple_faces_count = int(total_faces * 0.3)
+        family_faces_count = int(total_faces * 0.4)
+        
+        face_idx = 0
+        
+        # Prepare Couple updates
+        couple_faces_ids = shuffled_faces[face_idx:face_idx + couple_faces_count]
+        bride_faces_count = int(len(couple_faces_ids) * 0.5)
+        
+        for i, face_id in enumerate(couple_faces_ids):
+            group_id = groups[0]['groupID'] if i < bride_faces_count else groups[1]['groupID']
+            updates_to_make.append((group_id, face_id))
+        face_idx += couple_faces_count
+
+        # Prepare Family updates
+        family_faces_ids = shuffled_faces[face_idx:face_idx + family_faces_count]
+        faces_per_family = len(family_faces_ids) // 10
+        for i in range(10):
+            group_id = groups[i+2]['groupID']
+            start = i * faces_per_family
+            end = start + faces_per_family
+            for face_id in family_faces_ids[start:end]:
+                updates_to_make.append((group_id, face_id))
+        face_idx += family_faces_count
+
+        # Prepare Guests updates
+        guest_faces_ids = shuffled_faces[face_idx:]
+        num_guest_groups = 288
+        
+        if guest_faces_ids and num_guest_groups > 0:
+            avg_faces_per_guest = len(guest_faces_ids) / num_guest_groups
+            guest_face_idx = 0
+            for i in range(num_guest_groups):
+                group_id = groups[i+12]['groupID']
+                num_faces_for_guest = max(1, int(random.gauss(avg_faces_per_guest, avg_faces_per_guest/2)))
+                
+                end_idx = min(guest_face_idx + num_faces_for_guest, len(guest_faces_ids))
+                for face_id in guest_faces_ids[guest_face_idx:end_idx]:
+                     updates_to_make.append((group_id, face_id))
+                guest_face_idx = end_idx
+                if guest_face_idx >= len(guest_faces_ids):
+                    break
+
+        # Execute all updates in a single transaction
+        with cls.db.get_connection() as conn:
+            conn.executemany("UPDATE faces SET groupID = ? WHERE faceID = ?", updates_to_make)
+            conn.commit()
+
+        # Verification step
+        null_groups_count = cls.db.execute_query("SELECT COUNT(*) FROM faces WHERE groupID IS NULL")[0][0]
+        print(f"Faces with NULL groupID after update: {null_groups_count}")
+        
+        print(f"Generated {len(groups)} groups and assigned faces.")
+
+    @classmethod
+    def _generate_profiles(cls):
+        """Generate profiles with different access levels."""
+        print("Generating profiles...")
+        cls.profiles = [
+            {'profileID': 'admin', 'label': 'Admin', 'hierarchy_rank': 10, 'is_profiles_manager': 1, 'can_edit': 1, 'all_images': 1, 'all_albums': 1},
+            {'profileID': 'couple', 'label': 'Couple', 'hierarchy_rank': 5, 'is_profiles_manager': 0, 'can_edit': 1, 'all_images': 1, 'all_albums': 1},
+            {'profileID': 'editor', 'label': 'Editor', 'hierarchy_rank': 5, 'is_profiles_manager': 0, 'can_edit': 1, 'all_images': 1, 'all_albums': 1},
+            {'profileID': 'guest', 'label': 'Guest', 'hierarchy_rank': 1, 'is_profiles_manager': 0, 'can_edit': 0, 'all_images': 0, 'all_albums': 0},
+            {'profileID': 'family', 'label': 'Family', 'hierarchy_rank': 1, 'is_profiles_manager': 0, 'can_edit': 0, 'all_images': 0, 'all_albums': 0},
+            {'profileID': 'friends', 'label': 'Friends', 'hierarchy_rank': 1, 'is_profiles_manager': 0, 'can_edit': 0, 'all_images': 0, 'all_albums': 0},
+            {'profileID': 'no_access', 'label': 'No Access', 'hierarchy_rank': 1, 'is_profiles_manager': 0, 'can_edit': 0, 'all_images': 0, 'all_albums': 0}
+        ]
+        
+        # Add password and save_preferences to all profiles
+        for p in cls.profiles:
+            p['password'] = 'password'
+            p['save_preferences'] = 1
+
+        cls._execute_many('profiles', cls.profiles)
+
+        # Setup restricted access
+        guest_images = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.5))
+        family_images = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.9))
+        friends_images = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.8))
+
+        profile_images_guest = [{'profileID': 'guest', 'imageID': img_id, 'accessible': 1} for img_id in guest_images]
+        profile_images_family = [{'profileID': 'family', 'imageID': img_id, 'accessible': 1} for img_id in family_images]
+        profile_images_friends = [{'profileID': 'friends', 'imageID': img_id, 'accessible': 1} for img_id in friends_images]
+        
+        # for no_access, we don't add any images to profile_images
+
+        cls._execute_many('profile_images', profile_images_guest)
+        cls._execute_many('profile_images', profile_images_family)
+        cls._execute_many('profile_images', profile_images_friends)
+        
+        print(f"Generated {len(cls.profiles)} profiles.")
+
+    @classmethod
+    def _generate_albums(cls):
+        """Generate albums and add images to them."""
+        print("Generating albums...")
+        albums = []
+        for i in range(5):
+            album = {
+                "albumID": str(uuid.uuid4()),
+                "label": f"User Album {i+1}",
+                "description": f"A collection of photos for album {i+1}.",
+                "representative_image": None
+            }
+            albums.append(album)
+        
+        cls._execute_many('albums', albums)
+
+        album_images = []
+        for album in albums:
+            num_images = random.randint(20, 100)
+            album_image_ids = random.sample(cls.image_ids, num_images)
+            for image_id in album_image_ids:
+                album_images.append({
+                    "albumID": album['albumID'],
+                    "imageID": image_id
+                })
+        
+        cls._execute_many('album_images', album_images)
+        print(f"Generated {len(albums)} albums with a total of {len(album_images)} image associations.")
+
+    def test_data_consistency(self):
+        """Test that views show correct data for each profile."""
+        for profile in self.profiles:
+            profile_id = profile['profileID']
+            with self.subTest(profile=profile_id):
+                self.db.set_profile_id(profile_id)
+
+                # Images
+                view_count = self.db.execute_query("SELECT COUNT(*) FROM accessible_images")[0][0]
+                
+                profile_details = self.db.get_one('profiles', {'profileID': profile_id}, bypass_access_control=True)
+                if profile_details['all_images']:
+                    # Should see all images except those explicitly denied
+                    q = "SELECT COUNT(*) FROM images i LEFT JOIN profile_images pi ON i.imageID = pi.imageID AND pi.profileID = ? WHERE pi.accessible IS NULL OR pi.accessible = 1"
+                    manual_count = self.db.execute_query(q, (profile_id,))[0][0]
+                else:
+                    # Should see only images explicitly allowed
+                    q = "SELECT COUNT(*) FROM profile_images WHERE profileID = ? AND accessible = 1"
+                    manual_count = self.db.execute_query(q, (profile_id,))[0][0]
+                
+                self.assertEqual(view_count, manual_count, f"Image count mismatch for profile {profile_id}")
+
+                # Faces
+                view_count = self.db.execute_query("SELECT COUNT(*) FROM accessible_faces")[0][0]
+                q = """
+                    SELECT COUNT(*) FROM faces f
+                    JOIN accessible_images ai ON f.imageID = ai.imageID
+                """
+                manual_count = self.db.execute_query(q)[0][0]
+                self.assertEqual(view_count, manual_count, f"Face count mismatch for profile {profile_id}")
+
+    def _time_query(self, query, params=()):
+        start_time = time.time()
+        self.db.execute_query(query, params)
+        end_time = time.time()
+        return end_time - start_time
+
+    def test_performance(self):
+        """Test query performance for different profiles."""
+        
+        # --- Find good data for tests ---
+        self.db.set_profile_id('admin') # Use admin for setup
+        
+        # Find a group with a decent number of faces
+        test_group_id = self.db.execute_query("SELECT groupID FROM accessible_faces WHERE groupID IS NOT NULL GROUP BY groupID ORDER BY COUNT(*) DESC LIMIT 1")[0][0]
+        
+        # Find two groups with common images for filter tests
+        common_groups_query = """
+            SELECT f1.groupID, f2.groupID
+            FROM accessible_faces f1
+            JOIN accessible_faces f2 ON f1.imageID = f2.imageID AND f1.groupID < f2.groupID
+            GROUP BY f1.groupID, f2.groupID
+            ORDER BY COUNT(DISTINCT f1.imageID) DESC
+            LIMIT 1;
+        """
+        result = self.db.execute_query(common_groups_query)
+        group1_id, group2_id = result[0] if result else (None, None)
+        
+        # Find a moment with images for moving test
+        source_moment_id = self.db.execute_query("SELECT momentID FROM images WHERE momentID IS NOT NULL LIMIT 1")[0][0]
+        target_moment_id = self.db.execute_query(f"SELECT momentID FROM moments WHERE momentID != '{source_moment_id}' LIMIT 1")[0][0]
+        images_to_move = [row[0] for row in self.db.execute_query(f"SELECT imageID FROM images WHERE momentID = '{source_moment_id}' LIMIT 10")]
+
+        # --- Start Tests ---
+        print("\n--- Performance Tests ---")
+        
+        # --- SELECT Performance ---
+        print("\n--- SELECT Performance ---")
+        for profile in self.profiles:
+            profile_id = profile['profileID']
+            self.db.set_profile_id(profile_id)
+            print(f"\nTesting SELECT for profile: {profile_id}")
+
+            # Query 1: Get all images for a specific group
+            view_time = self._time_query(f"SELECT i.* FROM accessible_images i JOIN accessible_faces f ON i.imageID = f.imageID WHERE f.groupID = '{test_group_id}'")
+            base_time = self._time_query(f"SELECT i.* FROM images i JOIN faces f ON i.imageID = f.imageID WHERE f.groupID = '{test_group_id}'")
+            print(f"  Get images by group -> View: {view_time:.4f}s, Base: {base_time:.4f}s")
             
-        return True
+            # Query 2: Filter by two groups
+            if group1_id and group2_id:
+                view_time = self._time_query(f"SELECT imageID FROM accessible_faces WHERE groupID IN ('{group1_id}', '{group2_id}') GROUP BY imageID HAVING COUNT(DISTINCT groupID) = 2")
+                base_time = self._time_query(f"SELECT imageID FROM faces WHERE groupID IN ('{group1_id}', '{group2_id}') GROUP BY imageID HAVING COUNT(DISTINCT groupID) = 2")
+                print(f"  Filter by two groups -> View: {view_time:.4f}s, Base: {base_time:.4f}s")
+
+
+        # --- ACTION Performance (View vs. Base Table) ---
+        print("\n--- ACTION Performance ---")
+        self.db.set_profile_id('admin') # Use admin with edit rights
         
-    except Exception as e:
-        print(f"✗ Error recreating views and indexes: {e}")
-        return False
-
-def update_database_structure(db):
-    """Update the database structure according to the new requirements."""
-    print("\n=== Updating Database Structure ===")
-    
-    try:
-        with db.get_connection() as conn:
-            # remove is_manager column and add hierarchy_rank column
-            profile_id = db.profile_context['profileID']
-            # drop profiles table and recreate it with hierarchy_rank column            
-            conn.execute("DROP TABLE IF EXISTS profiles")
-            from src.core.db import TABLES
-            profiles_table = TABLES['profiles']
-            conn.execute(f'''CREATE TABLE IF NOT EXISTS profiles ({profiles_table})''')
-            conn.commit()
-            event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
-            event = Event(event_id)
-            profiles = event._initialize_default_profiles()
-            developer_profile = profiles[0]
-            conn.execute(f"""
-                UPDATE profiles SET profileID = '{profile_id}'
-                WHERE profileID = '{developer_profile['profileID']}'
-            """)
-            conn.execute("ALTER TABLE profile_albums ADD COLUMN accessible BOOLEAN")
-            conn.commit()
-            print("✓ Profiles table recreated")
-
-        return True
+        # Action 1: Regroup faces
+        faces_to_update = self.db.execute_query(f"SELECT faceID FROM accessible_faces WHERE groupID = '{test_group_id}' LIMIT 10")
+        face_ids_to_update = [f[0] for f in faces_to_update]
+        new_group_id = self.db.execute_query("SELECT groupID FROM groups LIMIT 1")[0][0]
         
-    except Exception as e:
-        print(f"✗ Error updating database structure: {e}")
-        return False
+        start_time_view = time.time()
+        self.db.execute_query(f"UPDATE accessible_faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['?']*len(face_ids_to_update))})", face_ids_to_update)
+        end_time_view = time.time()
+        print(f"\n  Regroup 10 faces -> View: {end_time_view - start_time_view:.4f}s")
 
-def main():
-    """Run all tests."""
-    print("Starting Database Views and Performance Tests\n")
-    
-    # Create one database connection
-    event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
-    db_path = f'src/data/{event_id}/{event_id}.db'
-    
-    if not os.path.exists(db_path):
-        print(f"Database not found at {db_path}")
-        return
-    
-    db = AppDB(db_path, '89cb4967-0eba-48af-99cc-5e87407fb639')
+        start_time_base = time.time()
+        self.db.execute_query(f"UPDATE faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['?']*len(face_ids_to_update))})", face_ids_to_update)
+        end_time_base = time.time()
+        print(f"  Regroup 10 faces -> Base: {end_time_base - start_time_base:.4f}s")
 
-    test_custom_queries(db)
+        # Action 2: Move images to another moment
+        start_time_view = time.time()
+        self.db.execute_query(f"UPDATE accessible_images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['?']*len(images_to_move))})", images_to_move)
+        end_time_view = time.time()
+        print(f"\n  Move 10 images -> View: {end_time_view - start_time_view:.4f}s")
 
-    # Test 3: Test views functionality
-    if not test_views_functionality(db):
-        print("Views functionality test failed.")
-        return
-    
-    # Test 4: Test performance
-    if not test_performance(db):
-        print("Performance test failed.")
-        return
-    
-    # Test 5: Test data consistency
-    if not test_data_consistency(db):
-        print("Data consistency test failed.")
-        return
-    
-    print("\n=== All Tests Passed! ===")
-    print("The views are working correctly and efficiently.")
+        start_time_base = time.time()
+        self.db.execute_query(f"UPDATE images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['?']*len(images_to_move))})", images_to_move)
+        end_time_base = time.time()
+        print(f"  Move 10 images -> Base: {end_time_base - start_time_base:.4f}s")
 
-if __name__ == "__main__":
-    main()
+        # Action 3: Edit profile permissions
+        guest_profile_id = 'guest'
+        # Find images the guest profile does NOT have access to, to avoid UNIQUE constraint errors
+        images_for_guest = [row[0] for row in self.db.execute_query(f"""
+            SELECT imageID from images 
+            WHERE imageID NOT IN (SELECT imageID FROM profile_images WHERE profileID = '{guest_profile_id}')
+            LIMIT 5
+        """)]
+        
+        start_time_view = time.time()
+        self.db.execute_query(f"INSERT INTO editable_profile_images (profileID, imageID, accessible) VALUES ('{guest_profile_id}', '{images_for_guest[0]}', 1)")
+        end_time_view = time.time()
+        print(f"\n  Add image permission -> View: {end_time_view - start_time_view:.4f}s")
+
+        start_time_base = time.time()
+        self.db.execute_query(f"INSERT INTO profile_images (profileID, imageID, accessible) VALUES ('{guest_profile_id}', '{images_for_guest[1]}', 1)")
+        end_time_base = time.time()
+        print(f"  Add image permission -> Base: {end_time_base - start_time_base:.4f}s")
+
+
+if __name__ == '__main__':
+    unittest.main()

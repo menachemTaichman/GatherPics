@@ -53,8 +53,10 @@ class Groups(BaseModel):
     def add_faces(self, group_id: str, face_ids: List[str]) -> None:
         if not face_ids:
             return
+        
+        accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
-        query = f"UPDATE faces SET groupID=? WHERE faceID IN ({placeholders})"
+        query = f"UPDATE {accessible_table} SET groupID=? WHERE faceID IN ({placeholders})"
         self.db.execute_query(query, (group_id, *face_ids))
 
     def get_faces(self, group_id: str) -> List[str]:

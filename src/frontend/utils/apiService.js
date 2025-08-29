@@ -95,12 +95,19 @@ export const groupsAPI = {
   },
 
   // Transfer faces between groups
-  transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventId = FIXED_EVENT_ID) => {
-    const response = await api.post(`/api/events/${eventId}/groups/transfer-faces`, {
+  transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventId = FIXED_EVENT_ID, newGroupName = null) => {
+    const requestData = {
       source_group_id: sourceGroupId,
       target_group_id: targetGroupId,
       face_ids: faceIds
-    });
+    };
+    
+    // Add new_group_name if provided (for creating new groups)
+    if (newGroupName) {
+      requestData.new_group_name = newGroupName;
+    }
+    
+    const response = await api.post(`/api/events/${eventId}/groups/transfer-faces`, requestData);
     return response.data;
   },
 
@@ -144,6 +151,12 @@ export const groupsAPI = {
     }
     
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-images?${params.toString()}`);
+    return response.data;
+  },
+
+  // Get group representative face
+  getRepresentative: async (groupId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/representative`);
     return response.data;
   }
 };
@@ -192,9 +205,11 @@ export const momentsAPI = {
     return response.data;
   },
 
-  // Get moment images in period
-  getImagesInPeriod: async (momentId, eventId = FIXED_EVENT_ID) => {
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images-in-period`);
+
+
+  // Get moment representative image
+  getRepresentative: async (momentId, eventId = FIXED_EVENT_ID) => {
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/representative`);
     return response.data;
   }
 };

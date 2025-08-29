@@ -56,8 +56,12 @@ export function useModalFocus(isOpen, onClose, options = {}) {
           const autoFocusElement = modalRef.current.querySelector('[autofocus]');
           if (autoFocusElement) {
             // The browser should handle this automatically, but we can give it a nudge
-            // if it hasn't happened yet.
-            autoFocusElement.focus();
+            // if it hasn't happened yet, without causing scroll jumps.
+            try {
+              autoFocusElement.focus({ preventScroll: true });
+            } catch (e) {
+              autoFocusElement.focus();
+            }
             return;
           }
 
@@ -66,10 +70,18 @@ export function useModalFocus(isOpen, onClose, options = {}) {
             'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
           );
           if (focusableElements.length > 0) {
-            focusableElements[0].focus();
+            try {
+              focusableElements[0].focus({ preventScroll: true });
+            } catch (e) {
+              focusableElements[0].focus();
+            }
           } else {
             // As a fallback, focus the modal container itself.
-            modalRef.current.focus();
+            try {
+              modalRef.current.focus({ preventScroll: true });
+            } catch (e) {
+              modalRef.current.focus();
+            }
           }
         }, 100);
       }
@@ -81,10 +93,14 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         // Only restore focus if this was the top modal closing
         if (isTopModal(modalId) || document.activeElement === document.body) {
           try {
-            lastActiveElement.current.focus();
+            lastActiveElement.current.focus({ preventScroll: true });
           } catch (e) {
             // Fallback if element is no longer in DOM
-            document.body.focus();
+            try {
+              document.body.focus({ preventScroll: true });
+            } catch (e2) {
+              document.body.focus();
+            }
           }
         }
       }

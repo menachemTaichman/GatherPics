@@ -14,8 +14,8 @@ event = Event.add(name='Test Event', events_manager=event_manager.id)
 print('Created Event:', event.get_info())
 """
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
-event = Event(event_id)
 profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
+event = Event(event_id, profile_id=profile_id)
 
 def reset_event(event: Event):
     images = event.images_model.list()
@@ -311,6 +311,28 @@ def clear_moments_images():
         for image in images:
             event.moments_model.remove_image_from_moment(moment['momentID'], image)
 
-# print(event.moments_model.list())
+def recreate_view_triggers_and_indexes():
+    db = event.db
 
-print(event.moments_model.list())
+    # get all views, triggers and indexes from the db itseilf, drop them, import them again
+    views = db.execute_query('SELECT name FROM sqlite_master WHERE type="view"')
+    triggers = db.execute_query('SELECT name FROM sqlite_master WHERE type="trigger"')
+    indexes = db.execute_query('SELECT name FROM sqlite_master WHERE type="index"')
+
+    for view in views:
+        db.execute_query(f'DROP VIEW {view[0]}')
+
+    for trigger in triggers:
+        db.execute_query(f'DROP TRIGGER {trigger[0]}')
+
+    from src.core.db import INDEXES, VIEWS, TRIGGERS
+
+    # import them again
+    for view_name, view_query in VIEWS.items():
+        db.execute_query('CREATE VIEW if not exists ' + view_name + ' as ' + view_query)
+
+    for trigger_name, trigger_query in TRIGGERS.items():
+        db.execute_query(trigger_query)
+
+    for index in INDEXES:
+        db.execute_query('CREATE INDEX if not exists ' + index)

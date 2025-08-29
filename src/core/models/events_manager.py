@@ -8,15 +8,23 @@ class EventsManager(JsonModel):
 
     def _init_fields(self):
         self.name = ''
+        self.password = ''
+        self.events = []
+        self.images_count_limit = 0
 
     def _load_fields(self, data: dict):
         self.name = data.get('name', '')
+        self.password = data.get('password', '')
+        self.events = data.get('events', [])
+        self.images_count_limit = data.get('images_count_limit', 0)
 
     def get_info(self) -> dict:
         return {
             'id': self.id,
             'name': self.name,
-            'events': self.get_events()
+            'password': self.password,
+            'events': self.events,
+            'images_count_limit': self.images_count_limit
         }
 
     def get_events(self):

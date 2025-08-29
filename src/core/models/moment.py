@@ -51,8 +51,9 @@ class Moments(BaseModel):
     def add_image_to_moment(self, moment_id: str, image_ids: List[str]) -> None:
         if not image_ids:  # Guard against empty lists
             return
+        accessible_table = self.db._get_accessible_table_name('images')
         image_placeholders = ','.join(['?'] * len(image_ids))   
-        query = 'UPDATE images SET momentID=? WHERE imageID IN ({})'.format(image_placeholders)
+        query = f'UPDATE {accessible_table} SET momentID=? WHERE imageID IN ({image_placeholders})'
         self.db.execute_query(query, (moment_id, *image_ids))
 
         representative_image = self.get(moment_id)['representative_image']
@@ -71,8 +72,9 @@ class Moments(BaseModel):
     def remove_image_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
         if not image_ids:  # Guard against empty lists
             return
+        accessible_table = self.db._get_accessible_table_name('images')
         image_placeholders = ','.join(['?'] * len(image_ids))
-        query = 'UPDATE images SET momentID=NULL WHERE imageID IN ({}) AND momentID=?'.format(image_placeholders)
+        query = f'UPDATE {accessible_table} SET momentID=NULL WHERE imageID IN ({image_placeholders}) AND momentID=?'
         self.db.execute_query(query, (*image_ids, moment_id))
 
         # Check if the current representative image is being removed
@@ -106,8 +108,9 @@ class Moments(BaseModel):
 
     def set_images(self, moment_id: str, image_ids: List[str]):
         """Set the images for a given moment, removing old ones."""
+        accessible_table = self.db._get_accessible_table_name('images')
         # First, remove all existing images from the moment
-        self.db.execute_query('UPDATE images SET momentID = NULL WHERE momentID = ?', (moment_id,))
+        self.db.execute_query(f'UPDATE {accessible_table} SET momentID = NULL WHERE momentID = ?', (moment_id,))
         # Then, add the new images
         if image_ids:  # Only add if there are new images
             self.add_image_to_moment(moment_id, image_ids)

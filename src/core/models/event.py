@@ -197,7 +197,6 @@ class Event(JsonModel):
             target_group_id = target_group_data['groupID']
         
         # Get all images that will be added to target group (images containing transferred faces)
-        # Use accessible_faces view for read operations
         accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
         query = f'''
@@ -420,18 +419,6 @@ class Event(JsonModel):
             image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
 
         return image_ids
-
-    def get_images_in_period(self, start_time: str, end_time: str) -> list:
-        """Get all images within a given time period."""
-        # Use accessible_images view for read operations
-        accessible_table = self.db._get_accessible_table_name('images')
-        query = f"""
-            SELECT imageID FROM {accessible_table}
-            WHERE date_taken BETWEEN ? AND ?
-        """
-        results = self.db.execute_query(query, (start_time, end_time))
-        return [row[0] for row in results]
-
 
     def delete_image(self, image_id: str) -> None:
         faces = self.images_model.get_faces(image_id)

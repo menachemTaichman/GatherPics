@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortImagesWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
-import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates, urlHelpers } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useDataStore } from '../utils/dataManager';
 
@@ -67,10 +67,10 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
 
   // Refetch images when dependencies change (only if modal is open)
   useEffect(() => {
-    if (moment && (imagesInPeriod.length > 0 || Object.keys(momentImagesMap).length > 0)) {
+    if (moment && Object.keys(momentImagesMap).length > 0) {
       fetchAllImagesWithTimestamps();
     }
-  }, [imagesInPeriod, momentImagesMap, moment]);
+  }, [momentImagesMap, moment]);
 
   useEffect(() => {
     if (moment) {
@@ -81,7 +81,11 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
   const fetchAllImagesWithTimestamps = async () => {
     try {
       const data = await imagesAPI.getAll();
-      setAllImagesWithTimestamps(data.images || []);
+      // Filter out invalid images and ensure they have required properties
+      const validImages = (data.images || []).filter(img => 
+        img && (img.id || img.imageID) && typeof img === 'object'
+      );
+      setAllImagesWithTimestamps(validImages);
     } catch (error) {
       console.error('Error fetching images:', error);
       const errorInfo = handleAPIError(error, 'Failed to fetch images');
@@ -91,20 +95,9 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
   };
 
   const fetchImagesInPeriod = async () => {
-    if (!moment || !moment.start || !moment.end) {
-      setImagesInPeriod([]);
-      return;
-    }
-
-    try {
-      const result = await momentsAPI.getImagesInPeriod(moment.momentID);
-      setImagesInPeriod(result.images || []);
-    } catch (error) {
-      console.error('Error fetching images in period:', error);
-      const errorInfo = handleAPIError(error, 'Failed to fetch images in period');
-      setError(errorInfo.message);
-      setImagesInPeriod([]);
-    }
+    // We don't need to fetch images in period separately anymore
+    // The filtering will be done locally in getFilteredAndSortedImages
+    setImagesInPeriod([]);
   };
 
   const handleSaveImages = async () => {
@@ -168,25 +161,19 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
       // This ensures representative images are calculated with the latest image data
       // Increased delay to ensure backend has fully processed representative image calculation
       await new Promise(resolve => setTimeout(resolve, 300));
-      
-      console.log('Updating moment data for representative images...');
-      
+            
       // Also trigger a moment update to refresh the moment data
       // This ensures the representative image and other moment data is updated
       // We update the moment directly to avoid triggering change handlers that might conflict
       let updatedMoment = await momentsAPI.getById(moment.momentID);
       if (updatedMoment) {
-        console.log('Updating current moment:', moment.momentID, 'with representative image:', updatedMoment.representative_image);
-        console.log('Previous representative image was:', moment.representative_image);
         
         // If the representative image hasn't changed, wait a bit more and try again
         // This handles cases where the backend needs more time to calculate
         if (updatedMoment.representative_image === moment.representative_image) {
-          console.log('Representative image unchanged, waiting a bit more...');
           await new Promise(resolve => setTimeout(resolve, 200));
           updatedMoment = await momentsAPI.getById(moment.momentID);
           if (updatedMoment) {
-            console.log('After retry - representative image:', updatedMoment.representative_image);
           }
         }
         
@@ -203,19 +190,15 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
         try {
           let otherMoment = await momentsAPI.getById(momentInfo.momentId);
           if (otherMoment) {
-            console.log('Updating moment that lost images:', momentInfo.momentId, 'with representative image:', otherMoment.representative_image);
             // Get the current moment data to compare
             const currentMoment = useDataStore.getState().moments.find(m => m.momentID === momentInfo.momentId);
             if (currentMoment) {
-              console.log('Previous representative image for', momentInfo.momentId, 'was:', currentMoment.representative_image);
               
               // If the representative image hasn't changed, wait a bit more and try again
               if (otherMoment.representative_image === currentMoment.representative_image) {
-                console.log('Representative image unchanged for', momentInfo.momentId, ', waiting a bit more...');
                 await new Promise(resolve => setTimeout(resolve, 200));
                 otherMoment = await momentsAPI.getById(momentInfo.momentId);
                 if (otherMoment) {
-                  console.log('After retry - representative image for', momentInfo.momentId, ':', otherMoment.representative_image);
                 }
               }
             }
@@ -233,14 +216,12 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
       try {
         // Trigger a small delay to ensure all updates are processed
         await new Promise(resolve => setTimeout(resolve, 50));
-        console.log('Forcing data store refresh...');
         
         // Also try to refresh the moments data to ensure representative images are up to date
         // This is a fallback in case the individual moment updates didn't work
         try {
           const allMoments = await momentsAPI.getAll();
           if (allMoments && allMoments.moments) {
-            console.log('Refreshing all moments data...');
             // Update the data store with all moments to ensure consistency
             allMoments.moments.forEach(momentData => {
               updateMoment(momentData.momentID, momentData);
@@ -265,12 +246,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
         } catch (forceUpdateError) {
           console.warn('Could not force update:', forceUpdateError);
         }
-        
-        console.log('Data store refresh completed. Summary of updates:');
-        console.log('- Current moment updated:', moment.momentID);
-        console.log('- Moments that lost images:', movedImagesMomentInfo.map(item => item.momentInfo.momentId));
-        console.log('- All moments refreshed from backend');
-        
+                
       } catch (error) {
         console.error('Error during data store refresh:', error);
       }
@@ -369,24 +345,49 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
   };
 
   const isImageInPeriod = (imageId) => {
-    return imagesInPeriod.some(p => (p.id || p.imageID) === imageId);
+    // Check if image is in period based on moment date range
+    if (!moment || !moment.start || !moment.end) return false;
+    
+    const image = allImagesWithTimestamps.find(img => (img.id || img.imageID) === imageId);
+    if (!image || !image.date_taken) return false;
+    
+    const startDate = new Date(moment.start);
+    const endDate = new Date(moment.end);
+    const imageDate = new Date(image.date_taken);
+    
+    return imageDate >= startDate && imageDate <= endDate;
   };
 
   const getFilteredAndSortedImages = () => {
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        (momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
+        img && (img.id || img.imageID) && (momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        !(momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
+        img && (img.id || img.imageID) && !(momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
       );
     } else if (filterType === 'in-period') {
-      filteredImages = imagesInPeriod;
+      // Filter images locally based on date_taken and moment date range
+      if (moment && moment.start && moment.end) {
+        const startDate = new Date(moment.start);
+        const endDate = new Date(moment.end);
+        
+        filteredImages = filteredImages.filter(img => {
+          if (!img || !img.date_taken) return false;
+          
+          const imageDate = new Date(img.date_taken);
+          return imageDate >= startDate && imageDate <= endDate;
+        });
+      } else {
+        // If moment doesn't have date range, show no images
+        filteredImages = [];
+      }
     }
     
-    // Sort using global utility with date priority
+    // Filter out any invalid images and sort using global utility with date priority
+    filteredImages = filteredImages.filter(img => img && (img.id || img.imageID));
     return sortImagesWithDatePriority(filteredImages, sortOrder);
   };
 
@@ -795,8 +796,8 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
                   data-image-id={image.id || image.imageID}
                 >
                   <img
-                    src={image.urls.thumbnail}
-                    alt={image.label}
+                    src={image.urls?.thumbnail || urlHelpers.getThumbnailUrl(image.id || image.imageID)}
+                    alt={image.label || `Image ${image.id || image.imageID}`}
                     className="w-full h-24 object-cover"
                     loading="lazy"
                     onError={(e) => {
