@@ -20,17 +20,17 @@ FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 def build_complete_image_data(event, image_id, include_all_faces=True, group_filter=None):
     """Build complete image data with all related information."""
     try:
-        image = event.images_model.get(image_id)
+        image = event.models_manager.get('images', image_id)
         if not image:
             return None
         
         # Get face IDs for this image
-        face_ids = event.images_model.get_faces(image_id)
+        face_ids = event.models_manager.get_image_faces(image_id)
         
         # Build faces data
         faces_data = []
         for face_id in face_ids:
-            face = event.faces_model.get(face_id)
+            face = event.models_manager.get('faces', face_id)
             if face:
                 # Apply group filter if specified
                 if group_filter and face.get('groupID') != group_filter:
@@ -38,7 +38,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
                 
                 group = None
                 if face.get('groupID'):
-                    group = event.groups_model.get(face['groupID'])
+                    group = event.models_manager.get('groups', face['groupID'])
                 
                 face_data = {
                     'face_id': face_id,
@@ -57,7 +57,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Get moment info if available
         moment_info = None
         if image.get('momentID'):
-            moment = event.moments_model.get(image['momentID'])
+            moment = event.models_manager.get('moments', image['momentID'])
             if moment:
                 moment_info = {
                     'id': moment.get('momentID', moment.get('id', 'Unknown')),
@@ -144,7 +144,7 @@ def get_groups(event_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    groups = event.groups_model.list()
+    groups = event.models_manager.get_all('groups')
     return jsonify({"groups": groups})
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
@@ -155,7 +155,7 @@ def get_group(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     return jsonify(group)
@@ -169,16 +169,16 @@ def update_group(event_id, group_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     # Check if group is accessible
-    if not event.groups_model.get(group_id):
+    if not event.models_manager.get_one('groups', group_id):
         return not_found(f"Group {group_id} not found or not accessible")
     
     data = request.json or {}
     
     try:
-        event.groups_model.edit(group_id, data)
+        event.models_manager.edit('groups', group_id, data)
         
         # Get the group after update
-        updated = event.groups_model.get(group_id)
+        updated = event.models_manager.get_one('groups', group_id)
         
         if updated is None:
             return not_found(f"Group {group_id} not found")
@@ -210,12 +210,12 @@ def check_group_name(event_id):
     
     try:
         # Check for conflicts
-        conflict_result = event.groups_model.check_name_conflict(label, exclude_group_id)
+        conflict_result = event.models_manager.is_exists('groups', {'label': label, 'groupID': {'!=': exclude_group_id}})
         
-        if conflict_result.get('conflict'):
+        if conflict_result:
             return jsonify({
                 "conflict": True,
-                "conflicting_group": conflict_result['conflicting_group']
+                "conflicting_group": conflict_result
             })
         else:
             return jsonify({"conflict": False})
@@ -232,12 +232,12 @@ def delete_group(event_id, group_id):
     
     try:
         # Check if group exists and is accessible
-        group = event.groups_model.get(group_id)
+        group = event.models_manager.get_one('groups', group_id)
         if not group:
             return not_found(f"Group {group_id} not found or not accessible")
         
         # Delete the group
-        event.groups_model.delete(group_id)
+        event.models_manager.delete('groups', group_id)
         
         # Add change instruction for frontend
         response_data = {"success": True}
@@ -269,22 +269,22 @@ def transfer_faces(event_id):
     
     try:
         # Validate source group exists and is accessible
-        source_group = event.groups_model.get(source_group_id)
+        source_group = event.models_manager.get_one('groups', source_group_id)
         if not source_group:
             return not_found("Source group not found or not accessible")
         
-        # Use the Event model's transfer_faces method which handles both existing and new groups
-        result = event.transfer_faces(source_group_id, face_ids, target_group_id, new_group_name)
+        # Use ModelsManager to transfer faces between groups
+        result = event.models_manager.transfer_faces(source_group_id, face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
         
         # Get updated groups for change instructions
         updated_source = None
         updated_target = None
         
         if not result.get('old_group_deleted'):
-            updated_source = event.groups_model.get(source_group_id)
+            updated_source = event.models_manager.get_one('groups', source_group_id)
         
         if result.get('target_group_id'):
-            updated_target = event.groups_model.get(result['target_group_id'])
+            updated_target = event.models_manager.get_one('groups', result['target_group_id'])
         
         # Add change instructions for frontend
         response_data = {"success": True, "transferred_count": len(face_ids)}
@@ -307,18 +307,18 @@ def get_group_images(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
         # Get image IDs for this group
-        image_ids = event.groups_model.get_images(group_id)
+        image_ids = event.models_manager.get_group_images(group_id)
         
         # Get basic image info for each
         images_data = []
         for image_id in image_ids:
-            image = event.images_model.get(image_id)
+            image = event.models_manager.get_one('images', image_id)
             if image:
                 images_data.append({
                     'id': image_id,
@@ -344,13 +344,13 @@ def get_group_crops(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
         # Get crop mapping from image_id to face_id
-        crop_mapping = event.get_crop_mapping(group_id)
+        crop_mapping = event.models_manager.get_group_unique_face_per_image(group_id)
         
         return jsonify({"crop_mapping": crop_mapping})
     except Exception as e:
@@ -364,18 +364,18 @@ def get_related_groups(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
         # Get related groups
-        related_groups = event.groups_model.get_related_groups(group_id)
+        related_groups = event.models_manager.get_related_groups([group_id])
         
         # Get basic info for each related group
         groups_data = []
         for related_group_id in related_groups:
-            related_group = event.groups_model.get(related_group_id)
+            related_group = event.models_manager.get_one('groups', related_group_id)
             if related_group:
                 groups_data.append({
                     'id': related_group_id,
@@ -395,7 +395,7 @@ def get_group_filtered_images(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -412,7 +412,7 @@ def get_group_filtered_images(event_id, group_id):
             return jsonify({"error": "Invalid pagination parameters"}), 400
         
         # Get filtered images
-        result = event.groups_model.get_filtered_images(
+        result = event.models_manager.get_filtered_images(
             group_id, page, per_page, search, sort_by, sort_order
         )
         
@@ -442,7 +442,7 @@ def get_moments(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        moments = event.moments_model.list()
+        moments = event.models_manager.get_all('moments')
         return jsonify({"moments": moments})
     except Exception as e:
         return bad_request(e)
@@ -456,7 +456,7 @@ def get_moment(event_id, moment_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        moment = event.moments_model.get(moment_id)
+        moment = event.models_manager.get_one('moments', moment_id)
         if not moment:
             return not_found(f"Moment {moment_id} not found or not accessible")
         return jsonify(moment)
@@ -475,10 +475,10 @@ def create_moment(event_id):
     
     try:
         # Create the moment
-        moment_id = event.moments_model.create(data)
+        moment_id = event.models_manager.add('moments', data)
         
         # Get the created moment
-        created_moment = event.moments_model.get(moment_id)
+        created_moment = event.models_manager.get_one('moments', moment_id)
         
         # Add change instruction for frontend
         response_data = {"success": True, "moment_id": moment_id}
@@ -497,16 +497,20 @@ def update_moment(event_id, moment_id):
     
     try:
         # Check if moment exists and is accessible
-        if not event.moments_model.get(moment_id):
+        if not event.models_manager.get_one('moments', moment_id):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         data = request.json or {}
         
         # Update the moment
-        event.moments_model.edit(moment_id, data)
+        event.models_manager.add_images_to_moment(moment_id, data.get('images_to_add', []))
+        event.models_manager.remove_images_from_moment(moment_id, data.get('images_to_remove', []))
+        del data['images_to_add']
+        del data['images_to_remove']
+        event.models_manager.edit('moments', moment_id, data)
         
         # Get the updated moment
-        updated_moment = event.moments_model.get(moment_id)
+        updated_moment = event.models_manager.get_one('moments', moment_id)
         
         # Add change instruction for frontend
         response_data = {"success": True}
@@ -525,11 +529,11 @@ def delete_moment(event_id, moment_id):
     
     try:
         # Check if moment exists and is accessible
-        if not event.moments_model.get(moment_id):
+        if not event.models_manager.get_one('moments', moment_id):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Delete the moment
-        event.moments_model.delete(moment_id)
+        event.models_manager.delete('moments', moment_id)
         
         # Add change instruction for frontend
         response_data = {"success": True}
@@ -548,16 +552,16 @@ def get_moment_images(event_id, moment_id):
     
     try:
         # Check if moment exists and is accessible
-        if not event.moments_model.get(moment_id):
+        if not event.models_manager.get_one('moments', moment_id):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Get image IDs for this moment
-        image_ids = event.moments_model.get_images(moment_id)
+        image_ids = event.models_manager.get_moment_images(moment_id)
         
         # Get basic image info for each
         images_data = []
         for image_id in image_ids:
-            image = event.images_model.get(image_id)
+            image = event.models_manager.get_one('images', image_id)
             if image:
                 images_data.append({
                     'id': image_id,
@@ -585,20 +589,20 @@ def get_image_faces(event_id, image_id):
     
     try:
         # Check if image exists and is accessible
-        if not event.images_model.get(image_id):
+        if not event.models_manager.get_one('images', image_id):
             return not_found(f"Image {image_id} not found or not accessible")
         
         # Get face IDs for this image
-        face_ids = event.images_model.get_faces(image_id)
+        face_ids = event.models_manager.get_image_faces(image_id)
         
         # Build faces data
         faces_data = []
         for face_id in face_ids:
-            face = event.faces_model.get(face_id)
+            face = event.models_manager.get_one('faces', face_id)
             if face:
                 group = None
                 if face.get('groupID'):
-                    group = event.groups_model.get(face['groupID'])
+                    group = event.models_manager.get_one('groups', face['groupID'])
                 
                 face_data = {
                     'face_id': face_id,
@@ -627,7 +631,7 @@ def get_image_info(event_id, image_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        image = event.images_model.get(image_id)
+        image = event.models_manager.get_one('images', image_id)
         if not image:
             return not_found(f"Image {image_id} not found or not accessible")
         
@@ -682,12 +686,12 @@ def get_group_images_complete(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     # Get image IDs for this group
-    image_ids = event.groups_model.get_images(group_id)
+    image_ids = event.models_manager.get_group_images(group_id)
     
     # Build complete image data for each image
     images_data = []
@@ -715,11 +719,11 @@ def get_moment_images_complete(event_id, moment_id):
     
     try:
         # Check if moment exists and is accessible
-        if not event.moments_model.get(moment_id):
+        if not event.models_manager.get_one('moments', moment_id):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Get image IDs for this moment
-        image_ids = event.moments_model.get_images(moment_id)
+        image_ids = event.models_manager.get_moment_images(moment_id)
         
         # Build complete image data for each image
         images_data = []
@@ -759,7 +763,7 @@ def download_images(event_id):
         with zipfile.ZipFile(memory_file, 'w') as zf:
             for image_id in image_ids:
                 # Check if image is accessible
-                if not event.images_model.get(image_id):
+                if not event.models_manager.get_one('images', image_id):
                     continue
                 
                 # Add high quality image to ZIP
@@ -786,7 +790,7 @@ def get_images_json(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        images = event.images_model.list()
+        images = event.models_manager.get_all('images')
         
         images_data = []
         for image in images:
@@ -824,7 +828,7 @@ def get_profile_permissions(event_id):
                 'accessible_image_IDs': []
             })
         
-        profile = event.profile_model.get(profile_id)
+        profile = event.models_manager.get_one('profiles', profile_id)
         if not profile:
             return jsonify({
                 'all_images': False,
@@ -860,7 +864,7 @@ def get_images_json_legacy():
 @require_auth
 def get_display_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.images_model.get(image_id):
+    if not event.models_manager.get_one('images', image_id):
         return abort(404)
     file_path = os.path.join(event.display_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -873,7 +877,7 @@ def get_display_image_webp(event_id, image_id):
 @require_auth
 def get_face_crop_webp(event_id, face_id):
     event = Event(event_id)
-    face = event.faces_model.get(face_id)
+    face = event.models_manager.get_one('faces', face_id)
     if not face:
         return abort(404)
     file_path = os.path.join(event.faces_dir, f'{face_id}.webp')
@@ -887,7 +891,7 @@ def get_face_crop_webp(event_id, face_id):
 @require_auth
 def get_thumbnail_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.images_model.get(image_id):
+    if not event.models_manager.get_one('images', image_id):
         return abort(403)
     file_path = os.path.join(event.thumb_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -900,7 +904,7 @@ def get_thumbnail_image_webp(event_id, image_id):
 @require_auth
 def get_high_quality_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.images_model.get(image_id):
+    if not event.models_manager.get_one('images', image_id):
         return abort(403)
     file_path = os.path.join(event.high_quality_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -913,7 +917,7 @@ def get_high_quality_image_webp(event_id, image_id):
 @require_auth
 def get_original_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.images_model.get(image_id):
+    if not event.models_manager.get_one('images', image_id):
         return abort(403)
     file_path = os.path.join(event.original_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -930,7 +934,7 @@ def get_group_representative(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.groups_model.get(group_id)
+    group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -939,7 +943,7 @@ def get_group_representative(event_id, group_id):
         return jsonify({"representative_face": None})
     
     # Get the face data
-    face = event.faces_model.get(representative_face_id)
+    face = event.models_manager.get_one('faces', representative_face_id)
     if not face:
         return jsonify({"representative_face": None})
     
@@ -966,7 +970,7 @@ def get_moment_representative(event_id, moment_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    moment = event.moments_model.get(moment_id)
+    moment = event.models_manager.get_one('moments', moment_id)
     if not moment:
         return not_found(f"Moment {moment_id} not found or not accessible")
     
@@ -975,7 +979,7 @@ def get_moment_representative(event_id, moment_id):
         return jsonify({"representative_image": None})
     
     # Get the image data
-    image = event.images_model.get(representative_image_id)
+    image = event.models_manager.get_one('images', representative_image_id)
     if not image:
         return jsonify({"representative_image": None})
     

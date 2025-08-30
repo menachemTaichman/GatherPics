@@ -1,13 +1,9 @@
 import os
 from ..db import AppDB
-from .image import Images
-from .group import Groups
-from .face import Faces
-from .moment import Moments
-from .profile import Profiles
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
-from typing import List, Dict, Optional
+from .models_manager import ModelsManager
+from typing import Optional
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
 
@@ -26,11 +22,7 @@ class Event(JsonModel):
         if profile_id:
             self.db.set_profile_id(profile_id)
         
-        self.images_model = Images(self.db)
-        self.groups_model = Groups(self.db)
-        self.faces_model = Faces(self.db)
-        self.moments_model = Moments(self.db)
-        self.profile_model = Profiles(self.db)
+        self.models_manager = ModelsManager(self.db)
         self.face_utils = None
         self.display_dir = os.path.join(self.event_dir, 'display')
         self.original_dir = os.path.join(self.event_dir, 'original')
@@ -69,13 +61,13 @@ class Event(JsonModel):
     def _initialize_default_profiles(self):
         """Initialize default profiles for the event: Main Manager and Event Manager"""
         # Check if profiles already exist to avoid duplicates
-        existing_profiles = self.profile_model.list()
+        existing_profiles = self.models_manager.get_all('profiles')
         if existing_profiles:
             return  # Profiles already exist, don't create duplicates
         
-        developer_id = self.profile_model.generate_id()
-        event_manager_id = self.profile_model.generate_id()
-        main_manager_id = self.profile_model.generate_id()
+        developer_id = self.models_manager.profiles_model.generate_id()
+        event_manager_id = self.models_manager.profiles_model.generate_id()
+        main_manager_id = self.models_manager.profiles_model.generate_id()
         developer_password = ''
         event_manager_password = ''
         main_manager_password = ''
@@ -91,7 +83,7 @@ class Event(JsonModel):
 
         self.set_profile_id(developer_id)
 
-        return self.profile_model.list()
+        return self.models_manager.get_all('profiles')
 
     def add(self, **fields) -> 'Event':
         super().add(**fields)
@@ -116,312 +108,8 @@ class Event(JsonModel):
             'DB_PATH': self.DB_PATH
         }
 
-    # faces utils
-    def get_crop_mapping(self, group_id: str) -> dict:
-        """
-        Get mapping from image_id to face_id for crop display.
-        For each image in the group, returns the first face that belongs to this group.
-        """
-        # Use accessible_faces view for read operations
-        accessible_table = self.db._get_accessible_table_name('faces')
-        query = f'''
-            SELECT DISTINCT f.imageID, f.faceID
-            FROM {accessible_table} f 
-            WHERE f.groupID = ?
-            GROUP BY f.imageID
-        '''
-        results = self.db.execute_query(query, (group_id,))
-        return {row[0]: row[1] for row in results}
-
-    def get_faces_by_image_and_group(self, image_id: str, group_id: str) -> List[str]:
-        """
-        Get face IDs that belong to a specific group in a specific image.
-        
-        Args:
-            image_id: The image ID
-            group_id: The group ID
-            
-        Returns:
-            List of face IDs that belong to the specified group in the specified image
-        """
-        # Use accessible_faces view for read operations
-        accessible_table = self.db._get_accessible_table_name('faces')
-        query = f'SELECT faceID FROM {accessible_table} WHERE imageID=? AND groupID=?'
-        results = self.db.execute_query(query, (image_id, group_id))
-        return [row[0] for row in results]
-    
-    def transfer_faces(self, old_group_id: str, face_ids: list, target_group_id: str = None, new_group_name: str = None) -> dict:
-        """
-        Transfer faces from one group to another group or create a new group.
-        
-        Args:
-            old_group_id: ID of the source group
-            face_ids: List of face IDs to transfer
-            target_group_id: ID of the target group (if None, will create new group)
-            new_group_name: Name for the new group (required if target_group_id is None)
-            
-        Returns:
-            dict: Result with target_group_id, whether old group was deleted, and transferred info
-        """
-        if not face_ids:
-            return {'target_group_id': None, 'old_group_deleted': False}
-        
-        # Validate old group exists
-        old_group = self.groups_model.get(old_group_id)
-        if not old_group:
-            raise ValueError(f"Source group {old_group_id} not found")
-        
-        # Determine target group
-        target_group_id_was_provided = target_group_id is not None
-        if target_group_id:
-            # Transfer to existing group
-            target_group = self.groups_model.get(target_group_id)
-            if not target_group:
-                raise ValueError(f"Target group {target_group_id} not found")
-        else:
-            # Create new group
-            if not new_group_name:
-                raise ValueError("new_group_name is required when target_group_id is not provided")
-            
-            # Check for name conflicts
-            conflict_check = self.groups_model.check_name_conflict(new_group_name)
-            if conflict_check['conflict']:
-                raise ValueError(f"Group name '{new_group_name}' already exists")
-            
-            # Create new group with biggest face as representative
-            representative_face = self.faces_model.get_biggest_face(face_ids) if face_ids else ''
-            target_group_data = self.groups_model.add(
-                label=new_group_name,
-                representative_face=representative_face
-            )
-            target_group_id = target_group_data['groupID']
-        
-        # Get all images that will be added to target group (images containing transferred faces)
-        accessible_table = self.db._get_accessible_table_name('faces')
-        placeholders = ','.join(['?'] * len(face_ids))
-        query = f'''
-            SELECT DISTINCT imageID 
-            FROM {accessible_table} 
-            WHERE faceID IN ({placeholders}) AND groupID = ?
-        '''
-        
-        images_to_add_to_target = set()
-        results = self.db.execute_query(query, (*face_ids, old_group_id))
-        for row in results:
-            images_to_add_to_target.add(row[0])
-
-        # Remove any images already in the target group before the transfer
-        target_group = self.groups_model.get(target_group_id)
-        if target_group and 'image_ids' in target_group:
-            existing_target_images = set(target_group['image_ids'])
-            images_to_add_to_target = images_to_add_to_target - existing_target_images
-
-        # Transfer faces to target group
-        self.groups_model.add_faces(target_group_id, face_ids)
-                
-        # After transferring, update the target group's representative to the biggest face
-        target_group_faces = self.groups_model.get_faces(target_group_id)
-        new_representative = self.faces_model.get_biggest_face(target_group_faces)
-        if new_representative:
-            self.groups_model.edit(target_group_id, {'representative_face': new_representative})
-        
-        # Check which images no longer belong to source group after transfer
-        images_to_remove_from_source = set()
-        for image_id in images_to_add_to_target:
-            # Check if source group still has faces in this image
-            source_faces_in_image = self.get_faces_by_image_and_group(image_id, old_group_id)
-            if not source_faces_in_image:
-                images_to_remove_from_source.add(image_id)
-        
-        # Check if any transferred face was the representative of the old group
-        old_representative = old_group.get('representative_face', '')
-        representative_transferred = old_representative in face_ids
-        
-        # Check if old group is now empty and delete it if so
-        old_group_deleted = False
-        if self.is_group_empty(old_group_id):
-            self.groups_model.delete(old_group_id)
-            old_group_deleted = True
-        elif representative_transferred:
-            # If the representative was transferred, choose a new representative with highest resolution
-            old_group_faces = self.groups_model.get_faces(old_group_id)
-            new_representative = self.faces_model.get_biggest_face(old_group_faces)
-            if new_representative:
-                self.groups_model.edit(old_group_id, {'representative_face': new_representative})
-        
-        # Get updated source group data if it wasn't deleted
-        updated_source_group = None
-        if not old_group_deleted:
-            updated_source_group = self.groups_model.get(old_group_id)
-        
-        # Get updated target group data
-        updated_target_group = self.groups_model.get(target_group_id)
-
-        result = {
-            'target_group_id': target_group_id,
-            'old_group_deleted': old_group_deleted,
-            'transferred_faces': face_ids,
-            'images_to_remove_from_source': list(images_to_remove_from_source),
-            'images_to_add_to_target': list(images_to_add_to_target),
-            'updated_source_group': updated_source_group,
-            'updated_target_group': updated_target_group
-        }
-        
-        # Include new group name if a new group was created
-        if not target_group_id_was_provided:
-            result['new_group_name'] = new_group_name
-            
-        return result
-
-    # groups utils
-    def is_group_empty(self, group_id: str) -> bool:
-        """
-        Check if a group is empty by counting faces, bypassing profile access.
-        This method is used for internal operations like transfer_faces where
-        we need to determine if a group should be deleted regardless of profile access.
-        
-        Args:
-            group_id: The group ID to check
-            
-        Returns:
-            True if the group has no faces, False otherwise
-        """
-        query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
-        results = self.db.execute_query(query, (group_id,))
-        count = results[0][0] if results else 0
-        return count == 0
-    
-    def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
-        """
-        Get related groups based on filtered images and co-occurrence frequency.
-        
-        Args:
-            group_ids: List of group IDs
-            mode: 'and' or 'or'
-            only: If True, any image shouldn't belong to any groups that aren't in groups list
-        
-        Returns:
-            List of group IDs ordered by relevance: selected groups, then by co-occurrence, then by name.
-        """
-        if not group_ids:
-            return []
-
-        group_id_placeholders = ','.join(['?'] * len(group_ids))
-        
-        if mode == 'or':
-            # OR mode: Get all other groups, ordered by co-occurrence with ANY of the selected groups.
-            # Use accessible views for read operations
-            accessible_groups = self.db._get_accessible_table_name('groups')
-            accessible_faces = self.db._get_accessible_table_name('faces')
-            query = f'''
-                SELECT 
-                    g.groupID,
-                    g.label,
-                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM {accessible_faces} WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
-                FROM {accessible_groups} g
-                LEFT JOIN {accessible_faces} f ON g.groupID = f.groupID
-                WHERE g.groupID NOT IN ({group_id_placeholders})
-                GROUP BY g.groupID, g.label
-                ORDER BY common_images_count DESC, g.label ASC
-            '''
-            query_params = group_ids + group_ids
-            related_group_rows = self.db.execute_query(query, query_params)
-        else:  # AND mode
-            # AND mode: Get only groups that appear in images containing ALL of the selected groups.
-            base_image_ids = self.get_filtered_images(group_ids, 'and', False) # Use 'only'=False to find potential candidates
-            
-            if not base_image_ids:
-                related_group_rows = []
-            else:
-                image_placeholders = ','.join(['?'] * len(base_image_ids))
-                # Use accessible views for read operations
-                accessible_groups = self.db._get_accessible_table_name('groups')
-                accessible_faces = self.db._get_accessible_table_name('faces')
-                query = f'''
-                    SELECT
-                        g.groupID,
-                        g.label,
-                        COUNT(DISTINCT f.imageID) AS common_images_count
-                    FROM {accessible_groups} g
-                    JOIN {accessible_faces} f ON g.groupID = f.groupID
-                    WHERE f.imageID IN ({image_placeholders})
-                    AND g.groupID NOT IN ({group_id_placeholders})
-                    GROUP BY g.groupID, g.label
-                    ORDER BY common_images_count DESC, g.label ASC
-                '''
-                query_params = base_image_ids + group_ids
-                related_group_rows = self.db.execute_query(query, query_params)
-
-        # Construct the final ordered list
-        ordered_group_ids = list(group_ids)
-        for row in related_group_rows:
-            ordered_group_ids.append(row[0])
-            
-        return ordered_group_ids
-    
-    # images utils
-    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
-        """
-        Get filtered image IDs based on filter criteria.
-        
-        Args:
-            groups_ids: List of group IDs
-            mode: 'and' or 'or'
-            only: If True, any image shouldn't belong to any groups that aren't in groups list
-        
-        Returns:
-            List of image IDs that match the filter criteria
-        """
-        if not groups_ids:
-            return []
-
-        group_placeholders = ','.join(['?'] * len(groups_ids))
-
-        # Use accessible views for read operations
-        accessible_faces = self.db._get_accessible_table_name('faces')
-
-        if mode == 'and':
-            # Images must contain faces from ALL groups in the list
-            base_query = f'''
-                SELECT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-                GROUP BY imageID
-                HAVING COUNT(DISTINCT groupID) = ?
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)])]
-        else:  # mode == 'or'
-            # Images must contain faces from AT LEAST ONE of the groups in the list
-            base_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids)]
-
-        if only and image_ids:
-            # Filter out images that contain faces from other groups
-            image_placeholders = ','.join(['?'] * len(image_ids))
-            
-            # Find all images from the current set that ALSO have faces from other groups
-            images_with_other_groups_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE imageID IN ({image_placeholders})
-                AND groupID NOT IN ({group_placeholders})
-            '''
-            
-            images_to_exclude = {row[0] for row in self.db.execute_query(
-                images_with_other_groups_query, image_ids + groups_ids
-            )}
-
-            # Return only the images that are not in the exclusion list
-            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
-
-        return image_ids
-
     def delete_image(self, image_id: str) -> None:
-        faces = self.images_model.get_faces(image_id)
+        faces = self.models_manager.get_image_faces(image_id)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
         
@@ -432,7 +120,7 @@ class Event(JsonModel):
             except FileNotFoundError:
                 pass
 
-        self.images_model.delete(image_id)
+        self.models_manager.delete('images', image_id)
         try:
             os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
             os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
@@ -468,7 +156,7 @@ class Event(JsonModel):
             save_image(
                 crop_img, crop_path, format='WEBP', quality=90, optimize=True
             )
-            return self.faces_model.get_add_data(
+            return self.models_manager.faces_model.get_add_data(
                 image_ID=image_id,
                 width=bbox['width'],
                 height=bbox['height'],
@@ -482,13 +170,13 @@ class Event(JsonModel):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             for cluster in clusters:
                 group_num = self.last_group_id + 1
-                representative_face_id = self.faces_model.get_biggest_face(cluster)
-                group_data = self.groups_model.add(
-                    label=f"Person {group_num}",
-                    representative_face=representative_face_id
-                )
+                # Create group without computing representative here; it will be set by add_faces_to_group
+                group_data = self.models_manager.add('groups', [{
+                    'label': f"Person {group_num}",
+                    'representative_face': ''
+                }])[0]
                 group_id = group_data['groupID']
-                self.groups_model.add_faces(group_id, cluster)
+                self.models_manager.add_faces_to_group(group_id, cluster)
                 self.last_group_id = group_num
             return len(clusters)
 
@@ -502,7 +190,8 @@ class Event(JsonModel):
                 metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
-                image_id = self.images_model.add(
+                image_id = self.models_manager.add(
+                    'images',
                     name=image_file,
                     date_taken=date_taken,
                     file_size=file_size,
@@ -579,7 +268,7 @@ class Event(JsonModel):
         if all_faces:
             if verbose:
                 print("Adding faces to database...")
-            self.faces_model.add_many(all_faces)
+            self.models_manager.add('faces', all_faces)
             if verbose:
                 print("Clustering faces...")
             groups_created = _cluster_and_group_faces([face['faceID'] for face in all_faces])
