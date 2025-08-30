@@ -89,10 +89,23 @@ class ModelsManager:
 
     def get_one(self, table: str, entity_id: str) -> Dict | None:
         entity = self.db.get_one(table, {self.id_field(table): entity_id})
+        if table == 'groups':
+            entity['image_ids'] = self.get_group_images(entity_id)
+        elif table == 'moments':
+            entity['image_ids'] = self.get_moment_images(entity_id)
         return entity if entity else None
 
     def get_all(self, table: str) -> List[Dict]:
-        return self.db.get_all(table) 
+        results = self.db.get_all(table)
+        if table == 'groups':
+            for result in results:
+                result['image_ids'] = self.get_group_images(result['groupID'])
+            return results
+        elif table == 'moments':
+            for result in results:
+                result['image_ids'] = self.get_moment_images(result['momentID'])
+            return results
+        return results
 
     # -------- Cross-model helpers --------
 

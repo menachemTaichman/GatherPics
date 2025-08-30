@@ -393,44 +393,22 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     try {
       setFilterLoading(true);
       
-             // For now, use the basic images endpoint since the filtered endpoint expects different parameters
-      // TODO: Update backend to support the filtering parameters we need
-      const response = await groupsAPI.getImagesComplete(group.groupID);
+      // Use the backend filtered images endpoint for better performance
+      const response = await groupsAPI.getFilteredImages(
+        group.groupID, 
+        filterGroups, 
+        filterMode, 
+        onlySelected
+      );
       
       if (response && response.images) {
-        let filteredImages = response.images;
-        
-        // Apply frontend filtering logic
-        if (filterGroups.length > 0) {
-          if (filterMode === 'and') {
-            // All filter groups must be present
-            filteredImages = filteredImages.filter(image => {
-              const imageGroupIds = new Set(image.faces?.map(f => f.group_id).filter(Boolean) || []);
-              return filterGroups.every(groupId => imageGroupIds.has(groupId));
-            });
-          } else {
-            // Any filter group can be present
-            filteredImages = filteredImages.filter(image => {
-              const imageGroupIds = new Set(image.faces?.map(f => f.group_id).filter(Boolean) || []);
-              return filterGroups.some(groupId => imageGroupIds.has(groupId));
-            });
-          }
-        }
-        
-        // Apply onlySelected filter
-        if (onlySelected) {
-          filteredImages = filteredImages.filter(image => 
-            selectedImages.has(image.id)
-          );
-        }
-        
         // Sort the filtered images
-        const sortedFilteredImages = sortImages(filteredImages, sortBy, sortOrder);
+        const sortedFilteredImages = sortImages(response.images, sortBy, sortOrder);
         setSortedImages(sortedFilteredImages);
         
         // Extract related groups from the images
         const relatedGroupIds = new Set();
-        filteredImages.forEach(image => {
+        response.images.forEach(image => {
           image.faces?.forEach(face => {
             if (face.group_id && face.group_id !== group.groupID) {
               relatedGroupIds.add(face.group_id);
@@ -1038,7 +1016,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
                       const subtract25 = currentPercent - 25;
                       const newPercent = Math.max(50, Math.max(subtract25, prev25));
-                      setimageSize(newPercent / 100);
+                      setImageSize(newPercent / 100);
                     }}
                     disabled={imageSize <= 0.5}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1053,19 +1031,19 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
-                    onChange={e => setimageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
                     onBlur={e => {
                       let val = parseInt(e.target.value, 10);
                       if (isNaN(val)) val = Math.round(imageSize * 100);
                       val = Math.max(50, Math.min(300, val));
-                      setimageSize(val / 100);
-                      setimageSizeInputValue(undefined);
+                      setImageSize(val / 100);
+                      setImageSizeInputValue(undefined);
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         e.target.blur();
                       } else if (e.key === 'Escape') {
-                        setimageSizeInputValue(undefined);
+                        setImageSizeInputValue(undefined);
                       }
                     }}
                     className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
@@ -1077,7 +1055,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
                       const add25 = currentPercent + 25;
                       const newPercent = Math.min(300, Math.min(add25, next25));
-                      setimageSize(newPercent / 100);
+                      setImageSize(newPercent / 100);
                     }}
                     disabled={imageSize >= 3}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"

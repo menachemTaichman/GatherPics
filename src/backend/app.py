@@ -20,7 +20,7 @@ FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 def build_complete_image_data(event, image_id, include_all_faces=True, group_filter=None):
     """Build complete image data with all related information."""
     try:
-        image = event.models_manager.get('images', image_id)
+        image = event.models_manager.get_one('images', image_id)
         if not image:
             return None
         
@@ -30,7 +30,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Build faces data
         faces_data = []
         for face_id in face_ids:
-            face = event.models_manager.get('faces', face_id)
+            face = event.models_manager.get_one('faces', face_id)
             if face:
                 # Apply group filter if specified
                 if group_filter and face.get('groupID') != group_filter:
@@ -38,7 +38,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
                 
                 group = None
                 if face.get('groupID'):
-                    group = event.models_manager.get('groups', face['groupID'])
+                    group = event.models_manager.get_one('groups', face['groupID'])
                 
                 face_data = {
                     'face_id': face_id,
@@ -57,7 +57,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Get moment info if available
         moment_info = None
         if image.get('momentID'):
-            moment = event.models_manager.get('moments', image['momentID'])
+            moment = event.models_manager.get_one('moments', image['momentID'])
             if moment:
                 moment_info = {
                     'id': moment.get('momentID', moment.get('id', 'Unknown')),
@@ -144,8 +144,9 @@ def get_groups(event_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    groups = event.models_manager.get_all('groups')
-    return jsonify({"groups": groups})
+    # Get enriched groups with image information
+    enriched_groups = event.models_manager.get_all('groups')
+    return jsonify({"groups": enriched_groups})
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
@@ -155,6 +156,7 @@ def get_group(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
+    # Get enriched group with image information
     group = event.models_manager.get_one('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
@@ -390,7 +392,7 @@ def get_related_groups(event_id, group_id):
 @app.route("/api/events/<event_id>/groups/<group_id>/filtered-images", methods=["GET"])
 @require_auth
 def get_group_filtered_images(event_id, group_id):
-    """Get images filtered by group with pagination and search in the event."""
+    """Get images filtered by group with advanced filtering options."""
     event = get_event_with_profile()
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
@@ -400,36 +402,40 @@ def get_group_filtered_images(event_id, group_id):
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
-        # Get query parameters
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
-        search = request.args.get('search', '').strip()
-        sort_by = request.args.get('sort_by', 'date_taken')
-        sort_order = request.args.get('sort_order', 'desc')
+        # Get query parameters that match frontend expectations
+        mode = request.args.get('mode', 'and')
+        only = request.args.get('only', 'false').lower() == 'true'
+        related_groups = request.args.get('related_groups', '').split(',') if request.args.get('related_groups') else []
         
-        # Validate parameters
-        if page < 1 or per_page < 1 or per_page > 100:
-            return jsonify({"error": "Invalid pagination parameters"}), 400
+        # Filter out empty strings
+        related_groups = [g for g in related_groups if g]
         
-        # Get filtered images
-        result = event.models_manager.get_filtered_images(
-            group_id, page, per_page, search, sort_by, sort_order
-        )
+        # Get filtered image IDs using the get_filtered_images method
+        if related_groups or only:
+            # Use advanced filtering with multiple groups OR when only mode is enabled
+            groups_to_filter = [group_id] + related_groups if related_groups else [group_id]
+            image_ids = event.models_manager.get_filtered_images(
+                groups_to_filter, mode, only
+            )
+        else:
+            # Simple case: just get images for this group (when not using only mode)
+            image_ids = event.models_manager.get_group_images(group_id)
         
-        # Build response with pagination info
-        response_data = {
-            "images": result['images'],
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": result['total'],
-                "pages": (result['total'] + per_page - 1) // per_page
-            }
-        }
+        # Build complete image data for each image
+        images_data = []
+        for image_id in image_ids:
+            image_data = build_complete_image_data(event, image_id)
+            if image_data:
+                # Update URLs to use event-scoped endpoints
+                image_data['urls'] = {
+                    'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                    'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                    'high_quality': f'/api/events/{event_id}/high_quality/{image_id}.webp',
+                    'original': f'/api/events/{event_id}/original/{image_id}.webp',
+                }
+                images_data.append(image_data)
         
-        return jsonify(response_data)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"images": images_data})
     except Exception as e:
         return bad_request(e)
 
@@ -442,8 +448,9 @@ def get_moments(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        moments = event.models_manager.get_all('moments')
-        return jsonify({"moments": moments})
+        # Get enriched moments with image information
+        enriched_moments = event.models_manager.get_all('moments')
+        return jsonify({"moments": enriched_moments})
     except Exception as e:
         return bad_request(e)
 
