@@ -209,15 +209,17 @@ def check_group_name(event_id):
     
     if not label:
         return jsonify({"error": "Label is required"}), 400
-    
+
     try:
         # Check for conflicts
-        conflict_result = event.models_manager.is_exists('groups', {'label': label, 'groupID': {'!=': exclude_group_id}})
+        conflict_group_id = event.models_manager.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
         
-        if conflict_result:
+        if conflict_group_id:
+            # Get the full conflicting group object
+            conflicting_group = event.models_manager.get_one('groups', conflict_group_id)
             return jsonify({
                 "conflict": True,
-                "conflicting_group": conflict_result
+                "conflicting_group": conflicting_group
             })
         else:
             return jsonify({"conflict": False})
@@ -487,8 +489,8 @@ def create_moment(event_id):
         # Get the created moment
         created_moment = event.models_manager.get_one('moments', moment_id)
         
-        # Add change instruction for frontend
-        response_data = {"success": True, "moment_id": moment_id}
+        # Add change instruction for frontend and include the created moment
+        response_data = {"success": True, "moment_id": moment_id, "moment": created_moment}
         response_data = add_change_instruction(response_data, 'MOMENT_CREATED', created_moment)
         return jsonify(response_data)
     except Exception as e:
@@ -512,15 +514,22 @@ def update_moment(event_id, moment_id):
         # Update the moment
         event.models_manager.add_images_to_moment(moment_id, data.get('images_to_add', []))
         event.models_manager.remove_images_from_moment(moment_id, data.get('images_to_remove', []))
-        del data['images_to_add']
-        del data['images_to_remove']
-        event.models_manager.edit('moments', moment_id, data)
+        # Safely remove optional and computed keys if present
+        data.pop('images_to_add', None)
+        data.pop('images_to_remove', None)
+        data.pop('image_ids', None)
+        data.pop('momentID', None)
+        # Keep only columns that exist on the moments table
+        allowed_fields = {'label', 'description', 'start', 'end', 'representative_image'}
+        sanitized = {k: v for k, v in (data or {}).items() if k in allowed_fields}
+        if sanitized:
+            event.models_manager.edit('moments', moment_id, sanitized)
         
         # Get the updated moment
         updated_moment = event.models_manager.get_one('moments', moment_id)
         
-        # Add change instruction for frontend
-        response_data = {"success": True}
+        # Add change instruction for frontend and include the updated moment
+        response_data = {"success": True, "moment": updated_moment}
         response_data = add_change_instruction(response_data, 'MOMENT_UPDATED', updated_moment)
         return jsonify(response_data)
     except Exception as e:
@@ -846,6 +855,26 @@ def get_profile_permissions(event_id):
             })
         
         return jsonify(profile)
+    except Exception as e:
+        return bad_request(e)
+
+# Events endpoint
+@app.route("/api/events", methods=["GET"])
+def get_events():
+    """Get all available events."""
+    try:
+        from src.core.models.event import list_events
+        events = list_events()
+        # Return only public event information (no sensitive data)
+        public_events = []
+        for event in events:
+            public_events.append({
+                'id': event.id,
+                'name': event.name,
+                'url': event.url,
+                'date': event.date
+            })
+        return jsonify(public_events)
     except Exception as e:
         return bad_request(e)
 

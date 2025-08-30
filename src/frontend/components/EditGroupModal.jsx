@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
-import { groupsAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { groupsAPI, handleAPIError, API_BASE } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
 
-export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups, onNameConflict }) {
+export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRefreshGroups, onNameConflict }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
   const [formData, setFormData] = useState({
     label: group.label || '',
     representative_face: group.representative_face
@@ -76,7 +78,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     const fetchCropMappings = async () => {
       try {
         setCropsLoading(true);
-        const response = await groupsAPI.getCrops(group.groupID);
+        const response = await groupsAPI.getCrops(group.groupID, eventUrl);
         setCropMappings(response.crop_mapping || {});
         
         // After loading crop mappings, check if we need to set a default representative
@@ -99,7 +101,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     };
 
     fetchCropMappings();
-  }, [group.groupID]);
+  }, [group.groupID, eventUrl]);
 
 
 
@@ -142,7 +144,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
     if (editingName.trim()) {
       try {
         // Check for conflicts first - call the API directly to avoid state timing issues
-        const conflictResult = await groupsAPI.checkName(editingName.trim(), group.groupID);
+        const conflictResult = await groupsAPI.checkName(editingName.trim(), group.groupID, eventUrl);
         
         if (conflictResult.conflict) {
           // Close this modal and pass conflict data to parent (GroupDetail)
@@ -182,7 +184,9 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
   const getRepresentativeImageSrc = () => {
     // Use displayData for header image - only changes after saving
     const representativeId = displayData.representative_face;
-    const imageUrl = representativeId ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${representativeId}.webp` : PLACEHOLDER_DATA_URL;
+    const imageUrl = representativeId && urlHelpers
+      ? urlHelpers.getFaceCropUrl(representativeId)
+      : PLACEHOLDER_DATA_URL;
     return imageUrl;
   };
 
@@ -231,7 +235,7 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                             setEditingName(e.target.value);
                             // Simple inline conflict check
                             if (e.target.value.trim()) {
-                              groupsAPI.checkName(e.target.value.trim(), group.groupID)
+                              groupsAPI.checkName(e.target.value.trim(), group.groupID, eventUrl)
                                 .then(result => {
                                   setNameConflict(result.conflict ? result.conflicting_group : null);
                                 })
@@ -308,10 +312,10 @@ export default function EditGroupModal({ group, onClose, onSave, onRefreshGroups
                   ) : (
                     <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
                       {group.image_ids?.map((imageId, index) => {
-                        const faceId = cropMappings[imageId];
-                        const imageSrc = faceId 
-                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${imageId}.webp`;
+                                                  const faceId = cropMappings[imageId];
+                          const imageSrc = faceId && urlHelpers
+                            ? urlHelpers.getFaceCropUrl(faceId)
+                            : PLACEHOLDER_DATA_URL;
                         
                         return (
                           <button

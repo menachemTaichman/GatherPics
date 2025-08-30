@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
-import { groupsAPI, handleAPIError, FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
 
@@ -10,6 +11,7 @@ import { useModalFocus } from '../utils/useModalFocus';
 
 export default function MergeConflictModal({ 
   isOpen, 
+  eventUrl,
   onClose, 
   newName, 
   currentGroup, 
@@ -19,6 +21,7 @@ export default function MergeConflictModal({
   onNavigateToGroup,
   onTransferComplete
 }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore();
   
@@ -43,20 +46,20 @@ export default function MergeConflictModal({
     try {
       // Check if currentGroup exists before accessing its groupID
       if (!currentGroup || !currentGroup.groupID) {
-        console.error('Current group is null or missing groupID');
+        console.error('Current person is null or missing groupID');
         return;
       }
       
       // Check if conflictingGroup exists before accessing its groupID
       if (!conflictingGroup || !conflictingGroup.groupID) {
-        console.error('Conflicting group is null or missing groupID');
+        console.error('Conflicting person is null or missing groupID');
         return;
       }
       
-      // Collect all face IDs belonging to current group (robust approach)
+      // Collect all face IDs belonging to current person (robust approach)
       let allFaceIds = [];
       try {
-        const cropsResp = await groupsAPI.getCrops(currentGroup.groupID);
+        const cropsResp = await groupsAPI.getCrops(currentGroup.groupID, eventUrl);
         const cropMapping = cropsResp?.crop_mapping || {};
         allFaceIds = Object.values(cropMapping).filter(Boolean);
       } catch (e) {
@@ -64,7 +67,7 @@ export default function MergeConflictModal({
       }
       if (!allFaceIds || allFaceIds.length === 0) {
         try {
-          const imagesResp = await groupsAPI.getImagesComplete(currentGroup.groupID);
+          const imagesResp = await groupsAPI.getImagesComplete(currentGroup.groupID, eventUrl);
                       const images = imagesResp?.images || [];
           const ids = new Set();
                       images.forEach((p) => {
@@ -78,7 +81,7 @@ export default function MergeConflictModal({
         }
       }
       if (!allFaceIds || allFaceIds.length === 0) {
-        throw new Error('No faces found to transfer for this group.');
+        throw new Error('No faces found to transfer for this person.');
       }
       
       // Use transfer logic instead of merge
@@ -86,7 +89,7 @@ export default function MergeConflictModal({
         currentGroup.groupID,
         conflictingGroup.groupID,
         allFaceIds,
-        FIXED_EVENT_ID
+        eventUrl
       );
       
       // The API service interceptor will automatically handle state updates
@@ -122,13 +125,14 @@ export default function MergeConflictModal({
   };
 
   const getRepresentativeImageSrc = (faceId) => {
-    if (!faceId) return null;
+    if (!faceId || !urlHelpers) return null;
     return urlHelpers.getFaceCropUrl(faceId);
   };
 
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
-  if (!isOpen || !conflictingGroup) return null;
+  // Early return if modal is not open or required props are missing
+  if (!isOpen || !conflictingGroup || !currentGroup) return null;
 
   return (
     <AnimatePresence>
@@ -147,7 +151,7 @@ export default function MergeConflictModal({
                 Transfer to "{newName}"?
               </h2>
               <p className="text-sm text-gray-600">
-                All images from the current group will be transferred to the existing group.
+                All images from the current person will be transferred to the existing person.
               </p>
             </div>
 
@@ -156,7 +160,7 @@ export default function MergeConflictModal({
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
                     src={getRepresentativeImageSrc(currentGroup?.representative_face) || PLACEHOLDER_DATA_URL}
-                    alt="Current group"
+                    alt="Current person"
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       e.target.onerror = null;
@@ -173,7 +177,7 @@ export default function MergeConflictModal({
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
                     src={getRepresentativeImageSrc(conflictingGroup?.representative_face) || PLACEHOLDER_DATA_URL}
-                    alt="Target group"
+                    alt="Target person"
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       e.target.onerror = null;

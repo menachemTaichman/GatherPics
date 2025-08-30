@@ -10,7 +10,7 @@ import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiServic
 import { useDataStore } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
-export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
+export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -66,7 +66,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Face Gallery
+              Persons Gallery
             </h1>
             <p className="text-gray-600">
               {filteredAndSortedGroups.length} of {currentGroups.length} face groups
@@ -225,12 +225,13 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
       {showEditModal && selectedGroup && (
         <EditGroupModal
           group={selectedGroup}
+          eventUrl={eventUrl}
           onClose={() => {
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
           onSave={async (updates) => {
-            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates);
+            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates, eventUrl);
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
@@ -246,6 +247,7 @@ export default function Gallery({ groups, onUpdateGroup, onDeleteGroup, onRefres
       {showMergeModal && conflictData && (
         <MergeConflictModal
           isOpen={showMergeModal}
+          eventUrl={eventUrl}
           onClose={() => setShowMergeModal(false)}
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}

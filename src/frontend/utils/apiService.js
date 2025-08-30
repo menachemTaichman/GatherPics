@@ -1,11 +1,9 @@
 import axios from 'axios';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from './dataManager';
+import { resolveEventId } from './eventResolver';
 
 // API base URL - centralized configuration
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-
-// Fixed event ID (should match backend) - centralized
-const FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2";
 
 // Create axios instance with default config
 const api = axios.create({
@@ -44,49 +42,149 @@ api.interceptors.response.use(
 // URL construction helpers - centralized
 export const urlHelpers = {
   // Get full API URL for event-scoped endpoints
-  getEventUrl: (endpoint) => `${API_BASE}/api/events/${FIXED_EVENT_ID}${endpoint}`,
+  getEventUrl: async (eventUrl, endpoint) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}${endpoint}`;
+  },
   
-  // Get image URLs
-  getDisplayImageUrl: (imageId) => `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageId}.webp`,
-  getThumbnailUrl: (imageId) => `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${imageId}.webp`,
-  getHighQualityUrl: (imageId) => `${API_BASE}/api/events/${FIXED_EVENT_ID}/high_quality/${imageId}.webp`,
-  getOriginalUrl: (imageId) => `${API_BASE}/api/events/${FIXED_EVENT_ID}/original/${imageId}.webp`,
-  getFaceCropUrl: (faceId) => `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`,
+  // Get image URLs (async versions for when you need to resolve eventUrl)
+  getDisplayImageUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp`;
+  },
+  getThumbnailUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/thumb/${imageId}.webp`;
+  },
+  getHighQualityUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp`;
+  },
+  getOriginalUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp`;
+  },
+  getFaceCropUrl: async (eventUrl, faceId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
+  },
   
   // Get relative URLs (for use in components that need relative paths)
-  getRelativeDisplayUrl: (imageId) => `/api/events/${FIXED_EVENT_ID}/display/${imageId}.webp`,
-  getRelativeThumbnailUrl: (imageId) => `/api/events/${FIXED_EVENT_ID}/thumb/${imageId}.webp`,
-  getRelativeFaceCropUrl: (faceId) => `/api/events/${FIXED_EVENT_ID}/faces/${faceId}.webp`,
+  getRelativeDisplayUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `/api/events/${eventId}/display/${imageId}.webp`;
+  },
+  getRelativeThumbnailUrl: async (eventUrl, imageId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `/api/events/${eventId}/thumb/${imageId}.webp`;
+  },
+  getRelativeFaceCropUrl: async (eventUrl, faceId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `/api/events/${eventId}/faces/${faceId}.webp`;
+  },
+
+  // Synchronous versions that work with already-resolved eventId
+  // These are for use in components where eventId is already available
+  getDisplayImageUrlSync: (eventId, imageId) => {
+    return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp`;
+  },
+  getThumbnailUrlSync: (eventId, imageId) => {
+    return `${API_BASE}/api/events/${eventId}/thumb/${imageId}.webp`;
+  },
+  getHighQualityUrlSync: (eventId, imageId) => {
+    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp`;
+  },
+  getOriginalUrlSync: (eventId, imageId) => {
+    return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp`;
+  },
+  getFaceCropUrlSync: (eventId, faceId) => {
+    return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
+  },
+  
+  // Synchronous relative URLs
+  getRelativeDisplayUrlSync: (eventId, imageId) => {
+    return `/api/events/${eventId}/display/${imageId}.webp`;
+  },
+  getRelativeThumbnailUrlSync: (eventId, imageId) => {
+    return `/api/events/${eventId}/thumb/${imageId}.webp`;
+  },
+  getRelativeFaceCropUrlSync: (eventId, faceId) => {
+    return `/api/events/${eventId}/faces/${faceId}.webp`;
+  },
 };
+
+// Helper function to get event ID for API calls
+async function getEventIdForApi(eventUrl) {
+  if (!eventUrl) {
+    throw new Error('Event URL is required');
+  }
+  const eventId = await resolveEventId(eventUrl);
+  if (!eventId) {
+    throw new Error(`Event not found: ${eventUrl}`);
+  }
+  return eventId;
+}
 
 // Groups API
 export const groupsAPI = {
   // Get all groups
-  getAll: async (eventId = FIXED_EVENT_ID) => {
+  getAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups`);
     return response.data;
   },
 
   // Get specific group
-  getById: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getById: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}`);
     return response.data;
   },
 
   // Update group
-  update: async (groupId, updates, eventId = FIXED_EVENT_ID) => {
+  update: async (groupId, updates, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/groups/${groupId}`, updates);
     return response.data;
   },
 
   // Delete group
-  delete: async (groupId, eventId = FIXED_EVENT_ID) => {
+  delete: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/groups/${groupId}`);
     return response.data;
   },
 
   // Check group name conflict
-  checkName: async (label, excludeGroupId = '', eventId = FIXED_EVENT_ID) => {
+  checkName: async (label, excludeGroupId = '', eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/groups/check-name`, {
       label,
       exclude_group_id: excludeGroupId
@@ -95,7 +193,8 @@ export const groupsAPI = {
   },
 
   // Transfer faces between groups
-  transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventId = FIXED_EVENT_ID, newGroupName = null) => {
+  transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventUrl, newGroupName = null) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const requestData = {
       source_group_id: sourceGroupId,
       target_group_id: targetGroupId,
@@ -112,31 +211,36 @@ export const groupsAPI = {
   },
 
   // Get group images
-  getImages: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getImages: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images`);
     return response.data;
   },
 
   // Get group images complete
-  getImagesComplete: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getImagesComplete: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete`);
     return response.data;
   },
 
   // Get group crops
-  getCrops: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getCrops: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/crops`);
     return response.data;
   },
 
   // Get related groups
-  getRelatedGroups: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getRelatedGroups: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/related-groups`);
     return response.data;
   },
 
   // Get filtered images
-  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventId = FIXED_EVENT_ID) => {
+  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const params = new URLSearchParams();
     
     params.append('mode', filterMode);
@@ -155,7 +259,8 @@ export const groupsAPI = {
   },
 
   // Get group representative face
-  getRepresentative: async (groupId, eventId = FIXED_EVENT_ID) => {
+  getRepresentative: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/representative`);
     return response.data;
   }
@@ -164,43 +269,50 @@ export const groupsAPI = {
 // Moments API
 export const momentsAPI = {
   // Get all moments
-  getAll: async (eventId = FIXED_EVENT_ID) => {
+  getAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments`);
     return response.data;
   },
 
   // Get specific moment
-  getById: async (momentId, eventId = FIXED_EVENT_ID) => {
+  getById: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}`);
     return response.data;
   },
 
   // Create moment
-  create: async (momentData, eventId = FIXED_EVENT_ID) => {
+  create: async (momentData, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/moments`, momentData);
     return response.data;
   },
 
   // Update moment
-  update: async (momentId, updates, eventId = FIXED_EVENT_ID) => {
+  update: async (momentId, updates, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/moments/${momentId}`, updates);
     return response.data;
   },
 
   // Delete moment
-  delete: async (momentId, eventId = FIXED_EVENT_ID) => {
+  delete: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/moments/${momentId}`);
     return response.data;
   },
 
   // Get moment images
-  getImages: async (momentId, eventId = FIXED_EVENT_ID) => {
+  getImages: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images`);
     return response.data;
   },
 
   // Get moment images complete
-  getImagesComplete: async (momentId, eventId = FIXED_EVENT_ID) => {
+  getImagesComplete: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images-complete`);
     return response.data;
   },
@@ -208,7 +320,8 @@ export const momentsAPI = {
 
 
   // Get moment representative image
-  getRepresentative: async (momentId, eventId = FIXED_EVENT_ID) => {
+  getRepresentative: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}/representative`);
     return response.data;
   }
@@ -217,25 +330,29 @@ export const momentsAPI = {
 // Images API
 export const imagesAPI = {
   // Get image faces
-  getFaces: async (imageId, eventId = FIXED_EVENT_ID) => {
+  getFaces: async (imageId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/images/${imageId}/faces`);
     return response.data;
   },
 
   // Get image info
-  getInfo: async (imageId, eventId = FIXED_EVENT_ID) => {
+  getInfo: async (imageId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/images/${imageId}/info`);
     return response.data;
   },
 
   // Get image complete
-  getComplete: async (imageId, eventId = FIXED_EVENT_ID) => {
+  getComplete: async (imageId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/images/${imageId}/complete`);
     return response.data;
   },
 
   // Get all images
-  getAll: async (eventId = FIXED_EVENT_ID) => {
+  getAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/images.json`);
     return response.data;
   }
@@ -244,7 +361,8 @@ export const imagesAPI = {
 // Download API
 export const downloadAPI = {
   // Download images
-  download: async (imageIds, format = 'zip', eventId = FIXED_EVENT_ID) => {
+  download: async (imageIds, format = 'zip', eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/download`, {
       image_ids: imageIds,
       format
@@ -258,7 +376,8 @@ export const downloadAPI = {
 // Profile API
 export const profileAPI = {
   // Get profile permissions
-  getPermissions: async (eventId = FIXED_EVENT_ID) => {
+  getPermissions: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/profile/permissions`);
     return response.data;
   }
@@ -267,7 +386,7 @@ export const profileAPI = {
 // Optimistic update helpers
 export const optimisticUpdates = {
   // Optimistic group update
-  updateGroup: async (groupId, updates, rollbackFn, eventId = FIXED_EVENT_ID) => {
+  updateGroup: async (groupId, updates, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const previousState = store.groups.find(g => g.groupID === groupId);
     
@@ -275,7 +394,7 @@ export const optimisticUpdates = {
     store.updateGroup(groupId, updates);
     
     try {
-      const result = await groupsAPI.update(groupId, updates, eventId);
+      const result = await groupsAPI.update(groupId, updates, eventUrl);
       
       // Process any change instructions from the backend
       if (result.changes) {
@@ -295,7 +414,7 @@ export const optimisticUpdates = {
   },
 
   // Optimistic group delete
-  deleteGroup: async (groupId, rollbackFn, eventId = FIXED_EVENT_ID) => {
+  deleteGroup: async (groupId, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const previousState = store.groups.find(g => g.groupID === groupId);
     
@@ -303,7 +422,7 @@ export const optimisticUpdates = {
     store.deleteGroup(groupId);
     
     try {
-      const result = await groupsAPI.delete(groupId, eventId);
+      const result = await groupsAPI.delete(groupId, eventUrl);
       return result;
     } catch (error) {
       // Rollback on error
@@ -314,7 +433,7 @@ export const optimisticUpdates = {
     }
   },
 
-  createMoment: async (momentData, rollbackFn, eventId = FIXED_EVENT_ID) => {
+  createMoment: async (momentData, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const tempId = `temp-${Date.now()}`;
     const newMoment = { ...momentData, momentID: tempId };
@@ -323,7 +442,7 @@ export const optimisticUpdates = {
     store.addMoment(newMoment);
 
     try {
-      const result = await momentsAPI.create(momentData, eventId);
+      const result = await momentsAPI.create(momentData, eventUrl);
       
       // Update the temporary moment with the real data from the server
       store.updateMoment(tempId, result.moment);
@@ -340,7 +459,7 @@ export const optimisticUpdates = {
   },
 
   // Optimistic moment update
-  updateMoment: async (momentId, updates, rollbackFn, eventId = FIXED_EVENT_ID) => {
+  updateMoment: async (momentId, updates, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const previousState = store.moments.find(m => m.momentID === momentId);
     
@@ -348,7 +467,7 @@ export const optimisticUpdates = {
     store.updateMoment(momentId, updates);
     
     try {
-      const result = await momentsAPI.update(momentId, updates, eventId);
+      const result = await momentsAPI.update(momentId, updates, eventUrl);
       return result;
     } catch (error) {
       // Rollback on error
@@ -362,7 +481,7 @@ export const optimisticUpdates = {
   },
 
   // Optimistic moment delete
-  deleteMoment: async (momentId, rollbackFn, eventId = FIXED_EVENT_ID) => {
+  deleteMoment: async (momentId, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const previousState = store.moments.find(m => m.momentID === momentId);
     
@@ -370,7 +489,7 @@ export const optimisticUpdates = {
     store.deleteMoment(momentId);
     
     try {
-      const result = await momentsAPI.delete(momentId, eventId);
+      const result = await momentsAPI.delete(momentId, eventUrl);
       return result;
     } catch (error) {
       // Rollback on error
@@ -410,6 +529,6 @@ export const showToast = (message, type = 'success', toastSetter) => {
 };
 
 // Export constants for components that need them
-export { FIXED_EVENT_ID, API_BASE };
+export { API_BASE };
 
 export default api; 

@@ -43,11 +43,10 @@ export default function SettingsManager() {
     <div className="relative" ref={settingsRef}>
       <button
         onClick={() => setShowSettings(!showSettings)}
-        className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
         title="Settings"
       >
         <Settings className="w-4 h-4" />
-        <span className="hidden sm:inline">Settings</span>
       </button>
 
       {showSettings && (

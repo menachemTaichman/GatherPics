@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortImagesWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
-import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates, urlHelpers } from '../utils/apiService';
+import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useDataStore } from '../utils/dataManager';
 
@@ -24,7 +25,8 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, moments, onClose }) {
+function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
   const { updateMoment } = useDataStore();
   const [imagesToAdd, setImagesToAdd] = useState(new Set());
   const [imagesToRemove, setImagesToRemove] = useState(new Set());
@@ -80,7 +82,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
 
   const fetchAllImagesWithTimestamps = async () => {
     try {
-      const data = await imagesAPI.getAll();
+      const data = await imagesAPI.getAll(eventUrl);
       // Filter out invalid images and ensure they have required properties
       const validImages = (data.images || []).filter(img => 
         img && (img.id || img.imageID) && typeof img === 'object'
@@ -116,10 +118,10 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
       await momentsAPI.update(moment.momentID, {
         images_to_add: actualAdditions,
         images_to_remove: actualRemovals
-      });
+      }, eventUrl);
       
       // Get the updated images for this moment to update the local state
-      const updatedImagesResult = await momentsAPI.getImages(moment.momentID);
+      const updatedImagesResult = await momentsAPI.getImages(moment.momentID, eventUrl);
       const updatedImages = updatedImagesResult.images || [];
       
       // Update the momentImagesMap directly in the parent component
@@ -165,14 +167,14 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
       // Also trigger a moment update to refresh the moment data
       // This ensures the representative image and other moment data is updated
       // We update the moment directly to avoid triggering change handlers that might conflict
-      let updatedMoment = await momentsAPI.getById(moment.momentID);
+      let updatedMoment = await momentsAPI.getById(moment.momentID, eventUrl);
       if (updatedMoment) {
         
         // If the representative image hasn't changed, wait a bit more and try again
         // This handles cases where the backend needs more time to calculate
         if (updatedMoment.representative_image === moment.representative_image) {
           await new Promise(resolve => setTimeout(resolve, 200));
-          updatedMoment = await momentsAPI.getById(moment.momentID);
+          updatedMoment = await momentsAPI.getById(moment.momentID, eventUrl);
           if (updatedMoment) {
           }
         }
@@ -188,7 +190,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
       // This ensures the representative image is recalculated
       for (const { imageId, momentInfo } of movedImagesMomentInfo) {
         try {
-          let otherMoment = await momentsAPI.getById(momentInfo.momentId);
+          let otherMoment = await momentsAPI.getById(momentInfo.momentId, eventUrl);
           if (otherMoment) {
             // Get the current moment data to compare
             const currentMoment = useDataStore.getState().moments.find(m => m.momentID === momentInfo.momentId);
@@ -197,7 +199,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
               // If the representative image hasn't changed, wait a bit more and try again
               if (otherMoment.representative_image === currentMoment.representative_image) {
                 await new Promise(resolve => setTimeout(resolve, 200));
-                otherMoment = await momentsAPI.getById(momentInfo.momentId);
+                otherMoment = await momentsAPI.getById(momentInfo.momentId, eventUrl);
                 if (otherMoment) {
                 }
               }
@@ -220,7 +222,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
         // Also try to refresh the moments data to ensure representative images are up to date
         // This is a fallback in case the individual moment updates didn't work
         try {
-          const allMoments = await momentsAPI.getAll();
+          const allMoments = await momentsAPI.getAll(eventUrl);
           if (allMoments && allMoments.moments) {
             // Update the data store with all moments to ensure consistency
             allMoments.moments.forEach(momentData => {
@@ -796,7 +798,7 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
                   data-image-id={image.id || image.imageID}
                 >
                   <img
-                    src={image.urls?.thumbnail || urlHelpers.getThumbnailUrl(image.id || image.imageID)}
+                    src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id || image.imageID))}
                     alt={image.label || `Image ${image.id || image.imageID}`}
                     className="w-full h-24 object-cover"
                     loading="lazy"
@@ -826,4 +828,4 @@ function EditImagesModal({ moment, momentImagesMap, onRefreshImages, onSave, mom
   );
 }
 
-export default EditImagesModal;
+export default EditMomentImagesModal;

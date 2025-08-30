@@ -1,8 +1,9 @@
 [
   {
     "id": "75cb6635-879d-4386-b023-366444dc0fb2",
-    "name": "Test Event",
-    "date": "",
+    "name": "Noga and Menachem Wedding",
+    "url": "noga-and-menachem-wedding",
+    "date": "2025-06-08",
     "events_manager": "81580a61-a2e8-4e1c-965a-8e0f8b590e29",
     "last_group_id": 49,
     "images_count_limit" : 6000,

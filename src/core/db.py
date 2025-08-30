@@ -553,6 +553,10 @@ class AppDB:
         self.db_path = db_path
         self.set_profile_id(profile_id)
 
+    def _get_id_field(self, table: str) -> str:
+        """Get the ID field for a table."""
+        return table[:-1] + 'ID'
+
     @staticmethod
     def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
         """Create a new SQLite DB in the given directory, initializing all tables and settings."""
@@ -656,20 +660,21 @@ class AppDB:
                 return dict(zip(columns, row))
             return None
 
-    def is_exists(self, table: str, where: Dict) -> str | None:
+    def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its ID for conflict checking."""
+
+        id_field = self._get_id_field(table)
 
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
         with self.get_connection() as conn:
-            cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause}', where_params)
+            cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause} AND {id_field} != ?', where_params + (exclude_id,))
             row = cursor.fetchone()
             if row:
                 columns = [desc[0] for desc in cursor.description]
                 record = dict(zip(columns, row))
                 # Return the ID field (assuming it's the first field or named 'id')
-                id_field = [col for col in columns if col.endswith('ID') or col == 'id'][0]
                 return record[id_field]
             return None
 

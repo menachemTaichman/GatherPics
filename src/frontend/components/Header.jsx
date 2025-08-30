@@ -1,15 +1,14 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Download, Home, Users, Settings, Clock, Smile } from 'lucide-react';
+import { Users, Settings, Clock, User, ShoppingBag, Home } from 'lucide-react';
 import SettingsManager from './SettingsManager';
 
 export default function Header() {
   const location = useLocation();
+  const params = useParams();
+  const eventUrl = params.eventUrl;
 
-  const handleAddAllToBucket = async () => {
-    // TODO: Implement add all to bucket functionality
-    alert('Add all photos to bucket functionality will be implemented later');
-  };
+  const getEventPath = (path) => `/${eventUrl}${path}`;
 
   return (
     <motion.header 
@@ -21,7 +20,7 @@ export default function Header() {
       <div className="w-full px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Title */}
-          <Link to="/" className="flex items-center space-x-3 group">
+          <Link to={getEventPath('/persons')} className="flex items-center space-x-3 group">
             <motion.div
               className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center"
               whileHover={{ scale: 1.05 }}
@@ -38,38 +37,52 @@ export default function Header() {
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center space-x-4">
+          <nav className="flex items-center space-x-3">
             <Link
-              to="/"
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                location.pathname === '/' 
+              to={getEventPath('')}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                location.pathname === `/${eventUrl}` || location.pathname === `/${eventUrl}/`
                   ? 'bg-primary-100 text-primary-700' 
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  : 'hover:bg-gray-100 text-gray-700'
               }`}
+              title="Home"
             >
-              <Smile className="w-4 h-4" />
-              <span className="hidden sm:inline">Faces</span>
+              <Home className="w-4 h-4" />
             </Link>
 
             <Link
-              to="/timeline"
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                location.pathname.startsWith('/timeline')
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              to={getEventPath('/persons')}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                location.pathname.includes('/persons') 
+                  ? 'bg-primary-100 text-primary-700' 
+                  : 'hover:bg-gray-100 text-gray-700'
               }`}
+              title="Persons"
+            >
+              <User className="w-4 h-4" />
+            </Link>
+
+            <Link
+              to={getEventPath('/timeline')}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                location.pathname.includes('/timeline')
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title="Timeline"
             >
               <Clock className="w-4 h-4" />
-              <span className="hidden sm:inline">Timeline</span>
             </Link>
 
             <button
-              onClick={handleAddAllToBucket}
-              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Add all photos to bucket"
+              onClick={() => {
+                // TODO: Implement bucket functionality
+                alert('Bucket functionality will be implemented later');
+              }}
+              className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
+              title="Bucket"
             >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Add All to Bucket</span>
+              <ShoppingBag className="w-4 h-4" />
             </button>
 
             <SettingsManager />

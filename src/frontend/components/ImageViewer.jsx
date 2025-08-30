@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, RotateCw, Download, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
-import { imagesAPI, downloadAPI, handleAPIError, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { imagesAPI, handleAPIError, API_BASE } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 
-export default function ImageViewer({ image, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
+export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { urlHelpers } = useEventUrls(eventUrl);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -83,7 +85,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     if (imageLoaded && showRectangles) {
       setRectangleKey(prev => prev + 1);
     }
-  }, [zoom, rotation, pan, imageLoaded, showRectangles]);
+  }, [zoom, pan, imageLoaded, showRectangles]);
 
 
 
@@ -123,15 +125,41 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
   // Use the image data directly
   const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.label || imageMeta.id || imageMeta.name;
 
+  // Fetch image info when image changes
   useEffect(() => {
-    if (image && imageId) {
-      loadImageInfo();
-      // Reset selected face when image changes
-      setSelectedFaceIndex(null);
-      // Reset image loaded state when image changes
-      setImageLoaded(false);
+    if (image) {
+      fetchImageInfo();
     }
-  }, [image, imageId]);
+  }, [image]);
+
+  const fetchImageInfo = async () => {
+    try {
+      setLoading(true);
+      // Fetch real image info
+      if (imageId && eventUrl) {
+        try {
+          const info = await imagesAPI.getComplete(imageId, eventUrl);
+          setImageInfo(info);
+          setFaces(info.faces || []);
+          setMomentInfo(info.moment || null);
+        } catch (err) {
+          // Fallback: try basic info
+          const info = await imagesAPI.getInfo(imageId, eventUrl);
+          setImageInfo(info);
+          setFaces(info.faces || []);
+          setMomentInfo(info.moment || null);
+        }
+      } else {
+        setImageInfo(null);
+        setFaces([]);
+        setMomentInfo(null);
+      }
+    } catch (error) {
+      console.error('Error fetching image info:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Subscribe to data store changes to update face data when transfers happen
   useEffect(() => {
@@ -157,35 +185,6 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     return unsubscribe;
   }, [imageId]);
 
-  const loadImageInfo = async () => {
-    try {
-      setLoading(true);
-      
-      // Check if we have a valid image ID
-      if (!imageId) {
-        console.error('No valid image ID found:', image);
-        setFaces([]);
-        setImageInfo({ filename: displayFilename, faces_count: 0, groups: [] });
-        setMomentInfo(null);
-        return;
-      }
-      
-      // Use the new complete image endpoint instead of multiple calls
-      const imageData = await imagesAPI.getComplete(imageId);
-      
-      setFaces(imageData.faces || []);
-      setImageInfo(imageData);
-      setMomentInfo(imageData.moment || null);
-    } catch (error) {
-      console.error('Error loading image info:', error);
-      setFaces([]);
-      setImageInfo({ filename: displayFilename, faces_count: 0, groups: [] });
-      setMomentInfo(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleZoomIn = () => {
     const currentPercent = Math.round(zoom * 100);
     const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
@@ -200,10 +199,9 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     const newPercent = Math.max(50, Math.max(subtract25, prev25));
     setZoom(newPercent / 100);
   };
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360);
+
   const handleReset = () => {
     setZoom(1);
-    setRotation(0);
     setPan({ x: 0, y: 0 });
   };
 
@@ -240,28 +238,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     };
   }, [handleWheel]);
 
-  const handleDownload = async () => {
-    try {
-      if (!imageId) {
-        console.error('No valid image ID for download');
-        return;
-      }
-      
-      const result = await downloadAPI.download([imageId]);
-      
-      // Create a temporary link to download the file
-      const link = document.createElement('a');
-      link.href = `${API_BASE}${result.download_url}`;
-      link.download = imageId;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error downloading image:', error);
-      const errorInfo = handleAPIError(error, 'Failed to download image');
-      alert(errorInfo.message);
-    }
-  };
+
 
   const handleFaceClick = (index) => {
     if (selectedFaceIndex === index) {
@@ -275,7 +252,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     if (face.group_id) {
       const group = groups.find(g => g.groupID === face.group_id);
       if (group) {
-        navigate(`/group/${encodeURIComponent(group.label)}`);
+        navigate(`/persons/${encodeURIComponent(group.label)}`);
         onClose();
       }
     }
@@ -285,8 +262,8 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
     } else if (momentInfo) {
-      // Navigate to timeline page with moment parameter
-      navigate(`/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
+      // Navigate to timeline page with moment parameter (scoped to event)
+      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
     }
     // Close the modal when navigating to moment
     onClose();
@@ -298,8 +275,8 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
     } else if (momentInfo) {
-      // Navigate to timeline page with moment parameter
-      navigate(`/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
+      // Navigate to timeline page with moment parameter (scoped to event)
+      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
     }
     // Close the modal after navigation
     onClose();
@@ -395,12 +372,23 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
     };
   };
 
+  const getImageSrc = () => {
+    if (!imageInfo?.id) return PLACEHOLDER_DATA_URL;
+    if (!urlHelpers) return PLACEHOLDER_DATA_URL;
+    return urlHelpers.getDisplayImageUrl(imageInfo.id);
+  };
+
+  const getFaceImageSrc = (face) => {
+    if (!face?.face_id || !urlHelpers) return PLACEHOLDER_DATA_URL;
+    return urlHelpers.getFaceCropUrl(face.face_id);
+  };
+
   return (
     <AnimatePresence>
       <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <motion.div
           ref={modalRef}
-          className="bg-white rounded-lg shadow-xl max-w-7xl w-full mx-4 image-viewer-modal"
+          className="bg-white rounded-xl shadow-xl max-w-7xl w-full mx-4 image-viewer-modal"
           style={{ 
             maxHeight: '92vh',
             height: '92vh'
@@ -509,7 +497,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                 <motion.div
                   className="relative"
                   style={{
-                    transform: `scale(${zoom}) rotate(${rotation}deg) translate(${pan.x}px, ${pan.y}px)`,
+                    transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
                     transition: isDragging ? 'none' : 'transform 0.2s ease-out',
                     width: '100%',
                     height: '100%',
@@ -518,7 +506,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
-                      src={imageInfo?.urls?.display ? `${API_BASE}${imageInfo.urls.display}` : `${API_BASE}/api/events/${FIXED_EVENT_ID}/display/${imageId}.webp`}
+                      src={getImageSrc()}
                       alt={imageId}
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
@@ -607,74 +595,68 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleZoomOut}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <input
-                      type="text"
-                      id="image-viewer-zoom"
-                      name="image-viewer-zoom"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
-                      onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                      onBlur={e => {
-                        let val = parseInt(e.target.value, 10);
-                        if (isNaN(val)) val = 100;
-                        val = Math.max(50, Math.min(300, val));
-                        setZoom(val / 100);
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={handleZoomOut}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    title="Zoom out"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="text"
+                    id="image-viewer-zoom"
+                    name="image-viewer-zoom"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
+                    onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    onBlur={e => {
+                      let val = parseInt(e.target.value, 10);
+                      if (isNaN(val)) val = 100;
+                      val = Math.max(50, Math.min(300, val));
+                      setZoom(val / 100);
+                      setZoomInputValue(undefined);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.target.blur();
+                      } else if (e.key === 'Escape') {
                         setZoomInputValue(undefined);
-                      }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.target.blur();
-                        } else if (e.key === 'Escape') {
-                          setZoomInputValue(undefined);
-                        }
-                      }}
-                      className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                      style={{width: '3rem'}}
-                    />
-                    <button
-                      onClick={handleZoomIn}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="flex flex-row gap-x-2">
-                    <button
-                      onClick={handleRotate}
-                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <RotateCw className="w-4 h-4" />
-                      <span className="text-xs">Rotate</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (showRectangles) {
-                          setSelectedFaceIndex(null);
-                        }
-                        setShowRectangles(v => !v);
-                      }}
-                      className="flex items-center justify-center space-x-1 p-2 px-4 w-[110px] hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      <span className="text-xs whitespace-nowrap">{showRectangles ? 'Hide' : 'Show'} Tags</span>
-                    </button>
-                    <button
-                      onClick={handleDownload}
-                      className="flex items-center justify-center space-x-1 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span className="text-xs">Download</span>
-                    </button>
-                  </div>
+                      }
+                    }}
+                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '3rem'}}
+                  />
+                  <button
+                    onClick={handleZoomIn}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    title="Zoom in"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (showRectangles) {
+                        setSelectedFaceIndex(null);
+                      }
+                      setShowRectangles(v => !v);
+                    }}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    title={showRectangles ? 'Hide face tags' : 'Show face tags'}
+                  >
+                    {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      // TODO: Implement add to bucket functionality
+                      alert('Add to bucket functionality will be implemented later');
+                    }}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    title="Add to bucket"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                  </button>
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
@@ -698,7 +680,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                        <div className="text-xs text-gray-500">
                          <span className="font-semibold">Moment:</span> 
                          <a
-                           href={`/timeline?moment=${encodeURIComponent(momentInfo.title)}`}
+                           href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`}
                            onClick={handleMomentLinkClick}
                            className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
                            title="Jump to moment"
@@ -713,7 +695,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
 
               {/* Faces Info */}
               <div className="image-viewer-faces p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
-                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Image</h3>
+                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Image ({faces.length})</h3>
                 
                 <div 
                   className="faces-list-container overflow-y-auto flex-1"
@@ -729,11 +711,7 @@ export default function ImageViewer({ image, onClose, onNavigate, totalImages, c
                           onClick={() => handleFaceClick(index)}
                         >
                           <img
-                            src={
-                              face.group_representative
-                                ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${face.group_representative}.webp`
-                                : PLACEHOLDER_DATA_URL
-                            }
+                            src={getFaceImageSrc(face)}
                             alt={face.group_label}
                             className="w-12 h-12 object-cover rounded-full"
                             loading="lazy"

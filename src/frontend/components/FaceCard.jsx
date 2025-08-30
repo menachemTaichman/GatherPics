@@ -1,10 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Edit, MoreVertical, User } from 'lucide-react';
-import { FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { Link, useParams } from 'react-router-dom';
+import { Edit, Download, MoreVertical } from 'lucide-react';
+import { useEventUrls } from '../utils/useEventUrls';
 
-export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
+
+export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) {
+  const params = useParams();
+  const eventUrl = params.eventUrl;
+  const { urlHelpers, loading, error } = useEventUrls(eventUrl);
   const [showActions, setShowActions] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
@@ -33,9 +37,10 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
     }
     setShowActions(!showActions);
   };
+  
   // Use representative_face for the group representative image
-  const imageSrc = group.representative_face
-    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.representative_face}.webp`
+  const imageSrc = group.representative_face && urlHelpers
+    ? urlHelpers.getFaceCropUrl(group.representative_face)
     : PLACEHOLDER_DATA_URL;
 
   return (
@@ -53,7 +58,7 @@ export default function FaceCard({ group, cardSize = 1, onEdit, onDownload }) {
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/group/${group.label}`} className="block mb-3 w-full flex justify-center">
+        <Link to={`/${eventUrl}/persons/${group.label}`} className="block mb-3 w-full flex justify-center">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg group"
             style={{ 

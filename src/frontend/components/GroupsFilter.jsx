@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -24,10 +24,12 @@ export default function GroupsFilter({
   onModeChange,
   onOnlySelectedChange,
   onReset,
-  isVisible
+  isVisible,
+  eventUrl
 }) {
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const { urlHelpers } = useEventUrls(eventUrl);
 
   const handleGroupClick = (groupId) => {
     onFilterChange(
@@ -121,7 +123,7 @@ export default function GroupsFilter({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
             <Filter className="w-4 h-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Filter by Groups</span>
+            <span className="text-sm font-medium text-gray-700">Filter by Persons</span>
             
             {/* Filter Mode Toggle - Single button with icon only */}
             <button
@@ -175,7 +177,7 @@ export default function GroupsFilter({
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
               {group.representative_face ? (
                 <img
-                  src={urlHelpers.getFaceCropUrl(group.representative_face)}
+                  src={urlHelpers ? urlHelpers.getFaceCropUrl(group.representative_face) : undefined}
                   alt={getGroupDisplayName(group)}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -210,7 +212,7 @@ export default function GroupsFilter({
                 }`}>
                   {relatedGroup.representative_face ? (
                     <img
-                      src={urlHelpers.getFaceCropUrl(relatedGroup.representative_face)}
+                      src={urlHelpers ? urlHelpers.getFaceCropUrl(relatedGroup.representative_face) : undefined}
                       alt={getGroupDisplayName(relatedGroup)}
                       className="w-full h-full object-cover"
                       onError={(e) => {

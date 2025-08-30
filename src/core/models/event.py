@@ -36,12 +36,14 @@ class Event(JsonModel):
         self.name = ''
         self.date = ''
         self.events_manager = ''
+        self.url = ''
         self.last_group_id = ''
 
     def _load_fields(self, data: dict):
         self.name = data.get('name', '')
         self.date = data.get('date', '')
         self.events_manager = data.get('events_manager', '')
+        self.url = data.get('url', '')
         self.last_group_id = data.get('last_group_id', '')
 
     def _ensure_event_dirs(self):
@@ -105,6 +107,7 @@ class Event(JsonModel):
             'date': self.date,
             'events_manager': self.events_manager,
             'last_group_id': self.last_group_id,
+            'url': self.url,
             'DB_PATH': self.DB_PATH
         }
 

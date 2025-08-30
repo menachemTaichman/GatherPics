@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
-import { momentsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useEventUrls } from '../utils/useEventUrls';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
 import RepresentativeImageModal from './RepresentativeImageModal';
@@ -25,7 +26,13 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
+function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
+  
+  // Inline SVG placeholder (gray background with a question mark)
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+
   const [editingMoments, setEditingMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
   const [showImageSelector, setShowImageSelector] = useState(false);
@@ -92,7 +99,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
     if (momentsToSave.length > 0) {
       for (const moment of momentsToSave) {
         // Filter out image-related fields before calling onSave
-        const { momentID, image_IDs, images, ...momentData } = moment;
+        const { momentID, image_IDs, images, image_ids, ...momentData } = moment;
         await onSave({ ...momentData, momentID });
       }
     }
@@ -104,9 +111,9 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
     try {
       let savedMoment;
       if (moment.momentID.startsWith('temp-')) {
-        const { momentID, image_IDs, images, ...momentData } = moment;
+        const { momentID, image_IDs, images, image_ids, ...momentData } = moment;
         // Create moment directly without optimistic updates to avoid duplicates
-        const result = await momentsAPI.create(momentData);
+        const result = await momentsAPI.create(momentData, eventUrl);
         savedMoment = result.moment;
         
         // Replace the temporary moment with the saved one, preserving any additional fields
@@ -117,7 +124,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
         // Update existing moment directly without optimistic updates to avoid conflicts
         // Filter out image-related fields that the backend doesn't expect
         const { momentID, image_IDs, images, ...momentData } = moment;
-        const result = await momentsAPI.update(moment.momentID, momentData);
+        const result = await momentsAPI.update(moment.momentID, momentData, eventUrl);
         savedMoment = result.moment;
         
         // Update the moment in editingMoments with the saved data, preserving existing fields
@@ -225,8 +232,11 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
     setEditingTitle({ id: momentId, title: currentTitle });
   };
 
-
-
+  const getRepresentativeImagePath = (imageID) => {
+    // Note: We need to resolve the event ID from eventUrl for the image URLs
+    // For now, we'll use placeholders until we implement proper event ID resolution
+    return PLACEHOLDER_DATA_URL;
+  };
 
 
   return (
@@ -275,7 +285,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
                           <img 
                             src={moment.representative_image.startsWith('/api/') 
                               ? `${API_BASE}${moment.representative_image}` 
-                              : urlHelpers.getThumbnailUrl(moment.representative_image)}
+                              : urlHelpers && urlHelpers.getThumbnailUrl(moment.representative_image)}
                             alt="" 
                             className="w-full h-full object-cover"
                             loading="lazy"
@@ -329,6 +339,13 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
                       ) : (
                         <div
                           onClick={() => startTitleEdit(moment.momentID, moment.label)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              startTitleEdit(moment.momentID, moment.label);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
                           className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
                         >
                           {moment.label || `Moment ${index + 1}`}
@@ -457,7 +474,8 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
       {/* Edit Images Modal - Render as child modal */}
       {editingImagesForMoment && (
         <EditMomentImagesModal
-                      moment={editingImagesForMoment}
+          eventUrl={eventUrl}
+          moment={editingImagesForMoment}
           momentImagesMap={momentImagesMap}
           onRefreshImages={onRefreshImages}
           onSave={onSave}
@@ -479,7 +497,7 @@ function EditMomentsModal({ moments, images, onSave, onDelete, momentImagesMap, 
               updateMoment(selectedMoment.momentID, { representative_image: '' });
             } else {
               // Store the representative image as a full API path, not just the image ID
-              const representativeImagePath = `/api/events/${FIXED_EVENT_ID}/thumb/${imageID}.webp`;
+              const representativeImagePath = getRepresentativeImagePath(imageID);
               updateMoment(selectedMoment.momentID, { representative_image: representativeImagePath });
             }
           }

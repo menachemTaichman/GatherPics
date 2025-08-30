@@ -1,26 +1,33 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
-  Edit, 
-  User, 
-  Image as ImageIcon, 
-  Grid, 
-  List,
-  Search,
-  Filter,
-  ArrowUpDown,
+  ArrowRight, 
   ArrowUp,
   ArrowDown,
-  Minus,
-  Plus,
-  Crop,
-  Check,
-  CheckCheck,
-  X,
+  Download, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  EyeOff, 
+  Filter, 
+  Settings, 
+  Check, 
+  X, 
   AlertTriangle,
+  User,
   Users,
+  Clock,
+  Image as ImageIcon,
+  Grid,
+  List,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Minus,
+  RotateCcw,
+  Search,
   Square,
   CheckSquare,
   ShoppingBag
@@ -35,14 +42,16 @@ import { useSetting } from '../utils/useSettings';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
-import { groupsAPI, handleAPIError, optimisticUpdates, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
-  const { group_name } = useParams();
+  const { group_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const [group, setGroup] = useState(null);
   const skipNextFetch = useRef(false);
   const [viewMode, setViewMode] = useSetting('groupDetail_viewMode', 'grid');
@@ -257,7 +266,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       // Don't redirect in this case
       return;
     } else {
-      navigate('/');
+      navigate(`/${eventUrl}/persons`);
     }
   }, [group_name, currentGroups, navigate, group]);
 
@@ -377,7 +386,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     }
     
     try {
-      const response = await groupsAPI.getCrops(group.groupID);
+      const response = await groupsAPI.getCrops(group.groupID, eventUrl);
       setImageCrops(response.crop_mapping || {});
     } catch (error) {
       console.error('Error fetching group crops:', error);
@@ -398,7 +407,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         group.groupID, 
         filterGroups, 
         filterMode, 
-        onlySelected
+        onlySelected,
+        [],
+        eventUrl
       );
       
       if (response && response.images) {
@@ -437,7 +448,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     if (!group?.groupID) return;
     
     try {
-      const response = await groupsAPI.getImagesComplete(group.groupID);
+      const response = await groupsAPI.getImagesComplete(group.groupID, eventUrl);
       if (response && response.images) {
         const sortedImages = sortImages(response.images, sortBy, sortOrder);
         setSortedImages(sortedImages);
@@ -598,21 +609,21 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       setGroup(newGroup);
       // 4. Fetch full, authoritative data for the target group to avoid client-side drift
       try {
-        const response = await groupsAPI.getImagesComplete(newGroup.groupID);
+        const response = await groupsAPI.getImagesComplete(newGroup.groupID, eventUrl);
         const images = response.images || [];
         setSortedImages(sortImages(images, sortBy, sortOrder));
       } catch (err) {
         console.error('Error fetching target group images after merge:', err);
       }
       try {
-        const cropsResp = await groupsAPI.getCrops(newGroup.groupID);
+        const cropsResp = await groupsAPI.getCrops(newGroup.groupID, eventUrl);
         setImageCrops(cropsResp.crop_mapping || {});
       } catch (err) {
         console.error('Error fetching target group crops after merge:', err);
       }
       setLoading(false); // Ensure spinner is not shown
       if (newGroup && newGroup.label) {
-        navigate(`/group/${encodeURIComponent(newGroup.label)}`, { replace: true });
+        navigate(`/${eventUrl}/persons/${encodeURIComponent(newGroup.label)}`, { replace: true });
       }
       showToast('All faces transferred. Now viewing the merged group.', 'success');
       return;
@@ -630,7 +641,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       }
       
       if (targetGroup) {
-        const link = `/group/${encodeURIComponent(targetGroup.label)}`;
+        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
         const isNewGroup = transferData.new_group_name;
         showToast(
           <span>
@@ -696,12 +707,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Don't handle shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       // Ctrl+A or Cmd+A for select all
       if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
         event.preventDefault();
-               if (sortedImages.length > 0) {
-         selectAllImages();
-       }
+        if (sortedImages.length > 0) {
+          selectAllImages();
+        }
       }
       // Escape to clear selection
       if (event.key === 'Escape') {
@@ -712,7 +728,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedImages]);
+  }, [sortedImages, handleFilterReset]);
 
   const openImageViewer = (imageId, index) => {
     // Use the image data directly since it comes from the API
@@ -783,7 +799,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     
     try {
       // Check for conflicts first - call the API directly to avoid state timing issues
-      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.groupID);
+      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.groupID, eventUrl);
       
       if (conflictResult.conflict) {
         // Show merge conflict modal with the conflicting group
@@ -796,7 +812,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       await optimisticUpdates.updateGroup(group.groupID, { label: trimmedTitle });
       
       // Update the URL to reflect the new group name
-      const newUrl = `/group/${encodeURIComponent(trimmedTitle)}`;
+              const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
       window.history.replaceState(null, '', newUrl);
       
       setIsEditingTitle(false);
@@ -838,8 +854,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              to="/"
+              to={`/${eventUrl}/persons`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to all persons"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
@@ -851,8 +868,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               >
                 <img
                   key={group.representative_face || 'no-representative'}
-                  src={group.representative_face && group.representative_face.trim() !== ''
-                    ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${group.representative_face}.webp`
+                  src={group.representative_face && group.representative_face.trim() !== '' && urlHelpers
+                    ? urlHelpers.getFaceCropUrl(group.representative_face)
                     : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.groupID}`}
                   className="w-full h-full object-cover"
@@ -1223,6 +1240,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               onOnlySelectedChange={handleOnlySelectedChange}
               onReset={handleFilterReset}
               isVisible={filterVisible}
+              eventUrl={eventUrl}
             />
           )}
         </AnimatePresence>
@@ -1291,9 +1309,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       }`}
                     />
                     <img
-                      src={showCrops && imageCrops[image.id] 
-                        ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[image.id]}.webp`
-                        : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${image.id}.webp`
+                      src={showCrops && imageCrops[image.id] && urlHelpers
+                        ? urlHelpers.getFaceCropUrl(imageCrops[image.id])
+                        : urlHelpers.getThumbnailUrl(image.id)
                       }
                       alt={`Photo ${index + 1}`}
                       className="w-full h-full object-cover rounded-lg"
@@ -1338,9 +1356,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     />
                     <div className="relative">
                       <img
-                        src={showCrops && imageCrops[image.id] 
-                          ? `${API_BASE}/api/events/${FIXED_EVENT_ID}/faces/${imageCrops[image.id]}.webp`
-                          : `${API_BASE}/api/events/${FIXED_EVENT_ID}/thumb/${image.id}.webp`
+                        src={showCrops && imageCrops[image.id] && urlHelpers
+                          ? urlHelpers.getFaceCropUrl(imageCrops[image.id])
+                          : urlHelpers.getThumbnailUrl(image.id)
                         }
                         alt={`Photo ${index + 1}`}
                         className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
@@ -1380,13 +1398,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       {showEditModal && (
         <EditGroupModal
           group={group}
+          eventUrl={eventUrl}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            const result = await optimisticUpdates.updateGroup(group.groupID, updates);
+            const result = await optimisticUpdates.updateGroup(group.groupID, updates, eventUrl);
             
             // Update the URL if the group name changed
             if (updates.label && updates.label !== group.label) {
-              const newUrl = `/group/${encodeURIComponent(updates.label)}`;
+              const newUrl = `/${eventUrl}/persons/${encodeURIComponent(updates.label)}`;
               window.history.replaceState(null, '', newUrl);
             }
             
@@ -1406,6 +1425,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
        {imageViewer.show && (
          <ImageViewer
            image={imageViewer.image}
+           eventUrl={eventUrl}
            onClose={closeImageViewer}
            onNavigate={navigateImage}
            totalImages={sortedImages.length}
@@ -1422,6 +1442,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       {showMergeModal && conflictData && (
         <MergeConflictModal
           isOpen={showMergeModal}
+          eventUrl={eventUrl}
           onClose={() => setShowMergeModal(false)}
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}
@@ -1433,9 +1454,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
             // Find the target group and navigate to it
             const targetGroup = currentGroups.find(g => g.groupID === targetGroupId);
             if (targetGroup) {
-              navigate(`/group/${encodeURIComponent(targetGroup.label)}`);
+              navigate(`/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`);
             } else {
-              navigate('/');
+              navigate(`/${eventUrl}/persons`);
             }
           }}
         />
@@ -1445,6 +1466,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
        {showTransferModal && (
          <TransferFacesModal
            isOpen={showTransferModal}
+           eventUrl={eventUrl}
            onClose={() => setShowTransferModal(false)}
            groups={currentGroups}
            currentGroup={group}

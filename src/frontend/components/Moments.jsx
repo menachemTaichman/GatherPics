@@ -7,7 +7,8 @@ import EditMomentImagesModal from './EditMomentImagesModal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
-import { momentsAPI, imagesAPI, FIXED_EVENT_ID, API_BASE, urlHelpers } from '../utils/apiService';
+import { momentsAPI, imagesAPI, API_BASE } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import { getSetting, setSetting } from '../utils/settings';
@@ -42,9 +43,10 @@ function formatDate(dateString) {
   }
 }
 
-export default function Moments() {
+export default function Moments({ eventUrl }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const { 
     moments, 
     setMoments, 
@@ -117,7 +119,7 @@ export default function Moments() {
 
   // Initialize timeline manager when component mounts
   useEffect(() => {
-    timelineManager.init('/timeline', '.sticky.top-16', (momentKey) => {
+    timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-16', (momentKey) => {
       // Callback from timeline manager when moment changes
       const moment = moments.find(m => m.label === momentKey);
       if (moment) {
@@ -128,7 +130,7 @@ export default function Moments() {
     return () => {
       timelineManager.destroy();
     };
-  }, [moments]);
+  }, [moments, eventUrl]);
 
   // Clean up refs when moments change
   useEffect(() => {
@@ -221,7 +223,7 @@ export default function Moments() {
       // Use parallel API calls for moments that need images fetched
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getImages(moment.momentID);
+          const result = await momentsAPI.getImages(moment.momentID, eventUrl);
           return { momentId: moment.momentID, images: result.images || [] };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.momentID}:`, error);
@@ -257,7 +259,7 @@ export default function Moments() {
   const fetchMoments = async () => {
     try {
       setStoreLoading(true);
-      const response = await momentsAPI.getAll();
+      const response = await momentsAPI.getAll(eventUrl);
       setMoments(response.moments || []);
       setStoreError(null);
     } catch (err) {
@@ -269,7 +271,7 @@ export default function Moments() {
 
   const fetchImages = async () => {
     try {
-      const response = await imagesAPI.getAll();
+      const response = await imagesAPI.getAll(eventUrl);
       setImages(response.images || []);
     } catch (err) {
       console.error('Error fetching images:', err);
@@ -278,7 +280,7 @@ export default function Moments() {
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
-      const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment);
+      const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment, eventUrl);
 
       // Handle any change instructions from the backend
       if (response.changes) {
@@ -324,7 +326,7 @@ export default function Moments() {
 
   const handleDeleteMoment = async (id) => {
     try {
-      const response = await momentsAPI.delete(id);
+      const response = await momentsAPI.delete(id, eventUrl);
       
       // Handle any change instructions from the backend
       if (response.changes) {
@@ -589,6 +591,8 @@ export default function Moments() {
 
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
+  if (urlError) return <div className="p-8 text-center text-red-500">Error loading event: {urlError}</div>;
+  if (urlLoading) return <div className="p-8 text-center">Loading event...</div>;
 
   // Calculate if all current images are selected for the select all button
   const allCurrentImages = getAllCurrentImageKeys();
@@ -854,7 +858,7 @@ export default function Moments() {
                             ? `${API_BASE}${moment.representative_image}` 
                             : moment.representative_image.startsWith('http') 
                               ? moment.representative_image 
-                              : urlHelpers.getThumbnailUrl(moment.representative_image)
+                              : urlHelpers && urlHelpers.getThumbnailUrl(moment.representative_image)
                           } 
                           alt="" 
                           className="object-cover w-full h-full" 
@@ -975,14 +979,15 @@ export default function Moments() {
 
       {showEditMomentsModal && (
         <EditMomentsModal
-          onSave={handleSaveMoments}
-          onDelete={handleDeleteMoment}
+          eventUrl={eventUrl}
           moments={moments}
           images={images}
-                          momentImagesMap={momentImagesMap}
-                      onRefreshImages={fetchAllMomentImages}
-          onClose={() => setShowEditMomentsModal(false)}
+          momentImagesMap={momentImagesMap}
+          onSave={handleSaveMoments}
+          onDelete={handleDeleteMoment}
+          onRefreshImages={fetchAllMomentImages}
           onToast={showToast}
+          onClose={() => setShowEditMomentsModal(false)}
         />
       )}
 

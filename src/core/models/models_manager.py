@@ -85,7 +85,7 @@ class ModelsManager:
 
     def edit(self, table: str, entity_id: str, fields: Dict) -> Dict | None:
         self.db.update(table, {self.id_field(table): entity_id}, fields)
-        return self.get_one(entity_id)
+        return self.get_one(table, entity_id)
 
     def get_one(self, table: str, entity_id: str) -> Dict | None:
         entity = self.db.get_one(table, {self.id_field(table): entity_id})
@@ -109,8 +109,8 @@ class ModelsManager:
 
     # -------- Cross-model helpers --------
 
-    def is_exists(self, table: str, fields: Dict) -> str | None:
-        return self.db.is_exists(table, fields)
+    def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
+        return self.db.is_exists(table, fields, exclude_id)
 
     # -------- Images helpers --------
     def get_image_faces(self, image_id: str) -> List[str]:
@@ -293,7 +293,7 @@ class ModelsManager:
             return ''
         accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
-        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE faceID IN ({placeholders}) ORDER BY width * height DESC LIMIT 1', (face_ids,))        
+        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE faceID IN ({placeholders}) ORDER BY width * height DESC LIMIT 1', (*face_ids,))        
         return results[0][0]    
 
     def transfer_faces(
@@ -312,24 +312,6 @@ class ModelsManager:
         if not old_group:
             raise ValueError(f"Source group {old_group_id} not found")
 
-        target_group_id_was_provided = target_group_id is not None
-        if target_group_id:
-            target_group = self.get_one('groups', target_group_id)
-            if not target_group:
-                raise ValueError(f"Target group {target_group_id} not found")
-        else:
-            if not new_group_name:
-                raise ValueError("new_group_name is required when target_group_id is not provided")
-            conflict_check = self.is_exists('groups', {'label': new_group_name})
-            if conflict_check['conflict']:
-                raise ValueError(f"Group name '{new_group_name}' already exists")
-            # Create new group with empty representative; it will be set by add_faces_to_group
-            created = self.add('groups', [{
-                'label': new_group_name,
-                'representative_face': ''
-            }])
-            target_group_id = created[0]['groupID'] if created else None
-
         accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
         query = f'''
@@ -341,6 +323,41 @@ class ModelsManager:
         results = self.db.execute_query(query, (*face_ids, old_group_id))
         for row in results:
             images_to_add_to_target.add(row[0])
+
+        if not images_to_add_to_target:
+            return {
+                'target_group_id': target_group_id,
+                'old_group_deleted': False,
+                'transferred_faces': face_ids,
+                'images_to_remove_from_source': [],
+                'images_to_add_to_target': [],
+                'updated_source_group': None,
+                'updated_target_group': None,
+                'representatives': {
+                    'source_before': old_group.get('representative_face', ''),
+                    'source_after': '',
+                    'target_before': '',
+                    'target_after': '',
+                }
+            }
+
+        target_group_id_was_provided = target_group_id is not None
+        if target_group_id:
+            target_group = self.get_one('groups', target_group_id)
+            if not target_group:
+                raise ValueError(f"Target group {target_group_id} not found")
+        else:
+            if not new_group_name:
+                raise ValueError("new_group_name is required when target_group_id is not provided")
+            conflict_check = self.is_exists('groups', {'label': new_group_name})
+            if conflict_check:
+                raise ValueError(f"Group name '{new_group_name}' already exists")
+            # Create new group with empty representative; it will be set by add_faces_to_group
+            created = self.add('groups', [{
+                'label': new_group_name,
+                'representative_face': ''
+            }])
+            target_group_id = created[0]['groupID'] if created else None
 
         target_group = self.get_one('groups', target_group_id)
         target_representative_before = target_group.get('representative_face') if target_group else ''

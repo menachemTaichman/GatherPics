@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
-import { groupsAPI, handleAPIError, FIXED_EVENT_ID, urlHelpers } from '../utils/apiService';
+import { groupsAPI, handleAPIError } from '../utils/apiService';
+import { useEventUrls } from '../utils/useEventUrls';
 import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore } from '../utils/dataManager';
@@ -9,12 +10,14 @@ import { useNavigate } from 'react-router-dom';
 
 export default function TransferFacesModal({ 
   isOpen, 
+  eventUrl,
   onClose, 
   currentGroup,
   selectedFaces,
   onTransferComplete,
   showToast
 }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
   const navigate = useNavigate();
   const groups = useDataStore(state => state.groups);
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -101,7 +104,7 @@ export default function TransferFacesModal({
     }
 
     try {
-      const result = await groupsAPI.checkName(name);
+      const result = await groupsAPI.checkName(name, '', eventUrl);
       setNameConflict(result.conflict);
     } catch (error) {
       console.error('Error checking name conflict:', error);
@@ -140,10 +143,18 @@ export default function TransferFacesModal({
       return;
     }
 
-    if (nameConflict) {
-      setError('Group name already exists. Please choose a different name.');
-      setIsLoading(false);
-      return;
+    // Final name conflict guard (handles debounce/race conditions)
+    if (!selectedGroupId && newGroupName.trim()) {
+      try {
+        const conflictCheck = await groupsAPI.checkName(newGroupName.trim(), '', eventUrl);
+        if (conflictCheck.conflict) {
+          setError('Group name already exists. Please choose a different name.');
+          setIsLoading(false);
+          return;
+        }
+      } catch (_) {
+        // Ignore and let backend validation handle it
+      }
     }
 
     setError('');
@@ -153,8 +164,8 @@ export default function TransferFacesModal({
         currentGroup.groupID,
         selectedGroupId || null,
         selectedFaces,
-        FIXED_EVENT_ID,
-        !selectedGroupId ? newGroupName.trim() : null
+        eventUrl,
+        newGroupName.trim() || undefined
       );
 
       // Determine if this is a new group
@@ -181,7 +192,12 @@ export default function TransferFacesModal({
       onClose();
     } catch (error) {
       const errorInfo = handleAPIError(error, 'Failed to transfer faces');
-      setError(errorInfo.message);
+      // Surface clearer message for unique constraint
+      if (String(errorInfo.message || '').toLowerCase().includes('unique')) {
+        setError('A person with this name already exists. Please choose a different name or select the existing person.');
+      } else {
+        setError(errorInfo.message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -292,10 +308,8 @@ export default function TransferFacesModal({
                   <div className="flex flex-col items-center space-y-1">
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
-                                             <img
-                         src={group.representative_face
-                   ? urlHelpers.getFaceCropUrl(group.representative_face)
-                           : PLACEHOLDER_DATA_URL}
+                      <img
+                        src={group.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(group.representative_face) : PLACEHOLDER_DATA_URL}
                         alt={group.label || `Person ${group.groupID}`}
                         className="w-full h-full object-cover"
                         loading="lazy"
