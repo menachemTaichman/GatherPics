@@ -361,13 +361,18 @@ export const imagesAPI = {
 // Download API
 export const downloadAPI = {
   // Download images
-  download: async (imageIds, format = 'zip', eventUrl) => {
+  download: async (imageIds, format = 'zip', eventUrl, options = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/download`, {
-      image_ids: imageIds,
-      format
-    });
-    return response.data;
+    const response = await api.post(
+      `/api/events/${eventId}/download`,
+      {
+        image_ids: imageIds,
+        format,
+        quality: options.quality || 'high'
+      },
+      { responseType: 'blob' }
+    );
+    return response.data; // Blob
   }
 };
 

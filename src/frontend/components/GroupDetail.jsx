@@ -30,6 +30,7 @@ import {
   Search,
   Square,
   CheckSquare,
+  CheckCheck,
   ShoppingBag
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
@@ -46,6 +47,7 @@ import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils
 import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
+import useBucketStore from '../utils/bucketStore';
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
@@ -100,6 +102,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [editingTitle, setEditingTitle] = useState('');
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const { addImages, open } = useBucketStore();
   
   // Filter state
   const [filterGroups, setFilterGroups] = useState([]);
@@ -546,8 +549,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
 
   const handleAddSelectedToBucket = async () => {
-    // TODO: Implement add selected to bucket functionality
-            alert(`Add ${selectedImages.size} selected images to bucket functionality will be implemented later`);
+    if (selectedImages.size === 0) return;
+    const added = addImages(Array.from(selectedImages));
+    if (added > 0) {
+      showToast(`${added} added to bucket`, 'success');
+    } else {
+      showToast('No new items added', 'success');
+    }
+    open();
   };
 
   const getSelectedFaceIds = () => {

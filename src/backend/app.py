@@ -769,6 +769,7 @@ def download_images(event_id):
     
     data = request.json or {}
     image_ids = data.get('image_ids', [])
+    quality = (data.get('quality') or 'high').lower()
     
     if not image_ids:
         return jsonify({"error": "No image IDs provided"}), 400
@@ -782,10 +783,16 @@ def download_images(event_id):
                 if not event.models_manager.get_one('images', image_id):
                     continue
                 
-                # Add high quality image to ZIP
-                high_quality_path = os.path.join(event.high_quality_dir, f"{image_id}.jpg")
-                if os.path.exists(high_quality_path):
-                    zf.write(high_quality_path, f"{image_id}.jpg")
+                # Choose source based on requested quality
+                if quality == 'original':
+                    src_dir = event.original_dir
+                else:
+                    src_dir = event.high_quality_dir
+
+                # Default to JPG for downloads (project uses WebP for URLs only)
+                file_path = os.path.join(src_dir, f"{image_id}.jpg")
+                if os.path.exists(file_path):
+                    zf.write(file_path, f"{image_id}.jpg")
         
         memory_file.seek(0)
         return send_file(

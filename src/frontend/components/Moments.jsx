@@ -12,6 +12,7 @@ import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import { getSetting, setSetting } from '../utils/settings';
+import useBucketStore from '../utils/bucketStore';
 
 
 function formatTimeOnly(dateString) {
@@ -72,6 +73,7 @@ export default function Moments({ eventUrl }) {
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const [imageViewer, setImageViewer] = useState({ show: false, image: null, index: 0, images: [] });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const { addImages, open } = useBucketStore();
   
   // New state for checkbox visibility and selection mode
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
@@ -522,9 +524,20 @@ export default function Moments({ eventUrl }) {
 
   const handleGlobalAddToBucket = async () => {
     if (globalSelection.size === 0) return;
-    
-    // TODO: Implement add selected images to bucket functionality
-          alert(`Add ${globalSelection.size} selected photos to bucket functionality will be implemented later`);
+    // globalSelection keys are `${momentId}:${image.label}`; resolve to real image IDs
+    const ids = Array.from(globalSelection).map(key => {
+      const [mId, label] = key.split(':');
+      const list = momentImagesMap[mId] || [];
+      const found = list.find(img => img.id === label || img.label === label || img.name === label);
+      return found ? found.id : null;
+    }).filter(Boolean);
+    const added = addImages(ids);
+    if (added > 0) {
+      showToast(`${added} added to bucket`, 'success');
+    } else {
+      showToast('No new items added', 'success');
+    }
+    open();
   };
 
   const handleRemoveFromMoment = async () => {
@@ -905,7 +918,7 @@ export default function Moments({ eventUrl }) {
         ) : (
           <div className="relative">
                          {/* Fixed right sidebar for sticky info */}
-             <div className="fixed right-4 top-100 w-64 z-50 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
+             <div className="fixed right-4 top-100 w-64 z-30 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200">
               {currentVisibleMoment ? (
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
@@ -1027,13 +1040,14 @@ export default function Moments({ eventUrl }) {
       )}
 
       {/* image Viewer */}
-              {imageViewer.show && (
-          <ImageViewer
-            image={imageViewer.image}
-            onClose={closeImageViewer}
-            onNavigate={navigateImage}
-            totalImages={imageViewer.images.length}
-            currentIndex={imageViewer.index}
+      {imageViewer.show && (
+        <ImageViewer
+          image={imageViewer.image}
+          eventUrl={eventUrl}
+          onClose={closeImageViewer}
+          onNavigate={navigateImage}
+          totalImages={imageViewer.images.length}
+          currentIndex={imageViewer.index}
           currentGroupId={null}
           onJumpToMoment={handleJumpToMoment}
         />

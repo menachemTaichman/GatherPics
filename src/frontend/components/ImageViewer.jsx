@@ -10,6 +10,7 @@ import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
+import useBucketStore from '../utils/bucketStore';
 
 export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
@@ -79,6 +80,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
+  const { addImages, open } = useBucketStore();
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -649,8 +651,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   </button>
                   <button
                     onClick={() => {
-                      // TODO: Implement add to bucket functionality
-                      alert('Add to bucket functionality will be implemented later');
+                      if (imageId) {
+                        addImages([imageId]);
+                        open();
+                      }
                     }}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title="Add to bucket"

@@ -37,7 +37,7 @@ const MomentCard = forwardRef(({
   viewMode,
   imageSize,
   globalSelection,
-  onimageSelect,
+  onImageSelect,
   onOpenImageViewer,
   selectionMode,
   onSelectAllInMoment,
@@ -170,7 +170,7 @@ const MomentCard = forwardRef(({
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
                                e.stopPropagation();
-                               onimageSelect(image.label, moment.momentID, e);
+                               onImageSelect(image.label, moment.momentID, e);
                              }}
                              className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
                                selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'

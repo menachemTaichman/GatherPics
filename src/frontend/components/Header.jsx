@@ -2,11 +2,14 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Settings, Clock, User, ShoppingBag, Home } from 'lucide-react';
 import SettingsManager from './SettingsManager';
+import BucketDrawer from './BucketDrawer';
+import useBucketStore from '../utils/bucketStore';
 
 export default function Header() {
   const location = useLocation();
   const params = useParams();
   const eventUrl = params.eventUrl;
+  const { toggle, lastPulseTs, queue, isOpen } = useBucketStore();
 
   const getEventPath = (path) => `/${eventUrl}${path}`;
 
@@ -74,21 +77,29 @@ export default function Header() {
               <Clock className="w-4 h-4" />
             </Link>
 
-            <button
-              onClick={() => {
-                // TODO: Implement bucket functionality
-                alert('Bucket functionality will be implemented later');
-              }}
-              className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
+            <motion.button
+              onClick={toggle}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
               title="Bucket"
+              animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
+              transition={{ duration: 0.4 }}
+              key={lastPulseTs}
             >
-              <ShoppingBag className="w-4 h-4" />
-            </button>
+              <div className="relative">
+                <ShoppingBag className="w-4 h-4" />
+                {queue.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+                    {queue.length}
+                  </span>
+                )}
+              </div>
+            </motion.button>
 
             <SettingsManager />
           </nav>
         </div>
       </div>
+      <BucketDrawer />
     </motion.header>
   );
 } 
