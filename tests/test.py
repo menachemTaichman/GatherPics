@@ -320,10 +320,22 @@ def recreate_view_triggers_and_indexes():
     indexes = db.execute_query('SELECT name FROM sqlite_master WHERE type="index"')
 
     for view in views:
-        db.execute_query(f'DROP VIEW {view[0]}')
+        try:
+            db.execute_query(f'DROP VIEW {view[0]}')
+        except Exception as e:
+            print(f'Error dropping view {view[0]}: {e}')
 
     for trigger in triggers:
-        db.execute_query(f'DROP TRIGGER {trigger[0]}')
+        try:
+            db.execute_query(f'DROP TRIGGER {trigger[0]}')
+        except Exception as e:
+            print(f'Error dropping trigger {trigger[0]}: {e}')
+
+    for index in indexes:
+        try:
+            db.execute_query(f'DROP INDEX {index[0]}')
+        except Exception as e:
+            print(f'Error dropping index {index[0]}: {e}')
 
     from src.core.db import INDEXES, VIEWS, TRIGGERS
 
@@ -337,3 +349,4 @@ def recreate_view_triggers_and_indexes():
     for index in INDEXES:
         db.execute_query('CREATE INDEX if not exists ' + index)
 
+# recreate_view_triggers_and_indexes()

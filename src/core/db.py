@@ -48,7 +48,7 @@ TABLES = {
     ''',
     'albums': '''
         albumID TEXT PRIMARY KEY,
-        label TEXT,
+        label TEXT UNIQUE,
         description TEXT,
         representative_image TEXT,
         FOREIGN KEY (representative_image) REFERENCES images(imageID) ON DELETE SET NULL
@@ -92,28 +92,58 @@ TABLES = {
 INDEXES = [
     'idx_faces_imageid ON faces(imageID)',
     'idx_faces_groupid ON faces(groupID)',
-    'idx_profile_images_imageid ON profile_images(imageID)',
+    'idx_profile_images_profileid_imageid ON profile_images(profileID, imageID)',
+    'idx_profile_albums_profileid_albumid ON profile_albums(profileID, albumID)',
     'idx_images_momentid ON images(momentID)',
     'idx_groups_representative_face ON groups(representative_face)',
     'idx_moments_representative_image ON moments(representative_image)',
     'idx_faces_groupid_imageid ON faces(groupID, imageID)',
     'idx_images_date_taken ON images(date_taken)',
+    'idx_albums_label ON albums(label)',
     'idx_albums_representative_image ON albums(representative_image)',
 ]
 
 VIEWS = {
-    'accessible_images': '''
-        SELECT images.*
+    'images_with_albums': '''
+        SELECT images.*,
+            CASE WHEN a1.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_archived,
+            CASE WHEN a2.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_favorites_helper
         FROM images
+        LEFT JOIN (album_images a1 INNER JOIN albums b1 ON a1.albumID = b1.albumID)
+        ON a1.imageID = images.imageID AND b1.label = 'archive'
+        LEFT JOIN (album_images a2 INNER JOIN albums b2 ON a2.albumID = b2.albumID)
+        ON a2.imageID = images.imageID AND b2.label = 'favorites';
+    ''',
+    'accessible_albums': '''
+        SELECT albums.* FROM albums
+        WHERE EXISTS (
+            SELECT 1
+            FROM profiles LEFT JOIN profile_albums
+            ON profiles.profileID = profile_albums.profileID
+            AND profiles.profileID = cur_profile('profileID')
+            WHERE (
+                profiles.profileID = cur_profile('profileID')
+                AND ((profiles.all_albums = 1 AND (profile_albums.albumID IS NULL))
+                OR (profiles.all_albums = 0 AND profile_albums.accessible = 1))
+            )
+        )
+    ''',
+    'accessible_images': '''
+        SELECT i.*,
+        (a2.albumID IS NOT NULL AND i.is_favorites_helper = 1) AS is_favorites
+        FROM images_with_albums as i
+        LEFT JOIN accessible_albums as a1 on a1.label = 'archive'
+        LEFT JOIN accessible_albums as a2 on a2.label = 'favorites'
         WHERE EXISTS (
             SELECT 1
             FROM profiles LEFT JOIN profile_images
-            ON profiles.profileID = profile_images.profileID AND images.imageID = profile_images.imageID
+            ON profiles.profileID = profile_images.profileID AND i.imageID = profile_images.imageID
             WHERE profiles.profileID = cur_profile('profileID') AND (
                 (profiles.all_images = 1 AND (profile_images.imageID IS NULL OR profile_images.accessible = 1))
                 OR (profiles.all_images = 0 AND profile_images.accessible = 1)
             )
         )
+        AND (a1.albumID IS NOT NULL OR i.is_archived = 0)
     ''',
     'accessible_groups': '''
         SELECT groups.* FROM groups
@@ -141,19 +171,6 @@ VIEWS = {
             SELECT 1 FROM accessible_images 
             INNER JOIN images ON accessible_images.imageID = images.imageID
             WHERE images.momentID = moments.momentID
-        )
-    ''',
-    'accessible_albums': '''
-        SELECT albums.* FROM albums
-        WHERE EXISTS (
-            SELECT 1
-            FROM profiles LEFT JOIN profile_albums
-            ON profiles.profileID = profile_albums.profileID
-            AND profiles.profileID = cur_profile('profileID')
-            WHERE (
-                (profiles.all_albums = 1 AND (profile_albums.albumID IS NULL))
-                OR (profiles.all_albums = 0 AND profile_albums.accessible = 1)
-            )
         )
     ''',
     'accessible_albums_images': '''
@@ -543,6 +560,18 @@ TRIGGERS = {
 
         INSERT INTO profile_albums (profileID, albumID, accessible)
         VALUES (NEW.profileID, NEW.albumID, NEW.accessible);
+    END;
+    """,
+
+    # ensure_default_albums
+    'trg_delete_ensure_default_albums': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_albums
+    BEFORE DELETE ON albums
+    BEGIN
+        SELECT CASE
+            WHEN OLD.label = 'archive' OR OLD.label = 'favorites' THEN
+                RAISE(ABORT, 'Permission denied: cannot delete default albums')
+        END;
     END;
     """,
 }

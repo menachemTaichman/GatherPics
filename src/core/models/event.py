@@ -67,9 +67,9 @@ class Event(JsonModel):
         if existing_profiles:
             return  # Profiles already exist, don't create duplicates
         
-        developer_id = self.models_manager.profiles_model.generate_id()
-        event_manager_id = self.models_manager.profiles_model.generate_id()
-        main_manager_id = self.models_manager.profiles_model.generate_id()
+        developer_id = self.models_manager.generate_id()
+        event_manager_id = self.models_manager.generate_id()
+        main_manager_id = self.models_manager.generate_id()
         developer_password = ''
         event_manager_password = ''
         main_manager_password = ''
@@ -86,6 +86,23 @@ class Event(JsonModel):
         self.set_profile_id(developer_id)
 
         return self.models_manager.get_all('profiles')
+
+    def _initialize_default_albums(self):
+        """Initialize default albums for the event: Main Album and Event Album"""
+        existing_albums = self.models_manager.get_all('albums')
+        if existing_albums:
+            return  # Albums already exist, don't create duplicates
+        
+        archive_album_id = self.models_manager.generate_id()
+        favorites_album_id = self.models_manager.generate_id()
+        archive_album_label = 'Archive'
+        favorites_album_label = 'Favorites'
+
+        self.db.execute_query(f'''
+            INSERT INTO albums (albumID, label)
+            VALUES (?, ?),
+                   (?, ?)
+        ''', (archive_album_id, archive_album_label, favorites_album_id, favorites_album_label))
 
     def add(self, **fields) -> 'Event':
         super().add(**fields)
