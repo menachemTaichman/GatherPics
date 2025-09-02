@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useParams, useL
 import { motion, AnimatePresence } from 'framer-motion';
 import { User } from 'lucide-react';
 import Header from './Header';
-import Gallery from './Gallery';
+import Gallery from './GroupsGallery';
 import GroupDetail from './GroupDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';

@@ -60,9 +60,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   };
 
   return (
-    <div className="w-full px-8 py-8">
-      {/* Header */}
-      <div className="mb-8">
+    <div className="w-full">
+      {/* Sticky Header */}
+      <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -78,9 +78,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                id="search-faces"
-                name="search-faces"
-                placeholder="Search faces..."
+                id="search-persons"
+                name="search-persons"
+                placeholder="Search persons..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
@@ -173,7 +173,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         </div>
       </div>
 
-      {/* Gallery Grid */}
+      {/* Content Area */}
+      <div className="px-8 py-8">
+        {/* Gallery Grid */}
       {filteredAndSortedGroups.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
@@ -182,7 +184,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         >
           <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {searchTerm ? 'No faces found' : 'No face groups yet'}
+            {searchTerm ? 'No persons found' : 'No person groups yet'}
           </h3>
           <p className="text-gray-500">
             {searchTerm 
@@ -220,6 +222,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           ))}
         </motion.div>
       )}
+      </div>
 
       {/* Modals */}
       {showEditModal && selectedGroup && (
