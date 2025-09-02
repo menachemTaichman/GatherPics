@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, RotateCcw, Trash2, Eye } from 'lucide-react';
-import { getAllSettings, resetAllSettings, clearAllSettings } from '../utils/settings';
+import { Settings, RotateCcw, Trash2 } from 'lucide-react';
+import { getAllSettings, resetAllSettings, clearAllSettings, setSetting, getSetting } from '../utils/settings';
 
 export default function SettingsManager() {
   const [showSettings, setShowSettings] = useState(false);
@@ -92,6 +92,22 @@ export default function SettingsManager() {
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* Quick toggles */}
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">Preferences</h4>
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={!!getSetting('include_archived_images')}
+                onChange={(e) => {
+                  setSetting('include_archived_images', e.target.checked);
+                  setSettings(getAllSettings());
+                }}
+              />
+              <span>Include archived images</span>
+            </label>
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">

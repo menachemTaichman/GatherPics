@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
-import { imagesAPI, handleAPIError, API_BASE } from '../utils/apiService';
+import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
 import { getSetting, setSetting } from '../utils/settings';
@@ -80,6 +80,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
+  const [imageAlbums, setImageAlbums] = useState([]);
+  const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const { addImages, open } = useBucketStore();
 
   // Force re-render of face rectangles when zoom/rotation changes
@@ -144,6 +146,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           setImageInfo(info);
           setFaces(info.faces || []);
           setMomentInfo(info.moment || null);
+          setImageAlbums(info.albums || []);
         } catch (err) {
           // Fallback: try basic info
           const info = await imagesAPI.getInfo(imageId, eventUrl);
@@ -179,6 +182,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setFaces(updatedImageData.faces || []);
             setImageInfo(updatedImageData);
             setMomentInfo(updatedImageData.moment || null);
+            setImageAlbums(updatedImageData.albums || []);
           }
         }
       }
@@ -529,6 +533,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }}
                       style={{display: 'block'}}
                     />
+                    {/* Overlays: archive icon top-left, favorite heart bottom-right (static in viewer for now) */}
+                    {/* Bottom-left overlays to leave bottom-right for time */}
+                    <div className="absolute bottom-2 left-2 w-7 h-7 rounded-full flex items-center justify-center bg-white bg-opacity-80">
+                      <svg viewBox="0 0 24 24" className={`w-4 h-4 ${imageInfo?.is_favorites ? 'text-red-500' : 'text-gray-300'}`} fill={imageInfo?.is_favorites ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                      </svg>
+                    </div>
+                    {imageInfo?.is_archived && (
+                      <div className="absolute bottom-2 left-12 bg-gray-700 bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">A</div>
+                    )}
                     
                     {/* Face rectangles - now inside the transformed container */}
                     {showRectangles && imageLoaded && faces.map((face, index) => {
@@ -661,6 +675,43 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   >
                     <ShoppingBag className="w-4 h-4" />
                   </button>
+                  {/* Add to album compact button */}
+                  <div className="relative">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await albumsAPI.getAll(eventUrl);
+                          window.__iv_albums = res.albums || [];
+                          const menu = document.getElementById('iv-albums-menu');
+                          if (menu) menu.classList.toggle('hidden');
+                        } catch (e) {}
+                      }}
+                      className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                      title="Add to album"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <div id="iv-albums-menu" className="hidden absolute z-40 mt-2 left-0 bg-white border border-gray-200 rounded shadow-lg w-56 p-1">
+                      <div className="text-xs text-gray-500 px-2 py-1">Add this image to</div>
+                      <div className="max-h-60 overflow-auto">
+                        {(window.__iv_albums || []).map(al => (
+                          <button
+                            key={al.albumID}
+                            onClick={async () => {
+                              try {
+                                await albumsAPI.addImages(al.albumID, [imageId], eventUrl);
+                                const menu = document.getElementById('iv-albums-menu');
+                                if (menu) menu.classList.add('hidden');
+                              } catch (e) {}
+                            }}
+                            className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded"
+                          >
+                            {al.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
@@ -697,13 +748,24 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 </div>
               </div>
 
-              {/* Faces Info */}
-              <div className="image-viewer-faces p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
-                <h3 className="font-semibold text-gray-900 mb-4 flex-shrink-0">Faces in Image ({faces.length})</h3>
-                
-                <div 
-                  className="faces-list-container overflow-y-auto flex-1"
-                >
+              {/* Albums and Faces Info with resizable split */}
+              <div className="p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Albums Section - hidden when no albums */}
+                {imageAlbums && imageAlbums.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-900 mb-2">Albums</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {imageAlbums.map(al => (
+                        <a key={al.albumID} href={`/${eventUrl}/albums/${encodeURIComponent(al.label)}`} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-800">
+                          {al.label}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <h3 className="font-semibold text-gray-900 mb-2 flex-shrink-0">Faces in Image ({faces.length})</h3>
+                <div className="overflow-y-auto flex-1">
                   {faces.length === 0 ? (
                     <p className="text-gray-500 text-sm">No faces detected in this image.</p>
                   ) : (

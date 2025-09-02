@@ -31,7 +31,10 @@ const DEFAULT_SETTINGS = {
   
   // TransferFacesModal settings
   transferModal_sortBy: 'name',
-  transferModal_sortOrder: 'asc'
+  transferModal_sortOrder: 'asc',
+
+  // Albums/Images settings
+  include_archived_images: false
 };
 
 /**

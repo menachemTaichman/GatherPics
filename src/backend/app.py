@@ -17,20 +17,26 @@ FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
-def build_complete_image_data(event, image_id, include_all_faces=True, group_filter=None):
+def _parse_include_archived(default: bool = False) -> bool:
+    val = request.args.get('include_archived')
+    if val is None:
+        return default
+    return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
+
+def build_complete_image_data(event, image_id, include_all_faces=True, group_filter=None, include_archived: bool = False):
     """Build complete image data with all related information."""
     try:
-        image = event.models_manager.get_one('images', image_id)
+        image = event.models_manager.get_one('images', image_id, include_archived)
         if not image:
             return None
         
         # Get face IDs for this image
-        face_ids = event.models_manager.get_image_faces(image_id)
+        face_ids = event.models_manager.get_image_faces(image_id, include_archived)
         
         # Build faces data
         faces_data = []
         for face_id in face_ids:
-            face = event.models_manager.get_one('faces', face_id)
+            face = event.models_manager.get_one('faces', face_id, include_archived)
             if face:
                 # Apply group filter if specified
                 if group_filter and face.get('groupID') != group_filter:
@@ -38,7 +44,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
                 
                 group = None
                 if face.get('groupID'):
-                    group = event.models_manager.get_one('groups', face['groupID'])
+                    group = event.models_manager.get_one('groups', face['groupID'], include_archived)
                 
                 face_data = {
                     'face_id': face_id,
@@ -57,7 +63,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Get moment info if available
         moment_info = None
         if image.get('momentID'):
-            moment = event.models_manager.get_one('moments', image['momentID'])
+            moment = event.models_manager.get_one('moments', image['momentID'], include_archived)
             if moment:
                 moment_info = {
                     'id': moment.get('momentID', moment.get('id', 'Unknown')),
@@ -68,6 +74,9 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
                 }
         
         # Build complete response
+        # List albums for this image (labels)
+        image_albums = event.models_manager.get_image_albums(image_id, include_archived)
+
         image_data = {
             'id': image_id,
             'label': image['label'],
@@ -75,6 +84,9 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
             'file_size': image.get('file_size'),
             'width': image.get('width'),
             'height': image.get('height'),
+            'is_archived': image.get('is_archived', 0) == 1 if isinstance(image.get('is_archived', 0), (int, bool)) else bool(image.get('is_archived')),
+            'is_favorites': image.get('is_favorites', 0) == 1 if isinstance(image.get('is_favorites', 0), (int, bool)) else bool(image.get('is_favorites')),
+            'albums': image_albums,
             'faces_count': len(faces_data),
             'faces': faces_data,
             'moment': moment_info,
@@ -145,8 +157,150 @@ def get_groups(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     # Get enriched groups with image information
-    enriched_groups = event.models_manager.get_all('groups')
+    include_archived = _parse_include_archived(False)
+    enriched_groups = event.models_manager.get_all('groups', include_archived)
     return jsonify({"groups": enriched_groups})
+
+# -------------------- Albums Endpoints --------------------
+@app.route("/api/events/<event_id>/albums", methods=["GET"])
+@require_auth
+def get_albums(event_id):
+    """List all accessible albums for the specific event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    try:
+        include_archived = _parse_include_archived(False)
+        albums = event.models_manager.get_all('albums', include_archived)
+
+        # Sort with archive first, favorites second, then by label
+        def album_sort_key(a):
+            label = (a.get('label') or '').lower()
+            if label == 'archive':
+                return (0, '')
+            if label == 'favorites':
+                return (1, '')
+            return (2, label)
+
+        albums_sorted = sorted(albums, key=album_sort_key)
+        return jsonify({"albums": albums_sorted})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/albums/<album_id>", methods=["GET"])
+@require_auth
+def get_album(event_id, album_id):
+    """Get a specific album by ID if accessible in the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    include_archived = _parse_include_archived(False)
+    album = event.models_manager.get_one('albums', album_id, include_archived)
+    if not album:
+        return not_found(f"Album {album_id} not found or not accessible")
+    return jsonify(album)
+
+@app.route("/api/events/<event_id>/albums/<album_id>", methods=["PUT"])
+@require_auth
+def update_album(event_id, album_id):
+    """Update an album's label/description/representative (defaults cannot change label)."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    # Check if album exists and is accessible
+    include_archived = _parse_include_archived(False)
+    album = event.models_manager.get_one('albums', album_id, include_archived)
+    if not album:
+        return not_found(f"Album {album_id} not found or not accessible")
+
+    data = request.json or {}
+
+    # Prevent renaming default albums
+    if (album.get('label') in ('archive', 'favorites')) and 'label' in data:
+        data.pop('label', None)
+
+    try:
+        # Keep only allowed columns
+        allowed = {'label', 'description', 'representative_image'}
+        sanitized = {k: v for k, v in data.items() if k in allowed}
+        if sanitized:
+            event.models_manager.edit('albums', album_id, sanitized)
+
+        updated = event.models_manager.get_one('albums', album_id, include_archived)
+        response_data = {"success": True, "album": updated}
+        return jsonify(response_data)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["GET"])
+@require_auth
+def get_album_images(event_id, album_id):
+    """Get all images in a specific album within the event."""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    try:
+        include_archived = _parse_include_archived(False)
+        album = event.models_manager.get_one('albums', album_id, include_archived)
+        if not album:
+            return not_found(f"Album {album_id} not found or not accessible")
+
+        image_ids = event.models_manager.get_album_images(album_id, include_archived)
+        images_data = []
+        for image_id in image_ids:
+            image = event.models_manager.get_one('images', image_id, include_archived)
+            if image:
+                images_data.append({
+                    'id': image_id,
+                    'label': image.get('label', ''),
+                    'date_taken': image.get('date_taken'),
+                    'width': image.get('width'),
+                    'height': image.get('height'),
+                    'urls': {
+                        'display': f'/api/events/{event_id}/display/{image_id}.webp',
+                        'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                    }
+                })
+        return jsonify({"images": images_data})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["POST"])
+@require_auth
+def add_images_to_album(event_id, album_id):
+    """Add images to album (idempotent). Body: { image_ids: [] }"""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    try:
+        added = event.models_manager.add_images_to_album(album_id, image_ids)
+        # If favorites album, include a change flag if needed in future
+        return jsonify({"success": True, "added": added})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["DELETE"])
+@require_auth
+def remove_images_from_album(event_id, album_id):
+    """Remove images from album. Body: { image_ids: [] }"""
+    event = get_event_with_profile()
+    if str(event.id) != event_id:
+        return not_found(f"Event {event_id} not found or not accessible")
+
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    try:
+        removed = event.models_manager.remove_images_from_album(album_id, image_ids)
+        return jsonify({"success": True, "removed": removed})
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
@@ -157,7 +311,8 @@ def get_group(event_id, group_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     # Get enriched group with image information
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     return jsonify(group)
@@ -180,7 +335,8 @@ def update_group(event_id, group_id):
         event.models_manager.edit('groups', group_id, data)
         
         # Get the group after update
-        updated = event.models_manager.get_one('groups', group_id)
+        include_archived = _parse_include_archived(False)
+        updated = event.models_manager.get_one('groups', group_id, include_archived)
         
         if updated is None:
             return not_found(f"Group {group_id} not found")
@@ -236,7 +392,8 @@ def delete_group(event_id, group_id):
     
     try:
         # Check if group exists and is accessible
-        group = event.models_manager.get_one('groups', group_id)
+        include_archived = _parse_include_archived(False)
+        group = event.models_manager.get_one('groups', group_id, include_archived)
         if not group:
             return not_found(f"Group {group_id} not found or not accessible")
         
@@ -311,18 +468,19 @@ def get_group_images(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     try:
         # Get image IDs for this group
-        image_ids = event.models_manager.get_group_images(group_id)
+        image_ids = event.models_manager.get_group_images(group_id, include_archived)
         
         # Get basic image info for each
         images_data = []
         for image_id in image_ids:
-            image = event.models_manager.get_one('images', image_id)
+            image = event.models_manager.get_one('images', image_id, include_archived)
             if image:
                 images_data.append({
                     'id': image_id,
@@ -348,7 +506,8 @@ def get_group_crops(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -368,7 +527,8 @@ def get_related_groups(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -399,7 +559,8 @@ def get_group_filtered_images(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -417,16 +578,16 @@ def get_group_filtered_images(event_id, group_id):
             # Use advanced filtering with multiple groups OR when only mode is enabled
             groups_to_filter = [group_id] + related_groups if related_groups else [group_id]
             image_ids = event.models_manager.get_filtered_images(
-                groups_to_filter, mode, only
+                groups_to_filter, mode, only, include_archived
             )
         else:
             # Simple case: just get images for this group (when not using only mode)
-            image_ids = event.models_manager.get_group_images(group_id)
+            image_ids = event.models_manager.get_group_images(group_id, include_archived)
         
         # Build complete image data for each image
         images_data = []
         for image_id in image_ids:
-            image_data = build_complete_image_data(event, image_id)
+            image_data = build_complete_image_data(event, image_id, include_archived=include_archived)
             if image_data:
                 # Update URLs to use event-scoped endpoints
                 image_data['urls'] = {
@@ -465,7 +626,8 @@ def get_moment(event_id, moment_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        moment = event.models_manager.get_one('moments', moment_id)
+        include_archived = _parse_include_archived(False)
+        moment = event.models_manager.get_one('moments', moment_id, include_archived)
         if not moment:
             return not_found(f"Moment {moment_id} not found or not accessible")
         return jsonify(moment)
@@ -487,7 +649,8 @@ def create_moment(event_id):
         moment_id = event.models_manager.add('moments', data)
         
         # Get the created moment
-        created_moment = event.models_manager.get_one('moments', moment_id)
+        include_archived = _parse_include_archived(False)
+        created_moment = event.models_manager.get_one('moments', moment_id, include_archived)
         
         # Add change instruction for frontend and include the created moment
         response_data = {"success": True, "moment_id": moment_id, "moment": created_moment}
@@ -526,7 +689,8 @@ def update_moment(event_id, moment_id):
             event.models_manager.edit('moments', moment_id, sanitized)
         
         # Get the updated moment
-        updated_moment = event.models_manager.get_one('moments', moment_id)
+        include_archived = _parse_include_archived(False)
+        updated_moment = event.models_manager.get_one('moments', moment_id, include_archived)
         
         # Add change instruction for frontend and include the updated moment
         response_data = {"success": True, "moment": updated_moment}
@@ -568,16 +732,17 @@ def get_moment_images(event_id, moment_id):
     
     try:
         # Check if moment exists and is accessible
-        if not event.models_manager.get_one('moments', moment_id):
+        include_archived = _parse_include_archived(False)
+        if not event.models_manager.get_one('moments', moment_id, include_archived):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Get image IDs for this moment
-        image_ids = event.models_manager.get_moment_images(moment_id)
+        image_ids = event.models_manager.get_moment_images(moment_id, include_archived)
         
         # Get basic image info for each
         images_data = []
         for image_id in image_ids:
-            image = event.models_manager.get_one('images', image_id)
+            image = event.models_manager.get_one('images', image_id, include_archived)
             if image:
                 images_data.append({
                     'id': image_id,
@@ -605,11 +770,12 @@ def get_image_faces(event_id, image_id):
     
     try:
         # Check if image exists and is accessible
-        if not event.models_manager.get_one('images', image_id):
+        include_archived = _parse_include_archived(False)
+        if not event.models_manager.get_one('images', image_id, include_archived):
             return not_found(f"Image {image_id} not found or not accessible")
         
         # Get face IDs for this image
-        face_ids = event.models_manager.get_image_faces(image_id)
+        face_ids = event.models_manager.get_image_faces(image_id, include_archived)
         
         # Build faces data
         faces_data = []
@@ -647,7 +813,8 @@ def get_image_info(event_id, image_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        image = event.models_manager.get_one('images', image_id)
+        include_archived = _parse_include_archived(False)
+        image = event.models_manager.get_one('images', image_id, include_archived)
         if not image:
             return not_found(f"Image {image_id} not found or not accessible")
         
@@ -678,7 +845,8 @@ def get_image_complete(event_id, image_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        image_data = build_complete_image_data(event, image_id)
+        include_archived = _parse_include_archived(False)
+        image_data = build_complete_image_data(event, image_id, include_archived=include_archived)
         if not image_data:
             return not_found(f"Image {image_id} not found or not accessible")
         
@@ -702,17 +870,18 @@ def get_group_images_complete(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
     # Get image IDs for this group
-    image_ids = event.models_manager.get_group_images(group_id)
+    image_ids = event.models_manager.get_group_images(group_id, include_archived)
     
     # Build complete image data for each image
     images_data = []
     for image_id in image_ids:
-        image_data = build_complete_image_data(event, image_id)
+        image_data = build_complete_image_data(event, image_id, include_archived=include_archived)
         if image_data:
             # Update URLs to use event-scoped endpoints
             image_data['urls'] = {
@@ -734,17 +903,18 @@ def get_moment_images_complete(event_id, moment_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
+        include_archived = _parse_include_archived(False)
         # Check if moment exists and is accessible
-        if not event.models_manager.get_one('moments', moment_id):
+        if not event.models_manager.get_one('moments', moment_id, include_archived):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Get image IDs for this moment
-        image_ids = event.models_manager.get_moment_images(moment_id)
+        image_ids = event.models_manager.get_moment_images(moment_id, include_archived)
         
         # Build complete image data for each image
         images_data = []
         for image_id in image_ids:
-            image_data = build_complete_image_data(event, image_id)
+            image_data = build_complete_image_data(event, image_id, include_archived=include_archived)
             if image_data:
                 # Update URLs to use event-scoped endpoints
                 image_data['urls'] = {
@@ -770,6 +940,7 @@ def download_images(event_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     quality = (data.get('quality') or 'high').lower()
+    include_archived = bool(data.get('include_archived', False))
     
     if not image_ids:
         return jsonify({"error": "No image IDs provided"}), 400
@@ -780,7 +951,7 @@ def download_images(event_id):
         with zipfile.ZipFile(memory_file, 'w') as zf:
             for image_id in image_ids:
                 # Check if image is accessible
-                if not event.models_manager.get_one('images', image_id):
+                if not event.models_manager.get_one('images', image_id, include_archived):
                     continue
                 
                 # Choose source based on requested quality
@@ -813,11 +984,12 @@ def get_images_json(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        images = event.models_manager.get_all('images')
+        include_archived = _parse_include_archived(False)
+        images = event.models_manager.get_all('images', include_archived)
         
         images_data = []
         for image in images:
-            image_data = build_complete_image_data(event, image['imageID'])
+            image_data = build_complete_image_data(event, image['imageID'], include_archived=include_archived)
             if image_data:
                 # Update URLs to use event-scoped endpoints
                 image_data['urls'] = {
@@ -907,7 +1079,7 @@ def get_images_json_legacy():
 @require_auth
 def get_display_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.models_manager.get_one('images', image_id):
+    if not event.models_manager.get_one('images', image_id, include_archived=True):
         return abort(404)
     file_path = os.path.join(event.display_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -920,7 +1092,7 @@ def get_display_image_webp(event_id, image_id):
 @require_auth
 def get_face_crop_webp(event_id, face_id):
     event = Event(event_id)
-    face = event.models_manager.get_one('faces', face_id)
+    face = event.models_manager.get_one('faces', face_id, include_archived=True)
     if not face:
         return abort(404)
     file_path = os.path.join(event.faces_dir, f'{face_id}.webp')
@@ -934,7 +1106,7 @@ def get_face_crop_webp(event_id, face_id):
 @require_auth
 def get_thumbnail_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.models_manager.get_one('images', image_id):
+    if not event.models_manager.get_one('images', image_id, include_archived=True):
         return abort(403)
     file_path = os.path.join(event.thumb_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -947,7 +1119,7 @@ def get_thumbnail_image_webp(event_id, image_id):
 @require_auth
 def get_high_quality_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.models_manager.get_one('images', image_id):
+    if not event.models_manager.get_one('images', image_id, include_archived=True):
         return abort(403)
     file_path = os.path.join(event.high_quality_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -960,7 +1132,7 @@ def get_high_quality_image_webp(event_id, image_id):
 @require_auth
 def get_original_image_webp(event_id, image_id):
     event = Event(event_id)
-    if not event.models_manager.get_one('images', image_id):
+    if not event.models_manager.get_one('images', image_id, include_archived=True):
         return abort(403)
     file_path = os.path.join(event.original_dir, f'{image_id}.webp')
     if not os.path.exists(file_path):
@@ -977,7 +1149,8 @@ def get_group_representative(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    group = event.models_manager.get_one('groups', group_id)
+    include_archived = _parse_include_archived(False)
+    group = event.models_manager.get_one('groups', group_id, include_archived)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -986,7 +1159,7 @@ def get_group_representative(event_id, group_id):
         return jsonify({"representative_face": None})
     
     # Get the face data
-    face = event.models_manager.get_one('faces', representative_face_id)
+    face = event.models_manager.get_one('faces', representative_face_id, include_archived)
     if not face:
         return jsonify({"representative_face": None})
     
@@ -1013,7 +1186,8 @@ def get_moment_representative(event_id, moment_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    moment = event.models_manager.get_one('moments', moment_id)
+    include_archived = _parse_include_archived(False)
+    moment = event.models_manager.get_one('moments', moment_id, include_archived)
     if not moment:
         return not_found(f"Moment {moment_id} not found or not accessible")
     

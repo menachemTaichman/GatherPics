@@ -144,6 +144,7 @@ VIEWS = {
             )
         )
         AND (a1.albumID IS NOT NULL OR i.is_archived = 0)
+        AND (include_archived() = 1 OR i.is_archived = 0)
     ''',
     'accessible_groups': '''
         SELECT groups.* FROM groups
@@ -648,7 +649,7 @@ class AppDB:
             self.profile_context[field] = val
 
     @contextmanager
-    def get_connection(self):
+    def get_connection(self, include_archived: bool = False):
         """Context manager for database connections."""
 
         conn = sqlite3.connect(self.db_path)
@@ -656,21 +657,22 @@ class AppDB:
         conn.execute("PRAGMA foreign_keys = ON")
         # Register the current profile context on every connection
         conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
+        conn.create_function("include_archived", 0, lambda: include_archived)
 
         try:
             yield conn
         finally:
             conn.close()
 
-    def get_all(self, table: str) -> List[Dict]:
+    def get_all(self, table: str, include_archived: bool = False) -> List[Dict]:
 
         accessible_table = self._get_accessible_table_name(table)
-        with self.get_connection() as conn:
+        with self.get_connection(include_archived) as conn:
             cursor = conn.execute(f'SELECT * FROM {accessible_table}')
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    def get_one(self, table: str, where: Dict, bypass_access_control: bool = False) -> Dict | None:
+    def get_one(self, table: str, where: Dict, bypass_access_control: bool = False, include_archived: bool = False) -> Dict | None:
 
         if bypass_access_control:
             accessible_table = table
@@ -681,7 +683,7 @@ class AppDB:
             where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
             where_params = tuple(where.values())
         
-        with self.get_connection() as conn:
+        with self.get_connection(include_archived) as conn:
             cursor = conn.execute(f'SELECT * FROM {accessible_table} WHERE {where_clause}', where_params)
             row = cursor.fetchone()
             if row:
@@ -697,7 +699,7 @@ class AppDB:
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
-        with self.get_connection() as conn:
+        with self.get_connection(include_archived=True) as conn:
             cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause} AND {id_field} != ?', where_params + (exclude_id,))
             row = cursor.fetchone()
             if row:
@@ -707,17 +709,9 @@ class AppDB:
                 return record[id_field]
             return None
 
-    def is_representative_image(self, image_id: str) -> bool:
-        """Check if an image is a representative image."""
-        return self.execute_query(f'SELECT 1 FROM representative_images WHERE imageID = ?', (image_id,))
-    
-    def is_representative_face(self, face_id: str) -> bool:
-        """Check if a face is a representative face."""
-        return self.execute_query(f'SELECT 1 FROM representative_faces WHERE faceID = ?', (face_id,))
-
-    def execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
+    def execute_query(self, query: str, params: tuple = (), include_archived: bool = False) -> List[tuple]:
         """Execute a custom query and return results."""
-        with self.get_connection() as conn:
+        with self.get_connection(include_archived) as conn:
             cursor = conn.execute(query, params)
             # For SELECT queries, fetch and return results
             if query.strip().upper().startswith('SELECT'):
@@ -740,7 +734,7 @@ class AppDB:
         sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
         values = [tuple(row[k] for k in keys) for row in data_list]
 
-        with self.get_connection() as conn:
+        with self.get_connection(True) as conn:
             conn.executemany(sql, values)
             conn.commit()
         return data_list
@@ -758,7 +752,7 @@ class AppDB:
         values = tuple(fields.values()) + tuple(where.values())
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
-        with self.get_connection() as conn:
+        with self.get_connection(True) as conn:
             conn.execute(sql, values)
             conn.commit()
 
@@ -771,7 +765,7 @@ class AppDB:
         
         sql = f'DELETE FROM {target_table} WHERE {where_clause}'
 
-        with self.get_connection() as conn:
+        with self.get_connection(True) as conn:
             conn.execute(sql, values)
             conn.commit()
 

@@ -1,6 +1,6 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Settings, Clock, User, ShoppingBag, Home } from 'lucide-react';
+import { Users, Settings, Clock, User, ShoppingBag, Home, Album } from 'lucide-react';
 import SettingsManager from './SettingsManager';
 import BucketDrawer from './BucketDrawer';
 import useBucketStore from '../utils/bucketStore';
@@ -63,6 +63,18 @@ export default function Header() {
               title="Persons"
             >
               <User className="w-4 h-4" />
+            </Link>
+
+            <Link
+              to={getEventPath('/albums')}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                location.pathname.includes('/albums') 
+                  ? 'bg-primary-100 text-primary-700' 
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title="Albums"
+            >
+              <Album className="w-4 h-4" />
             </Link>
 
             <Link

@@ -218,9 +218,10 @@ export const groupsAPI = {
   },
 
   // Get group images complete
-  getImagesComplete: async (groupId, eventUrl) => {
+  getImagesComplete: async (groupId, eventUrl, includeArchived = false) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete`);
+    const params = includeArchived ? '?include_archived=true' : '';
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete${params}`);
     return response.data;
   },
 
@@ -239,7 +240,7 @@ export const groupsAPI = {
   },
 
   // Get filtered images
-  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl) => {
+  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl, includeArchived = false) => {
     const eventId = await getEventIdForApi(eventUrl);
     const params = new URLSearchParams();
     
@@ -252,6 +253,9 @@ export const groupsAPI = {
 
     if (currentImageIds.length > 0) {
       params.append('current_image_ids', currentImageIds.join(','));
+    }
+    if (includeArchived) {
+      params.append('include_archived', 'true');
     }
     
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-images?${params.toString()}`);
@@ -355,6 +359,71 @@ export const imagesAPI = {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/images.json`);
     return response.data;
+  }
+};
+
+// Albums API
+export const albumsAPI = {
+  // Get all albums
+  getAll: async (eventUrl, includeArchived = false) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const params = includeArchived ? '?include_archived=true' : '';
+    const response = await api.get(`/api/events/${eventId}/albums${params}`);
+    return response.data;
+  },
+
+  // Get specific album
+  getById: async (albumId, eventUrl, includeArchived = false) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const params = includeArchived ? '?include_archived=true' : '';
+    const response = await api.get(`/api/events/${eventId}/albums/${albumId}${params}`);
+    return response.data;
+  },
+
+  // Update album
+  update: async (albumId, updates, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/albums/${albumId}`, updates);
+    return response.data;
+  },
+
+  // Get album images
+  getImages: async (albumId, eventUrl, includeArchived = false) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const params = includeArchived ? '?include_archived=true' : '';
+    const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images${params}`);
+    return response.data;
+  },
+
+  // Add images to album
+  addImages: async (albumId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/albums/${albumId}/images`, { image_ids: imageIds });
+    return response.data;
+  },
+
+  // Remove images from album
+  removeImages: async (albumId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/albums/${albumId}/images`, { data: { image_ids: imageIds } });
+    return response.data;
+  },
+
+  // Favorites helpers (uses default album label lookups client-side)
+  toggleFavorite: async (imageIds, inFavorites, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    // Resolve favorites album id
+    const all = await api.get(`/api/events/${eventId}/albums`);
+    const fav = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'favorites');
+    if (!fav) return { added: 0, removed: 0 };
+    if (inFavorites) {
+      // remove
+      const res = await api.delete(`/api/events/${eventId}/albums/${fav.albumID}/images`, { data: { image_ids: imageIds } });
+      return { removed: res.data.removed || 0 };
+    } else {
+      const res = await api.post(`/api/events/${eventId}/albums/${fav.albumID}/images`, { image_ids: imageIds });
+      return { added: res.data.added || 0 };
+    }
   }
 };
 

@@ -5,6 +5,8 @@ import { User } from 'lucide-react';
 import Header from './Header';
 import Gallery from './GroupsGallery';
 import GroupDetail from './GroupDetail';
+import AlbumsGallery from './AlbumsGallery';
+import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
@@ -299,6 +301,32 @@ function AppContent({ eventUrl }) {
                 />
               </motion.div>
             } 
+          />
+          <Route 
+            path="albums/:album_name" 
+            element={
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AlbumDetail showToast={showToast} />
+              </motion.div>
+            }
+          />
+          <Route 
+            path="albums" 
+            element={
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AlbumsGallery eventUrl={eventUrl} />
+              </motion.div>
+            }
           />
           <Route
             path="timeline"
