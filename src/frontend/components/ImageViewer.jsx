@@ -251,7 +251,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleFaceNavigation = (face) => {
-    if (face.group_id) {
+    if (face.group_id && groups) {
       const group = groups.find(g => g.groupID === face.group_id);
       if (group) {
         navigate(`/persons/${encodeURIComponent(group.label)}`);
@@ -755,15 +755,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         <TransferFacesModal
           key="transfer-faces-modal"
           isOpen={showTransferModal}
+          eventUrl={eventUrl}
           onClose={() => {
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
           }}
-          groups={groups}
-          currentGroup={groups.find(g => g.groupID === selectedFaceForTransfer.group_id)}
-                          selectedFaces={selectedFaceForTransfer.all_faces_in_image || [selectedFaceForTransfer.face_id]}
+          currentGroup={groups && selectedFaceForTransfer?.group_id ? groups.find(g => g.groupID === selectedFaceForTransfer.group_id) : null}
+          selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer?.face_id ? [selectedFaceForTransfer.face_id] : [])}
           onTransferComplete={handleTransferComplete}
           showToast={showToast}
+          sourceGroupId={selectedFaceForTransfer?.group_id}
         />
       )}
     </AnimatePresence>

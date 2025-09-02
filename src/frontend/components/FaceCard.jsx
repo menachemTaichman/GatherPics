@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
-import { Edit, Download, MoreVertical } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { useEventUrls } from '../utils/useEventUrls';
 
 
@@ -9,9 +8,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
   const params = useParams();
   const eventUrl = params.eventUrl;
   const { urlHelpers, loading, error } = useEventUrls(eventUrl);
-  const [showActions, setShowActions] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-  const buttonRef = useRef(null);
+
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
@@ -21,22 +18,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
     e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
   };
 
-  const updateMenuPosition = () => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.right - 140 // 140px is the min-width of the menu
-      });
-    }
-  };
 
-  const handleToggleActions = () => {
-    if (!showActions) {
-      updateMenuPosition();
-    }
-    setShowActions(!showActions);
-  };
   
   // Use representative_face for the group representative image
   const imageSrc = group.representative_face && urlHelpers
@@ -100,63 +82,18 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
             {/* Action Menu Button */}
             <div className="relative">
               <button
-                ref={buttonRef}
-                onClick={handleToggleActions}
+                onClick={() => onEdit()}
                 className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                title="Edit group"
               >
-                <MoreVertical className="w-3 h-3 text-gray-500" />
+                <Pencil className="w-3 h-3 text-gray-500" />
               </button>
             </div>
           </div>
         </div>
       </motion.div>
 
-      {/* Dropdown Menu - Rendered as Portal */}
-      <AnimatePresence>
-        {showActions && (
-          <div key="dropdown-menu">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[1000] min-w-[140px]"
-              style={{
-                top: menuPosition.top,
-                left: menuPosition.left,
-                transformOrigin: 'top right'
-              }}
-            >
-              <button
-                onClick={() => {
-                  onEdit();
-                  setShowActions(false);
-                }}
-                className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Edit</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  onDownload();
-                  setShowActions(false);
-                }}
-                className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                <span>Add to Bucket</span>
-              </button>
-            </motion.div>
 
-            {/* Click outside to close */}
-            <div
-              className="fixed inset-0 z-[999]"
-              onClick={() => setShowActions(false)}
-            />
-          </div>
-        )}
-      </AnimatePresence>
     </>
   );
 } 

@@ -15,9 +15,10 @@ export default function TransferFacesModal({
   currentGroup,
   selectedFaces,
   onTransferComplete,
-  showToast
+  showToast,
+  sourceGroupId
 }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const navigate = useNavigate();
   const groups = useDataStore(state => state.groups);
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -47,8 +48,11 @@ export default function TransferFacesModal({
     customKeyHandler: handleTransferModalKeys
   });
 
-  // Filter out current group from available groups
-  const availableGroups = groups.filter(g => g.groupID !== currentGroup?.groupID);
+  // Filter out current group and source group from available groups
+  const availableGroups = groups.filter(g => 
+    g.groupID !== currentGroup?.groupID && 
+    g.groupID !== sourceGroupId
+  );
 
   // Filter and sort groups
   const filteredAndSortedGroups = availableGroups
@@ -161,7 +165,7 @@ export default function TransferFacesModal({
 
     try {
       const result = await groupsAPI.transferFaces(
-        currentGroup.groupID,
+        currentGroup?.groupID || sourceGroupId || null,
         selectedGroupId || null,
         selectedFaces,
         eventUrl,
@@ -248,10 +252,34 @@ export default function TransferFacesModal({
           </button>
         </div>
 
+        {/* Error handling for URL issues */}
+        {urlError && (
+          <div className="mx-6 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-red-800 text-sm">
+                {urlError}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-6">
+          {/* Loading state */}
+          {urlLoading && (
+            <div className="text-center py-8">
+              <div className="inline-flex items-center space-x-2 text-gray-500">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
+                <span>Loading...</span>
+              </div>
+            </div>
+          )}
+          
           {/* Search and Sort Controls */}
-          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+          {!urlLoading && (
+            <>
+            <div className="mb-4 flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -366,6 +394,8 @@ export default function TransferFacesModal({
               <AlertTriangle className="w-4 h-4" />
               <span>{error}</span>
             </div>
+          )}
+            </>
           )}
         </div>
 

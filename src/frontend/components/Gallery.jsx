@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, Download, Edit, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
@@ -37,7 +37,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
     clearConflict,
     setShowMergeModal,
     setConflictData
-  } = useGroupNameConflict(selectedGroup, onRefreshGroups);
+  } = useGroupNameConflict(selectedGroup, onRefreshGroups, eventUrl);
 
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = currentGroups.filter(group => 
@@ -231,7 +231,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             setSelectedGroup(null);
           }}
           onSave={async (updates) => {
-            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates, eventUrl);
+            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates, null, eventUrl);
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
@@ -254,6 +254,28 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           conflictingGroup={conflictData.conflictingGroup}
           onMerge={handleMergeGroups}
           onCancel={handleMergeCancel}
+          onTransferComplete={async (result) => {
+            // Handle the transfer result to update the UI
+            // Explicitly update the data store like GroupDetail does
+            const transferData = { ...(result || {}) };
+            
+            // For merge operations, ensure we have the old_group_id from the conflict data
+            if (!transferData.old_group_id && conflictData?.currentGroup?.groupID) {
+              transferData.old_group_id = conflictData.currentGroup.groupID;
+            }
+            
+            // For merge operations, ensure old_group_deleted is set to true
+            // since all faces are being transferred from the source group
+            if (transferData.old_group_id && transferData.target_group_id) {
+              transferData.old_group_deleted = true;
+            }
+            
+            try {
+              useDataStore.getState().transferFaces(transferData);
+            } catch (e) {
+              console.warn('Failed to update store after transfer:', e);
+            }
+          }}
           onNavigateToGroup={() => {
             // No navigation needed - just close the modal
             setShowMergeModal(false);

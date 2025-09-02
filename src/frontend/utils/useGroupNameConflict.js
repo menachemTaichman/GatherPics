@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { groupsAPI, handleAPIError } from './apiService';
 import { useDataStore } from './dataManager';
 
-export function useGroupNameConflict(currentGroup, onRefreshGroups) {
+export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
   const [nameConflict, setNameConflict] = useState(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [conflictData, setConflictData] = useState(null);
@@ -15,7 +15,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups) {
     }
 
     try {
-      const result = await groupsAPI.checkName(name.trim(), currentGroup?.groupID);
+      const result = await groupsAPI.checkName(name.trim(), currentGroup?.groupID, eventUrl);
       
       if (result.conflict) {
         setNameConflict(result.conflicting_group);

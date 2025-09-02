@@ -456,7 +456,7 @@ export default function Moments({ eventUrl }) {
 
   const selectAllInMoment = (momentId) => {
     const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image.name}`);
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image.label}`);
     
     // Check if all images in this moment are already selected
     const allSelected = momentImageKeys.every(key => globalSelection.has(key));
@@ -480,7 +480,7 @@ export default function Moments({ eventUrl }) {
 
   const clearMomentSelection = (momentId) => {
     const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image.name}`);
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image.label}`);
     
     setGlobalSelection(prev => {
       const next = new Set(prev);

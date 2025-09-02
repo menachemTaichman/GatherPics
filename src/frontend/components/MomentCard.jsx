@@ -207,7 +207,7 @@ const MomentCard = forwardRef(({
                              checked={globalSelection.has(`${moment.momentID}:${image.label}`)}
                              onChange={() => {}} // Empty handler to satisfy React
                              onClick={(e) => {
-                               onimageSelect(image.label, moment.momentID, e);
+                               onImageSelect(image.label, moment.momentID, e);
                              }}
                              className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
                            />

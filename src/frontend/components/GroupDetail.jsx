@@ -253,7 +253,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     showMergeConflictModal,
     clearConflict,
     setShowMergeModal
-  } = useGroupNameConflict(group, onRefreshGroups);
+  } = useGroupNameConflict(group, onRefreshGroups, eventUrl);
 
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
