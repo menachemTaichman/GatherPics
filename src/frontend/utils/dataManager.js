@@ -35,6 +35,7 @@ export const useDataStore = create((set, get) => ({
   imageViewer: { show: false, image: null, index: 0 },
   loading: false,
   error: null,
+  lastImagesRefresh: null,
   
   // Actions
   setGroups: (groups) => set({ groups }),
@@ -42,6 +43,7 @@ export const useDataStore = create((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   clearLastTransferResult: () => set({ lastTransferResult: null }),
+  setImagesRefresh: (data) => set({ lastImagesRefresh: data }),
   
   // Group operations
   updateGroup: (groupId, updates) => {
@@ -279,6 +281,17 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
     case CHANGE_TYPES.MOMENTS_REFRESH:
       // This will trigger a full refresh of moments
       break;
+    
+    case CHANGE_TYPES.IMAGES_REFRESH: {
+      // Update images flags in-place for currently loaded groups view, based on album_label
+      const { album_label, image_ids, added, action } = data || {};
+      const addedCount = typeof added === 'number' ? added : 0;
+      const isAdd = action !== 'remove';
+      if (!album_label || !Array.isArray(image_ids)) break;
+      // Save last refresh payload so components can react
+      store.setImagesRefresh({ album_label, image_ids, isAdd, addedCount });
+      break;
+    }
       
     default:
       console.warn(`Unknown change type: ${changeType}`);

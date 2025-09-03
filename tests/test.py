@@ -350,3 +350,5 @@ def recreate_view_triggers_and_indexes():
         db.execute_query('CREATE INDEX if not exists ' + index)
 
 # recreate_view_triggers_and_indexes()
+
+

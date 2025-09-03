@@ -361,10 +361,13 @@ export const imagesAPI = {
 // Albums API
 export const albumsAPI = {
   // Get all albums
-  getAll: async (eventUrl, includeArchived = false) => {
+  getAll: async (eventUrl, includeArchived = false, options = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const params = includeArchived ? '?include_archived=true' : '';
-    const response = await api.get(`/api/events/${eventId}/albums${params}`);
+    const params = [];
+    if (includeArchived) params.push('include_archived=true');
+    if (options.exclude_defaults) params.push('exclude_defaults=true');
+    const query = params.length ? `?${params.join('&')}` : '';
+    const response = await api.get(`/api/events/${eventId}/albums${query}`);
     return response.data;
   },
 
@@ -420,6 +423,16 @@ export const albumsAPI = {
       const res = await api.post(`/api/events/${eventId}/albums/${fav.albumID}/images`, { image_ids: imageIds });
       return { added: res.data.added || 0 };
     }
+  }
+  ,
+  // Archive helpers
+  addToArchive: async (imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const all = await api.get(`/api/events/${eventId}/albums`);
+    const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
+    if (!archive) return { added: 0 };
+    const res = await api.post(`/api/events/${eventId}/albums/${archive.albumID}/images`, { image_ids: imageIds });
+    return { added: res.data.added || 0 };
   }
 };
 

@@ -45,10 +45,84 @@ import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
+function AlbumQuickAddButton({ selectedImages, eventUrl, showToast, urlHelpers, placeholderDataUrl }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [albums, setAlbums] = useState([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await albumsAPI.getAll(eventUrl, false, { exclude_defaults: true });
+        if (mounted) setAlbums(res.albums || []);
+      } catch (e) {
+        // ignore
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [open, eventUrl]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+        title="Add selected photos to album"
+      >
+        <PlusIcon className="w-4 h-4" />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-20">
+          {loading ? (
+            <div className="p-3 text-sm text-gray-500">Loading albums...</div>
+          ) : (albums.length === 0 ? (
+            <div className="p-3 text-sm text-gray-500">No albums</div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {albums.map(album => (
+                <li key={album.albumID}>
+                  <button
+                    className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const res = await albumsAPI.addImages(album.albumID, selectedImages, eventUrl);
+                        const added = res.added || 0;
+                        showToast(
+                          <span>
+                            {added} added to{' '}
+                            <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link>
+                          </span>,
+                          'success'
+                        );
+                      } catch (e) {
+                        showToast('Failed to add to album', 'error');
+                      } finally {
+                        setOpen(false);
+                      }
+                    }}
+                  >
+                    <img src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : (placeholderDataUrl || '')} alt="" className="w-8 h-8 rounded object-cover" />
+                    <span className="text-sm text-gray-700 truncate">{album.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
+import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
@@ -104,6 +178,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
+
+  const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+  const [albums, setAlbums] = useState([]);
   
   // Filter state
   const [filterGroups, setFilterGroups] = useState([]);
@@ -288,6 +365,34 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   useEffect(() => {
     const unsubscribe = useDataStore.subscribe(
       (state) => {
+        // Handle images refresh events (favorites/archive)
+        const imgRefresh = state.lastImagesRefresh;
+        if (imgRefresh && Array.isArray(sortedImages) && sortedImages.length > 0) {
+          const affected = new Set(imgRefresh.image_ids || []);
+          if (imgRefresh.album_label === 'favorites') {
+            setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_favorite: imgRefresh.isAdd } : img));
+          }
+          if (imgRefresh.album_label === 'archive') {
+            const includeArchived = !!getSetting('include_archived_images');
+            if (imgRefresh.isAdd) {
+              // Archiving: either remove from grid (if not including archived) or mark as archived
+              if (!includeArchived) {
+                setSortedImages(prev => prev.filter(img => !affected.has(img.id)));
+              } else {
+                setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: true } : img));
+              }
+            } else {
+              // Unarchive
+              setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: false } : img));
+            }
+          }
+          // Clear viewer if current image was removed due to archive
+          if (imageViewer.show && imgRefresh.album_label === 'archive' && imgRefresh.isAdd && !getSetting('include_archived_images')) {
+            if (!sortedImages.some(img => img.id === imageViewer.image)) {
+              setImageViewer({ show: false, image: null, index: 0 });
+            }
+          }
+        }
         // Handle transfer results
         const transferResult = state.lastTransferResult;
         if (transferResult) {
@@ -548,12 +653,25 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
 
+  // Determine if an image is in Favorites, with a fallback to album labels
+  const isImageFavorite = (img) => {
+    if (!img) return false;
+    if (img.is_favorite !== undefined && img.is_favorite !== null) {
+      return !!img.is_favorite;
+    }
+    if (img.is_favorites !== undefined && img.is_favorites !== null) {
+      return !!img.is_favorites;
+    }
+    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
+  };
+
+
 
   const handleAddSelectedToBucket = async () => {
     if (selectedImages.size === 0) return;
     const added = addImages(Array.from(selectedImages));
     if (added > 0) {
-      showToast(`${added} added to bucket`, 'success');
+      showToast(<span>{added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('bucket')}`} className="underline hover:text-gray-100">bucket</Link></span>, 'success');
     } else {
       showToast('No new items added', 'success');
     }
@@ -1186,6 +1304,60 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     <Users className="w-4 h-4" />
                   </button>
                 )}
+                {/* Add to Album button */}
+                <AlbumQuickAddButton 
+                  selectedImages={Array.from(selectedImages)} 
+                  eventUrl={eventUrl}
+                  showToast={showToast}
+                  urlHelpers={urlHelpers}
+                  placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                />
+                {/* Mark selection as Favorites */}
+                <button
+                  onClick={async () => {
+                    if (selectedImages.size === 0) return;
+                    try {
+                      const res = await albumsAPI.toggleFavorite(Array.from(selectedImages), false, eventUrl);
+                      const added = res.added || 0;
+                      showToast(
+                        <span>
+                          {added} added to{' '}
+                          <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+                        </span>,
+                        'success'
+                      );
+                    } catch (e) {
+                      showToast('Failed to add to favorites', 'error');
+                    }
+                  }}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 text-red-600"
+                  title="Add selected to favorites"
+                >
+                  <HeartIcon className="w-4 h-4" />
+                </button>
+                {/* Move selection to Archive */}
+                <button
+                  onClick={async () => {
+                    if (selectedImages.size === 0) return;
+                    try {
+                      const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
+                      const added = res.added || 0;
+                      showToast(
+                        <span>
+                          {added} moved to{' '}
+                          <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+                        </span>,
+                        'success'
+                      );
+                    } catch (e) {
+                      showToast('Failed to move to archive', 'error');
+                    }
+                  }}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+                  title="Move selected to archive"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
                 <button
                   onClick={handleAddSelectedToBucket}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
@@ -1240,6 +1412,13 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                         <Users className="w-4 h-4" />
                       </button>
                     )}
+                    <AlbumQuickAddButton 
+                      selectedImages={Array.from(selectedImages)} 
+                      eventUrl={eventUrl}
+                      showToast={showToast}
+                      urlHelpers={urlHelpers}
+                      placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                    />
                     <button
                       onClick={handleAddSelectedToBucket}
                       className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
@@ -1353,22 +1532,50 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     />
                     {/* Bottom-left icons: heart then archive */}
                     <button
-                      className="absolute bottom-2 left-2 w-6 h-6 rounded-full flex items-center justify-center bg-white bg-opacity-80 hover:bg-opacity-100"
-                      title={image.is_favorites ? 'Remove from Favorites' : 'Add to Favorites'}
+                      type="button"
+                      aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
+                      aria-pressed={isImageFavorite(image)}
+                      className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                      title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
                       onClick={(e) => {
                         e.stopPropagation();
                         (async () => {
                           try {
-                            await albumsAPI.toggleFavorite([image.id], !!image.is_favorites, eventUrl);
-                            setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_favorites: !img.is_favorites } : img));
-                            showToast(image.is_favorites ? 'Removed from Favorites' : 'Added to Favorites', 'success');
+                            const inFav = isImageFavorite(image);
+                            await albumsAPI.toggleFavorite([image.id], inFav, eventUrl);
+                            setSortedImages(prev => prev.map(img => {
+                              if (img.id !== image.id) return img;
+                              const toggled = !inFav;
+                              return {
+                                ...img,
+                                is_favorite: toggled,
+                                albums: Array.isArray(img.albums)
+                                  ? (toggled
+                                      ? Array.from(new Set([...img.albums, 'favorites']))
+                                      : img.albums.filter(a => (a || '').toLowerCase() !== 'favorites'))
+                                  : (toggled ? ['favorites'] : [])
+                              };
+                            }));
+                            showToast(inFav ? 'Removed from Favorites' : 'Added to Favorites', 'success');
                           } catch (err) {
                             showToast('Failed to update favorites', 'error');
                           }
                         })();
                       }}
                     >
-                      <svg viewBox="0 0 24 24" className={`w-4 h-4 ${image.is_favorites ? 'text-red-500' : 'text-gray-300'}`} fill={image.is_favorites ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
+                        fill={isImageFavorite(image) ? 'currentColor' : 'none'}
+                        stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
+                        strokeWidth="2"
+                        role="img"
+                        focusable="false"
+                        style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
+                      >
+                        <title>Favorite</title>
                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                       </svg>
                     </button>

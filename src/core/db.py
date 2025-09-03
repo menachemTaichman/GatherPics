@@ -110,9 +110,9 @@ VIEWS = {
             CASE WHEN a2.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_favorites_helper
         FROM images
         LEFT JOIN (album_images a1 INNER JOIN albums b1 ON a1.albumID = b1.albumID)
-        ON a1.imageID = images.imageID AND b1.label = 'archive'
+        ON a1.imageID = images.imageID AND LOWER(b1.label) = 'archive'
         LEFT JOIN (album_images a2 INNER JOIN albums b2 ON a2.albumID = b2.albumID)
-        ON a2.imageID = images.imageID AND b2.label = 'favorites';
+        ON a2.imageID = images.imageID AND LOWER(b2.label) = 'favorites';
     ''',
     'accessible_albums': '''
         SELECT albums.* FROM albums
@@ -130,10 +130,10 @@ VIEWS = {
     ''',
     'accessible_images': '''
         SELECT i.*,
-        (a2.albumID IS NOT NULL AND i.is_favorites_helper = 1) AS is_favorites
+        (a2.albumID IS NOT NULL AND i.is_favorites_helper = 1) AS is_favorite
         FROM images_with_albums as i
-        LEFT JOIN accessible_albums as a1 on a1.label = 'archive'
-        LEFT JOIN accessible_albums as a2 on a2.label = 'favorites'
+        LEFT JOIN accessible_albums as a1 on LOWER(a1.label) = 'archive'
+        LEFT JOIN accessible_albums as a2 on LOWER(a2.label) = 'favorites'
         WHERE EXISTS (
             SELECT 1
             FROM profiles LEFT JOIN profile_images
@@ -387,7 +387,7 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied')
         END;
 
-        INSERT INTO album_images (albumID, imageID)
+        INSERT OR IGNORE INTO album_images (albumID, imageID)
         SELECT accessible_albums.albumID, accessible_images.imageID
         FROM accessible_albums
         JOIN accessible_images

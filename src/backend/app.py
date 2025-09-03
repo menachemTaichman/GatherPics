@@ -88,7 +88,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
             'width': image.get('width'),
             'height': image.get('height'),
             'is_archived': image.get('is_archived', 0) == 1 if isinstance(image.get('is_archived', 0), (int, bool)) else bool(image.get('is_archived')),
-            'is_favorites': image.get('is_favorites', 0) == 1 if isinstance(image.get('is_favorites', 0), (int, bool)) else bool(image.get('is_favorites')),
+            'is_favorite': image.get('is_favorite', 0) == 1 if isinstance(image.get('is_favorite', 0), (int, bool)) else bool(image.get('is_favorite')),
             'albums': image_albums,
             'faces_count': len(faces_data),
             'faces': faces_data,
@@ -176,6 +176,11 @@ def get_albums(event_id):
     try:
         include_archived = _parse_include_archived(False)
         albums = event.models_manager.get_all('albums', include_archived)
+
+        # Optional exclusion of default albums
+        exclude_defaults = request.args.get('exclude_defaults', 'false').lower() in ('1','true','yes','y','on')
+        if exclude_defaults:
+            albums = [a for a in albums if (a.get('label') or '').lower() not in ('archive', 'favorites')]
 
         # Sort with archive first, favorites second, then by label
         def album_sort_key(a):
@@ -284,8 +289,13 @@ def add_images_to_album(event_id, album_id):
     image_ids = data.get('image_ids', [])
     try:
         added = event.models_manager.add_images_to_album(album_id, image_ids)
-        # If favorites album, include a change flag if needed in future
-        return jsonify({"success": True, "added": added})
+        # Add change instruction for store updates (favorites/archive or generic album)
+        response = {"success": True, "added": added}
+        label = (event.models_manager.get_one('albums', album_id, include_archived=True) or {}).get('label', '').lower()
+        if label in ('favorites', 'archive'):
+            change_type = 'IMAGES_REFRESH'
+            response = add_change_instruction(response, change_type, {"album_label": label, "image_ids": image_ids, "added": added})
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
@@ -301,7 +311,11 @@ def remove_images_from_album(event_id, album_id):
     image_ids = data.get('image_ids', [])
     try:
         removed = event.models_manager.remove_images_from_album(album_id, image_ids)
-        return jsonify({"success": True, "removed": removed})
+        response = {"success": True, "removed": removed}
+        label = (event.models_manager.get_one('albums', album_id, include_archived=True) or {}).get('label', '').lower()
+        if label in ('favorites', 'archive'):
+            response = add_change_instruction(response, 'IMAGES_REFRESH', {"album_label": label, "image_ids": image_ids, "action": 'remove'})
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
