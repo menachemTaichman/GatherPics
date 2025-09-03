@@ -675,43 +675,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   >
                     <ShoppingBag className="w-4 h-4" />
                   </button>
-                  {/* Add to album compact button */}
-                  <div className="relative">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = await albumsAPI.getAll(eventUrl);
-                          window.__iv_albums = res.albums || [];
-                          const menu = document.getElementById('iv-albums-menu');
-                          if (menu) menu.classList.toggle('hidden');
-                        } catch (e) {}
-                      }}
-                      className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                      title="Add to album"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <div id="iv-albums-menu" className="hidden absolute z-40 mt-2 left-0 bg-white border border-gray-200 rounded shadow-lg w-56 p-1">
-                      <div className="text-xs text-gray-500 px-2 py-1">Add this image to</div>
-                      <div className="max-h-60 overflow-auto">
-                        {(window.__iv_albums || []).map(al => (
-                          <button
-                            key={al.albumID}
-                            onClick={async () => {
-                              try {
-                                await albumsAPI.addImages(al.albumID, [imageId], eventUrl);
-                                const menu = document.getElementById('iv-albums-menu');
-                                if (menu) menu.classList.add('hidden');
-                              } catch (e) {}
-                            }}
-                            className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded"
-                          >
-                            {al.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">

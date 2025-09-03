@@ -218,10 +218,9 @@ export const groupsAPI = {
   },
 
   // Get group images complete
-  getImagesComplete: async (groupId, eventUrl, includeArchived = false) => {
+  getImagesComplete: async (groupId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const params = includeArchived ? '?include_archived=true' : '';
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete${params}`);
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete`);
     return response.data;
   },
 
@@ -240,7 +239,7 @@ export const groupsAPI = {
   },
 
   // Get filtered images
-  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl, includeArchived = false) => {
+  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const params = new URLSearchParams();
     
@@ -253,9 +252,6 @@ export const groupsAPI = {
 
     if (currentImageIds.length > 0) {
       params.append('current_image_ids', currentImageIds.join(','));
-    }
-    if (includeArchived) {
-      params.append('include_archived', 'true');
     }
     
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-images?${params.toString()}`);

@@ -104,8 +104,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
-  const [showAlbumsMenu, setShowAlbumsMenu] = useState(false);
-  const [albumsList, setAlbumsList] = useState([]);
   
   // Filter state
   const [filterGroups, setFilterGroups] = useState([]);
@@ -415,18 +413,13 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         filterMode, 
         onlySelected,
         [],
-        eventUrl,
-        getSetting('include_archived_images') === true
+        eventUrl
       );
       
       if (response && response.images) {
         // Sort the filtered images
         const sortedFilteredImages = sortImages(response.images, sortBy, sortOrder);
         setSortedImages(sortedFilteredImages);
-        // Fallback to basic images if empty but group claims to have images
-        if (sortedFilteredImages.length === 0 && (group.image_ids?.length || 0) > 0) {
-          await fetchBasicImages();
-        }
         
         // Extract related groups from the images
         const relatedGroupIds = new Set();
@@ -459,7 +452,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     if (!group?.groupID) return;
     
     try {
-      const response = await groupsAPI.getImagesComplete(group.groupID, eventUrl, getSetting('include_archived_images') === true);
+      const response = await groupsAPI.getImagesComplete(group.groupID, eventUrl);
       if (response && response.images) {
         const sortedImages = sortImages(response.images, sortBy, sortOrder);
         setSortedImages(sortedImages);
@@ -1193,56 +1186,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     <Users className="w-4 h-4" />
                   </button>
                 )}
-                {/* Add to album menu */}
-                <div className="relative">
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await albumsAPI.getAll(eventUrl);
-                        setAlbumsList(res.albums || []);
-                        setShowAlbumsMenu(v => !v);
-                      } catch (e) {
-                        showToast('Failed to load albums', 'error');
-                      }
-                    }}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                    title="Add selected to album"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  {showAlbumsMenu && (
-                    <div className="absolute z-40 mt-2 left-0 bg-white border border-gray-200 rounded shadow-lg w-56 p-1">
-                      <div className="text-xs text-gray-500 px-2 py-1">Add to album</div>
-                      <div className="max-h-60 overflow-auto">
-                        {albumsList.map(al => (
-                          <button
-                            key={al.albumID}
-                            data-stop-open
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setShowAlbumsMenu(false);
-                              try {
-                                const added = await albumsAPI.addImages(al.albumID, Array.from(selectedImages), eventUrl);
-                                showToast(
-                                  <span>
-                                    {(added.added || 0)} added to{' '}
-                                    <Link to={`/${eventUrl}/albums/${encodeURIComponent(al.label)}`} className="underline hover:text-gray-100">{al.label}</Link>
-                                  </span>,
-                                  'success'
-                                );
-                              } catch (err) {
-                                showToast('Failed to add to album', 'error');
-                              }
-                            }}
-                            className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded"
-                          >
-                            {al.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
                 <button
                   onClick={handleAddSelectedToBucket}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
@@ -1375,7 +1318,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               >
                 {viewMode === 'grid' ? (
                   <div className="relative group cursor-pointer h-full" onClick={(e) => {
-                    if (!e.target.closest('input[type="checkbox"], button, [data-stop-open]')) {
+                    if (!e.target.closest('input[type="checkbox"]')) {
                       openImageViewer(image.id, index);
                     }
                   }}>
@@ -1410,7 +1353,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     />
                     {/* Bottom-left icons: heart then archive */}
                     <button
-                      className="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center text-white"
+                      className="absolute bottom-2 left-2 w-6 h-6 rounded-full flex items-center justify-center bg-white bg-opacity-80 hover:bg-opacity-100"
                       title={image.is_favorites ? 'Remove from Favorites' : 'Add to Favorites'}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1425,12 +1368,12 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                         })();
                       }}
                     >
-                      <svg viewBox="0 0 24 24" className={`w-5 h-5 drop-shadow ${image.is_favorites ? 'text-red-500' : 'text-white'}`} fill={image.is_favorites ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                      <svg viewBox="0 0 24 24" className={`w-4 h-4 ${image.is_favorites ? 'text-red-500' : 'text-gray-300'}`} fill={image.is_favorites ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                       </svg>
                     </button>
                     {image.is_archived ? (
-                      <div className="absolute bottom-2 left-8 bg-gray-700 bg-opacity-70 text-white text-[10px] leading-none px-1 py-0.5 rounded">
+                      <div className="absolute bottom-2 left-10 bg-gray-700 bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">
                         A
                       </div>
                     ) : null}

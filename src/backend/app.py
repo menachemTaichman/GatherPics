@@ -75,7 +75,10 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         
         # Build complete response
         # List albums for this image (labels)
-        image_albums = event.models_manager.get_image_albums(image_id, include_archived)
+        try:
+            image_albums = event.models_manager.get_image_albums(image_id, include_archived)
+        except Exception:
+            image_albums = []
 
         image_data = {
             'id': image_id,
@@ -578,7 +581,7 @@ def get_group_filtered_images(event_id, group_id):
             # Use advanced filtering with multiple groups OR when only mode is enabled
             groups_to_filter = [group_id] + related_groups if related_groups else [group_id]
             image_ids = event.models_manager.get_filtered_images(
-                groups_to_filter, mode, only, include_archived
+                groups_to_filter, mode, only
             )
         else:
             # Simple case: just get images for this group (when not using only mode)
