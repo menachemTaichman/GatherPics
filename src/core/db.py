@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union, Tuple, Any
 from contextlib import contextmanager
 
 ACCESSIBLE_VIEWS = {
@@ -8,6 +8,29 @@ ACCESSIBLE_VIEWS = {
     'groups': 'accessible_groups',
     'moments': 'accessible_moments',
     'albums': 'accessible_albums'
+}
+
+PRIMARY_KEYS = {
+    'faces': 'faceID',
+    'images': 'imageID',
+    'groups': 'groupID',
+    'moments': 'momentID',
+    'albums': 'albumID',
+    'profiles': 'profileID',
+    'album_images': ('albumID', 'imageID'),
+    'profile_images': ('profileID', 'imageID'),
+    'profile_albums': ('profileID', 'albumID'),
+    # Views mapping
+    'accessible_images': 'imageID',
+    'accessible_faces': 'faceID',
+    'accessible_groups': 'groupID',
+    'accessible_moments': 'momentID',
+    'accessible_albums': 'albumID',
+    'accessible_albums_images': ('albumID', 'imageID'),
+    'editable_profiles_details': 'profileID',
+    'editable_full_profiles': 'profileID',
+    'editable_profile_images': ('profileID', 'imageID'),
+    'editable_profile_albums': ('profileID', 'albumID'),
 }
 
 TABLES = {
@@ -395,7 +418,21 @@ TRIGGERS = {
         AND accessible_images.imageID = NEW.imageID;
     END;
     """,
-    
+    'trg_delete_accessible_albums_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_albums_images
+    INSTEAD OF DELETE ON accessible_albums_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_edit') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM album_images
+        WHERE albumID = OLD.albumID
+        AND imageID = OLD.imageID;
+    END;
+    """,
+
     # editable_full_profiles
     'trg_insert_editable_full_profiles': """
     CREATE TRIGGER IF NOT EXISTS trg_insert_editable_full_profiles
@@ -533,7 +570,7 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible image')
         END;
 
-        INSERT INTO profile_images (profileID, imageID, accessible)
+        INSERT OR IGNORE INTO profile_images (profileID, imageID, accessible)
         VALUES (NEW.profileID, NEW.imageID, NEW.accessible);
     END;
     """,
@@ -559,7 +596,7 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible album')
         END;
 
-        INSERT INTO profile_albums (profileID, albumID, accessible)
+        INSERT OR IGNORE INTO profile_albums (profileID, albumID, accessible)
         VALUES (NEW.profileID, NEW.albumID, NEW.accessible);
     END;
     """,
@@ -583,9 +620,22 @@ class AppDB:
         self.db_path = db_path
         self.set_profile_id(profile_id)
 
+    def _get_primary_keys(self, table: str) -> Union[str, Tuple[str, ...], None]:
+        """Get the primary key(s) for a table or view."""
+        return PRIMARY_KEYS.get(table)
+
     def _get_id_field(self, table: str) -> str:
         """Get the ID field for a table."""
         return table[:-1] + 'ID'
+
+    def _get_accessible_table_name(self, table: str) -> str:
+        """
+        Get the accessible view name for a table if it exists and profile filtering is enabled.
+        Returns the original table name if no accessible view exists or profile filtering is disabled.
+        """
+        if not self.profile_context.get('profileID') or table not in ACCESSIBLE_VIEWS:
+            return table
+        return ACCESSIBLE_VIEWS[table]
 
     @staticmethod
     def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
@@ -713,15 +763,20 @@ class AppDB:
         """Execute a custom query and return results."""
         with self.get_connection(include_archived) as conn:
             cursor = conn.execute(query, params)
+            upper_query = query.strip().upper()
             # For SELECT queries, fetch and return results
-            if query.strip().upper().startswith('SELECT'):
+            if upper_query.startswith('SELECT'):
                 return cursor.fetchall()
+            if 'RETURNING' in upper_query:
+                results = cursor.fetchall()
+                conn.commit()
+                return results
             # For non-SELECT queries (INSERT, UPDATE, DELETE), commit and return empty list
             conn.commit()
             return []
 
-    def insert(self, table: str, data_list: List[Dict], bypass_access_control: bool = False) -> List[Dict]:
-        """Insert multiple records into a table/view and return the inserted records."""
+    def insert(self, table: str, data_list: List[Dict], bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+        """Insert multiple records into a table/view and return their IDs."""
         if not data_list:
             return []
         
@@ -732,48 +787,108 @@ class AppDB:
         placeholders = '(' + ', '.join(['?'] * len(keys)) + ')'
         
         sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
-        values = [tuple(row[k] for k in keys) for row in data_list]
 
+        p_keys = self._get_primary_keys(target_table)
+        if p_keys:
+            returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
+            sql += f' RETURNING {returning_str}'
+        
+        inserted_ids = []
         with self.get_connection(True) as conn:
-            conn.executemany(sql, values)
+            for row_data in data_list:
+                values = tuple(row_data[k] for k in keys)
+                try:
+                    cursor = conn.execute(sql, values)
+                    if p_keys:
+                        for row in cursor.fetchall():
+                            inserted_ids.append(row[0] if len(row) == 1 else tuple(row))
+                except sqlite3.IntegrityError:
+                    pass  # Ignore integrity errors (e.g., duplicates)
             conn.commit()
-        return data_list
+        return inserted_ids
 
-    def update(self, table: str, where: Dict, fields: Dict, bypass_access_control: bool = False):
-        """Update records in a table/view."""
+    def update(self, table: str, where: Dict, fields: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+        """Update records in a table/view and return their IDs."""
         if not fields:
-            return
+            return []
 
         target_table = table if bypass_access_control else self._get_accessible_table_name(table)
         
         set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
-        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         
-        values = tuple(fields.values()) + tuple(where.values())
+        where_clauses = []
+        where_values = []
+        for k, v in where.items():
+            if isinstance(v, list):
+                if not v:
+                    where_clauses.append('1=0')  # No match for empty list
+                else:
+                    placeholders = ','.join(['?'] * len(v))
+                    where_clauses.append(f'{k} IN ({placeholders})')
+                    where_values.extend(v)
+            else:
+                where_clauses.append(f'{k}=?')
+                where_values.append(v)
+        where_clause = ' AND '.join(where_clauses)
+
+        values = tuple(fields.values()) + tuple(where_values)
+        
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
+        p_keys = self._get_primary_keys(target_table)
+        if p_keys:
+            returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
+            sql += f' RETURNING {returning_str}'
+        
+        updated_ids = []
         with self.get_connection(True) as conn:
-            conn.execute(sql, values)
+            try:
+                cursor = conn.execute(sql, values)
+                if p_keys:
+                    for row in cursor.fetchall():
+                        updated_ids.append(row[0] if len(row) == 1 else tuple(row))
+            except sqlite3.OperationalError:
+                conn.execute(sql.replace(f' RETURNING {returning_str}', ''), values)
             conn.commit()
+        return updated_ids
 
-    def delete(self, table: str, where: Dict, bypass_access_control: bool = False):
-        """Delete records from a table/view."""
+
+    def delete(self, table: str, where: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+        """Delete records from a table/view and return their IDs."""
         target_table = table if bypass_access_control else self._get_accessible_table_name(table)
         
-        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-        values = tuple(where.values())
+        where_clauses = []
+        where_values = []
+        for k, v in where.items():
+            if isinstance(v, list):
+                if not v:
+                    where_clauses.append('1=0')
+                else:
+                    placeholders = ','.join(['?'] * len(v))
+                    where_clauses.append(f'{k} IN ({placeholders})')
+                    where_values.extend(v)
+            else:
+                where_clauses.append(f'{k}=?')
+                where_values.append(v)
+        where_clause = ' AND '.join(where_clauses)
+        values = tuple(where_values)
         
         sql = f'DELETE FROM {target_table} WHERE {where_clause}'
 
+        p_keys = self._get_primary_keys(target_table)
+        if p_keys:
+            returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
+            sql += f' RETURNING {returning_str}'
+
+        deleted_ids = []
         with self.get_connection(True) as conn:
-            conn.execute(sql, values)
+            try:
+                cursor = conn.execute(sql, values)
+                if p_keys:
+                    for row in cursor.fetchall():
+                        deleted_ids.append(row[0] if len(row) == 1 else tuple(row))
+            except sqlite3.OperationalError:
+                conn.execute(sql.replace(f' RETURNING {returning_str}', ''), values)
             conn.commit()
 
-    def _get_accessible_table_name(self, table: str) -> str:
-        """
-        Get the accessible view name for a table if it exists and profile filtering is enabled.
-        Returns the original table name if no accessible view exists or profile filtering is disabled.
-        """
-        if not self.profile_context.get('profileID') or table not in ACCESSIBLE_VIEWS:
-            return table
-        return ACCESSIBLE_VIEWS[table]
+        return deleted_ids

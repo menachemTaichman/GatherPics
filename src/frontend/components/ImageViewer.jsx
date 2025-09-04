@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { X, ZoomIn, ZoomOut, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Eye, EyeOff, Clock, Minus, Plus, Archive, ChevronDown, ChevronUp, Image as ImageIcon } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
@@ -11,6 +11,80 @@ import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
+
+function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeholderDataUrl }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [albums, setAlbums] = useState([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await albumsAPI.getAll(eventUrl, { exclude_defaults: true });
+        if (mounted) setAlbums(res.albums || []);
+      } catch (e) {
+        // ignore
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [open, eventUrl]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+        title="Add photo to album"
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-20">
+          {loading ? (
+            <div className="p-3 text-sm text-gray-500">Loading albums...</div>
+          ) : (albums.length === 0 ? (
+            <div className="p-3 text-sm text-gray-500">No albums</div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {albums.map(album => (
+                <li key={album.albumID}>
+                  <button
+                    className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const res = await albumsAPI.addImages(album.albumID, [imageId], eventUrl);
+                        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+                        showToast(
+                          <span>
+                            {added} added to{' '}
+                            <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link>
+                          </span>,
+                          'success'
+                        );
+                      } catch (e) {
+                        showToast('Failed to add to album', 'error');
+                      } finally {
+                        setOpen(false);
+                      }
+                    }}
+                  >
+                    <img src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : (placeholderDataUrl || '')} alt="" className="w-8 h-8 rounded object-cover" />
+                    <span className="text-sm text-gray-700 truncate">{album.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
@@ -83,6 +157,17 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [imageAlbums, setImageAlbums] = useState([]);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const { addImages, open } = useBucketStore();
+  const [albumsOpen, setAlbumsOpen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('iv_albumsOpen') || 'false'); } catch { return false; }
+  });
+  const [facesOpen, setFacesOpen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('iv_facesOpen') || 'true'); } catch { return true; }
+  });
+  const [albumsHeight, setAlbumsHeight] = useState(() => {
+    try { return parseInt(localStorage.getItem('iv_albumsHeight') || '160', 10); } catch { return 160; }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const sectionsRef = useRef(null);
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -91,7 +176,116 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   }, [zoom, pan, imageLoaded, showRectangles]);
 
+  // Respect user choice; do not auto-open on image change
 
+  // Persist UI state
+  useEffect(() => {
+    try { localStorage.setItem('iv_albumsOpen', JSON.stringify(albumsOpen)); } catch {}
+  }, [albumsOpen]);
+  useEffect(() => {
+    try { localStorage.setItem('iv_facesOpen', JSON.stringify(facesOpen)); } catch {}
+  }, [facesOpen]);
+  useEffect(() => {
+    try { localStorage.setItem('iv_albumsHeight', String(albumsHeight)); } catch {}
+  }, [albumsHeight]);
+
+  // Global mouse handlers for resizer
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing || !sectionsRef.current) return;
+      const rect = sectionsRef.current.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const minAlbum = 80;
+      const minFaces = 100;
+      const maxAlbum = Math.max(minAlbum, rect.height - minFaces);
+      const next = Math.max(minAlbum, Math.min(y, maxAlbum));
+      setAlbumsHeight(next);
+    };
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        try { document.body.style.cursor = ''; } catch {}
+      }
+    };
+    if (isResizing) {
+      try { document.body.style.cursor = 'row-resize'; } catch {}
+    }
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      try { document.body.style.cursor = ''; } catch {}
+    };
+  }, [isResizing]);
+
+  const startResize = () => {
+    setIsResizing(true);
+  };
+
+  const handleRemoveFromAlbum = async (album) => {
+    if (!imageInfo) return;
+    try {
+      await albumsAPI.removeImages(album.albumID, [imageInfo.id], eventUrl);
+      setImageAlbums(prev => prev.filter(a => a.albumID !== album.albumID));
+      const lbl = (album.label || '').toLowerCase();
+      if (lbl === 'favorites') {
+        setImageInfo(prev => ({ ...prev, is_favorite: false }));
+      }
+      if (lbl === 'archive') {
+        setImageInfo(prev => ({ ...prev, is_archived: false }));
+      }
+      showToast(
+        <span>
+          Removed from{' '}
+          <a href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</a>
+        </span>,
+        'success'
+      );
+    } catch (e) {
+      showToast('Failed to remove from album', 'error');
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!imageInfo) return;
+    try {
+      const currentFavorite = !!(imageInfo.is_favorite ?? imageInfo.is_favorites);
+      const result = await albumsAPI.toggleFavorite([imageInfo.id], currentFavorite, eventUrl);
+      if (result) {
+        setImageInfo(prev => ({ ...prev, is_favorite: !currentFavorite }));
+        showToast(currentFavorite ? 'Removed from favorites' : 'Added to favorites', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to update favorites', 'error');
+    }
+  };
+
+  const handleAddToArchive = async () => {
+    if (!imageInfo) return;
+    try {
+      const result = await albumsAPI.addToArchive([imageInfo.id], eventUrl);
+      if (result) {
+        setImageInfo(prev => ({ ...prev, is_archived: true }));
+        showToast('Moved to archive', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to move to archive', 'error');
+    }
+  };
+
+  const handleRemoveFromArchive = async () => {
+    if (!imageInfo) return;
+    try {
+      const result = await albumsAPI.toggleArchive([imageInfo.id], true, eventUrl);
+      if (result) {
+        setImageInfo(prev => ({ ...prev, is_archived: false }));
+        showToast('Removed from archive', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to remove from archive', 'error');
+    }
+  };
 
   // Circular navigation
   const handleNavigate = (direction, index) => {
@@ -288,6 +482,29 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     onClose();
   };
 
+  const shouldLetBrowserHandle = (e) => {
+    // Allow default for modifier/middle/double click so new tab/window works
+    return e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1);
+  };
+
+  const handleAlbumLinkClick = (e, album) => {
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
+    e.stopPropagation();
+    e.preventDefault();
+    if (!album) return;
+    navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`);
+    onClose();
+  };
+
+  const handlePersonLinkClick = (e, face) => {
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
+    e.stopPropagation();
+    e.preventDefault();
+    if (!face?.group_label) return;
+    navigate(`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`);
+    onClose();
+  };
+
   const handleTransferFace = (face) => {
     setSelectedFaceForTransfer(face);
     setShowTransferModal(true);
@@ -389,6 +606,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return urlHelpers.getFaceCropUrl(face.face_id);
   };
 
+  const isFavorite = !!(imageInfo?.is_favorite ?? imageInfo?.is_favorites);
+  const isArchived = !!imageInfo?.is_archived;
+
   return (
     <AnimatePresence>
       <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -487,7 +707,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           </div>
 
           {/* Content */}
-          <div className="flex h-full overflow-hidden">
+          <div className="flex h-full overflow-visible">
             {/* Image Viewer */}
             <div 
               ref={containerRef}
@@ -533,16 +753,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }}
                       style={{display: 'block'}}
                     />
-                    {/* Overlays: archive icon top-left, favorite heart bottom-right (static in viewer for now) */}
-                    {/* Bottom-left overlays to leave bottom-right for time */}
-                    <div className="absolute bottom-2 left-2 w-7 h-7 rounded-full flex items-center justify-center bg-white bg-opacity-80">
-                      <svg viewBox="0 0 24 24" className={`w-4 h-4 ${(imageInfo?.is_favorite ?? imageInfo?.is_favorites) ? 'text-red-500' : 'text-gray-300'}`} fill={(imageInfo?.is_favorite ?? imageInfo?.is_favorites) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                      </svg>
-                    </div>
-                    {imageInfo?.is_archived && (
-                      <div className="absolute bottom-2 left-12 bg-gray-700 bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">A</div>
-                    )}
+                    {/* Overlays: show unarchive when archived */}
+                    {/* No image overlay actions */}
                     
                     {/* Face rectangles - now inside the transformed container */}
                     {showRectangles && imageLoaded && faces.map((face, index) => {
@@ -611,10 +823,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={handleZoomOut}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    className="w-7 h-7 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title="Zoom out"
                   >
                     <Minus className="w-4 h-4" />
@@ -641,12 +853,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         setZoomInputValue(undefined);
                       }
                     }}
-                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                    style={{width: '3rem'}}
+                    className="text-xs font-medium text-gray-700 w-10 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '2.5rem'}}
                   />
                   <button
                     onClick={handleZoomIn}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    className="w-7 h-7 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title="Zoom in"
                   >
                     <Plus className="w-4 h-4" />
@@ -658,10 +870,45 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }
                       setShowRectangles(v => !v);
                     }}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    className="w-7 h-7 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title={showRectangles ? 'Hide face tags' : 'Show face tags'}
                   >
                     {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  {/* Quick add to album */}
+                  <AlbumQuickAddButton 
+                    imageId={imageId}
+                    eventUrl={eventUrl}
+                    showToast={showToast}
+                    urlHelpers={urlHelpers}
+                    placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                  />
+                  {/* Favorites and Archive actions (same UI as GroupDetail) */}
+                  <button
+                    onClick={handleToggleFavorite}
+                    className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${isFavorite ? 'text-red-600' : 'text-gray-700'}`}
+                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-pressed={isFavorite}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={isArchived ? handleRemoveFromArchive : handleAddToArchive}
+                    className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${isArchived ? 'text-gray-600' : 'text-gray-700'}`}
+                    title={isArchived ? 'Remove from archive' : 'Move to archive'}
+                    aria-pressed={isArchived}
+                  >
+                    {isArchived ? (
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" stroke="none" aria-hidden="true" focusable="false">
+                        <rect x="3" y="5" width="18" height="4" rx="1" ry="1"></rect>
+                        <rect x="4" y="9" width="16" height="10" rx="2" ry="2"></rect>
+                        <rect x="10" y="13" width="4" height="2" fill="white"></rect>
+                      </svg>
+                    ) : (
+                      <Archive className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => {
@@ -670,7 +917,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         open();
                       }
                     }}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    className="w-7 h-7 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title="Add to bucket"
                   >
                     <ShoppingBag className="w-4 h-4" />
@@ -678,7 +925,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-1">Image Details</h4>
+                  <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
                     <div><span className="font-semibold">Name:</span> {imageInfo?.label || imageMeta.label}</div>
                     <div><span className="font-semibold">Date:</span> {imageInfo?.date_taken || 'Unknown'}</div>
@@ -711,61 +958,123 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 </div>
               </div>
 
-              {/* Albums and Faces Info with resizable split */}
-              <div className="p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
-                {/* Albums Section - hidden when no albums */}
+              {/* Albums and Persons Info with resizable split */}
+              <div ref={sectionsRef} className="p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Albums Panel */}
                 {imageAlbums && imageAlbums.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-900 mb-2">Albums</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {imageAlbums.map(al => (
-                        <a key={al.albumID} href={`/${eventUrl}/albums/${encodeURIComponent(al.label)}`} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-800">
-                          {al.label}
-                        </a>
-                      ))}
+                  <div className="flex flex-col mb-2 min-h-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900">Albums ({imageAlbums.length})</h3>
+                      <button
+                        onClick={() => setAlbumsOpen(v => !v)}
+                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                        title={albumsOpen ? 'Hide albums' : 'Show albums'}
+                      >
+                        {albumsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
                     </div>
+                    {albumsOpen && (
+                      <div
+                        className={`overflow-y-auto ${facesOpen ? '' : 'flex-1 min-h-0'}`}
+                        style={facesOpen ? { height: albumsHeight } : {}}
+                      >
+                        {imageAlbums.map(album => (
+                          <div
+                            key={album.albumID}
+                            className="flex items-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-2"
+                          >
+                            <a
+                              href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+                              onClick={(e) => handleAlbumLinkClick(e, album)}
+                              className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              title={album.label}
+                            >
+                              <img
+                                src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : PLACEHOLDER_DATA_URL}
+                                alt=""
+                                className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = PLACEHOLDER_DATA_URL;
+                                }}
+                              />
+                              <span className="font-medium text-gray-900 truncate">{album.label}</span>
+                            </a>
+                            <button
+                              onClick={() => handleRemoveFromAlbum(album)}
+                              className="ml-3 p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              title={`Remove from ${album.label}`}
+                            >
+                              <Minus className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <h3 className="font-semibold text-gray-900 mb-2 flex-shrink-0">Faces in Image ({faces.length})</h3>
-                <div className="overflow-y-auto flex-1">
-                  {faces.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No faces detected in this image.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {faces.map((face, index) => (
-                        <div
-                          key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
-                          className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                          onClick={() => handleFaceClick(index)}
-                        >
-                          <img
-                            src={getFaceImageSrc(face)}
-                            alt={face.group_label}
-                            className="w-12 h-12 object-cover rounded-full"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src = PLACEHOLDER_DATA_URL;
-                            }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate">
-                              {face.group_label}
-                            </p>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleFaceNavigation(face);
-                            }}
-                            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                            title="Go to group page"
-                          >
-                            <User className="w-4 h-4 text-gray-600" />
-                          </button>
+                {/* Resizer */}
+                {imageAlbums && imageAlbums.length > 0 && albumsOpen && facesOpen && (
+                  <div
+                    className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mb-2"
+                    onMouseDown={startResize}
+                    title="Drag to resize"
+                  />
+                )}
+
+                {/* Persons Panel */}
+                <div className="flex flex-col flex-1 min-h-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">Persons in Photo ({faces.length})</h3>
+                    <button
+                      onClick={() => setFacesOpen(v => !v)}
+                      className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                      title={facesOpen ? 'Hide persons' : 'Show persons'}
+                    >
+                      {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {facesOpen && (
+                    <div className="overflow-y-auto flex-1">
+                      {faces.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No persons detected in this photo.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {faces.map((face, index) => (
+                            <div
+                              key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
+                              className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                              onClick={() => handleFaceClick(index)}
+                            >
+                              <img
+                                src={getFaceImageSrc(face)}
+                                alt={face.group_label}
+                                className="w-12 h-12 object-cover rounded-full"
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = PLACEHOLDER_DATA_URL;
+                                }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 truncate">
+                                  {face.group_label}
+                                </p>
+                              </div>
+                              <a
+                                href={`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`}
+                                onClick={(e) => handlePersonLinkClick(e, face)}
+                                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                                title="Go to person page"
+                              >
+                                <User className="w-4 h-4 text-gray-600" />
+                              </a>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>

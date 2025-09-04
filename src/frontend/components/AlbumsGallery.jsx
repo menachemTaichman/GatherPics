@@ -14,7 +14,7 @@ export default function AlbumsGallery({ eventUrl }) {
   useEffect(() => {
     async function loadAlbums() {
       try {
-        const res = await albumsAPI.getAll(eventUrl, includeArchived);
+        const res = await albumsAPI.getAll(eventUrl);
         setAlbums(res.albums || []);
       } catch (e) {
         console.error('Failed to load albums', e);

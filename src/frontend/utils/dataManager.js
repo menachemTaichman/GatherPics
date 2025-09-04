@@ -36,6 +36,9 @@ export const useDataStore = create((set, get) => ({
   loading: false,
   error: null,
   lastImagesRefresh: null,
+  lastAlbumAdd: null,
+  favoritesAlbumId: null,
+  archiveAlbumId: null,
   
   // Actions
   setGroups: (groups) => set({ groups }),
@@ -44,6 +47,9 @@ export const useDataStore = create((set, get) => ({
   setError: (error) => set({ error }),
   clearLastTransferResult: () => set({ lastTransferResult: null }),
   setImagesRefresh: (data) => set({ lastImagesRefresh: data }),
+  addImagesToAlbum: (result) => set({ lastAlbumAdd: result }),
+  setFavoritesAlbumId: (id) => set({ favoritesAlbumId: id }),
+  setArchiveAlbumId: (id) => set({ archiveAlbumId: id }),
   
   // Group operations
   updateGroup: (groupId, updates) => {
@@ -283,13 +289,20 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
       break;
     
     case CHANGE_TYPES.IMAGES_REFRESH: {
-      // Update images flags in-place for currently loaded groups view, based on album_label
-      const { album_label, image_ids, added, action } = data || {};
-      const addedCount = typeof added === 'number' ? added : 0;
-      const isAdd = action !== 'remove';
-      if (!album_label || !Array.isArray(image_ids)) break;
-      // Save last refresh payload so components can react
-      store.setImagesRefresh({ album_label, image_ids, isAdd, addedCount });
+      // Normalize payload from backend change instructions
+      const albumLabel = data?.album_label;
+      const imageIds = Array.isArray(data?.image_ids) ? data.image_ids : [];
+      const isAdd = typeof data?.isAdd === 'boolean' ? data.isAdd : (data?.action ? data.action !== 'remove' : true);
+      const addedCount =
+        typeof data?.added === 'number'
+          ? data.added
+          : (Array.isArray(data?.added_ids)
+              ? data.added_ids.length
+              : (Array.isArray(data?.removed_ids)
+                  ? data.removed_ids.length
+                  : (Array.isArray(imageIds) ? imageIds.length : 0)));
+      if (!albumLabel || imageIds.length === 0) break;
+      store.setImagesRefresh({ album_label: albumLabel, image_ids: imageIds, isAdd, addedCount });
       break;
     }
       

@@ -16,28 +16,27 @@ export default function AlbumDetail({ showToast }) {
   const [sortOrder, setSortOrder] = useSetting('albumDetail_sortOrder', 'asc');
   const [imageSize, setImageSize] = useSetting('albumDetail_imageSize', 1.0);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
-  const [includeArchived] = useSetting('include_archived_images', false);
   const [selection, setSelection] = useState(new Set());
 
   useEffect(() => {
     async function fetchAlbum() {
       try {
         // We have label in the URL: fetch all albums and find by label
-        const all = await albumsAPI.getAll(eventUrl, includeArchived);
+        const all = await albumsAPI.getAll(eventUrl);
         const found = (all.albums || []).find(a => a.label === album_name);
         if (!found) {
           navigate(`/${eventUrl}/albums`);
           return;
         }
         setAlbum(found);
-        const res = await albumsAPI.getImages(found.albumID, eventUrl, includeArchived);
+        const res = await albumsAPI.getImages(found.albumID, eventUrl);
         setImages(res.images || []);
       } catch (e) {
         console.error('Failed to load album', e);
       }
     }
     if (eventUrl && album_name) fetchAlbum();
-  }, [eventUrl, album_name, includeArchived, navigate]);
+  }, [eventUrl, album_name, navigate]);
 
   const sortedImages = useMemo(() => {
     const arr = [...images];
@@ -58,10 +57,14 @@ export default function AlbumDetail({ showToast }) {
   const handleRemoveSelected = async () => {
     if (!album || selection.size === 0) return;
     try {
-      await albumsAPI.removeImages(album.albumID, Array.from(selection), eventUrl);
-      setImages(prev => prev.filter(img => !selection.has(img.id)));
-      setSelection(new Set());
-      showToast('Removed from album', 'success');
+      const result = await albumsAPI.removeImages(album.albumID, Array.from(selection), eventUrl);
+      if (result.success && result.removed_ids) {
+        setImages(prev => prev.filter(img => !result.removed_ids.includes(img.id)));
+        setSelection(new Set());
+        showToast('Removed from album', 'success');
+      } else {
+        throw new Error('Failed to remove images');
+      }
     } catch (e) {
       showToast('Failed to remove from album', 'error');
     }

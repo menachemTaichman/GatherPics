@@ -86,23 +86,24 @@ class ModelsManager:
         """Insert one or many records. If a single dict is provided, return the new ID.
         If a list is provided, return the inserted records list.
         """
-        if isinstance(data, dict):
-            if self.id_field(table) not in data:
-                data[self.id_field(table)] = self.generate_id()
-            inserted = self.db.insert(table, [data])
-            return inserted[0][self.id_field(table)] if inserted else None
-        data_list: List[Dict] = data
+        is_single_item = isinstance(data, dict)
+        data_list = [data] if is_single_item else data
+        
         for row in data_list:
             if self.id_field(table) not in row:
                 row[self.id_field(table)] = self.generate_id()
-        return self.db.insert(table, data_list)
+        
+        inserted_ids = self.db.insert(table, data_list)
+        
+        if is_single_item:
+            return inserted_ids[0] if inserted_ids else None
+        return inserted_ids
 
     def delete(self, table: str, entity_id: str):
-        self.db.delete(table, {self.id_field(table): entity_id})
+        return self.db.delete(table, {self.id_field(table): entity_id})
 
-    def edit(self, table: str, entity_id: str, fields: Dict, include_archived: bool = False) -> Dict | None:
-        self.db.update(table, {self.id_field(table): entity_id}, fields)
-        return self.get_one(table, entity_id, include_archived)
+    def edit(self, table: str, entity_id: str, fields: Dict, include_archived: bool = False) -> List[str]:
+        return self.db.update(table, {self.id_field(table): entity_id}, fields)
 
     def get_one(self, table: str, entity_id: str, include_archived: bool = False) -> Dict | None:
         entity = self.db.get_one(table, {self.id_field(table): entity_id}, include_archived=include_archived)
@@ -120,12 +121,19 @@ class ModelsManager:
         results = self.db.get_all(table, include_archived)
         if table in ('groups', 'moments', 'albums'):
             for row in results:
+                entity_id = row.get(self.id_field(table))
+                if not entity_id:
+                    row['image_ids'] = []
+                    continue
+
                 if table == 'groups':
-                    row['image_ids'] = self.get_group_images(row['groupID'], include_archived)
+                    row['image_ids'] = self.get_group_images(entity_id, include_archived)
                 elif table == 'moments':
-                    row['image_ids'] = self.get_moment_images(row['momentID'], include_archived)
+                    row['image_ids'] = self.get_moment_images(entity_id, include_archived)
                 elif table == 'albums':
-                    row['image_ids'] = self.get_album_images(row['albumID'], include_archived)
+                    # Always include archived for 'archive' album, otherwise use param
+                    is_archive_album = (row.get('label') or '').lower() == 'archive'
+                    row['image_ids'] = self.get_album_images(entity_id, is_archive_album or include_archived)
         return results
 
     # -------- Cross-model helpers --------
@@ -244,9 +252,11 @@ class ModelsManager:
 
     def get_group_images(self, group_id: str, include_archived: bool = False) -> List[str]:
         accessible_faces = self.db._get_accessible_table_name('faces')
+        accessible_images = self.db._get_accessible_table_name('images')
         query = f'''
-            SELECT DISTINCT f.imageID 
-            FROM {accessible_faces} f 
+            SELECT DISTINCT i.imageID 
+            FROM {accessible_images} i
+            JOIN {accessible_faces} f ON i.imageID = f.imageID
             WHERE f.groupID = ?
         '''
         results = self.db.execute_query(query, (group_id,), include_archived)
@@ -272,15 +282,15 @@ class ModelsManager:
         results = self.db.execute_query(query, (image_id, group_id), include_archived)
         return [row[0] for row in results]
 
-    def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> None:
+    def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> List[str]:
         if not face_ids or not group_id:
-            return
+            return []
 
         # Move faces to the target group
         accessible_faces = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
         query = f"UPDATE {accessible_faces} SET groupID=? WHERE faceID IN ({placeholders})"
-        self.db.execute_query(query, (group_id, *face_ids), include_archived=True)
+        updated_ids = self.db.execute_query(query, (group_id, *face_ids), include_archived=True)
 
         # Ensure target representative exists
         representative_face = self.get_one('groups', group_id, include_archived=True).get('representative_face')
@@ -307,6 +317,8 @@ class ModelsManager:
                 if not new_representative_face:
                     new_representative_face = ''
                 self.edit('groups', old_group_id, {'representative_face': new_representative_face}, include_archived=True)
+        
+        return updated_ids
 
     # -------- Faces helpers --------
     def get_biggest_face(self, face_ids: List[str], include_archived: bool = False) -> str:
@@ -350,7 +362,7 @@ class ModelsManager:
             return {
                 'target_group_id': target_group_id,
                 'old_group_deleted': False,
-                'transferred_faces': face_ids,
+                'transferred_faces_ids': [],
                 'images_to_remove_from_source': [],
                 'images_to_add_to_target': [],
                 'updated_source_group': None,
@@ -375,11 +387,11 @@ class ModelsManager:
             if conflict_check:
                 raise ValueError(f"Group name '{new_group_name}' already exists")
             # Create new group with empty representative; it will be set by add_faces_to_group
-            created = self.add('groups', [{
+            created_id = self.add('groups', {
                 'label': new_group_name,
                 'representative_face': ''
-            }])
-            target_group_id = created[0]['groupID'] if created else None
+            })
+            target_group_id = created_id
 
         target_group = self.get_one('groups', target_group_id, include_archived=True)
         target_representative_before = target_group.get('representative_face') if target_group else ''
@@ -387,7 +399,7 @@ class ModelsManager:
             existing_target_images = set(target_group['image_ids'])
             images_to_add_to_target = images_to_add_to_target - existing_target_images
 
-        self.add_faces_to_group(target_group_id, face_ids)
+        transferred_faces_ids = self.add_faces_to_group(target_group_id, face_ids)
 
         images_to_remove_from_source = set()
         for image_id in images_to_add_to_target:
@@ -412,7 +424,7 @@ class ModelsManager:
         result = {
             'target_group_id': target_group_id,
             'old_group_deleted': old_group_deleted,
-            'transferred_faces': face_ids,
+            'transferred_faces_ids': transferred_faces_ids,
             'images_to_remove_from_source': list(images_to_remove_from_source),
             'images_to_add_to_target': list(images_to_add_to_target),
             'updated_source_group': updated_source_group,
@@ -436,13 +448,13 @@ class ModelsManager:
         results = self.db.execute_query(f'SELECT imageID FROM {accessible_table} WHERE momentID=?', (moment_id,), include_archived)
         return [row[0] for row in results]
 
-    def add_images_to_moment(self, moment_id: str, image_ids: List[str]) -> None:
+    def add_images_to_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:  # Guard against empty lists
-            return
+            return []
         accessible_table = self.db._get_accessible_table_name('images')
         image_placeholders = ','.join(['?'] * len(image_ids))   
         query = f'UPDATE {accessible_table} SET momentID=? WHERE imageID IN ({image_placeholders})'
-        self.db.execute_query(query, (moment_id, *image_ids), True)
+        updated_ids = self.db.execute_query(query, (moment_id, *image_ids), True)
 
         representative_image = self.get_one('moments', moment_id, True)['representative_image']
         new_representative_image = ''
@@ -462,14 +474,16 @@ class ModelsManager:
                 else:
                     new_representative_image = ''
                 self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
+        
+        return updated_ids
 
-    def remove_images_from_moment(self, moment_id: str, image_ids: List[str]) -> None:
+    def remove_images_from_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:  # Guard against empty lists
-            return
+            return []
         accessible_table = self.db._get_accessible_table_name('images')
         image_placeholders = ','.join(['?'] * len(image_ids))
         query = f'UPDATE {accessible_table} SET momentID=NULL WHERE imageID IN ({image_placeholders}) AND momentID=?'
-        self.db.execute_query(query, (*image_ids, moment_id), True)
+        updated_ids = self.db.execute_query(query, (*image_ids, moment_id), True)
 
         # Check if the current representative image is being removed
         current_representative_image = self.get_one('moments', moment_id, True)['representative_image']
@@ -480,15 +494,52 @@ class ModelsManager:
             if remaining_images and len(remaining_images) > 0:
                 new_representative_image = remaining_images[0]
             self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
+        
+        return updated_ids
+
+    def get_image_albums(self, image_id: str, include_archived: bool = False, exclude_defaults: bool = True) -> List[Dict]:
+        """Return list of albums the image belongs to, excluding default albums if requested.
+        Each item: { 'albumID': str, 'label': str, 'representative_image': str }
+        """
+        accessible_albums = self.db._get_accessible_table_name('albums')
+        accessible_album_images = self.db._get_accessible_table_name('album_images')
+
+        query = f'''
+            SELECT a.albumID, a.label, a.representative_image
+            FROM {accessible_albums} a
+            JOIN {accessible_album_images} ai ON a.albumID = ai.albumID
+            WHERE ai.imageID = ?
+        '''
+        rows = self.db.execute_query(query, (image_id,), include_archived)
+
+        results: List[Dict] = []
+        for album_id, label, rep in rows:
+            if exclude_defaults and (label or '').lower() in ('favorites', 'archive'):
+                continue
+            results.append({
+                'albumID': album_id,
+                'label': label,
+                'representative_image': rep
+            })
+        return results
     
     # -------- Albums helpers --------
     def get_album_images(self, album_id: str, include_archived: bool = False) -> List[str]:
-        accessible_table = self.db._get_accessible_table_name('album_images')
-        # get from db model to avoid infinite recursion
+        accessible_album_images = self.db._get_accessible_table_name('album_images')
+        accessible_images = self.db._get_accessible_table_name('images')
+        
         album = self.db.get_one('albums', {'albumID': album_id}, include_archived=True)
-        if album and 'label' in album and album['label'] == 'archive':
+        # Always include archived images for the "archive" album, regardless of the parameter
+        if album and 'label' in album and album['label'].lower() == 'archive':
             include_archived = True
-        results = self.db.execute_query(f'SELECT imageID FROM {accessible_table} WHERE albumID=?', (album_id,), include_archived)
+            
+        query = f'''
+            SELECT ai.imageID
+            FROM {accessible_album_images} ai
+            JOIN {accessible_images} i ON ai.imageID = i.imageID
+            WHERE ai.albumID = ?
+        '''
+        results = self.db.execute_query(query, (album_id,), include_archived)
         return [row[0] for row in results]
 
     def get_album_by_label(self, label: str) -> Dict | None:
@@ -500,27 +551,49 @@ class ModelsManager:
         accessible = self.db.get_one('albums', {'albumID': album['albumID']}, include_archived=True)
         return accessible
 
-    def add_images_to_album(self, album_id: str, image_ids: List[str]) -> int:
-        """Add images to an album using the accessible view trigger. Returns count added."""
+    def add_images_to_album(self, album_id: str, image_ids: List[str]) -> Dict[str, Union[List[str], List[str]]]:
+        """Add images to an album. Returns added image IDs and images that are now archived."""
         if not image_ids:
-            return 0
+            return {'added_ids': [], 'archived_ids': []}
+            
+        already_in_album = self.get_album_images(album_id, include_archived=True)
+        image_ids = [image_id for image_id in image_ids if image_id not in already_in_album]
+        
+        if not image_ids:
+            return {'added_ids': [], 'archived_ids': []}
+        
         rows = [{'albumID': album_id, 'imageID': image_id} for image_id in image_ids]
-        inserted = self.db.insert('accessible_albums_images', rows)
-        return len(inserted)
+        # inserted_pairs is a list of (album_id, image_id) tuples
+        inserted_pairs = self.db.insert('accessible_albums_images', rows)
+        added_ids = [pair[1] for pair in inserted_pairs]
+        
+        if not added_ids:
+            return {'added_ids': [], 'archived_ids': []}
+        
+        archived_ids = []
+        image_placeholders = ','.join(['?'] * len(added_ids))
+        query = f'''
+            SELECT imageID
+            FROM images_with_albums
+            WHERE imageID IN ({image_placeholders}) AND is_archived = 1
+        '''
+        results = self.db.execute_query(query, (*added_ids,), True)
+        if results:
+            archived_ids.extend([row[0] for row in results])
 
-    def remove_images_from_album(self, album_id: str, image_ids: List[str]) -> int:
+        return {'added_ids': added_ids, 'archived_ids': archived_ids}
+
+    def remove_images_from_album(self, album_id: str, image_ids: List[str]) -> List[str]:
         """Remove images from an album. Rely on DB triggers for permissions and then update representative image if needed."""
         if not image_ids:
-            return 0
-        # Delete directly from album_images; DB triggers and views enforce permissions
-        accessible_table = self.db._get_accessible_table_name('album_images')
+            return []
+        
         del_placeholders = ','.join(['?'] * len(image_ids))
-        self.db.execute_query(
-            f"DELETE FROM {accessible_table} WHERE albumID=? AND imageID IN ({del_placeholders})",
-            (album_id, *image_ids),
-            include_archived=True
+        deleted_pairs = self.db.delete(
+            'accessible_albums_images',
+            {'albumID': album_id, 'imageID': image_ids}
         )
-
+        
         # If representative_image removed, choose a new one (first remaining), or clear it
         current_album = self.get_one('albums', album_id, include_archived=True)
         if current_album:
@@ -530,35 +603,45 @@ class ModelsManager:
                 new_rep = remaining[0] if remaining else ''
                 self.edit('albums', album_id, {'representative_image': new_rep}, include_archived=True)
 
-        return len(image_ids)
+        return [pair[1] for pair in deleted_pairs]
 
     # -------- Profiles helpers --------
-    def add_accessible_images(self, profile_id: str, image_ids: List[str]):
+    def add_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:
-            return
+            return []
         to_insert = [
             {'profileID': profile_id, 'imageID': image_id, 'accessible': 1}
             for image_id in image_ids
         ]
-        self.db.insert('editable_profile_images', to_insert)
+        inserted_pairs = self.db.insert('editable_profile_images', to_insert)
+        return [pair[1] for pair in inserted_pairs]
 
-    def remove_accessible_images(self, profile_id: str, image_ids: List[str]):
+    def remove_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:
-            return
-        for image_id in image_ids:
-            self.db.delete('editable_profile_images', {'profileID': profile_id, 'imageID': image_id})
+            return []
+        
+        deleted_pairs = self.db.delete(
+            'editable_profile_images',
+            {'profileID': profile_id, 'imageID': image_ids}
+        )
+        return [pair[1] for pair in deleted_pairs]
 
-    def add_accessible_albums(self, profile_id: str, album_ids: List[str]):
+    def add_accessible_albums(self, profile_id: str, album_ids: List[str]) -> List[str]:
         if not album_ids:
-            return
+            return []
         to_insert = [
             {'profileID': profile_id, 'albumID': album_id, 'accessible': 1}
             for album_id in album_ids
         ]
-        self.db.insert('editable_profile_albums', to_insert)
+        inserted_pairs = self.db.insert('editable_profile_albums', to_insert)
+        return [pair[1] for pair in inserted_pairs]
 
-    def remove_accessible_albums(self, profile_id: str, album_ids: List[str]):
+    def remove_accessible_albums(self, profile_id: str, album_ids: List[str]) -> List[str]:
         if not album_ids:
-            return
-        for album_id in album_ids:
-            self.db.delete('editable_profile_albums', {'profileID': profile_id, 'albumID': album_id})
+            return []
+        
+        deleted_pairs = self.db.delete(
+            'editable_profile_albums',
+            {'profileID': profile_id, 'albumID': album_ids}
+        )
+        return [pair[1] for pair in deleted_pairs]

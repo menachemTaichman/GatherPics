@@ -76,7 +76,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Build complete response
         # List albums for this image (labels)
         try:
-            image_albums = event.models_manager.get_image_albums(image_id, include_archived)
+            image_albums = event.models_manager.get_image_albums(image_id, include_archived, exclude_defaults=True)
         except Exception:
             image_albums = []
 
@@ -259,6 +259,8 @@ def get_album_images(event_id, album_id):
 
         image_ids = event.models_manager.get_album_images(album_id, include_archived)
         images_data = []
+        if album.get('label', '').lower() == 'archive':
+            include_archived = True
         for image_id in image_ids:
             image = event.models_manager.get_one('images', image_id, include_archived)
             if image:
@@ -287,14 +289,20 @@ def add_images_to_album(event_id, album_id):
 
     data = request.json or {}
     image_ids = data.get('image_ids', [])
+    include_archived = _parse_include_archived(False)
+    
     try:
-        added = event.models_manager.add_images_to_album(album_id, image_ids)
-        # Add change instruction for store updates (favorites/archive or generic album)
-        response = {"success": True, "added": added}
-        label = (event.models_manager.get_one('albums', album_id, include_archived=True) or {}).get('label', '').lower()
+        result = event.models_manager.add_images_to_album(album_id, image_ids)
+        response = {"success": True, "added_ids": result['added_ids'], "archived_ids": result['archived_ids']}
+        
+        album = event.models_manager.get_one('albums', album_id, include_archived=include_archived)
+        label = (album or {}).get('label', '').lower()
+        
         if label in ('favorites', 'archive'):
             change_type = 'IMAGES_REFRESH'
-            response = add_change_instruction(response, change_type, {"album_label": label, "image_ids": image_ids, "added": added})
+            # For state logic, we need to signify an addition of these images to the album
+            response = add_change_instruction(response, change_type, {"album_label": label, "image_ids": image_ids, "isAdd": True})
+        
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -310,11 +318,11 @@ def remove_images_from_album(event_id, album_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed = event.models_manager.remove_images_from_album(album_id, image_ids)
-        response = {"success": True, "removed": removed}
+        removed_ids = event.models_manager.remove_images_from_album(album_id, image_ids)
+        response = {"success": True, "removed_ids": removed_ids}
         label = (event.models_manager.get_one('albums', album_id, include_archived=True) or {}).get('label', '').lower()
         if label in ('favorites', 'archive'):
-            response = add_change_instruction(response, 'IMAGES_REFRESH', {"album_label": label, "image_ids": image_ids, "action": 'remove'})
+            response = add_change_instruction(response, 'IMAGES_REFRESH', {"album_label": label, "image_ids": image_ids, "isAdd": False})
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -349,7 +357,7 @@ def update_group(event_id, group_id):
     data = request.json or {}
     
     try:
-        event.models_manager.edit('groups', group_id, data)
+        updated_ids = event.models_manager.edit('groups', group_id, data)
         
         # Get the group after update
         include_archived = _parse_include_archived(False)
@@ -415,7 +423,7 @@ def delete_group(event_id, group_id):
             return not_found(f"Group {group_id} not found or not accessible")
         
         # Delete the group
-        event.models_manager.delete('groups', group_id)
+        deleted_ids = event.models_manager.delete('groups', group_id)
         
         # Add change instruction for frontend
         response_data = {"success": True}
@@ -465,7 +473,7 @@ def transfer_faces(event_id):
             updated_target = event.models_manager.get_one('groups', result['target_group_id'])
         
         # Add change instructions for frontend
-        response_data = {"success": True, "transferred_count": len(face_ids)}
+        response_data = {"success": True, "transferred_count": len(result.get('transferred_faces_ids', []))}
         response_data.update(result)  # Include all result data from the transfer
         
         if updated_source:
@@ -692,8 +700,8 @@ def update_moment(event_id, moment_id):
         data = request.json or {}
         
         # Update the moment
-        event.models_manager.add_images_to_moment(moment_id, data.get('images_to_add', []))
-        event.models_manager.remove_images_from_moment(moment_id, data.get('images_to_remove', []))
+        added_image_ids = event.models_manager.add_images_to_moment(moment_id, data.get('images_to_add', []))
+        removed_image_ids = event.models_manager.remove_images_from_moment(moment_id, data.get('images_to_remove', []))
         # Safely remove optional and computed keys if present
         data.pop('images_to_add', None)
         data.pop('images_to_remove', None)
@@ -710,7 +718,7 @@ def update_moment(event_id, moment_id):
         updated_moment = event.models_manager.get_one('moments', moment_id, include_archived)
         
         # Add change instruction for frontend and include the updated moment
-        response_data = {"success": True, "moment": updated_moment}
+        response_data = {"success": True, "moment": updated_moment, "added_image_ids": added_image_ids, "removed_image_ids": removed_image_ids}
         response_data = add_change_instruction(response_data, 'MOMENT_UPDATED', updated_moment)
         return jsonify(response_data)
     except Exception as e:
@@ -730,10 +738,10 @@ def delete_moment(event_id, moment_id):
             return not_found(f"Moment {moment_id} not found or not accessible")
         
         # Delete the moment
-        event.models_manager.delete('moments', moment_id)
+        deleted_ids = event.models_manager.delete('moments', moment_id)
         
         # Add change instruction for frontend
-        response_data = {"success": True}
+        response_data = {"success": True, "deleted_ids": deleted_ids}
         response_data = add_change_instruction(response_data, 'MOMENT_DELETED', {"moment_id": moment_id})
         return jsonify(response_data)
     except Exception as e:

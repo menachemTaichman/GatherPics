@@ -20,7 +20,19 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups
-  const { groups: storeGroups } = useDataStore();
+  const { groups: storeGroups, setGroups } = useDataStore();
+
+  useEffect(() => {
+    async function loadGroups() {
+        try {
+            const res = await groupsAPI.getAll(eventUrl);
+            setGroups(res.groups || []);
+        } catch (e) {
+            console.error('Failed to load groups', e);
+        }
+    }
+    if (eventUrl) loadGroups();
+  }, [eventUrl, setGroups]);
 
   // Use groups from store if available, otherwise fall back to props
   const currentGroups = storeGroups.length > 0 ? storeGroups : groups;

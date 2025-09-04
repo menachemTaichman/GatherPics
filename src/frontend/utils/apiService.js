@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from './dataManager';
 import { resolveEventId } from './eventResolver';
+import { getSetting } from './settings';
 
 // API base URL - centralized configuration
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
@@ -16,6 +17,16 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
+    // Automatically add include_archived flag to all GET requests
+    if (config.method === 'get') {
+      const includeArchived = getSetting('include_archived_images', false);
+      if (includeArchived) {
+        config.params = {
+          ...config.params,
+          include_archived: 'true',
+        };
+      }
+    }
     return config;
   },
   (error) => {
@@ -361,21 +372,20 @@ export const imagesAPI = {
 // Albums API
 export const albumsAPI = {
   // Get all albums
-  getAll: async (eventUrl, includeArchived = false, options = {}) => {
+  getAll: async (eventUrl, options = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const params = [];
-    if (includeArchived) params.push('include_archived=true');
-    if (options.exclude_defaults) params.push('exclude_defaults=true');
-    const query = params.length ? `?${params.join('&')}` : '';
-    const response = await api.get(`/api/events/${eventId}/albums${query}`);
+    const params = {};
+    if (options.exclude_defaults) {
+        params.exclude_defaults = 'true';
+    }
+    const response = await api.get(`/api/events/${eventId}/albums`, { params });
     return response.data;
   },
 
   // Get specific album
-  getById: async (albumId, eventUrl, includeArchived = false) => {
+  getById: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const params = includeArchived ? '?include_archived=true' : '';
-    const response = await api.get(`/api/events/${eventId}/albums/${albumId}${params}`);
+    const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
     return response.data;
   },
 
@@ -387,10 +397,9 @@ export const albumsAPI = {
   },
 
   // Get album images
-  getImages: async (albumId, eventUrl, includeArchived = false) => {
+  getImages: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const params = includeArchived ? '?include_archived=true' : '';
-    const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images${params}`);
+    const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
     return response.data;
   },
 
@@ -409,30 +418,76 @@ export const albumsAPI = {
   },
 
   // Favorites helpers (uses default album label lookups client-side)
-  toggleFavorite: async (imageIds, inFavorites, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    // Resolve favorites album id
-    const all = await api.get(`/api/events/${eventId}/albums`);
-    const fav = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'favorites');
-    if (!fav) return { added: 0, removed: 0 };
-    if (inFavorites) {
-      // remove
-      const res = await api.delete(`/api/events/${eventId}/albums/${fav.albumID}/images`, { data: { image_ids: imageIds } });
-      return { removed: res.data.removed || 0 };
-    } else {
-      const res = await api.post(`/api/events/${eventId}/albums/${fav.albumID}/images`, { image_ids: imageIds });
-      return { added: res.data.added || 0 };
+  toggleFavorite: async (imageIds, isFavorite, eventUrl) => {
+    const store = useDataStore.getState();
+    let favoritesAlbumId = store.favoritesAlbumId;
+
+    if (!favoritesAlbumId) {
+      const eventId = await getEventIdForApi(eventUrl);
+      const all = await api.get(`/api/events/${eventId}/albums`);
+      const fav = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'favorites');
+      if (fav) {
+        favoritesAlbumId = fav.albumID;
+        store.setFavoritesAlbumId(favoritesAlbumId);
+      }
     }
-  }
-  ,
+
+    if (!favoritesAlbumId) {
+      throw new Error("Favorites album not found.");
+    }
+    
+    if (isFavorite) {
+      return albumsAPI.removeImages(favoritesAlbumId, imageIds, eventUrl);
+    } else {
+      return albumsAPI.addImages(favoritesAlbumId, imageIds, eventUrl);
+    }
+  },
+
   // Archive helpers
   addToArchive: async (imageIds, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const all = await api.get(`/api/events/${eventId}/albums`);
-    const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
-    if (!archive) return { added: 0 };
-    const res = await api.post(`/api/events/${eventId}/albums/${archive.albumID}/images`, { image_ids: imageIds });
-    return { added: res.data.added || 0 };
+    const store = useDataStore.getState();
+    let archiveAlbumId = store.archiveAlbumId;
+    
+    if (!archiveAlbumId) {
+        const eventId = await getEventIdForApi(eventUrl);
+        const all = await api.get(`/api/events/${eventId}/albums`);
+        const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
+        if (archive) {
+            archiveAlbumId = archive.albumID;
+            store.setArchiveAlbumId(archiveAlbumId);
+        }
+    }
+
+    if (!archiveAlbumId) {
+        throw new Error("Archive album not found.");
+    }
+    
+    return albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
+  },
+
+  // Toggle archive status for images
+  toggleArchive: async (imageIds, isArchived, eventUrl) => {
+    const store = useDataStore.getState();
+    let archiveAlbumId = store.archiveAlbumId;
+
+    if (!archiveAlbumId) {
+      const eventId = await getEventIdForApi(eventUrl);
+      const all = await api.get(`/api/events/${eventId}/albums`);
+      const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
+      if (archive) {
+        archiveAlbumId = archive.albumID;
+        store.setArchiveAlbumId(archiveAlbumId);
+      }
+    }
+
+    if (!archiveAlbumId) {
+      throw new Error('Archive album not found.');
+    }
+
+    if (isArchived) {
+      return albumsAPI.removeImages(archiveAlbumId, imageIds, eventUrl);
+    }
+    return albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
   }
 };
 

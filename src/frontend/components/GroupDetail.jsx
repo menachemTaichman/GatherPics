@@ -32,7 +32,8 @@ import {
   CheckSquare,
   CheckCheck,
   ShoppingBag,
-  Heart
+  Heart,
+  Archive
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import ImageViewer from './ImageViewer';
@@ -56,7 +57,7 @@ function AlbumQuickAddButton({ selectedImages, eventUrl, showToast, urlHelpers, 
     (async () => {
       setLoading(true);
       try {
-        const res = await albumsAPI.getAll(eventUrl, false, { exclude_defaults: true });
+        const res = await albumsAPI.getAll(eventUrl, { exclude_defaults: true });
         if (mounted) setAlbums(res.albums || []);
       } catch (e) {
         // ignore
@@ -91,7 +92,8 @@ function AlbumQuickAddButton({ selectedImages, eventUrl, showToast, urlHelpers, 
                     onClick={async () => {
                       try {
                         const res = await albumsAPI.addImages(album.albumID, selectedImages, eventUrl);
-                        const added = res.added || 0;
+                        useDataStore.getState().addImagesToAlbum(res);
+                        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
                         showToast(
                           <span>
                             {added} added to{' '}
@@ -136,6 +138,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedImages, setSelectedImages] = useState(new Set());
   const [lastSelectedImage, setLastSelectedImage] = useState(null);
+  const [includeArchived] = useSetting('include_archived_images', false);
   
   // Load selected images from cache when group changes
   useEffect(() => {
@@ -367,17 +370,23 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       (state) => {
         // Handle images refresh events (favorites/archive)
         const imgRefresh = state.lastImagesRefresh;
-        if (imgRefresh && Array.isArray(sortedImages) && sortedImages.length > 0) {
+        if (imgRefresh) {
           const affected = new Set(imgRefresh.image_ids || []);
           if (imgRefresh.album_label === 'favorites') {
             setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_favorite: imgRefresh.isAdd } : img));
           }
           if (imgRefresh.album_label === 'archive') {
-            const includeArchived = !!getSetting('include_archived_images');
             if (imgRefresh.isAdd) {
               // Archiving: either remove from grid (if not including archived) or mark as archived
               if (!includeArchived) {
-                setSortedImages(prev => prev.filter(img => !affected.has(img.id)));
+                setSortedImages(prev => {
+                  const next = prev.filter(img => !affected.has(img.id));
+                  // If viewer is open and current image was removed, close it
+                  if (imageViewer.show && affected.has(imageViewer.image)) {
+                    setImageViewer({ show: false, image: null, index: 0 });
+                  }
+                  return next;
+                });
               } else {
                 setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: true } : img));
               }
@@ -386,13 +395,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: false } : img));
             }
           }
-          // Clear viewer if current image was removed due to archive
-          if (imageViewer.show && imgRefresh.album_label === 'archive' && imgRefresh.isAdd && !getSetting('include_archived_images')) {
-            if (!sortedImages.some(img => img.id === imageViewer.image)) {
-              setImageViewer({ show: false, image: null, index: 0 });
-            }
-          }
         }
+
+        // Handle images to remove from album add
+        const albumAddResult = state.lastAlbumAdd;
+        if (albumAddResult && albumAddResult.images_to_remove && albumAddResult.images_to_remove.length > 0) {
+            const removedSet = new Set(albumAddResult.images_to_remove);
+            setSortedImages(prev => prev.filter(img => !removedSet.has(img.id)));
+            // Reset after processing
+            useDataStore.getState().addImagesToAlbum(null); 
+        }
+
         // Handle transfer results
         const transferResult = state.lastTransferResult;
         if (transferResult) {
@@ -479,7 +492,18 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate, imageViewer]); // include imageViewer for accurate updates
+  }, [group?.groupID, sortBy, sortOrder, navigate, imageViewer, includeArchived]); // include imageViewer for accurate updates
+
+  useEffect(() => {
+    // When the archive setting changes, refetch the group data to get updated image_ids count
+    if (group?.groupID) {
+        (async () => {
+            const freshGroup = await groupsAPI.getById(group.groupID, eventUrl);
+            useDataStore.getState().updateGroup(group.groupID, freshGroup);
+        })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeArchived, eventUrl, group?.groupID]);
 
   // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
@@ -665,6 +689,55 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
   };
 
+  // Unified favorites toggle for single or multiple images
+  const toggleFavoritesForIds = async (imageIds) => {
+    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
+    const selectedImageObjects = sortedImages.filter(img => imageIds.includes(img.id));
+    const allAreFavorites = selectedImageObjects.length > 0 && selectedImageObjects.every(isImageFavorite);
+
+    // Optimistic update
+    setSortedImages(prevImages =>
+      prevImages.map(img =>
+        imageIds.includes(img.id) ? { ...img, is_favorite: !allAreFavorites } : img
+      )
+    );
+
+    try {
+      if (allAreFavorites) {
+        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
+        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        showToast(
+          <span>
+            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+          </span>,
+          'success'
+        );
+      } else {
+        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
+        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        showToast(
+          <span>
+            {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+          </span>,
+          'success'
+        );
+      }
+    } catch (e) {
+      // Rollback on error
+      showToast('Failed to update favorites', 'error');
+      setSortedImages(prev => {
+        const newImages = [...prev];
+        selectedImageObjects.forEach(originalImage => {
+          const index = newImages.findIndex(i => i.id === originalImage.id);
+          if (index !== -1) {
+            newImages[index] = originalImage;
+          }
+        });
+        return newImages;
+      });
+    }
+  };
+
 
 
   const handleAddSelectedToBucket = async () => {
@@ -683,7 +756,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     if (selectedImages.size === 0) return;
     try {
       const res = await albumsAPI.addImages(album.albumID, Array.from(selectedImages), eventUrl);
-      const added = res.added || 0;
+      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
       showToast(
         <span>
           {added} added to{' '}
@@ -1316,19 +1389,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 <button
                   onClick={async () => {
                     if (selectedImages.size === 0) return;
-                    try {
-                      const res = await albumsAPI.toggleFavorite(Array.from(selectedImages), false, eventUrl);
-                      const added = res.added || 0;
-                      showToast(
-                        <span>
-                          {added} added to{' '}
-                          <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-                        </span>,
-                        'success'
-                      );
-                    } catch (e) {
-                      showToast('Failed to add to favorites', 'error');
-                    }
+                    await toggleFavoritesForIds(Array.from(selectedImages));
                   }}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 text-red-600"
                   title="Add selected to favorites"
@@ -1341,7 +1402,13 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     if (selectedImages.size === 0) return;
                     try {
                       const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
-                      const added = res.added || 0;
+                      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+                      // Remove archived from selection immediately
+                      setSelectedImages(prev => {
+                        const next = new Set(prev);
+                        Array.from(selectedImages).forEach(id => next.delete(id));
+                        return next;
+                      });
                       showToast(
                         <span>
                           {added} moved to{' '}
@@ -1356,7 +1423,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                   className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
                   title="Move selected to archive"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Archive className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleAddSelectedToBucket}
@@ -1539,30 +1606,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                         selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}
                       title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        (async () => {
-                          try {
-                            const inFav = isImageFavorite(image);
-                            await albumsAPI.toggleFavorite([image.id], inFav, eventUrl);
-                            setSortedImages(prev => prev.map(img => {
-                              if (img.id !== image.id) return img;
-                              const toggled = !inFav;
-                              return {
-                                ...img,
-                                is_favorite: toggled,
-                                albums: Array.isArray(img.albums)
-                                  ? (toggled
-                                      ? Array.from(new Set([...img.albums, 'favorites']))
-                                      : img.albums.filter(a => (a || '').toLowerCase() !== 'favorites'))
-                                  : (toggled ? ['favorites'] : [])
-                              };
-                            }));
-                            showToast(inFav ? 'Removed from Favorites' : 'Added to Favorites', 'success');
-                          } catch (err) {
-                            showToast('Failed to update favorites', 'error');
-                          }
-                        })();
+                        const imageId = image.id;
+                        await toggleFavoritesForIds([imageId]);
                       }}
                     >
                       <svg
@@ -1580,9 +1627,31 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       </svg>
                     </button>
                     {image.is_archived ? (
-                      <div className="absolute bottom-2 left-10 bg-gray-700 bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">
-                        A
-                      </div>
+                      <button
+                        type="button"
+                        className="absolute bottom-2 left-10 z-10 transition-opacity bg-gray-800 bg-opacity-70 text-white rounded px-1.5 py-0.5 flex items-center space-x-1"
+                        title="Remove from Archive"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
+                            const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+                            // Optimistic update
+                            setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: false } : img));
+                            showToast(
+                              <span>
+                                {removed} removed from{' '}
+                                <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+                              </span>,
+                              'success'
+                            );
+                          } catch (err) {
+                            showToast('Failed to remove from archive', 'error');
+                          }
+                        }}
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
                     ) : null}
                     </div>
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
