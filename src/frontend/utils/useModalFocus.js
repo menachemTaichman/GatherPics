@@ -115,15 +115,16 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     if (allowOutsideScroll) return;
     
     // Only apply scroll lock if this is the only modal open
-    if (isOpen && isTopModal(modalId) && document.body.style.overflow !== 'hidden') {
-      const originalOverflow = document.body.style.overflow;
+    if (isOpen && isTopModal(modalId)) {
+      const originalOverflow = document.documentElement.style.overflow || '';
+      document.documentElement.style.overflow = 'hidden';
+      const originalBodyOverflow = document.body.style.overflow || '';
       document.body.style.overflow = 'hidden';
       
       return () => {
-        // Only restore scroll if no other modals are open
-        if (!document.querySelector('.modal-overlay')) {
-           document.body.style.overflow = originalOverflow;
-        }
+        // Restore scroll on both root and body
+        document.documentElement.style.overflow = originalOverflow;
+        document.body.style.overflow = originalBodyOverflow;
       };
     }
   }, [isOpen, preventBackgroundScroll, allowOutsideScroll, modalId, isTopModal]);
@@ -233,14 +234,71 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   const handleWheel = useCallback((e) => {
     if (!isOpen || !isTopModal(modalId)) return;
 
-    // Check if the scroll is happening inside the modal first
-    if (modalRef.current && modalRef.current.contains(e.target)) {
-      return; // Allow scrolling inside modal
+    // If another handler already prevented default (e.g., custom image zoom/pan), respect it
+    if (e.defaultPrevented) return;
+
+    const isEventInsideModal = modalRef.current && modalRef.current.contains(e.target);
+    const isOutsideByPointer = (() => {
+      if (!modalRef.current) return true;
+      const rect = modalRef.current.getBoundingClientRect();
+      return (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+    })();
+
+    // If inside modal, allow scroll only when a scrollable ancestor can actually scroll in this direction.
+    if (isEventInsideModal) {
+      let node = e.target instanceof Element ? e.target : null;
+      const deltaY = e.deltaY || 0;
+      const deltaX = e.deltaX || 0;
+
+      const canScrollInAxis = (el) => {
+        const style = window.getComputedStyle(el);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+
+        // Treat auto/scroll as scrollable candidates
+        const yScrollable = overflowY === 'auto' || overflowY === 'scroll';
+        const xScrollable = overflowX === 'auto' || overflowX === 'scroll';
+
+        if (yScrollable) {
+          const maxY = el.scrollHeight - el.clientHeight;
+          if (maxY > 0) {
+            if (deltaY < 0 && el.scrollTop > 0) return true; // up
+            if (deltaY > 0 && el.scrollTop < maxY) return true; // down
+          }
+        }
+
+        if (xScrollable) {
+          const maxX = el.scrollWidth - el.clientWidth;
+          if (maxX > 0) {
+            if (deltaX < 0 && el.scrollLeft > 0) return true; // left
+            if (deltaX > 0 && el.scrollLeft < maxX) return true; // right
+          }
+        }
+
+        return false;
+      };
+
+      while (node && node !== modalRef.current) {
+        if (node instanceof Element && canScrollInAxis(node)) {
+          return; // A scrollable ancestor can consume this wheel event
+        }
+        node = node.parentElement;
+      }
+
+      // No scrollable ancestor can consume this event; prevent background from scrolling
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
 
     // When mouse is outside modal bounds and outside scroll is allowed
-    if (allowOutsideScroll && isMouseOutsideModal.current) {
-      // Don't prevent the default scroll behavior - let the browser handle it naturally
+    if (allowOutsideScroll && isOutsideByPointer) {
+      // Let the browser handle background scroll naturally
       return;
     }
 

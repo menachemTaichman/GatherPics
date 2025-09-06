@@ -140,7 +140,7 @@
     height: 0; /* Forces flex item to respect flex constraints */
   }
   
-  .photo-viewer-modal {
+  .image-viewer-modal {
     max-height: 92vh !important;
     height: 92vh !important;
     overflow: hidden;
@@ -149,7 +149,7 @@
     padding-bottom: 8px; /* Add padding to ensure scrollbar is visible */
   }
   
-  .photo-viewer-sidebar {
+  .image-viewer-sidebar {
     height: 100%;
     max-height: 100vh;
     display: flex;
@@ -158,11 +158,11 @@
     padding-bottom: 8px; /* Add padding to ensure scrollbar is visible */
   }
   
-  .photo-viewer-controls {
+  .image-viewer-controls {
     flex-shrink: 0;
   }
   
-  .photo-viewer-faces {
+  .image-viewer-faces {
     display: flex;
     flex-direction: column;
     overflow: hidden;

@@ -168,6 +168,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   });
   const [isResizing, setIsResizing] = useState(false);
   const sectionsRef = useRef(null);
+  const startResizeYRef = useRef(0);
+  const startAlbumsHeightRef = useRef(0);
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -194,32 +196,35 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     const handleMouseMove = (e) => {
       if (!isResizing || !sectionsRef.current) return;
       const rect = sectionsRef.current.getBoundingClientRect();
-      const y = e.clientY - rect.top;
+      const delta = e.clientY - startResizeYRef.current;
       const minAlbum = 80;
       const minFaces = 100;
       const maxAlbum = Math.max(minAlbum, rect.height - minFaces);
-      const next = Math.max(minAlbum, Math.min(y, maxAlbum));
+      const proposed = startAlbumsHeightRef.current + delta;
+      const next = Math.max(minAlbum, Math.min(proposed, maxAlbum));
       setAlbumsHeight(next);
     };
     const handleMouseUp = () => {
       if (isResizing) {
         setIsResizing(false);
-        try { document.body.style.cursor = ''; } catch {}
+        try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
       }
     };
     if (isResizing) {
-      try { document.body.style.cursor = 'row-resize'; } catch {}
+      try { document.body.style.cursor = 'row-resize'; document.body.style.userSelect = 'none'; } catch {}
     }
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      try { document.body.style.cursor = ''; } catch {}
+      try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
     };
   }, [isResizing]);
 
-  const startResize = () => {
+  const startResize = (e) => {
+    startResizeYRef.current = e.clientY;
+    startAlbumsHeightRef.current = albumsHeight;
     setIsResizing(true);
   };
 
@@ -611,13 +616,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   return (
     <AnimatePresence>
-      <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden modal-overlay">
         <motion.div
           ref={modalRef}
-          className="bg-white rounded-xl shadow-xl max-w-7xl w-full mx-4 image-viewer-modal"
+          className="bg-white rounded-lg shadow-xl max-w-7xl w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal"
           style={{ 
-            maxHeight: '92vh',
-            height: '92vh'
+            maxHeight: 'calc(100vh - 2rem)',
+            height: 'calc(100vh - 2rem)'
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -707,7 +712,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           </div>
 
           {/* Content */}
-          <div className="flex h-full overflow-visible">
+          <div className="flex h-full overflow-hidden min-h-0">
             {/* Image Viewer */}
             <div 
               ref={containerRef}
@@ -809,9 +814,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             </div>
 
                     {/* Sidebar */}
-        <div className="w-80 bg-white border-l border-gray-200 image-viewer-sidebar">
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0 image-viewer-sidebar">
           {/* Controls */}
-          <div className="p-3 border-b border-gray-200 image-viewer-controls">
+          <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Controls</h3>
                   <div className="flex items-center space-x-2">
@@ -959,11 +964,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
               </div>
 
               {/* Albums and Persons Info with resizable split */}
-              <div ref={sectionsRef} className="p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div ref={sectionsRef} className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
                 {/* Albums Panel */}
                 {imageAlbums && imageAlbums.length > 0 && (
-                  <div className="flex flex-col mb-2 min-h-0">
-                    <div className="flex items-center justify-between">
+                  <div className="flex flex-col min-h-0">
+                    <div className="flex items-center justify-between px-4 pt-4">
                       <h3 className="font-semibold text-gray-900">Albums ({imageAlbums.length})</h3>
                       <button
                         onClick={() => setAlbumsOpen(v => !v)}
@@ -975,41 +980,43 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     </div>
                     {albumsOpen && (
                       <div
-                        className={`overflow-y-auto ${facesOpen ? '' : 'flex-1 min-h-0'}`}
+                        className={`overflow-y-auto overscroll-contain ${facesOpen ? '' : 'flex-1 min-h-0'}`}
                         style={facesOpen ? { height: albumsHeight } : {}}
                       >
-                        {imageAlbums.map(album => (
-                          <div
-                            key={album.albumID}
-                            className="flex items-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-2"
-                          >
-                            <a
-                              href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
-                              onClick={(e) => handleAlbumLinkClick(e, album)}
-                              className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              title={album.label}
+                        <div className="px-4 pb-4">
+                          {imageAlbums.map(album => (
+                            <div
+                              key={album.albumID}
+                              className="flex items-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-2"
                             >
-                              <img
-                                src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : PLACEHOLDER_DATA_URL}
-                                alt=""
-                                className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
-                                loading="lazy"
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src = PLACEHOLDER_DATA_URL;
-                                }}
-                              />
-                              <span className="font-medium text-gray-900 truncate">{album.label}</span>
-                            </a>
-                            <button
-                              onClick={() => handleRemoveFromAlbum(album)}
-                              className="ml-3 p-2 hover:bg-red-100 rounded-lg transition-colors"
-                              title={`Remove from ${album.label}`}
-                            >
-                              <Minus className="w-4 h-4 text-red-600" />
-                            </button>
-                          </div>
-                        ))}
+                              <a
+                                href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+                                onClick={(e) => handleAlbumLinkClick(e, album)}
+                                className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                title={album.label}
+                              >
+                                <img
+                                  src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : PLACEHOLDER_DATA_URL}
+                                  alt=""
+                                  className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = PLACEHOLDER_DATA_URL;
+                                  }}
+                                />
+                                <span className="font-medium text-gray-900 truncate">{album.label}</span>
+                              </a>
+                              <button
+                                onClick={() => handleRemoveFromAlbum(album)}
+                                className="ml-3 p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                title={`Remove from ${album.label}`}
+                              >
+                                <Minus className="w-4 h-4 text-red-600" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1018,16 +1025,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 {/* Resizer */}
                 {imageAlbums && imageAlbums.length > 0 && albumsOpen && facesOpen && (
                   <div
-                    className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mb-2"
+                    className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mx-4 flex-shrink-0"
                     onMouseDown={startResize}
                     title="Drag to resize"
                   />
                 )}
 
                 {/* Persons Panel */}
-                <div className="flex flex-col flex-1 min-h-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">Persons in Photo ({faces.length})</h3>
+                <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
+                  <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                    <h3 className="font-semibold text-gray-900">Persons ({faces.length})</h3>
                     <button
                       onClick={() => setFacesOpen(v => !v)}
                       className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
@@ -1037,44 +1044,46 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     </button>
                   </div>
                   {facesOpen && (
-                    <div className="overflow-y-auto flex-1">
-                      {faces.length === 0 ? (
-                        <p className="text-gray-500 text-sm">No persons detected in this photo.</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {faces.map((face, index) => (
-                            <div
-                              key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
-                              className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                              onClick={() => handleFaceClick(index)}
-                            >
-                              <img
-                                src={getFaceImageSrc(face)}
-                                alt={face.group_label}
-                                className="w-12 h-12 object-cover rounded-full"
-                                loading="lazy"
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src = PLACEHOLDER_DATA_URL;
-                                }}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-gray-900 truncate">
-                                  {face.group_label}
-                                </p>
-                              </div>
-                              <a
-                                href={`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`}
-                                onClick={(e) => handlePersonLinkClick(e, face)}
-                                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                                title="Go to person page"
+                    <div className="faces-list-container overflow-y-auto overscroll-contain">
+                      <div className="px-4 pb-4">
+                        {faces.length === 0 ? (
+                          <p className="text-gray-500 text-sm">No persons detected in this photo.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {faces.map((face, index) => (
+                              <div
+                                key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
+                                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                onClick={() => handleFaceClick(index)}
                               >
-                                <User className="w-4 h-4 text-gray-600" />
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                                <img
+                                  src={getFaceImageSrc(face)}
+                                  alt={face.group_label}
+                                  className="w-12 h-12 object-cover rounded-full"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = PLACEHOLDER_DATA_URL;
+                                  }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {face.group_label}
+                                  </p>
+                                </div>
+                                <a
+                                  href={`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`}
+                                  onClick={(e) => handlePersonLinkClick(e, face)}
+                                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                                  title="Go to person page"
+                                >
+                                  <User className="w-4 h-4 text-gray-600" />
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
