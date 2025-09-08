@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ZoomIn, ZoomOut, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Clock, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Image as ImageIcon, MoreVertical } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -170,16 +170,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const sectionsRef = useRef(null);
   const startResizeYRef = useRef(0);
   const startAlbumsHeightRef = useRef(0);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreMenuRef = useRef(null);
-  const moreButtonRef = useRef(null);
-  const [albumMenuOpen, setAlbumMenuOpen] = useState(false);
-  const albumMenuRef = useRef(null);
-  const [albumMenuLoading, setAlbumMenuLoading] = useState(false);
-  const [albumMenuAlbums, setAlbumMenuAlbums] = useState([]);
+  
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     try { return JSON.parse(localStorage.getItem('iv_sidebarVisible') || 'true'); } catch { return true; }
   });
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideControlsTimerRef = useRef(null);
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -235,40 +231,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     };
   }, [isResizing]);
 
-  // Close menus on outside click
-  useEffect(() => {
-    const onDocClick = (e) => {
-      const menuEl = moreMenuRef.current;
-      const btnEl = moreButtonRef.current;
-      if (moreOpen && menuEl && !menuEl.contains(e.target) && (!btnEl || !btnEl.contains(e.target))) {
-        setMoreOpen(false);
-      }
-      const albumEl = albumMenuRef.current;
-      if (albumMenuOpen && albumEl && !albumEl.contains(e.target)) {
-        setAlbumMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [moreOpen, albumMenuOpen]);
-
-  // Load albums for submenu when opened
-  useEffect(() => {
-    if (!albumMenuOpen || !eventUrl) return;
-    let mounted = true;
-    (async () => {
-      setAlbumMenuLoading(true);
-      try {
-        const res = await albumsAPI.getAll(eventUrl, { exclude_defaults: true });
-        if (mounted) setAlbumMenuAlbums(res.albums || []);
-      } catch (e) {
-        if (mounted) setAlbumMenuAlbums([]);
-      } finally {
-        if (mounted) setAlbumMenuLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [albumMenuOpen, eventUrl]);
 
   const startResize = (e) => {
     startResizeYRef.current = e.clientY;
@@ -592,6 +554,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleMouseMove = (e) => {
+    // Show overlay controls on any mouse movement
+    try {
+      setControlsVisible(true);
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+    } catch {}
     if (isDragging && zoom > 1) {
       setPan({
         x: e.clientX - dragStart.x,
@@ -661,107 +629,33 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const isFavorite = !!(imageInfo?.is_favorite ?? imageInfo?.is_favorites);
   const isArchived = !!imageInfo?.is_archived;
-  const facesCountHeader = imageInfo ? (typeof imageInfo.faces_count === 'number' ? imageInfo.faces_count : (Array.isArray(imageInfo.faces) ? imageInfo.faces.length : 0)) : 0;
-  const personsCountHeader = imageInfo ? new Set((imageInfo.faces || []).map(f => f.group_id)).size : 0;
+
+  useEffect(() => {
+    // Initial auto-hide schedule for controls
+    try {
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+    } catch {}
+    return () => {
+      try { if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current); } catch {}
+    };
+  }, []);
 
   return (
     <AnimatePresence>
       <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden modal-overlay">
         <motion.div
           ref={modalRef}
-          className={`bg-white rounded-lg shadow-xl ${sidebarVisible ? 'max-w-7xl' : 'max-w-5xl'} w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal`}
+          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl ${sidebarVisible ? 'max-w-7xl' : 'max-w-5xl'} w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal`}
           style={{ 
-            maxHeight: 'calc(100vh - 2rem)',
-            height: 'calc(100vh - 2rem)'
+            maxHeight: 'calc(100vh - 3rem)',
+            height: 'calc(100vh - 3rem)'
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           tabIndex={-1}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white image-viewer-header">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-              
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{imageInfo?.label || imageMeta.label}</h2>
-                {imageInfo && (
-                  <p className="text-sm text-gray-500">
-                    {facesCountHeader === personsCountHeader
-                      ? `${personsCountHeader} persons`
-                      : `${facesCountHeader} faces • ${personsCountHeader} persons`}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="flex items-center space-x-2">
-              {totalImages > 1 && (
-                <>
-                  <button
-                    onClick={() => handleNavigate('prev')}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <span className="text-sm text-gray-500">
-                    {isEditingIndex ? (
-                      <input
-                        type="text"
-                        id="image-viewer-index"
-                        name="image-viewer-index"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
-                        onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
-                        onBlur={e => {
-                          let val = parseInt(e.target.value, 10);
-                          if (isNaN(val)) val = currentIndex + 1;
-                          val = Math.max(1, Math.min(totalImages, val));
-                          handleNavigate('jump', val - 1);
-                          setIsEditingIndex(false);
-                          setEditIndexValue(undefined);
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.target.blur();
-                          } else if (e.key === 'Escape') {
-                            setIsEditingIndex(false);
-                            setEditIndexValue(undefined);
-                          }
-                        }}
-                        className="w-12 text-center border-b border-gray-300 focus:outline-none focus:border-primary-500 bg-transparent"
-                        style={{width: '3rem'}}
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:underline w-12 inline-block text-center"
-                        style={{width: '3rem'}}
-                        title="Jump to image"
-                        onClick={() => setIsEditingIndex(true)}
-                      >
-                        {currentIndex + 1}
-                      </span>
-                    )} / {totalImages}
-                  </span>
-                  <button
-                    onClick={() => handleNavigate('next')}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
 
           {/* Content */}
           <div className="flex h-full overflow-hidden min-h-0">
@@ -863,14 +757,152 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   </div>
                 </motion.div>
               )}
-              {/* Sticky sidebar toggle */}
-              <button
-                onClick={() => setSidebarVisible(v => !v)}
-                className="absolute top-4 right-0 z-20 bg-white text-gray-700 border border-gray-200 shadow-sm rounded-l-md px-2 py-1 hover:bg-gray-50"
-                title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-              >
-                {sidebarVisible ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-              </button>
+
+              {/* On-image overlay controls */}
+              {!loading && (
+                <div className={`absolute inset-0 z-30 transition-opacity duration-200 ${controlsVisible ? 'opacity-100' : 'opacity-0'} pointer-events-none`}
+                     onMouseMove={() => {
+                       try {
+                         setControlsVisible(true);
+                         if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                         hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+                       } catch {}
+                     }}
+                     onMouseLeave={() => {
+                       try {
+                         if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                       } catch {}
+                       setControlsVisible(false);
+                     }}
+                >
+                  {/* Close button - top-left */}
+                  <button
+                    onClick={onClose}
+                    className="absolute top-4 left-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                    title="Close"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  {/* Navigation - top-center */}
+                  {totalImages > 1 && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
+                      <button
+                        onClick={() => handleNavigate('prev')}
+                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                        title="Previous"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <div className="bg-white/80 text-gray-800 rounded-md px-2 py-1 shadow flex items-center">
+                        {isEditingIndex ? (
+                          <input
+                            type="text"
+                            id="image-viewer-index"
+                            name="image-viewer-index"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
+                            onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
+                            onBlur={e => {
+                              let val = parseInt(e.target.value, 10);
+                              if (isNaN(val)) val = currentIndex + 1;
+                              val = Math.max(1, Math.min(totalImages, val));
+                              handleNavigate('jump', val - 1);
+                              setIsEditingIndex(false);
+                              setEditIndexValue(undefined);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.target.blur();
+                              } else if (e.key === 'Escape') {
+                                setIsEditingIndex(false);
+                                setEditIndexValue(undefined);
+                              }
+                            }}
+                            className="w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                            style={{width: '3rem'}}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className="cursor-pointer hover:underline w-12 inline-block text-center"
+                            style={{width: '3rem'}}
+                            title="Jump to image"
+                            onClick={() => setIsEditingIndex(true)}
+                          >
+                            {currentIndex + 1}
+                          </span>
+                        )}
+                        <span className="mx-1">/</span>
+                        <span>{totalImages}</span>
+                      </div>
+                      <button
+                        onClick={() => handleNavigate('next')}
+                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                        title="Next"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Zoom - bottom-center */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
+                    <button
+                      onClick={handleZoomOut}
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                      title="Zoom out"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <div className="bg-white/80 text-gray-800 rounded-md px-2 py-1 shadow text-sm font-medium flex items-center space-x-1">
+                      <input
+                        type="text"
+                        id="image-viewer-zoom"
+                        name="image-viewer-zoom"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
+                        onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                        onBlur={e => {
+                          let val = parseInt(e.target.value, 10);
+                          if (isNaN(val)) val = 100;
+                          val = Math.max(50, Math.min(300, val));
+                          setZoom(val / 100);
+                          setZoomInputValue(undefined);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.target.blur();
+                          } else if (e.key === 'Escape') {
+                            setZoomInputValue(undefined);
+                          }
+                        }}
+                        className="w-10 text-center bg-transparent focus:outline-none border-b border-gray-300 focus:border-primary-500"
+                        style={{width: '2.5rem'}}
+                      />
+                    </div>
+                    <button
+                      onClick={handleZoomIn}
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                      title="Zoom in"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Sidebar toggle - top-right */}
+                  <button
+                    onClick={() => setSidebarVisible(v => !v)}
+                    className="absolute top-4 right-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                    title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                  >
+                    {sidebarVisible ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                  </button>
+                </div>
+              )}
+              
             </div>
 
                     {/* Sidebar */}
@@ -878,49 +910,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0 image-viewer-sidebar">
           {/* Controls */}
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900">Controls</h3>
-                </div>
                 <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleZoomOut}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                    title="Zoom out"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <input
-                    type="text"
-                    id="image-viewer-zoom"
-                    name="image-viewer-zoom"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
-                    onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                    onBlur={e => {
-                      let val = parseInt(e.target.value, 10);
-                      if (isNaN(val)) val = 100;
-                      val = Math.max(50, Math.min(300, val));
-                      setZoom(val / 100);
-                      setZoomInputValue(undefined);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.target.blur();
-                      } else if (e.key === 'Escape') {
-                        setZoomInputValue(undefined);
-                      }
-                    }}
-                    className="text-sm font-medium text-gray-700 w-16 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                    style={{width: '4rem'}}
-                  />
-                  <button
-                    onClick={handleZoomIn}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                    title="Zoom in"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
                   {/* Favorites */}
                   <button
                     onClick={handleToggleFavorite}
@@ -932,6 +922,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                     </svg>
                   </button>
+                  {/* Add to album */}
+                  <AlbumQuickAddButton
+                    imageId={imageId}
+                    eventUrl={eventUrl}
+                    showToast={showToast}
+                    urlHelpers={urlHelpers}
+                    placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                  />
                   {/* Add to bucket */}
                   <button
                     onClick={() => {
@@ -945,117 +943,21 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   >
                     <ShoppingBag className="w-4 h-4" />
                   </button>
-                  {/* More options - last */}
-                  <div className="relative">
-                    <button
-                      ref={moreButtonRef}
-                      onClick={() => setMoreOpen(v => !v)}
-                      className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
-                      title="More options"
-                      aria-expanded={moreOpen}
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {moreOpen && (
-                      <div
-                        ref={moreMenuRef}
-                        className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-20"
-                      >
-                        <ul className="py-1 text-sm text-gray-700">
-                          <li>
-                            <button
-                              className="w-full px-3 py-2 hover:bg-gray-50 flex items-center justify-between"
-                              onClick={() => {
-                                setMoreOpen(false);
-                                setAlbumMenuOpen(true);
-                              }}
-                            >
-                              <span className="flex items-center space-x-2">
-                                <ImageIcon className="w-4 h-4" />
-                                <span>Add to album</span>
-                              </span>
-                              <ChevronRight className="w-4 h-4 text-gray-400" />
-                            </button>
-                          </li>
-                          <li>
-                            <button
-                              className="w-full px-3 py-2 hover:bg-gray-50 flex items-center space-x-2"
-                              onClick={async () => {
-                                setMoreOpen(false);
-                                if (isArchived) {
-                                  await handleRemoveFromArchive();
-                                } else {
-                                  await handleAddToArchive();
-                                }
-                              }}
-                            >
-                              <Archive className="w-4 h-4" />
-                              <span>{isArchived ? 'Remove from archive' : 'Move to archive'}</span>
-                            </button>
-                          </li>
-                          
-                        </ul>
-                      </div>
-                    )}
-                    {albumMenuOpen && (
-                      <div
-                        ref={albumMenuRef}
-                        className="absolute right-0 mt-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-20"
-                      >
-                        <div className="px-2 py-1 border-b border-gray-100 flex items-center space-x-2">
-                          <button
-                            className="p-1 hover:bg-gray-100 rounded-md"
-                            onMouseDown={(e) => { e.stopPropagation(); }}
-                            onClick={(e) => { e.stopPropagation(); setAlbumMenuOpen(false); setTimeout(() => setMoreOpen(true), 0); }}
-                            title="Back"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-                          <span className="text-xs text-gray-500">Albums</span>
-                        </div>
-                        {albumMenuLoading ? (
-                          <div className="p-3 text-sm text-gray-500">Loading albums...</div>
-                        ) : (albumMenuAlbums.length === 0 ? (
-                          <div className="p-3 text-sm text-gray-500">No albums</div>
-                        ) : (
-                          <ul className="divide-y divide-gray-100">
-                            {albumMenuAlbums.map(album => (
-                              <li key={album.albumID}>
-                                <button
-                                  className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
-                                  onClick={async () => {
-                                    try {
-                                      const res = await albumsAPI.addImages(album.albumID, [imageId], eventUrl);
-                                      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
-                                      showToast(
-                                        <span>
-                                          {added} added to{' '}
-                                          <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link>
-                                        </span>,
-                                        'success'
-                                      );
-                                      setImageAlbums(prev => {
-                                        if (!prev || !Array.isArray(prev)) return [album];
-                                        if (prev.some(a => a.albumID === album.albumID)) return prev;
-                                        return [...prev, album];
-                                      });
-                                    } catch (e) {
-                                      showToast('Failed to add to album', 'error');
-                                    } finally {
-                                      setAlbumMenuOpen(false);
-                                    }
-                                  }}
-                                >
-                                  <img src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : (PLACEHOLDER_DATA_URL || '')} alt="" className="w-8 h-8 rounded object-cover" />
-                                  <span className="text-sm text-gray-700 truncate">{album.label}</span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* Archive toggle */}
+                  <button
+                    onClick={async () => {
+                      if (isArchived) {
+                        await handleRemoveFromArchive();
+                      } else {
+                        await handleAddToArchive();
+                      }
+                    }}
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${isArchived ? 'text-gray-900' : 'text-gray-700'}`}
+                    title={isArchived ? 'Remove from archive' : 'Move to archive'}
+                    aria-pressed={isArchived}
+                  >
+                    <Archive className="w-4 h-4" fill={isArchived ? 'currentColor' : 'none'} />
+                  </button>
                 </div>
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
