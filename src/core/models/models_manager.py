@@ -518,8 +518,8 @@ class ModelsManager:
                 continue
             results.append({
                 'albumID': album_id,
-                'label': label,
-                'representative_image': rep
+                'label': label or '',
+                'representative_image': rep or ''
             })
         return results
     

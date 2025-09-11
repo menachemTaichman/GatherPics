@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -176,6 +176,44 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   });
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
+  const [dynamicHeight, setDynamicHeight] = useState(null);
+
+  useEffect(() => {
+    const calculateAndSetHeight = () => {
+      if (modalRef.current) {
+        const modalElement = modalRef.current;
+        const modalWidth = modalElement.offsetWidth;
+        
+        const sidebarElement = modalElement.querySelector('.image-viewer-sidebar');
+        const sidebarWidth = sidebarVisible && sidebarElement ? sidebarElement.offsetWidth : 0;
+        
+        const imageContainerWidth = modalWidth - sidebarWidth;
+        let newHeight = Math.round((2 / 3) * imageContainerWidth);
+
+        const verticalMarginRem = 3; 
+        const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        const verticalMarginPx = verticalMarginRem * rootFontSize;
+        const maxHeight = window.innerHeight - verticalMarginPx;
+        
+        newHeight = Math.min(newHeight, maxHeight);
+        
+        setDynamicHeight(newHeight);
+      }
+    };
+
+    // Recalculate when sidebar visibility changes or window is resized
+    calculateAndSetHeight(); // Initial calculation
+    
+    // Delay to allow DOM to update after sidebar visibility changes
+    const timerId = setTimeout(calculateAndSetHeight, 50);
+
+    window.addEventListener('resize', calculateAndSetHeight);
+
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener('resize', calculateAndSetHeight);
+    };
+  }, [sidebarVisible]);
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -798,7 +836,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       >
                         <ArrowLeft className="w-4 h-4" />
                       </button>
-                      <div className="bg-white/80 text-gray-800 rounded-md px-2 py-1 shadow flex items-center">
+                      <div className="bg-white/80 text-gray-800 rounded-md px-1 py-1 shadow flex items-center">
                         {isEditingIndex ? (
                           <input
                             type="text"
@@ -824,15 +862,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 setEditIndexValue(undefined);
                               }
                             }}
-                            className="w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                            style={{width: '3rem'}}
+                            className="w-6 text-center bg-transparent focus:outline-none"
+                            style={{width: '1.5rem'}}
                             autoFocus
                           />
                         ) : (
                           <span
-                            className="cursor-pointer hover:underline w-12 inline-block text-center"
-                            style={{width: '3rem'}}
-                            title="Jump to image"
+                            className="w-6 inline-block text-center cursor-text"
+                            style={{width: '1.5rem'}}
+                            title="Click to edit"
                             onClick={() => setIsEditingIndex(true)}
                           >
                             {currentIndex + 1}
@@ -855,12 +893,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
                     <button
                       onClick={handleZoomOut}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
                       title="Zoom out"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
-                    <div className="bg-white/80 text-gray-800 rounded-md px-2 py-1 shadow text-sm font-medium flex items-center space-x-1">
+                    <div className="bg-white/80 text-gray-800 rounded-md px-1 py-1 shadow flex items-center space-x-1">
                       <input
                         type="text"
                         id="image-viewer-zoom"
@@ -883,16 +921,23 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                             setZoomInputValue(undefined);
                           }
                         }}
-                        className="w-10 text-center bg-transparent focus:outline-none border-b border-gray-300 focus:border-primary-500"
-                        style={{width: '2.5rem'}}
+                        className="w-8 text-center bg-transparent focus:outline-none text-sm"
+                        style={{width: '2rem'}}
                       />
                     </div>
                     <button
                       onClick={handleZoomIn}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
                       title="Zoom in"
                     >
                       <Plus className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
+                      title="Reset zoom"
+                    >
+                      <RotateCcw className="w-4 h-4" />
                     </button>
                   </div>
 
