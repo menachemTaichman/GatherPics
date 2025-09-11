@@ -85,108 +85,29 @@ export const useDataStore = create((set, get) => ({
     set((state) => {
       const newGroups = [...state.groups];
       
-      // Find source and target groups
-      const sourceGroupIndex = newGroups.findIndex(g => g.groupID === result.old_group_id);
-      const targetGroupIndex = newGroups.findIndex(g => g.groupID === result.target_group_id);
-      
       // Update source group if it exists and wasn't deleted
-      if (sourceGroupIndex !== -1 && !result.old_group_deleted) {
-        // Use updated source group data from backend if available, otherwise update manually
-        if (result.updated_source_group) {
+      if (result.updated_source_group) {
+        const sourceGroupIndex = newGroups.findIndex(g => g.groupID === result.updated_source_group.groupID);
+        if (sourceGroupIndex !== -1) {
           newGroups[sourceGroupIndex] = result.updated_source_group;
-        } else {
-          const sourceGroup = { ...newGroups[sourceGroupIndex] };
-          
-          // Update image count by subtracting images that need to be removed
-          if (result.images_to_remove_from_source) {
-            const currentCount = sourceGroup.image_count || sourceGroup.imageCount || sourceGroup.image_ids?.length || 0;
-            sourceGroup.image_count = Math.max(0, currentCount - result.images_to_remove_from_source.length);
-            if (sourceGroup.imageCount !== undefined) {
-              sourceGroup.imageCount = sourceGroup.image_count;
-            }
-            if (sourceGroup.image_ids) {
-              sourceGroup.image_ids = sourceGroup.image_ids.filter(id => 
-                !result.images_to_remove_from_source.includes(id)
-              );
-            }
-          }
-          
-          newGroups[sourceGroupIndex] = sourceGroup;
         }
       }
       
       // Remove source group if it was deleted
-      if (result.old_group_deleted && sourceGroupIndex !== -1) {
-        newGroups.splice(sourceGroupIndex, 1);
-      }
-      
-      // Update target group if it exists
-      if (targetGroupIndex !== -1) {
-        // Use updated target group data from backend if available, otherwise update manually
-        if (result.updated_target_group) {
-          newGroups[targetGroupIndex] = result.updated_target_group;
-        } else {
-          const targetGroup = { ...newGroups[targetGroupIndex] };
-          
-          // Update image count by adding images that need to be added
-          if (result.images_to_add_to_target) {
-            const currentCount = targetGroup.image_count || targetGroup.imageCount || targetGroup.image_ids?.length || 0;
-            targetGroup.image_count = currentCount + result.images_to_add_to_target.length;
-            if (targetGroup.imageCount !== undefined) {
-              targetGroup.imageCount = targetGroup.image_count;
-            }
-            if (targetGroup.image_ids) {
-              // Create a set of existing image IDs to avoid duplicates
-              const existingImageIds = new Set(targetGroup.image_ids);
-              const newImageIds = result.images_to_add_to_target.filter(id => !existingImageIds.has(id));
-              targetGroup.image_ids = [...targetGroup.image_ids, ...newImageIds];
-            } else {
-              targetGroup.image_ids = [...result.images_to_add_to_target];
-            }
-          }
-          
-          // Do not heuristically set representative face on client.
-          // The backend is the source of truth and should provide
-          // updated_target_group when representative changes.
-          
-          newGroups[targetGroupIndex] = targetGroup;
+      if (result.old_group_deleted && result.old_group_id) {
+        const sourceGroupIndex = newGroups.findIndex(g => g.groupID === result.old_group_id);
+        if (sourceGroupIndex !== -1) {
+          newGroups.splice(sourceGroupIndex, 1);
         }
       }
       
-      // Add new group if it was created or if target group doesn't exist in store
-      if (targetGroupIndex === -1) {
-        // Prefer complete backend data when available
-        if (result.updated_target_group) {
-          const newGroup = {
-            groupID: result.updated_target_group.groupID,
-            label: result.updated_target_group.label,
-            image_count: result.updated_target_group.image_ids?.length || 0,
-            imageCount: result.updated_target_group.image_ids?.length || 0,
-            image_ids: result.updated_target_group.image_ids || [],
-            representative_face: result.updated_target_group.representative_face || '',
-            created_at: result.updated_target_group.created_at || new Date().toISOString(),
-            updated_at: result.updated_target_group.updated_at || new Date().toISOString()
-          };
-          if (!newGroups.some(g => g.groupID === newGroup.groupID)) {
-            newGroups.push(newGroup);
-          }
-        } else if (result.new_group_name) {
-          // New group created
-          const newGroup = {
-            groupID: result.target_group_id,
-            label: result.new_group_name,
-            image_count: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
-            imageCount: result.images_to_add_to_target ? result.images_to_add_to_target.length : 0,
-            image_ids: result.images_to_add_to_target || [],
-            // Do not set representative_face heuristically; wait for backend-provided value
-            representative_face: '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-          // Double-check we're not adding a duplicate
-          if (!newGroups.some(g => g.groupID === result.target_group_id)) {
-            newGroups.push(newGroup);
-          }
+      // Update or add target group
+      if (result.updated_target_group) {
+        const targetGroupIndex = newGroups.findIndex(g => g.groupID === result.updated_target_group.groupID);
+        if (targetGroupIndex !== -1) {
+          newGroups[targetGroupIndex] = result.updated_target_group;
+        } else {
+          newGroups.push(result.updated_target_group);
         }
       }
       

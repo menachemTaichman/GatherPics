@@ -351,12 +351,7 @@ def recreate_view_triggers_and_indexes():
 
 # recreate_view_triggers_and_indexes()
 
-imageIDs = ["03f584ba-06a2-49a6-897f-3403027d35d1", "ba9ca86a-ac92-49e9-b379-63812f355867"]
-albumID = "f947b84f-7d57-4f4d-8593-cbba2c30c353"
+imageID = "ba9ca86a-ac92-49e9-b379-63812f355867"
+albumID = "1a854c21-6ef9-4641-96a9-72b0e7c054dd"
 
-before = event.db.execute_query('SELECT * FROM accessible_albums_images WHERE albumID=? AND imageID IN (?, ?)', (albumID, *imageIDs))
-print('before', before)
-result = event.models_manager.add_images_to_album(albumID, imageIDs)
-print('result', result)
-after = event.db.execute_query('SELECT * FROM accessible_albums_images WHERE albumID=? AND imageID IN (?, ?)', (albumID, *imageIDs))
-print('after', after)
+#event.models_manager.edit('albums', albumID, {'representative_image': imageID})

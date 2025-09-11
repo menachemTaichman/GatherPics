@@ -714,11 +714,15 @@ class AppDB:
         finally:
             conn.close()
 
-    def get_all(self, table: str, include_archived: bool = False) -> List[Dict]:
+    def get_all(self, table: str, include_archived: bool = False, order_by: Optional[str] = None) -> List[Dict]:
 
         accessible_table = self._get_accessible_table_name(table)
+        query = f'SELECT * FROM {accessible_table}'
+        if order_by:
+            query += f' ORDER BY {order_by}'
+
         with self.get_connection(include_archived) as conn:
-            cursor = conn.execute(f'SELECT * FROM {accessible_table}')
+            cursor = conn.execute(query)
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 

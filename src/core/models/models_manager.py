@@ -117,8 +117,17 @@ class ModelsManager:
             entity['image_ids'] = self.get_album_images(entity_id, include_archived)
         return entity
 
-    def get_all(self, table: str, include_archived: bool = False) -> List[Dict]:
-        results = self.db.get_all(table, include_archived)
+    def get_all(self, table: str, include_archived: bool = False, sort: bool = False) -> List[Dict]:
+        order_by = None
+        if sort:
+            if table == 'groups':
+                order_by = 'label ASC'
+            elif table == 'moments':
+                order_by = 'start ASC'
+            elif table == 'albums':
+                order_by = "CASE WHEN label IN ('Favorites', 'Archive') THEN 0 ELSE 1 END, label ASC"
+
+        results = self.db.get_all(table, include_archived, order_by=order_by)
         if table in ('groups', 'moments', 'albums'):
             for row in results:
                 entity_id = row.get(self.id_field(table))
@@ -321,6 +330,42 @@ class ModelsManager:
         return updated_ids
 
     # -------- Faces helpers --------
+    def get_image_faces_details(self, image_id: str, include_archived: bool = False, sort: bool = False) -> List[Dict]:
+        """Return a list of face details for a given image, optionally sorted by group label."""
+        accessible_faces = self.db._get_accessible_table_name('faces')
+        accessible_groups = self.db._get_accessible_table_name('groups')
+
+        query = f'''
+            SELECT f.faceID, f.imageID, f.width, f.height, f.left, f.top, f.groupID,
+                   g.label as group_label, g.representative_face as group_representative
+            FROM {accessible_faces} f
+            LEFT JOIN {accessible_groups} g ON f.groupID = g.groupID
+            WHERE f.imageID = ?
+        '''
+        if sort:
+            query += ' ORDER BY g.label ASC'
+
+        results = self.db.execute_query(query, (image_id,), include_archived)
+        
+        # Manually construct dictionaries to match desired keys
+        faces_data = []
+        for row in results:
+            face_data = {
+                'face_id': row[0],
+                'face_coords': {
+                    'Left': row[4],
+                    'Top': row[5],
+                    'Width': row[2],
+                    'Height': row[3]
+                },
+                'group_id': row[6],
+                'group_label': row[7] if row[7] else 'Unknown',
+                'group_representative': row[8]
+            }
+            faces_data.append(face_data)
+            
+        return faces_data
+
     def get_biggest_face(self, face_ids: List[str], include_archived: bool = False) -> str:
         if not face_ids:
             return ''
@@ -348,31 +393,24 @@ class ModelsManager:
 
         accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
+        
+        # Get all unique images affected by this transfer BEFORE making changes
         query = f'''
             SELECT DISTINCT imageID
             FROM {accessible_table}
             WHERE faceID IN ({placeholders}) AND groupID = ?
         '''
-        images_to_add_to_target = set()
-        results = self.db.execute_query(query, (*face_ids, old_group_id), include_archived)
-        for row in results:
-            images_to_add_to_target.add(row[0])
+        original_affected_images = {row[0] for row in self.db.execute_query(query, (*face_ids, old_group_id), include_archived)}
 
-        if not images_to_add_to_target:
+        if not original_affected_images:
             return {
                 'target_group_id': target_group_id,
                 'old_group_deleted': False,
                 'transferred_faces_ids': [],
                 'images_to_remove_from_source': [],
                 'images_to_add_to_target': [],
-                'updated_source_group': None,
-                'updated_target_group': None,
-                'representatives': {
-                    'source_before': old_group.get('representative_face', ''),
-                    'source_after': '',
-                    'target_before': '',
-                    'target_after': '',
-                }
+                'updated_source_group': old_group,
+                'updated_target_group': self.get_one('groups', target_group_id) if target_group_id else None,
             }
 
         target_group_id_was_provided = target_group_id is not None
@@ -395,14 +433,18 @@ class ModelsManager:
 
         target_group = self.get_one('groups', target_group_id, include_archived=True)
         target_representative_before = target_group.get('representative_face') if target_group else ''
+
+        # Determine which images are genuinely new for the target group
+        images_to_add_to_target = set(original_affected_images)
         if target_group and 'image_ids' in target_group:
             existing_target_images = set(target_group['image_ids'])
-            images_to_add_to_target = images_to_add_to_target - existing_target_images
+            images_to_add_to_target.difference_update(existing_target_images)
 
         transferred_faces_ids = self.add_faces_to_group(target_group_id, face_ids)
 
+        # Determine which of the affected images no longer have any faces from the source group
         images_to_remove_from_source = set()
-        for image_id in images_to_add_to_target:
+        for image_id in original_affected_images:
             if not self.get_group_faces_by_image(image_id, old_group_id, include_archived):
                 images_to_remove_from_source.add(image_id)
 
@@ -439,6 +481,18 @@ class ModelsManager:
 
         if not target_group_id_was_provided and new_group_name is not None:
             result['new_group_name'] = new_group_name
+
+        # Get complete data for all images affected by the transfer to update ImageViewer
+        transferred_image_ids = set()
+        if result.get('transferred_faces_ids'):
+            accessible_faces = self.db._get_accessible_table_name('faces')
+            placeholders = ','.join(['?'] * len(result['transferred_faces_ids']))
+            query = f"SELECT DISTINCT imageID FROM {accessible_faces} WHERE faceID IN ({placeholders})"
+            rows = self.db.execute_query(query, (*result['transferred_faces_ids'],), include_archived=True)
+            for row in rows:
+                transferred_image_ids.add(row[0])
+        
+        result['transferred_image_ids'] = list(original_affected_images)
 
         return result
 
@@ -497,7 +551,7 @@ class ModelsManager:
         
         return updated_ids
 
-    def get_image_albums(self, image_id: str, include_archived: bool = False, exclude_defaults: bool = True) -> List[Dict]:
+    def get_image_albums(self, image_id: str, include_archived: bool = False, exclude_defaults: bool = True, sort: bool = False) -> List[Dict]:
         """Return list of albums the image belongs to, excluding default albums if requested.
         Each item: { 'albumID': str, 'label': str, 'representative_image': str }
         """
@@ -510,6 +564,9 @@ class ModelsManager:
             JOIN {accessible_album_images} ai ON a.albumID = ai.albumID
             WHERE ai.imageID = ?
         '''
+        if sort:
+            query += " ORDER BY CASE WHEN a.label IN ('Favorites', 'Archive') THEN 0 ELSE 1 END, a.label ASC"
+
         rows = self.db.execute_query(query, (image_id,), include_archived)
 
         results: List[Dict] = []

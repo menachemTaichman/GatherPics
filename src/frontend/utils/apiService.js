@@ -355,9 +355,9 @@ export const imagesAPI = {
   },
 
   // Get image complete
-  getComplete: async (imageId, eventUrl) => {
+  getComplete: async (imageId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images/${imageId}/complete`);
+    const response = await api.get(`/api/events/${eventId}/images/${imageId}/complete`, { params });
     return response.data;
   },
 

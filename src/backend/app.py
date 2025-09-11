@@ -23,43 +23,26 @@ def _parse_include_archived(default: bool = False) -> bool:
         return default
     return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
 
-def build_complete_image_data(event, image_id, include_all_faces=True, group_filter=None, include_archived: bool = False):
+def _parse_sort(default: bool = False) -> bool:
+    val = request.args.get('sort')
+    if val is None:
+        return default
+    return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
+
+def build_complete_image_data(event, image_id, group_filter=None, include_archived: bool = False, sort: bool = False):
     """Build complete image data with all related information."""
     try:
         image = event.models_manager.get_one('images', image_id, include_archived)
         if not image:
             return None
         
-        # Get face IDs for this image
-        face_ids = event.models_manager.get_image_faces(image_id, include_archived)
+        # Get face details for this image
+        faces_data = event.models_manager.get_image_faces_details(image_id, include_archived, sort=sort)
         
-        # Build faces data
-        faces_data = []
-        for face_id in face_ids:
-            face = event.models_manager.get_one('faces', face_id, include_archived)
-            if face:
-                # Apply group filter if specified
-                if group_filter and face.get('groupID') != group_filter:
-                    continue
-                
-                group = None
-                if face.get('groupID'):
-                    group = event.models_manager.get_one('groups', face['groupID'], include_archived)
-                
-                face_data = {
-                    'face_id': face_id,
-                    'face_coords': {
-                        'Left': face['left'],
-                        'Top': face['top'], 
-                        'Width': face['width'],
-                        'Height': face['height']
-                    },
-                    'group_id': face.get('groupID'),
-                    'group_label': group['label'] if group else 'Unknown',
-                    'group_representative': group.get('representative_face') if group else None
-                }
-                faces_data.append(face_data)
-        
+        # Apply group filter if specified
+        if group_filter:
+            faces_data = [face for face in faces_data if face.get('group_id') == group_filter]
+
         # Get moment info if available
         moment_info = None
         if image.get('momentID'):
@@ -76,7 +59,7 @@ def build_complete_image_data(event, image_id, include_all_faces=True, group_fil
         # Build complete response
         # List albums for this image (labels)
         try:
-            image_albums = event.models_manager.get_image_albums(image_id, include_archived, exclude_defaults=True)
+            image_albums = event.models_manager.get_image_albums(image_id, include_archived, exclude_defaults=True, sort=sort)
         except Exception:
             image_albums = []
 
@@ -161,7 +144,8 @@ def get_groups(event_id):
     
     # Get enriched groups with image information
     include_archived = _parse_include_archived(False)
-    enriched_groups = event.models_manager.get_all('groups', include_archived)
+    sort = _parse_sort(False)
+    enriched_groups = event.models_manager.get_all('groups', include_archived, sort=sort)
     return jsonify({"groups": enriched_groups})
 
 # -------------------- Albums Endpoints --------------------
@@ -175,7 +159,8 @@ def get_albums(event_id):
 
     try:
         include_archived = _parse_include_archived(False)
-        albums = event.models_manager.get_all('albums', include_archived)
+        sort = _parse_sort(False)
+        albums = event.models_manager.get_all('albums', include_archived, sort=sort)
 
         # Optional exclusion of default albums
         exclude_defaults = request.args.get('exclude_defaults', 'false').lower() in ('1','true','yes','y','on')
@@ -462,6 +447,15 @@ def transfer_faces(event_id):
         # Use ModelsManager to transfer faces between groups
         result = event.models_manager.transfer_faces(source_group_id, face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
         
+        # Get complete data for all images affected by the transfer from the returned image IDs
+        transferred_images_data = []
+        if result.get('transferred_image_ids'):
+            for image_id in result['transferred_image_ids']:
+                image_data = build_complete_image_data(event, image_id, include_archived=_parse_include_archived(False), sort=True)
+                if image_data:
+                    transferred_images_data.append(image_data)
+        result['transferred_images_data'] = transferred_images_data
+
         # Get updated groups for change instructions
         updated_source = None
         updated_target = None
@@ -476,11 +470,13 @@ def transfer_faces(event_id):
         response_data = {"success": True, "transferred_count": len(result.get('transferred_faces_ids', []))}
         response_data.update(result)  # Include all result data from the transfer
         
-        if updated_source:
-            response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_source)
-        if updated_target:
-            response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_target)
+        # Build a single, comprehensive change instruction for the transfer
+        change_data = result.copy()
+        change_data['updated_source_group'] = updated_source
+        change_data['updated_target_group'] = updated_target
         
+        response_data = add_change_instruction(response_data, 'GROUP_FACES_TRANSFERRED', change_data)
+
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -871,7 +867,8 @@ def get_image_complete(event_id, image_id):
     
     try:
         include_archived = _parse_include_archived(False)
-        image_data = build_complete_image_data(event, image_id, include_archived=include_archived)
+        sort = _parse_sort(False)
+        image_data = build_complete_image_data(event, image_id, include_archived=include_archived, sort=sort)
         if not image_data:
             return not_found(f"Image {image_id} not found or not accessible")
         
@@ -1010,11 +1007,12 @@ def get_images_json(event_id):
     
     try:
         include_archived = _parse_include_archived(False)
-        images = event.models_manager.get_all('images', include_archived)
+        sort = _parse_sort(False)
+        images = event.models_manager.get_all('images', include_archived, sort=sort)
         
         images_data = []
         for image in images:
-            image_data = build_complete_image_data(event, image['imageID'], include_archived=include_archived)
+            image_data = build_complete_image_data(event, image['imageID'], include_archived=include_archived, sort=sort)
             if image_data:
                 # Update URLs to use event-scoped endpoints
                 image_data['urls'] = {

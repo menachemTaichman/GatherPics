@@ -12,7 +12,7 @@ import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
 
-function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeholderDataUrl }) {
+function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeholderDataUrl, onAlbumAdded }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [albums, setAlbums] = useState([]);
@@ -59,6 +59,12 @@ function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeho
                       try {
                         const res = await albumsAPI.addImages(album.albumID, [imageId], eventUrl);
                         const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+                        if (added > 0) {
+                          // Update local state immediately
+                          if (onAlbumAdded) {
+                            onAlbumAdded(album);
+                          }
+                        }
                         showToast(
                           <span>
                             {added} added to{' '}
@@ -90,6 +96,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const navigate = useNavigate();
   const location = useLocation();
   const { urlHelpers } = useEventUrls(eventUrl);
+  const lastTransferResult = useDataStore(state => state.lastTransferResult);
+  const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -156,7 +164,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [imageAlbums, setImageAlbums] = useState([]);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
-  const { addImages, open } = useBucketStore();
+  const { addImages, removeFromQueue, queue, open } = useBucketStore();
   const [albumsOpen, setAlbumsOpen] = useState(() => {
     try { return JSON.parse(localStorage.getItem('iv_albumsOpen') || 'false'); } catch { return false; }
   });
@@ -340,6 +348,26 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
+  const handleAlbumAdded = (album) => {
+    // Add the album to the local imageAlbums state immediately
+    setImageAlbums(prev => {
+      // Check if album is already in the list to avoid duplicates
+      if (prev.some(a => a.albumID === album.albumID)) {
+        return prev;
+      }
+      return [...prev, album];
+    });
+    
+    // Update imageInfo if it's a special album
+    const lbl = (album.label || '').toLowerCase();
+    if (lbl === 'favorites') {
+      setImageInfo(prev => ({ ...prev, is_favorite: true }));
+    }
+    if (lbl === 'archive') {
+      setImageInfo(prev => ({ ...prev, is_archived: true }));
+    }
+  };
+
   // Circular navigation
   const handleNavigate = (direction, index) => {
     if (!onNavigate) return;
@@ -389,7 +417,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       // Fetch real image info
       if (imageId && eventUrl) {
         try {
-          const info = await imagesAPI.getComplete(imageId, eventUrl);
+          const info = await imagesAPI.getComplete(imageId, eventUrl, { sort: true });
           setImageInfo(info);
           setFaces(info.faces || []);
           setMomentInfo(info.moment || null);
@@ -415,28 +443,28 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   // Subscribe to data store changes to update face data when transfers happen
   useEffect(() => {
-    const unsubscribe = useDataStore.subscribe(
-      (state) => {
-        const transferResult = state.lastTransferResult;
-        if (transferResult && transferResult.transferred_images_data && imageId) {
-          // Check if the current image was affected by the transfer
-          const updatedImageData = transferResult.transferred_images_data.find(
-            imageData => imageData.id === imageId || imageData.label === imageId
-          );
-          
-          if (updatedImageData) {
-            // Update face data without reloading
-            setFaces(updatedImageData.faces || []);
-            setImageInfo(updatedImageData);
-            setMomentInfo(updatedImageData.moment || null);
-            setImageAlbums(updatedImageData.albums || []);
-          }
-        }
+    if (lastTransferResult && lastTransferResult.transferred_images_data && imageId) {
+      // Check if the current image was affected by the transfer
+      const updatedImageData = lastTransferResult.transferred_images_data.find(
+        imageData => imageData.id === imageId || imageData.label === imageId
+      );
+      
+      if (updatedImageData) {
+        // Update face data without reloading
+        setFaces(updatedImageData.faces || []);
+        setImageInfo(updatedImageData);
+        setMomentInfo(updatedImageData.moment || null);
+        setImageAlbums(updatedImageData.albums || []);
+        
+        // Important: Clear the result after processing to prevent re-triggering
+        setTimeout(() => clearLastTransferResult(), 0);
+      } else if (lastTransferResult) {
+        // If the current image was not affected, but there was a transfer,
+        // still clear the result to prevent it being processed stale later.
+        setTimeout(() => clearLastTransferResult(), 0);
       }
-    );
-    
-    return unsubscribe;
-  }, [imageId]);
+    }
+  }, [lastTransferResult, imageId, clearLastTransferResult]);
 
   const handleZoomIn = () => {
     const currentPercent = Math.round(zoom * 100);
@@ -564,14 +592,35 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleTransferComplete = async (result) => {
+    // The API response now triggers a zustand update via an interceptor.
+    // The useEffect hook that subscribes to `useDataStore` will handle all UI updates.
+    // We only need to show a toast message here and handle parent notifications.
     const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
 
     if (transferData) {
       clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
+
+      // Show a generic success toast if the parent isn't GroupDetail handling its own.
+      if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
+        const targetGroup = transferData.updated_target_group || 
+                              (transferData.target_group_id && groups.find(g => g.groupID === transferData.target_group_id));
+        
+        if (targetGroup) {
+          const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+          showToast(
+            <span>
+              Transferred to <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
+            </span>, 'success'
+          );
+        } else {
+          showToast('Transfer complete!', 'success');
+        }
+      }
     }
     
-    // The parent component (GroupDetail) is responsible for all state and cache updates.
-    if (onTransferComplete) {
+    // The parent component (GroupDetail) is responsible for grid/navigation updates.
+    // Only trigger if the transferred face belongs to the currently viewed group.
+    if (onTransferComplete && selectedFaceForTransfer && selectedFaceForTransfer.group_id === currentGroupId) {
       onTransferComplete(result);
     }
 
@@ -667,6 +716,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const isFavorite = !!(imageInfo?.is_favorite ?? imageInfo?.is_favorites);
   const isArchived = !!imageInfo?.is_archived;
+  const isInBucket = imageId ? queue.includes(imageId) : false;
 
   useEffect(() => {
     // Initial auto-hide schedule for controls
@@ -820,7 +870,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   {/* Close button - top-left */}
                   <button
                     onClick={onClose}
-                    className="absolute top-4 left-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                    className="absolute top-4 left-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                     title="Close"
                   >
                     <X className="w-5 h-5" />
@@ -831,12 +881,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
                       <button
                         onClick={() => handleNavigate('prev')}
-                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                         title="Previous"
                       >
                         <ArrowLeft className="w-4 h-4" />
                       </button>
-                      <div className="bg-white/80 text-gray-800 rounded-md px-1 py-1 shadow flex items-center">
+                      <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center">
                         {isEditingIndex ? (
                           <input
                             type="text"
@@ -862,14 +912,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 setEditIndexValue(undefined);
                               }
                             }}
-                            className="w-6 text-center bg-transparent focus:outline-none"
-                            style={{width: '1.5rem'}}
+                            className="w-8 text-center bg-transparent focus:outline-none"
+                            style={{width: '2rem'}}
                             autoFocus
                           />
                         ) : (
                           <span
-                            className="w-6 inline-block text-center cursor-text"
-                            style={{width: '1.5rem'}}
+                            className="w-8 inline-block text-center cursor-text"
+                            style={{width: '2rem'}}
                             title="Click to edit"
                             onClick={() => setIsEditingIndex(true)}
                           >
@@ -881,7 +931,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       </div>
                       <button
                         onClick={() => handleNavigate('next')}
-                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                         title="Next"
                       >
                         <ArrowRight className="w-4 h-4" />
@@ -893,12 +943,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
                     <button
                       onClick={handleZoomOut}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                       title="Zoom out"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
-                    <div className="bg-white/80 text-gray-800 rounded-md px-1 py-1 shadow flex items-center space-x-1">
+                    <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center space-x-1">
                       <input
                         type="text"
                         id="image-viewer-zoom"
@@ -921,20 +971,20 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                             setZoomInputValue(undefined);
                           }
                         }}
-                        className="w-8 text-center bg-transparent focus:outline-none text-sm"
-                        style={{width: '2rem'}}
+                        className="w-10 text-center bg-transparent focus:outline-none"
+                        style={{width: '2.5rem'}}
                       />
                     </div>
                     <button
                       onClick={handleZoomIn}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                       title="Zoom in"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
                     <button
                       onClick={handleReset}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md px-1 py-1 shadow"
+                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                       title="Reset zoom"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -944,7 +994,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   {/* Sidebar toggle - top-right */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
-                    className="absolute top-4 right-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md p-2 shadow"
+                    className="absolute top-4 right-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
                     title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
                   >
                     {sidebarVisible ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -978,19 +1028,25 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     showToast={showToast}
                     urlHelpers={urlHelpers}
                     placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                    onAlbumAdded={handleAlbumAdded}
                   />
-                  {/* Add to bucket */}
+                  {/* Add to bucket / Remove from bucket */}
                   <button
                     onClick={() => {
                       if (imageId) {
-                        addImages([imageId]);
-                        open();
+                        if (isInBucket) {
+                          removeFromQueue(imageId);
+                          showToast('Removed from bucket', 'success');
+                        } else {
+                          addImages([imageId]);
+                          open();
+                        }
                       }
                     }}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                    title="Add to bucket"
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${isInBucket ? 'text-gray-700' : 'text-gray-700'}`}
+                    title={isInBucket ? 'Remove from bucket' : 'Add to bucket'}
                   >
-                    <ShoppingBag className="w-4 h-4" />
+                    <ShoppingBag className="w-4 h-4" fill={isInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
                   </button>
                   {/* Archive toggle */}
                   <button
@@ -1001,11 +1057,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         await handleAddToArchive();
                       }
                     }}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${isArchived ? 'text-gray-900' : 'text-gray-700'}`}
+                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
                     title={isArchived ? 'Remove from archive' : 'Move to archive'}
                     aria-pressed={isArchived}
                   >
-                    <Archive className="w-4 h-4" fill={isArchived ? 'currentColor' : 'none'} />
+                    <Archive className="w-4 h-4" fill={isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2" />
                   </button>
                 </div>
                 {/* Details Section */}
