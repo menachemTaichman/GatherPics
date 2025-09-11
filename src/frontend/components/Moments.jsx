@@ -4,10 +4,11 @@ import { Download, Image, Grid, List, Minus, Plus, Settings, Clock, Calendar, Ch
 import ImageViewer from './ImageViewer';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentImagesModal from './EditMomentImagesModal';
-import { useLocation, useNavigate } from 'react-router-dom';
+import FloatingSelectionControls from './FloatingSelectionControls';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useSetting } from '../utils/useSettings';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
-import { momentsAPI, imagesAPI, API_BASE } from '../utils/apiService';
+import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
@@ -64,6 +65,7 @@ export default function Moments({ eventUrl }) {
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
   const [imageSize, setImageSize] = useSetting('moments_imageSize', 1.0);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  const [includeArchived] = useSetting('include_archived_images', false);
   const [momentImagesMap, setMomentImagesMap] = useState({});
   const [imagesLoading, setImagesLoading] = useState(false);
   const [globalSelection, setGlobalSelection] = useState(new Set());
@@ -158,6 +160,27 @@ export default function Moments({ eventUrl }) {
     fetchImages();
   }, []);
 
+  // Refetch images when includeArchived setting changes
+  useEffect(() => {
+    if (moments.length > 0) {
+      // Force refetch all images to respect new includeArchived setting
+      fetchAllMomentImages(null, null, true);
+    }
+  }, [includeArchived]);
+
+  // Remove archived images from grid when includeArchived is false
+  useEffect(() => {
+    if (!includeArchived) {
+      setMomentImagesMap(prev => {
+        const newMap = { ...prev };
+        Object.keys(newMap).forEach(momentId => {
+          newMap[momentId] = newMap[momentId].filter(img => !img.is_archived);
+        });
+        return newMap;
+      });
+    }
+  }, [includeArchived]);
+
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
     if (location.state?.scrollToMoment && moments.length > 0) {
@@ -196,7 +219,7 @@ export default function Moments({ eventUrl }) {
 
   // The timeline manager now handles all scroll detection and URL updates automatically
 
-  const fetchAllMomentImages = async (specificMomentId = null, updatedImages = null) => {
+  const fetchAllMomentImages = async (specificMomentId = null, updatedImages = null, forceRefetch = false) => {
     try {
       setImagesLoading(true);
       
@@ -213,8 +236,8 @@ export default function Moments({ eventUrl }) {
       
       const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
       
-      // Check which moments need images fetched
-      const momentsToFetch = validMoments.filter(moment => !momentImagesMap[moment.momentID]);
+      // Check which moments need images fetched (or all if forceRefetch is true)
+      const momentsToFetch = forceRefetch ? validMoments : validMoments.filter(moment => !momentImagesMap[moment.momentID]);
       
       if (momentsToFetch.length === 0) {
         // All images are already loaded
@@ -454,6 +477,7 @@ export default function Moments({ eventUrl }) {
     }
   };
 
+
   const selectAllInMoment = (momentId) => {
     const momentImages = momentImagesMap[momentId] || [];
     const momentImageKeys = momentImages.map(image => `${momentId}:${image.label}`);
@@ -522,15 +546,19 @@ export default function Moments({ eventUrl }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [momentImagesMap, globalSelection]);
 
-  const handleGlobalAddToBucket = async () => {
-    if (globalSelection.size === 0) return;
-    // globalSelection keys are `${momentId}:${image.label}`; resolve to real image IDs
-    const ids = Array.from(globalSelection).map(key => {
+  // Helper function to convert globalSelection keys to actual image IDs
+  const getSelectedImageIds = () => {
+    return Array.from(globalSelection).map(key => {
       const [mId, label] = key.split(':');
       const list = momentImagesMap[mId] || [];
       const found = list.find(img => img.id === label || img.label === label || img.name === label);
       return found ? found.id : null;
     }).filter(Boolean);
+  };
+
+  const handleGlobalAddToBucket = async () => {
+    if (globalSelection.size === 0) return;
+    const ids = getSelectedImageIds();
     const added = addImages(ids);
     if (added > 0) {
       showToast(`${added} added to bucket`, 'success');
@@ -538,6 +566,195 @@ export default function Moments({ eventUrl }) {
       showToast('No new items added', 'success');
     }
     open();
+  };
+
+  // Determine if an image is in Favorites
+  const isImageFavorite = (img) => {
+    if (!img) return false;
+    if (img.is_favorite !== undefined && img.is_favorite !== null) {
+      return !!img.is_favorite;
+    }
+    if (img.is_favorites !== undefined && img.is_favorites !== null) {
+      return !!img.is_favorites;
+    }
+    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
+  };
+
+  // Unified favorites toggle for selected images
+  const handleToggleFavorites = async () => {
+    if (globalSelection.size === 0) return;
+    
+    // Get all selected image objects
+    const selectedImageObjects = [];
+    Array.from(globalSelection).forEach(key => {
+      const [mId, label] = key.split(':');
+      const list = momentImagesMap[mId] || [];
+      const found = list.find(img => img.id === label || img.label === label || img.name === label);
+      if (found) {
+        selectedImageObjects.push(found);
+      }
+    });
+
+    if (selectedImageObjects.length === 0) return;
+
+    const allAreFavorites = selectedImageObjects.every(isImageFavorite);
+    const imageIds = getSelectedImageIds();
+
+    try {
+      if (allAreFavorites) {
+        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
+        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        showToast(`${removed} removed from Favorites`, 'success');
+      } else {
+        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
+        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        showToast(`${added} added to Favorites`, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to update favorites', 'error');
+    }
+  };
+
+  // Single image favorites toggle
+  const handleSingleToggleFavorites = async (imageIds) => {
+    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
+    
+    // Find the image objects
+    const imageObjects = [];
+    Object.values(momentImagesMap).forEach(images => {
+      images.forEach(img => {
+        if (imageIds.includes(img.id)) {
+          imageObjects.push(img);
+        }
+      });
+    });
+
+    const allAreFavorites = imageObjects.length > 0 && imageObjects.every(isImageFavorite);
+
+    // Optimistic update
+    setMomentImagesMap(prev => {
+      const newMap = { ...prev };
+      Object.keys(newMap).forEach(momentId => {
+        newMap[momentId] = newMap[momentId].map(img => 
+          imageIds.includes(img.id) ? { ...img, is_favorite: !allAreFavorites } : img
+        );
+      });
+      return newMap;
+    });
+
+    try {
+      if (allAreFavorites) {
+        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
+        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        showToast(
+          <span>
+            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+          </span>,
+          'success'
+        );
+      } else {
+        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
+        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        showToast(
+          <span>
+            {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+          </span>,
+          'success'
+        );
+      }
+    } catch (e) {
+      // Rollback on error
+      showToast('Failed to update favorites', 'error');
+      setMomentImagesMap(prev => {
+        const newMap = { ...prev };
+        Object.keys(newMap).forEach(momentId => {
+          newMap[momentId] = newMap[momentId].map(img => 
+            imageIds.includes(img.id) ? { ...img, is_favorite: allAreFavorites } : img
+          );
+        });
+        return newMap;
+      });
+    }
+  };
+
+  // Single image archive toggle
+  const handleSingleToggleArchive = async (imageIds, isRemove = false) => {
+    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
+
+    try {
+      if (isRemove) {
+        const res = await albumsAPI.toggleArchive(imageIds, true, eventUrl);
+        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        
+        // Optimistic update
+        setMomentImagesMap(prev => {
+          const newMap = { ...prev };
+          Object.keys(newMap).forEach(momentId => {
+            newMap[momentId] = newMap[momentId].map(img => 
+              imageIds.includes(img.id) ? { ...img, is_archived: false } : img
+            );
+          });
+          return newMap;
+        });
+
+        showToast(
+          <span>
+            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+          </span>,
+          'success'
+        );
+      } else {
+        const res = await albumsAPI.addToArchive(imageIds, eventUrl);
+        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        
+        // If not including archived, remove from grid
+        if (!includeArchived) {
+          setMomentImagesMap(prev => {
+            const newMap = { ...prev };
+            Object.keys(newMap).forEach(momentId => {
+              newMap[momentId] = newMap[momentId].filter(img => !imageIds.includes(img.id));
+            });
+            return newMap;
+          });
+        } else {
+          // Mark as archived
+          setMomentImagesMap(prev => {
+            const newMap = { ...prev };
+            Object.keys(newMap).forEach(momentId => {
+              newMap[momentId] = newMap[momentId].map(img => 
+                imageIds.includes(img.id) ? { ...img, is_archived: true } : img
+              );
+            });
+            return newMap;
+          });
+        }
+
+        showToast(
+          <span>
+            {added} moved to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+          </span>,
+          'success'
+        );
+      }
+    } catch (e) {
+      showToast('Failed to update archive', 'error');
+    }
+  };
+
+  const handleMoveToArchive = async () => {
+    if (globalSelection.size === 0) return;
+    
+    const imageIds = getSelectedImageIds();
+    if (imageIds.length === 0) return;
+
+    try {
+      const res = await albumsAPI.addToArchive(imageIds, eventUrl);
+      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+      showToast(`${added} moved to Archive`, 'success');
+      clearGlobalSelection();
+    } catch (e) {
+      showToast('Failed to move to archive', 'error');
+    }
   };
 
   const handleRemoveFromMoment = async () => {
@@ -643,11 +860,6 @@ export default function Moments({ eventUrl }) {
               <p className="text-gray-600">
                 {allCurrentImages.size} photos
               </p>
-              {globalSelection.size > 0 && (
-                <span className="text-sm text-primary-600 font-medium">
-                  • {globalSelection.size} selected
-                </span>
-              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -754,61 +966,10 @@ export default function Moments({ eventUrl }) {
                     {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                   </button>
                   
-                  {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
-                  {selectionMode && allCurrentImages.size > 0 && !allCurrentSelected && (
-                    <button
-                      onClick={selectAllImages}
-                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                        globalSelection.size > 0 
-                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                          : 'hover:bg-gray-100 text-gray-700'
-                      }`}
-                      title="Select all photos (Ctrl+A)"
-                    >
-                      <CheckCheck className="w-4 h-4" />
-                    </button>
-                  )}
-                  
-                  {/* Clear button - always visible when any images are selected, always red */}
-                  {globalSelection.size > 0 && (
-                    <button
-                      onClick={clearGlobalSelection}
-                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center bg-red-100 text-red-700 hover:bg-red-200"
-                      title="Clear selection"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
                 </>
               )}
             </div>
 
-            {/* Group 3: Actions on Selection */}
-            {globalSelection.size > 0 && !imagesLoading && (
-              <div className="flex items-center space-x-3 px-4">
-                <button
-                  onClick={handleGlobalAddToBucket}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                  title="Add selected photos to bucket"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleRemoveFromMoment}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
-                  title="Remove selected photos from moment"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setShowMoveModal(true)}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-700"
-                  title="Move selected photos to another moment"
-                >
-                  <Move className="w-4 h-4" />
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="flex items-center">
@@ -982,6 +1143,11 @@ export default function Moments({ eventUrl }) {
                   selectionMode={selectionMode}
                   onSelectAllInMoment={selectAllInMoment}
                   onClearMomentSelection={clearMomentSelection}
+                  onToggleFavorites={handleSingleToggleFavorites}
+                  onToggleArchive={handleSingleToggleArchive}
+                  showToast={showToast}
+                  eventUrl={eventUrl}
+                  includeArchived={includeArchived}
                   ref={setMomentRef(moment.label)}
                 />
               ))}
@@ -1050,8 +1216,35 @@ export default function Moments({ eventUrl }) {
           currentIndex={imageViewer.index}
           currentGroupId={null}
           onJumpToMoment={handleJumpToMoment}
+          showToast={showToast}
         />
       )}
+
+      {/* Floating Selection Controls */}
+      <FloatingSelectionControls
+        selectedCount={globalSelection.size}
+        totalCount={allCurrentImages.size}
+        selectedImages={new Set(getSelectedImageIds())}
+        onSelectAll={selectAllImages}
+        onClearSelection={clearGlobalSelection}
+        onAddToBucket={handleGlobalAddToBucket}
+        onToggleFavorites={handleToggleFavorites}
+        onMoveToArchive={handleMoveToArchive}
+        onRemoveFromMoment={handleRemoveFromMoment}
+        onMoveToMoment={() => setShowMoveModal(true)}
+        eventUrl={eventUrl}
+        showToast={showToast}
+        urlHelpers={urlHelpers}
+        placeholderDataUrl="data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>"
+        showTransferFaces={false}
+        showRemoveFromMoment={true}
+        showMoveToMoment={true}
+        showArchive={true}
+        showFavorites={true}
+        showBucket={true}
+        showAlbum={true}
+        selectionMode={selectionMode}
+      />
     </div>
   );
 } 

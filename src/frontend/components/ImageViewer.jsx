@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
+import SingleImageActions from './SingleImageActions';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
@@ -10,97 +11,7 @@ import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
-import useBucketStore from '../utils/bucketStore';
 
-function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeholderDataUrl, onAlbumAdded }) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [albums, setAlbums] = useState([]);
-
-  useEffect(() => {
-    if (!open) return;
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await albumsAPI.getAll(eventUrl, { exclude_defaults: true });
-        if (mounted) setAlbums(res.albums || []);
-      } catch (e) {
-        // ignore
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [open, eventUrl]);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-        title="Add photo to album"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-20">
-          {loading ? (
-            <div className="p-3 text-sm text-gray-500">Loading albums...</div>
-          ) : (albums.length === 0 ? (
-            <div className="p-3 text-sm text-gray-500">No albums</div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {albums.map(album => (
-                <li key={album.albumID}>
-                  <button
-                    className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
-                    onClick={async () => {
-                      try {
-                        const res = await albumsAPI.addImages(album.albumID, [imageId], eventUrl);
-                        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
-                        if (added > 0) {
-                          // Update local state immediately
-                          if (onAlbumAdded) {
-                            onAlbumAdded(album);
-                          }
-                        }
-                        showToast(
-                          <span>
-                            {added} added to{' '}
-                            <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link>
-                          </span>,
-                          'success'
-                        );
-                      } catch (e) {
-                        showToast('Failed to add to album', 'error');
-                      } finally {
-                        setOpen(false);
-                      }
-                    }}
-                  >
-                    {album.representative_image ? (
-                      <img 
-                        src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`} 
-                        alt="" 
-                        className="w-8 h-8 rounded object-cover" 
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
-                        <ImageIcon className="w-4 h-4 text-gray-400" />
-                      </div>
-                    )}
-                    <span className="text-sm text-gray-700 truncate">{album.label}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
   const navigate = useNavigate();
@@ -174,7 +85,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [imageAlbums, setImageAlbums] = useState([]);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
-  const { addImages, removeFromQueue, queue, open } = useBucketStore();
   const [albumsOpen, setAlbumsOpen] = useState(() => {
     try { return JSON.parse(localStorage.getItem('iv_albumsOpen') || 'false'); } catch { return false; }
   });
@@ -318,43 +228,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  const handleToggleFavorite = async () => {
-    if (!imageInfo) return;
-    try {
-      const currentFavorite = !!(imageInfo.is_favorite ?? imageInfo.is_favorites);
-      const result = await albumsAPI.toggleFavorite([imageInfo.id], currentFavorite, eventUrl);
-      if (result) {
-        setImageInfo(prev => ({ ...prev, is_favorite: !currentFavorite }));
-        showToast(currentFavorite ? 'Removed from favorites' : 'Added to favorites', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to update favorites', 'error');
-    }
-  };
-
-  const handleAddToArchive = async () => {
-    if (!imageInfo) return;
-    try {
-      const result = await albumsAPI.addToArchive([imageInfo.id], eventUrl);
-      if (result) {
-        setImageInfo(prev => ({ ...prev, is_archived: true }));
-        showToast('Moved to archive', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to move to archive', 'error');
-    }
-  };
-
-  const handleRemoveFromArchive = async () => {
-    if (!imageInfo) return;
-    try {
-      const result = await albumsAPI.toggleArchive([imageInfo.id], true, eventUrl);
-      if (result) {
-        setImageInfo(prev => ({ ...prev, is_archived: false }));
-        showToast('Removed from archive', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to remove from archive', 'error');
+  const handleImageUpdated = (updates) => {
+    setImageInfo(prev => ({ ...prev, ...updates }));
+    
+    // Handle album_added case
+    if (updates.album_added) {
+      handleAlbumAdded(updates.album_added);
     }
   };
 
@@ -365,7 +244,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       if (prev.some(a => a.albumID === album.albumID)) {
         return prev;
       }
-      return [...prev, album];
+      
+      // Insert album in alphabetical order by label
+      const newAlbums = [...prev, album];
+      return newAlbums.sort((a, b) => {
+        const na = (a.label || '').toLowerCase();
+        const nb = (b.label || '').toLowerCase();
+        return na.localeCompare(nb);
+      });
     });
     
     // Update imageInfo if it's a special album
@@ -724,9 +610,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return urlHelpers.getFaceCropUrl(face.face_id);
   };
 
-  const isFavorite = !!(imageInfo?.is_favorite ?? imageInfo?.is_favorites);
-  const isArchived = !!imageInfo?.is_archived;
-  const isInBucket = imageId ? queue.includes(imageId) : false;
 
   useEffect(() => {
     // Initial auto-hide schedule for controls
@@ -1019,61 +902,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0 image-viewer-sidebar">
           {/* Controls */}
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
-                <div className="flex items-center space-x-2">
-                  {/* Favorites */}
-                  <button
-                    onClick={handleToggleFavorite}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${isFavorite ? 'text-red-600' : 'text-gray-700'}`}
-                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                    aria-pressed={isFavorite}
-                  >
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                    </svg>
-                  </button>
-                  {/* Add to album */}
-                  <AlbumQuickAddButton
-                    imageId={imageId}
-                    eventUrl={eventUrl}
-                    showToast={showToast}
-                    urlHelpers={urlHelpers}
-                    placeholderDataUrl={PLACEHOLDER_DATA_URL}
-                    onAlbumAdded={handleAlbumAdded}
-                  />
-                  {/* Add to bucket / Remove from bucket */}
-                  <button
-                    onClick={() => {
-                      if (imageId) {
-                        if (isInBucket) {
-                          removeFromQueue(imageId);
-                          showToast('Removed from bucket', 'success');
-                        } else {
-                          addImages([imageId]);
-                          open();
-                        }
-                      }
-                    }}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${isInBucket ? 'text-gray-700' : 'text-gray-700'}`}
-                    title={isInBucket ? 'Remove from bucket' : 'Add to bucket'}
-                  >
-                    <ShoppingBag className="w-4 h-4" fill={isInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
-                  </button>
-                  {/* Archive toggle */}
-                  <button
-                    onClick={async () => {
-                      if (isArchived) {
-                        await handleRemoveFromArchive();
-                      } else {
-                        await handleAddToArchive();
-                      }
-                    }}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
-                    title={isArchived ? 'Remove from archive' : 'Move to archive'}
-                    aria-pressed={isArchived}
-                  >
-                    <Archive className="w-4 h-4" fill={isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2" />
-                  </button>
-                </div>
+                <SingleImageActions
+                  imageId={imageId}
+                  imageInfo={imageInfo}
+                  eventUrl={eventUrl}
+                  showToast={showToast}
+                  urlHelpers={urlHelpers}
+                  placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                  onImageUpdated={handleImageUpdated}
+                />
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>

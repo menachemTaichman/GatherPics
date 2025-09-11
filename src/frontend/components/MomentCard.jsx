@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { forwardRef } from 'react';
-import { Image, Clock, Calendar, Grid, List, CheckCheck, X } from 'lucide-react';
+import { Image, Clock, Calendar, Grid, List, CheckCheck, X, Archive } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { albumsAPI } from '../utils/apiService';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -41,13 +43,30 @@ const MomentCard = forwardRef(({
   onOpenImageViewer,
   selectionMode,
   onSelectAllInMoment,
-  onClearMomentSelection
+  onClearMomentSelection,
+  onToggleFavorites,
+  onToggleArchive,
+  showToast,
+  eventUrl,
+  includeArchived
 }, ref) => {
   // Calculate selection stats for this moment
   const momentimageKeys = images.map(image => `${moment.momentID}:${image.label}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
+
+  // Helper function to check if image is favorite
+  const isImageFavorite = (img) => {
+    if (!img) return false;
+    if (img.is_favorite !== undefined && img.is_favorite !== null) {
+      return !!img.is_favorite;
+    }
+    if (img.is_favorites !== undefined && img.is_favorites !== null) {
+      return !!img.is_favorites;
+    }
+    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
+  };
 
   return (
     <motion.div
@@ -84,7 +103,7 @@ const MomentCard = forwardRef(({
                      </div>
                    )}
                    
-                   {/* Per-moment selection controls - moved after images count with proper spacing */}
+                   {/* Per-moment selection controls */}
                    {images.length > 0 && (
                      <div className="flex items-center space-x-3">
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
@@ -102,7 +121,7 @@ const MomentCard = forwardRef(({
                          </button>
                        )}
                        
-                       {/* Clear button - always visible when any images are selected, regardless of checkbox visibility */}
+                       {/* Clear button - always visible when any images are selected */}
                        {selectedInMoment.length > 0 && (
                          <button
                            onClick={() => onClearMomentSelection(moment.momentID)}
@@ -186,6 +205,51 @@ const MomentCard = forwardRef(({
                             e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
                           }}
                         />
+                        {/* Bottom-left icons: heart then archive */}
+                        <button
+                          type="button"
+                          aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
+                          aria-pressed={isImageFavorite(image)}
+                          className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                            selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}
+                          title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (onToggleFavorites) {
+                              await onToggleFavorites([image.id]);
+                            }
+                          }}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
+                            fill={isImageFavorite(image) ? 'currentColor' : 'none'}
+                            stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
+                            strokeWidth="2"
+                            role="img"
+                            focusable="false"
+                            style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
+                          >
+                            <title>Favorite</title>
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                          </svg>
+                        </button>
+                        {image.is_archived ? (
+                          <button
+                            type="button"
+                            className="absolute bottom-2 left-10 z-10 transition-opacity bg-gray-800 bg-opacity-70 text-white rounded px-1.5 py-0.5 flex items-center space-x-1"
+                            title="Remove from Archive"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (onToggleArchive) {
+                                await onToggleArchive([image.id], true);
+                              }
+                            }}
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                        ) : null}
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
                             <Image className="w-8 h-8 mx-auto mb-1" />

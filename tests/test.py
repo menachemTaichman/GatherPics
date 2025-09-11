@@ -349,9 +349,3 @@ def recreate_view_triggers_and_indexes():
     for index in INDEXES:
         db.execute_query('CREATE INDEX if not exists ' + index)
 
-# recreate_view_triggers_and_indexes()
-
-imageID = "ba9ca86a-ac92-49e9-b379-63812f355867"
-albumID = "1a854c21-6ef9-4641-96a9-72b0e7c054dd"
-
-#event.models_manager.edit('albums', albumID, {'representative_image': imageID})
