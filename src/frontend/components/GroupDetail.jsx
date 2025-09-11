@@ -108,7 +108,17 @@ function AlbumQuickAddButton({ selectedImages, eventUrl, showToast, urlHelpers, 
                       }
                     }}
                   >
-                    <img src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : (placeholderDataUrl || '')} alt="" className="w-8 h-8 rounded object-cover" />
+                    {album.representative_image ? (
+                      <img 
+                        src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`} 
+                        alt="" 
+                        className="w-8 h-8 rounded object-cover" 
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                        <ImageIcon className="w-4 h-4 text-gray-400" />
+                      </div>
+                    )}
                     <span className="text-sm text-gray-700 truncate">{album.label}</span>
                   </button>
                 </li>

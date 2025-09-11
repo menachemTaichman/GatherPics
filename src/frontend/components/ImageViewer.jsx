@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -79,7 +79,17 @@ function AlbumQuickAddButton({ imageId, eventUrl, showToast, urlHelpers, placeho
                       }
                     }}
                   >
-                    <img src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : (placeholderDataUrl || '')} alt="" className="w-8 h-8 rounded object-cover" />
+                    {album.representative_image ? (
+                      <img 
+                        src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`} 
+                        alt="" 
+                        className="w-8 h-8 rounded object-cover" 
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                        <ImageIcon className="w-4 h-4 text-gray-400" />
+                      </div>
+                    )}
                     <span className="text-sm text-gray-700 truncate">{album.label}</span>
                   </button>
                 </li>
@@ -1131,16 +1141,22 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 title={album.label}
                               >
-                                <img
-                                  src={album.representative_image ? (urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`) : PLACEHOLDER_DATA_URL}
-                                  alt=""
-                                  className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = PLACEHOLDER_DATA_URL;
-                                  }}
-                                />
+                                {album.representative_image ? (
+                                  <img
+                                    src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`}
+                                    alt=""
+                                    className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      e.target.onerror = null;
+                                      e.target.src = PLACEHOLDER_DATA_URL;
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                    <ImageIcon className="w-5 h-5 text-gray-400" />
+                                  </div>
+                                )}
                                 <span className="font-medium text-gray-900 truncate">{album.label}</span>
                               </a>
                               <button
