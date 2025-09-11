@@ -78,7 +78,7 @@ function AlbumQuickAddButton({ selectedImages, eventUrl, showToast, urlHelpers, 
         <PlusIcon className="w-4 h-4" />
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-20">
+        <div className="absolute bottom-full left-0 mb-2 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg z-50">
           {loading ? (
             <div className="p-3 text-sm text-gray-500">Loading albums...</div>
           ) : (albums.length === 0 ? (
@@ -1169,11 +1169,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     </span>
                   )}
                 </p>
-                {selectedImages.size > 0 && (
-                  <p className="text-sm text-primary-600 font-medium absolute top-full left-0">
-                    {selectedImages.size} selected
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -1323,8 +1318,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               </button>
             </div>
 
-                        {/* Group 3: Selection Controls */}
-            {sortedImages.length > 0 && viewMode === 'grid' && (
+                        {/* Group 3: Selection Mode Toggle */}
+            {sortedImages.length > 0 && (
               <div className="flex items-center space-x-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
@@ -1337,165 +1332,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
-                {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
-                {selectionMode && selectedImages.size < sortedImages.length && (
-                  <button
-                    onClick={selectAllImages}
-                    className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                      selectedImages.size > 0 
-                        ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                        : 'hover:bg-gray-100 text-gray-700'
-                    }`}
-                    title="Select all photos (Ctrl+A)"
-                  >
-                    <CheckCheck className="w-4 h-4" />
-                  </button>
-                )}
-                
-                {/* Clear button - always visible when any images are selected, always red */}
-                {selectedImages.size > 0 && (
-                  <button
-                    onClick={clearSelection}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center bg-red-100 text-red-700 hover:bg-red-200"
-                    title="Clear selection"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
               </div>
-            )}
-
-            {/* Group 4: Actions on Selection */}
-            {sortedImages.length > 0 && viewMode === 'grid' && selectedImages.size > 0 && (
-              <div className="flex items-center space-x-3 px-4">
-                {filterMode !== 'or' && (
-                  <button
-                    onClick={handleTransferFaces}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
-                    title="Change group for selected faces"
-                  >
-                    <Users className="w-4 h-4" />
-                  </button>
-                )}
-                {/* Add to Album button */}
-                <AlbumQuickAddButton 
-                  selectedImages={Array.from(selectedImages)} 
-                  eventUrl={eventUrl}
-                  showToast={showToast}
-                  urlHelpers={urlHelpers}
-                  placeholderDataUrl={PLACEHOLDER_DATA_URL}
-                />
-                {/* Mark selection as Favorites */}
-                <button
-                  onClick={async () => {
-                    if (selectedImages.size === 0) return;
-                    await toggleFavoritesForIds(Array.from(selectedImages));
-                  }}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 text-red-600"
-                  title="Add selected to favorites"
-                >
-                  <HeartIcon className="w-4 h-4" />
-                </button>
-                {/* Move selection to Archive */}
-                <button
-                  onClick={async () => {
-                    if (selectedImages.size === 0) return;
-                    try {
-                      const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
-                      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
-                      // Remove archived from selection immediately
-                      setSelectedImages(prev => {
-                        const next = new Set(prev);
-                        Array.from(selectedImages).forEach(id => next.delete(id));
-                        return next;
-                      });
-                      showToast(
-                        <span>
-                          {added} moved to{' '}
-                          <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-                        </span>,
-                        'success'
-                      );
-                    } catch (e) {
-                      showToast('Failed to move to archive', 'error');
-                    }
-                  }}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                  title="Move selected to archive"
-                >
-                  <Archive className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleAddSelectedToBucket}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                  title="Add selected photos to bucket"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            
-            {/* List View Selection Controls - Always show when in list mode */}
-            {sortedImages.length > 0 && viewMode === 'list' && (
-              <>
-                {/* Group 3: Selection Controls */}
-                <div className="flex items-center space-x-3 px-4">
-                  {/* Select all button - only visible when not all are selected */}
-                  {selectedImages.size < sortedImages.length && (
-                    <button
-                      onClick={selectAllImages}
-                                              className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
-                          selectedImages.size > 0 
-                            ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                            : 'hover:bg-gray-100 text-gray-700'
-                        }`}
-                      title="Select all photos (Ctrl+A)"
-                    >
-                      <CheckCheck className="w-4 h-4" />
-                    </button>
-                  )}
-                  
-                  {/* Clear button - always visible when any images are selected, always red */}
-                  {selectedImages.size > 0 && (
-                    <button
-                      onClick={clearSelection}
-                      className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
-                      title="Clear selection"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Group 4: Actions on Selection */}
-                {selectedImages.size > 0 && (
-                  <div className="flex items-center space-x-3 px-4">
-                    {filterMode !== 'or' && (
-                      <button
-                        onClick={handleTransferFaces}
-                        className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-orange-100 text-orange-700"
-                        title="Change group for selected faces"
-                      >
-                        <Users className="w-4 h-4" />
-                      </button>
-                    )}
-                    <AlbumQuickAddButton 
-                      selectedImages={Array.from(selectedImages)} 
-                      eventUrl={eventUrl}
-                      showToast={showToast}
-                      urlHelpers={urlHelpers}
-                      placeholderDataUrl={PLACEHOLDER_DATA_URL}
-                    />
-                    <button
-                      onClick={handleAddSelectedToBucket}
-                      className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                                          title="Add selected photos to bucket"
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                  </button>
-                  </div>
-                )}
-              </>
             )}
           </div>
         </div>
@@ -1579,7 +1416,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                          toggleImageSelection(image.id, e);
                        }}
                       className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                        viewMode === 'list' || selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       }`}
                     />
                     <div className="relative w-full h-full">
@@ -1725,6 +1562,115 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           </motion.div>
         )}
       </div>
+
+      {/* Floating Selection Controls */}
+      {(selectionMode || selectedImages.size > 0) && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-40">
+          <span className="text-sm text-gray-700">{selectedImages.size} selected</span>
+          
+          {/* Select all button - only visible when not all are selected */}
+          {selectedImages.size < sortedImages.length && (
+            <button
+              onClick={selectAllImages}
+              className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                selectedImages.size > 0 
+                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title="Select all photos (Ctrl+A)"
+            >
+              <CheckCheck className="w-4 h-4" />
+            </button>
+          )}
+          
+          {/* Clear selection */}
+          {selectedImages.size > 0 && (
+            <button
+              onClick={clearSelection}
+              className="w-8 h-8 rounded-md bg-red-100 text-red-700 hover:bg-red-200 flex items-center justify-center"
+              title="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+          
+          {/* Action buttons - only show when images are selected */}
+          {selectedImages.size > 0 && (
+            <>
+              {/* Transfer faces */}
+              {filterMode !== 'or' && (
+                <button
+                  onClick={handleTransferFaces}
+                  className="w-8 h-8 rounded-md hover:bg-orange-100 text-orange-700 flex items-center justify-center"
+                  title="Change group for selected faces"
+                >
+                  <Users className="w-4 h-4" />
+                </button>
+              )}
+              
+              {/* Add to Album */}
+              <AlbumQuickAddButton 
+                selectedImages={Array.from(selectedImages)} 
+                eventUrl={eventUrl}
+                showToast={showToast}
+                urlHelpers={urlHelpers}
+                placeholderDataUrl={PLACEHOLDER_DATA_URL}
+              />
+              
+              {/* Add to Favorites */}
+              <button
+                onClick={async () => {
+                  if (selectedImages.size === 0) return;
+                  await toggleFavoritesForIds(Array.from(selectedImages));
+                }}
+                className="w-8 h-8 rounded-md hover:bg-red-50 text-red-600 flex items-center justify-center"
+                title="Add selected to favorites"
+              >
+                <HeartIcon className="w-4 h-4" />
+              </button>
+              
+              {/* Move to Archive */}
+              <button
+                onClick={async () => {
+                  if (selectedImages.size === 0) return;
+                  try {
+                    const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
+                    const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+                    // Remove archived from selection immediately
+                    setSelectedImages(prev => {
+                      const next = new Set(prev);
+                      Array.from(selectedImages).forEach(id => next.delete(id));
+                      return next;
+                    });
+                    showToast(
+                      <span>
+                        {added} moved to{' '}
+                        <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+                      </span>,
+                      'success'
+                    );
+                  } catch (e) {
+                    showToast('Failed to move to archive', 'error');
+                  }
+                }}
+                className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
+                title="Move selected to archive"
+              >
+                <Archive className="w-4 h-4" />
+              </button>
+              
+              {/* Add to Bucket */}
+              <button
+                onClick={handleAddSelectedToBucket}
+                className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
+                title="Add selected photos to bucket"
+              >
+                <ShoppingBag className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Modals */}
       {showEditModal && (
