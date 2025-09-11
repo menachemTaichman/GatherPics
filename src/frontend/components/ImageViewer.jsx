@@ -646,10 +646,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden modal-overlay">
         <motion.div
           ref={modalRef}
-          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl ${sidebarVisible ? 'max-w-7xl' : 'max-w-5xl'} w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal`}
+          className="bg-transparent border-2 border-white/30 rounded-lg shadow-xl w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal"
           style={{ 
             maxHeight: 'calc(100vh - 3rem)',
-            height: 'calc(100vh - 3rem)'
+            height: 'calc(min(100vw - 2rem, 1024px) * 0.67)', // Always use base modal width for consistent image container
+            maxWidth: sidebarVisible ? '1344px' : '1024px' // 1024px + 320px for sidebar
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -662,7 +663,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             {/* Image Viewer */}
             <div 
               ref={containerRef}
-              className="flex-1 flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
+              className="flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
+              style={{ 
+                width: 'calc(min(100vw - 2rem, 1024px))' // Always use base modal width for consistent image container
+              }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}

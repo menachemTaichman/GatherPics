@@ -141,12 +141,9 @@
   }
   
   .image-viewer-modal {
-    max-height: 92vh !important;
-    height: 92vh !important;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding-bottom: 8px; /* Add padding to ensure scrollbar is visible */
   }
   
   .image-viewer-sidebar {
