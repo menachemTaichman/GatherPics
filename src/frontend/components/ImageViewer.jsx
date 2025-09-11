@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -1182,7 +1182,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
                         title={showRectangles ? 'Hide face tags' : 'Show face tags'}
                       >
-                        <User className="w-4 h-4" />
+                        {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     <button
