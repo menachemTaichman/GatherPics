@@ -381,13 +381,12 @@ class ModelsManager:
         *,
         target_group_id: Optional[str] = None,
         new_group_name: Optional[str] = None,
-        include_archived: bool = False,
     ) -> Dict:
         """Transfer faces to an existing/new group and update representatives as needed."""
         if not face_ids:
             return {'target_group_id': None, 'old_group_deleted': False}
 
-        old_group = self.get_one('groups', old_group_id)
+        old_group = self.get_one('groups', old_group_id, True)
         if not old_group:
             raise ValueError(f"Source group {old_group_id} not found")
 
@@ -400,7 +399,7 @@ class ModelsManager:
             FROM {accessible_table}
             WHERE faceID IN ({placeholders}) AND groupID = ?
         '''
-        original_affected_images = {row[0] for row in self.db.execute_query(query, (*face_ids, old_group_id), include_archived)}
+        original_affected_images = {row[0] for row in self.db.execute_query(query, (*face_ids, old_group_id), True)}
 
         if not original_affected_images:
             return {
@@ -410,12 +409,12 @@ class ModelsManager:
                 'images_to_remove_from_source': [],
                 'images_to_add_to_target': [],
                 'updated_source_group': old_group,
-                'updated_target_group': self.get_one('groups', target_group_id) if target_group_id else None,
+                'updated_target_group': self.get_one('groups', target_group_id, True) if target_group_id else None,
             }
 
         target_group_id_was_provided = target_group_id is not None
         if target_group_id:
-            target_group = self.get_one('groups', target_group_id)
+            target_group = self.get_one('groups', target_group_id, True)
             if not target_group:
                 raise ValueError(f"Target group {target_group_id} not found")
         else:
@@ -431,7 +430,7 @@ class ModelsManager:
             })
             target_group_id = created_id
 
-        target_group = self.get_one('groups', target_group_id, include_archived=True)
+        target_group = self.get_one('groups', target_group_id, True)
         target_representative_before = target_group.get('representative_face') if target_group else ''
 
         # Determine which images are genuinely new for the target group
@@ -445,11 +444,10 @@ class ModelsManager:
         # Determine which of the affected images no longer have any faces from the source group
         images_to_remove_from_source = set()
         for image_id in original_affected_images:
-            if not self.get_group_faces_by_image(image_id, old_group_id, include_archived):
+            if not self.get_group_faces_by_image(image_id, old_group_id, True):
                 images_to_remove_from_source.add(image_id)
 
         old_representative = old_group.get('representative_face', '')
-        representative_transferred = old_representative in face_ids
 
         old_group_deleted = False
         if self.is_group_empty(old_group_id):
@@ -458,9 +456,9 @@ class ModelsManager:
 
         updated_source_group = None
         if not old_group_deleted:
-            updated_source_group = self.get_one('groups', old_group_id, include_archived=True)
+            updated_source_group = self.get_one('groups', old_group_id, True)
 
-        updated_target_group = self.get_one('groups', target_group_id, include_archived=True)
+        updated_target_group = self.get_one('groups', target_group_id, True)
         target_representative_after = updated_target_group.get('representative_face') if updated_target_group else ''
 
         result = {
@@ -488,7 +486,7 @@ class ModelsManager:
             accessible_faces = self.db._get_accessible_table_name('faces')
             placeholders = ','.join(['?'] * len(result['transferred_faces_ids']))
             query = f"SELECT DISTINCT imageID FROM {accessible_faces} WHERE faceID IN ({placeholders})"
-            rows = self.db.execute_query(query, (*result['transferred_faces_ids'],), include_archived=True)
+            rows = self.db.execute_query(query, (*result['transferred_faces_ids'],), True)
             for row in rows:
                 transferred_image_ids.add(row[0])
         

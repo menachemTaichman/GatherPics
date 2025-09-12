@@ -13,6 +13,7 @@ import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManag
 import { groupsAPI } from '../utils/apiService';
 import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
+import { ImageViewerProvider } from './ImageViewerProvider';
 
 // Component to handle root redirect dynamically
 function RootRedirect() {
@@ -391,12 +392,14 @@ function AppContent({ eventUrl }) {
 export default function App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
-        </Routes>
-      </div>
+      <ImageViewerProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
+          </Routes>
+        </div>
+      </ImageViewerProvider>
     </Router>
   );
 }

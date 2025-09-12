@@ -36,13 +36,14 @@ import {
   Archive
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
-import ImageViewer from './ImageViewer';
+import { useImageViewer } from './ImageViewerProvider';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
 import GroupsFilter from './GroupsFilter';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
+import useImageSelection from '../utils/useImageSelection';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
@@ -52,6 +53,8 @@ import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
 import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
+import SingleImageTile from './SingleImageTile';
+import SingleImageRow from './SingleImageRow';
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
@@ -63,39 +66,33 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [viewMode, setViewMode] = useSetting('groupDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedImages, setSelectedImages] = useState(new Set());
-  const [lastSelectedImage, setLastSelectedImage] = useState(null);
+  const [sortedImages, setSortedImages] = useState([]);
+  const {
+    selectedKeys: selectedImages,
+    toggleKey: toggleSelectedImageKey,
+    clear: clearSelection,
+    selectAll: selectAllImages,
+    deselectMany,
+  } = useImageSelection({
+    items: sortedImages,
+    getKey: (img) => img?.id,
+    storageKey: group?.groupID ? `groupDetail_selection_${group.groupID}` : undefined,
+    persist: true,
+    enableRange: true,
+  });
   const [includeArchived] = useSetting('include_archived_images', false);
   
-  // Load selected images from cache when group changes
-  useEffect(() => {
-    if (group?.groupID) {
-      const cachedSelection = getSetting(`groupDetail_selection_${group.groupID}`);
-      if (cachedSelection && Array.isArray(cachedSelection)) {
-        setSelectedImages(new Set(cachedSelection));
-      } else {
-        setSelectedImages(new Set());
-      }
-      setLastSelectedImage(null);
-    }
-  }, [group?.groupID]);
-  
-  // Save selection to cache whenever it changes
-  useEffect(() => {
-    if (group?.groupID && selectedImages.size > 0) {
-      setSetting(`groupDetail_selection_${group.groupID}`, Array.from(selectedImages));
-    } else if (group?.groupID && selectedImages.size === 0) {
-      // Clear cache when selection is empty
-      try {
-        localStorage.removeItem(`face_gallery_settings_groupDetail_selection_${group.groupID}`);
-      } catch (error) {
-        console.warn('Failed to clear selection cache:', error);
-      }
-    }
-  }, [selectedImages, group?.groupID]);
-  const [imageViewer, setImageViewer] = useState({ show: false, image: null, index: 0 });
+  // Selection persistence handled by useImageSelection
+  const { 
+    open: openGlobalViewer, 
+    navigate: navigateGlobalViewer,
+    close: closeGlobalViewer,
+    updateSession: updateViewerSession,
+    isOpen: isViewerOpen,
+    currentImageId,
+    currentIndex: viewerIndex
+  } = useImageViewer();
   const [imageClasses, setImageClasses] = useState({});
-  const [sortedImages, setSortedImages] = useState([]);
   const [sortBy, setSortBy] = useSetting('groupDetail_sortBy', 'date');
   const [sortOrder, setSortOrder] = useSetting('groupDetail_sortOrder', 'asc');
   const [loading, setLoading] = useState(false);
@@ -175,7 +172,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     
     const groupNames = window.__pendingFilterGroups;
     const groupIds = groupNames
-      .map(name => currentGroups.find(g => g.label === name)?.groupID)
+      .map(name => currentGroups.find(g => g.groupID === id)?.label)
       .filter(Boolean)
       .filter(id => id !== group?.groupID); // Exclude the main group
     
@@ -309,9 +306,11 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 setSortedImages(prev => {
                   const next = prev.filter(img => !affected.has(img.id));
                   // If viewer is open and current image was removed, close it
-                  if (imageViewer.show && affected.has(imageViewer.image)) {
-                    setImageViewer({ show: false, image: null, index: 0 });
-                  }
+                  try {
+                    if (isViewerOpen && currentImageId && affected.has(currentImageId)) {
+                      closeGlobalViewer();
+                    }
+                  } catch {}
                   return next;
                 });
               } else {
@@ -349,15 +348,16 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               const updatedImages = prevImages.filter(image => !removedSet.has(image.id));
 
               // If viewer is open and current image was removed, move to the next logical image
-              if (imageViewer.show && removedSet.has(imageViewer.image)) {
-                if (updatedImages.length === 0) {
-                  setImageViewer({ show: false, image: null, index: 0 });
-                } else {
-                  const newIndex = Math.min(imageViewer.index, updatedImages.length - 1);
-                  const newImageId = updatedImages[newIndex].id;
-                  setImageViewer({ show: true, image: newImageId, index: newIndex });
+              try {
+                if (isViewerOpen && currentImageId && removedSet.has(currentImageId)) {
+                  if (updatedImages.length === 0) {
+                    closeGlobalViewer();
+                  } else {
+                    const newIndex = Math.min(viewerIndex || 0, updatedImages.length - 1);
+                    updateViewerSession({ images: updatedImages.map(i => i.id), index: newIndex });
+                  }
                 }
-              }
+              } catch {}
 
               return updatedImages;
             });
@@ -419,7 +419,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate, imageViewer, includeArchived]); // include imageViewer for accurate updates
+  }, [group?.groupID, sortBy, sortOrder, navigate, includeArchived, isViewerOpen, currentImageId, viewerIndex]);
 
   useEffect(() => {
     // When the archive setting changes, refetch the group data to get updated image_ids count
@@ -733,7 +733,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     const isCompleteTransfer = !!transferData.old_group_deleted;
 
     // Clear selection and remove transferred images from cache
-    setSelectedImages(new Set());
+    clearSelection();
     
     // If images were transferred away from this group, remove them from the cached selection
     if (transferData) {
@@ -808,47 +808,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
   const toggleImageSelection = (imageId, event) => {
-    const newSelected = new Set(selectedImages);
-    
-    // Handle shift-click for range selection
-    if (event?.shiftKey && lastSelectedImage && lastSelectedImage !== imageId) {
-          const lastIndex = sortedImages.findIndex(p => p.id === lastSelectedImage);
-    const currentIndex = sortedImages.findIndex(p => p.id === imageId);
-      
-      if (lastIndex !== -1 && currentIndex !== -1) {
-        const startIndex = Math.min(lastIndex, currentIndex);
-        const endIndex = Math.max(lastIndex, currentIndex);
-        
-        // Add all images in the range
-        for (let i = startIndex; i <= endIndex; i++) {
-          newSelected.add(sortedImages[i].id);
-        }
-        setSelectedImages(newSelected);
-        setLastSelectedImage(imageId);
-        return;
-      }
-    }
-    
-    // Regular click - toggle the image
-    if (newSelected.has(imageId)) {
-      newSelected.delete(imageId);
-    } else {
-      newSelected.add(imageId);
-    }
-    
-            setSelectedImages(newSelected);
-    setLastSelectedImage(imageId);
+    toggleSelectedImageKey(imageId, event);
   };
 
-  const selectAllImages = () => {
-    setSelectedImages(new Set(sortedImages.map(p => p.id)));
-    setLastSelectedImage(sortedImages.length > 0 ? sortedImages[sortedImages.length - 1].id : null);
-  };
-
-  const clearSelection = () => {
-    setSelectedImages(new Set());
-    setLastSelectedImage(null);
-  };
+  // selectAllImages and clearSelection provided by useImageSelection
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -877,33 +840,23 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   }, [sortedImages, handleFilterReset]);
 
   const openImageViewer = (imageId, index) => {
-    // Use the image data directly since it comes from the API
-    setImageViewer({
-      show: true,
-      image: imageId, // Store just the image_id string for consistency
-      index: index
+    openGlobalViewer({
+      images: sortedImages.map(p => p.id),
+      index,
+      eventUrl,
+      groups: currentGroups,
+      currentGroupId: group.groupID,
+      showToast,
+      onTransferComplete: handleTransferComplete,
+      onJumpToMoment: handleJumpToMoment,
+      image: imageId,
     });
   };
 
-  const closeImageViewer = () => {
-    setImageViewer({ show: false, image: null, index: 0 });
-  };
+  const closeImageViewer = () => {};
 
   const navigateImage = (direction, index) => {
-    const currentIndex = imageViewer.index;
-    let newIndex;
-    if (direction === 'jump' && typeof index === 'number') {
-      newIndex = index;
-    } else if (direction === 'next') {
-              newIndex = Math.min(currentIndex + 1, sortedImages.length - 1);
-    } else {
-      newIndex = Math.max(currentIndex - 1, 0);
-    }
-    setImageViewer({
-      show: true,
-              image: sortedImages[newIndex].id, // This is already correct
-      index: newIndex
-    });
+    navigateGlobalViewer(direction, index);
   };
 
   const handleJumpToMoment = (momentInfo) => {
@@ -1327,208 +1280,64 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 className={`${viewMode === 'grid' ? `photo-card ${imageClasses[image.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
               >
                 {viewMode === 'grid' ? (
-                  <div className="relative group cursor-pointer h-full" onClick={(e) => {
-                    if (!e.target.closest('input[type="checkbox"]')) {
-                      openImageViewer(image.id, index);
-                    }
-                  }}>
-                    <input
-                      type="checkbox"
-                      id={`image-checkbox-grid-${image.id}`}
-                      name={`image-checkbox-grid-${image.id}`}
-                      checked={selectedImages.has(image.id)}
-                      onChange={() => {}} // Empty handler to satisfy React
-                                             onClick={(e) => {
-                         e.stopPropagation();
-                         toggleImageSelection(image.id, e);
-                       }}
-                      className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                        selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                      }`}
-                    />
-                    <div className="relative w-full h-full">
-                    <img
-                      src={showCrops && imageCrops[image.id] && urlHelpers
-                        ? urlHelpers.getFaceCropUrl(imageCrops[image.id])
-                        : urlHelpers.getThumbnailUrl(image.id)
-                      }
-                      alt={`Photo ${index + 1}`}
-                      className="w-full h-full object-cover rounded-lg"
-                      loading="lazy"
-                      onLoad={(e) => handleImageLoad(image.id, e)}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = PLACEHOLDER_DATA_URL;
-                      }}
-                    />
-                    {/* Bottom-left icons: archive first, then heart */}
-                    {image.is_archived ? (
-                      <button
-                        type="button"
-                        aria-label="Remove from archive"
-                        aria-pressed={image.is_archived}
-                        className="absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100"
-                        title="Remove from Archive"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
-                            const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
-                            // Optimistic update
-                            setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: false } : img));
-                            showToast(
-                              <span>
-                                {removed} removed from{' '}
-                                <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-                              </span>,
-                              'success'
-                            );
-                          } catch (err) {
-                            showToast('Failed to remove from archive', 'error');
+                  <SingleImageTile
+                    image={image}
+                    aspectClass={imageClasses[image.id] || 'square'}
+                    thumbSrc={showCrops && imageCrops[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(imageCrops[image.id]) : urlHelpers.getThumbnailUrl(image.id)}
+                    selectionMode={selectionMode}
+                    isSelected={selectedImages.has(image.id)}
+                    onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                    onOpen={() => openImageViewer(image.id, index)}
+                    isFavorite={isImageFavorite(image)}
+                    onToggleFavorite={async () => { const id = image.id; await toggleFavoritesForIds([id]); }}
+                    isArchived={!!image.is_archived}
+                    onToggleArchive={async (isRemove) => {
+                      try {
+                        if (isRemove) {
+                          const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
+                          setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: false } : img));
+                          showToast(
+                            <span>
+                              {(Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0))} removed from{' '}
+                              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+                            </span>,
+                            'success'
+                          );
+                        } else {
+                          const res = await albumsAPI.addToArchive([image.id], eventUrl);
+                          if (!includeArchived) {
+                            setSortedImages(prev => prev.filter(img => img.id !== image.id));
+                          } else {
+                            setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: true } : img));
                           }
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="w-5 h-5 text-white"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="2"
-                          role="img"
-                          focusable="false"
-                        >
-                          <title>Archive</title>
-                          <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
-                        </svg>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
-                        aria-pressed={isImageFavorite(image)}
-                        className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                          selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const imageId = image.id;
-                          await toggleFavoritesForIds([imageId]);
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
-                          fill={isImageFavorite(image) ? 'currentColor' : 'none'}
-                          stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
-                          strokeWidth="2"
-                          role="img"
-                          focusable="false"
-                          style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
-                        >
-                          <title>Favorite</title>
-                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                        </svg>
-                      </button>
-                    )}
-                    
-                    {/* Heart icon appears second when image is archived */}
-                    {image.is_archived && (
-                      <button
-                        type="button"
-                        aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
-                        aria-pressed={isImageFavorite(image)}
-                        className={`absolute bottom-2 left-10 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                          selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const imageId = image.id;
-                          await toggleFavoritesForIds([imageId]);
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
-                          fill={isImageFavorite(image) ? 'currentColor' : 'none'}
-                          stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
-                          strokeWidth="2"
-                          role="img"
-                          focusable="false"
-                          style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
-                        >
-                          <title>Favorite</title>
-                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                        </svg>
-                      </button>
-                    )}
-                    </div>
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-                        <ImageIcon className="w-8 h-8 mx-auto mb-1" />
-                        <span className="text-sm">Click to view</span>
-                      </div>
-                    </div>
-                    {/* Date overlay */}
-                    {image.date_taken && (
-                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                        {formatDate(image.date_taken)}
-                      </div>
-                    )}
-                    {/* Crop indicator */}
-                    {showCrops && imageCrops[image.id] && (
-                      <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
-                        Crop
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="checkbox"
-                      id={`image-checkbox-list-${image.id}`}
-                      name={`image-checkbox-list-${image.id}`}
-                      checked={selectedImages.has(image.id)}
-                      onChange={() => {}} // Empty handler to satisfy React
-                                             onClick={(e) => {
-                         toggleImageSelection(image.id, e);
-                       }}
-                      className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                    />
-                    <div className="relative">
-                      <img
-                        src={showCrops && imageCrops[image.id] && urlHelpers
-                          ? urlHelpers.getFaceCropUrl(imageCrops[image.id])
-                          : urlHelpers.getThumbnailUrl(image.id)
+                          showToast(
+                            <span>
+                              {(Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0))} moved to{' '}
+                              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+                            </span>,
+                            'success'
+                          );
                         }
-                        alt={`Photo ${index + 1}`}
-                        className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                        loading="lazy"
-                        onClick={(e) => {
-                          if (!e.target.closest('input[type="checkbox"]')) {
-                            openImageViewer(image.id, index);
-                          }
-                        }}
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = PLACEHOLDER_DATA_URL;
-                        }}
-                      />
-                      {/* Crop indicator for list view */}
-                      {showCrops && imageCrops[image.id] && (
-                        <div className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">
-                          C
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900">{image.label}</p>
-                      <p className="text-sm text-gray-500">
-                        {image.date_taken ? formatDate(image.date_taken) : 'Unknown date'}
-                      </p>
-                    </div>
-                  </>
+                      } catch (err) {
+                        showToast('Failed to update archive', 'error');
+                      }
+                    }}
+                    onImageLoad={(e) => handleImageLoad(image.id, e)}
+                    dateLabel={formatDate(image.date_taken)}
+                    showDate={!!image.date_taken}
+                    showCropBadge={showCrops && !!imageCrops[image.id]}
+                  />
+                ) : (
+                  <SingleImageRow
+                    image={image}
+                    thumbSrc={showCrops && imageCrops[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(imageCrops[image.id]) : urlHelpers.getThumbnailUrl(image.id)}
+                    isSelected={selectedImages.has(image.id)}
+                    onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                    onOpen={() => openImageViewer(image.id, index)}
+                    rightContent={showCrops && imageCrops[image.id] ? (
+                      <div className="bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">C</div>
+                    ) : null}
+                  />
                 )}
               </motion.div>
             ))}
@@ -1554,11 +1363,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
             const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
             const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
             // Remove archived from selection immediately
-            setSelectedImages(prev => {
-              const next = new Set(prev);
-              Array.from(selectedImages).forEach(id => next.delete(id));
-              return next;
-            });
+            deselectMany(Array.from(selectedImages));
             showToast(
               <span>
                 {added} moved to{' '}
@@ -1612,22 +1417,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         />
       )}
 
-             {/* Image Viewer */}
-       {imageViewer.show && (
-         <ImageViewer
-           image={imageViewer.image}
-           eventUrl={eventUrl}
-           onClose={closeImageViewer}
-           onNavigate={navigateImage}
-           totalImages={sortedImages.length}
-           currentIndex={imageViewer.index}
-           currentGroupId={group.groupID}
-           onJumpToMoment={handleJumpToMoment}
-           groups={currentGroups}
-           onTransferComplete={handleTransferComplete}
-           showToast={showToast}
-         />
-       )}
+             {/* Image Viewer handled globally via ImageViewerProvider */}
 
       {/* Merge Conflict Modal */}
       {showMergeModal && conflictData && (

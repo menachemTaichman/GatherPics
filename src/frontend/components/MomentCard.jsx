@@ -3,6 +3,8 @@ import { forwardRef } from 'react';
 import { Image, Clock, Calendar, Grid, List, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { albumsAPI } from '../utils/apiService';
+import SingleImageTile from './SingleImageTile';
+import SingleImageRow from './SingleImageRow';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -180,168 +182,29 @@ const MomentCard = forwardRef(({
                     className={`${viewMode === 'grid' ? `photo-card ${aspectRatioClass}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
                   >
                     {viewMode === 'grid' ? (
-                      <div className="relative group cursor-pointer h-full" onClick={() => onOpenImageViewer(images, image, index)}>
-                                                                                                                                                                                                       <input
-                             type="checkbox"
-                             id={`image-checkbox-${moment.momentID}-${image.label}`}
-                             name={`image-checkbox-${moment.momentID}-${image.label}`}
-                             checked={globalSelection.has(`${moment.momentID}:${image.label}`)}
-                             onChange={() => {}} // Empty handler to satisfy React
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               onImageSelect(image.label, moment.momentID, e);
-                             }}
-                             className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-                               selectionMode || viewMode === 'list' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                             }`}
-                           />
-                        <img
-                          src={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
-                          alt={`Photo ${index + 1}`}
-                          className="w-full h-full object-cover rounded-lg"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
-                          }}
-                        />
-                         {/* Bottom-left icons: archive first, then heart */}
-                         {image.is_archived ? (
-                           <button
-                             type="button"
-                             aria-label="Remove from archive"
-                             aria-pressed={image.is_archived}
-                             className="absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100"
-                             title="Remove from Archive"
-                             onClick={async (e) => {
-                               e.stopPropagation();
-                               if (onToggleArchive) {
-                                 await onToggleArchive([image.id], true);
-                               }
-                             }}
-                           >
-                             <svg
-                               viewBox="0 0 24 24"
-                               className="w-5 h-5 text-white"
-                               fill="none"
-                               stroke="white"
-                               strokeWidth="2"
-                               role="img"
-                               focusable="false"
-                             >
-                               <title>Archive</title>
-                               <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
-                             </svg>
-                           </button>
-                         ) : (
-                           <button
-                             type="button"
-                             aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
-                             aria-pressed={isImageFavorite(image)}
-                             className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                               selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                             }`}
-                             title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
-                             onClick={async (e) => {
-                               e.stopPropagation();
-                               if (onToggleFavorites) {
-                                 await onToggleFavorites([image.id]);
-                               }
-                             }}
-                           >
-                             <svg
-                               viewBox="0 0 24 24"
-                               className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
-                               fill={isImageFavorite(image) ? 'currentColor' : 'none'}
-                               stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
-                               strokeWidth="2"
-                               role="img"
-                               focusable="false"
-                               style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
-                             >
-                               <title>Favorite</title>
-                               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                             </svg>
-                           </button>
-                         )}
-                         
-                         {/* Heart icon appears second when image is archived */}
-                         {image.is_archived && (
-                           <button
-                             type="button"
-                             aria-label={isImageFavorite(image) ? 'Remove from favorites' : 'Add to favorites'}
-                             aria-pressed={isImageFavorite(image)}
-                             className={`absolute bottom-2 left-10 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                               selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                             }`}
-                             title={isImageFavorite(image) ? 'Remove from Favorites' : 'Add to Favorites'}
-                             onClick={async (e) => {
-                               e.stopPropagation();
-                               if (onToggleFavorites) {
-                                 await onToggleFavorites([image.id]);
-                               }
-                             }}
-                           >
-                             <svg
-                               viewBox="0 0 24 24"
-                               className={`w-5 h-5 ${isImageFavorite(image) ? 'text-red-500' : 'text-white'}`}
-                               fill={isImageFavorite(image) ? 'currentColor' : 'none'}
-                               stroke={isImageFavorite(image) ? 'currentColor' : 'white'}
-                               strokeWidth="2"
-                               role="img"
-                               focusable="false"
-                               style={{ color: isImageFavorite(image) ? '#ef4444' : '#ffffff' }}
-                             >
-                               <title>Favorite</title>
-                               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                             </svg>
-                           </button>
-                         )}
-                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-                            <Image className="w-8 h-8 mx-auto mb-1" />
-                            <span className="text-sm">Click to view photo</span>
-                          </div>
-                        </div>
-                        {image.date_taken && (
-                          <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            {formatTimeOnly(image.date_taken)}
-                          </div>
-                        )}
-                      </div>
+                      <SingleImageTile
+                        image={image}
+                        aspectClass={aspectRatioClass}
+                        thumbSrc={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
+                        selectionMode={selectionMode || viewMode === 'list'}
+                        isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
+                        onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
+                        onOpen={() => onOpenImageViewer(images, image, index)}
+                        isFavorite={isImageFavorite(image)}
+                        onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
+                        isArchived={!!image.is_archived}
+                        onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}
+                        dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
+                        showDate={!!image.date_taken}
+                      />
                     ) : (
-                      <>
-                                                                                                                                                                                                       <input
-                             type="checkbox"
-                             id={`image-checkbox-list-${moment.momentID}-${image.label}`}
-                             name={`image-checkbox-list-${moment.momentID}-${image.label}`}
-                             checked={globalSelection.has(`${moment.momentID}:${image.label}`)}
-                             onChange={() => {}} // Empty handler to satisfy React
-                             onClick={(e) => {
-                               onImageSelect(image.label, moment.momentID, e);
-                             }}
-                             className="w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500"
-                           />
-                        <div className="relative">
-                          <img
-                            src={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
-                            alt={`Photo ${index + 1}`}
-                            className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                            loading="lazy"
-                            onClick={() => onOpenImageViewer(images, image, index)}
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50\%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>';
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{image.label}</p>
-                          <p className="text-sm text-gray-500">
-                            {image.date_taken ? formatTimeOnly(image.date_taken) : 'Unknown date'}
-                          </p>
-                        </div>
-                      </>
+                      <SingleImageRow
+                        image={image}
+                        thumbSrc={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
+                        isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
+                        onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
+                        onOpen={() => onOpenImageViewer(images, image, index)}
+                      />
                     )}
                   </motion.div>
                 );
