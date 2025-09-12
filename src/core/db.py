@@ -626,7 +626,7 @@ class AppDB:
 
     def _get_id_field(self, table: str) -> str:
         """Get the ID field for a table."""
-        return table[:-1] + 'ID'
+        return PRIMARY_KEYS[table]
 
     def _get_accessible_table_name(self, table: str) -> str:
         """
@@ -714,10 +714,22 @@ class AppDB:
         finally:
             conn.close()
 
-    def get_all(self, table: str, include_archived: bool = False, order_by: Optional[str] = None) -> List[Dict]:
+    def get_all(self, table: str, include_archived: bool = False, order_by: Optional[str] = None, exclude_empty_entities: bool = False) -> List[Dict]:
 
         accessible_table = self._get_accessible_table_name(table)
         query = f'SELECT * FROM {accessible_table}'
+
+        if exclude_empty_entities:
+            sub_table = {
+                'moments': 'images',
+                'albums': 'album_images',
+                'groups': 'faces'
+            }
+            accessible_sub_table = self._get_accessible_table_name(sub_table[table])
+            connection_field = self._get_id_field(accessible_table)
+            where_clause = f'EXISTS (SELECT 1 FROM {accessible_sub_table} WHERE {accessible_sub_table}.{connection_field} = {accessible_table}.{connection_field})'
+            query += f' WHERE {where_clause}'
+
         if order_by:
             query += f' ORDER BY {order_by}'
 

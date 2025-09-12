@@ -349,3 +349,24 @@ def recreate_view_triggers_and_indexes():
     for index in INDEXES:
         db.execute_query('CREATE INDEX if not exists ' + index)
 
+
+table = 'moments'
+# test if get_all with exclude_empty_entities=True works
+result = event.models_manager.get_all(table, include_archived=True, exclude_empty_entities=True)
+for row in result:
+    print(row['label'])
+
+print('--------------------------------')
+result = event.models_manager.get_all(table, include_archived=True, exclude_empty_entities=False)
+for row in result:
+    print(row['label'])
+
+print('--------------------------------')
+result = event.models_manager.get_all(table, include_archived=False, exclude_empty_entities=True)
+for row in result:
+    print(row['label'])
+
+print('--------------------------------')
+result = event.models_manager.get_all(table, include_archived=False, exclude_empty_entities=False)
+for row in result:
+    print(row['label'])

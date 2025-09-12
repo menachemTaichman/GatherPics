@@ -117,7 +117,7 @@ class ModelsManager:
             entity['image_ids'] = self.get_album_images(entity_id, include_archived)
         return entity
 
-    def get_all(self, table: str, include_archived: bool = False, sort: bool = False) -> List[Dict]:
+    def get_all(self, table: str, include_archived: bool = False, sort: bool = False, exclude_empty_entities: bool = False) -> List[Dict]:
         order_by = None
         if sort:
             if table == 'groups':
@@ -127,7 +127,7 @@ class ModelsManager:
             elif table == 'albums':
                 order_by = "CASE WHEN label IN ('Favorites', 'Archive') THEN 0 ELSE 1 END, label ASC"
 
-        results = self.db.get_all(table, include_archived, order_by=order_by)
+        results = self.db.get_all(table, include_archived, order_by=order_by, exclude_empty_entities=exclude_empty_entities)
         if table in ('groups', 'moments', 'albums'):
             for row in results:
                 entity_id = row.get(self.id_field(table))

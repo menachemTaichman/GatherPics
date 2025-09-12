@@ -134,7 +134,7 @@ export default function Moments({ eventUrl }) {
     return () => {
       timelineManager.destroy();
     };
-  }, [moments, eventUrl]);
+  }, [eventUrl]);
 
   // Clean up refs when moments change
   useEffect(() => {
@@ -160,12 +160,14 @@ export default function Moments({ eventUrl }) {
     fetchImages();
   }, []);
 
-  // Refetch images when includeArchived setting changes
+  // Refetch moments and images when includeArchived setting changes
   useEffect(() => {
-    if (moments.length > 0) {
-      // Force refetch all images to respect new includeArchived setting
-      fetchAllMomentImages(null, null, true);
-    }
+    // This hook now handles refetching both moments and images
+    // to correctly handle moments that might appear/disappear
+    // based on whether they contain only archived images.
+    fetchMoments();
+    // Force refetch all images to respect new includeArchived setting
+    fetchAllMomentImages(null, null, true);
   }, [includeArchived]);
 
   // Remove archived images from grid when includeArchived is false
@@ -248,7 +250,7 @@ export default function Moments({ eventUrl }) {
       // Use parallel API calls for moments that need images fetched
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getImages(moment.momentID, eventUrl);
+          const result = await momentsAPI.getImages(moment.momentID, eventUrl, { include_archived: includeArchived ? 'true' : 'false' });
           return { momentId: moment.momentID, images: result.images || [] };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.momentID}:`, error);
@@ -284,7 +286,7 @@ export default function Moments({ eventUrl }) {
   const fetchMoments = async () => {
     try {
       setStoreLoading(true);
-      const response = await momentsAPI.getAll(eventUrl);
+      const response = await momentsAPI.getAll(eventUrl, { exclude_empty_entities: true });
       setMoments(response.moments || []);
       setStoreError(null);
     } catch (err) {
@@ -337,7 +339,7 @@ export default function Moments({ eventUrl }) {
   // Function to update the momentImagesMap for a specific moment
   const updateMomentImagesMap = async (momentId) => {
     try {
-      const result = await momentsAPI.getImages(momentId);
+      const result = await momentsAPI.getImages(momentId, eventUrl, { include_archived: includeArchived ? 'true' : 'false' });
       
       setMomentImagesMap(prev => ({
         ...prev,

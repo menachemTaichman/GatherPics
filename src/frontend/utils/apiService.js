@@ -20,11 +20,13 @@ api.interceptors.request.use(
     // Automatically add include_archived flag to all GET requests
     if (config.method === 'get') {
       const includeArchived = getSetting('include_archived_images', false);
-      if (includeArchived) {
-        config.params = {
-          ...config.params,
-          include_archived: 'true',
-        };
+
+      if (!config.params) {
+        config.params = {};
+      }
+
+      if (includeArchived && config.params.include_archived === undefined) {
+        config.params.include_archived = 'true';
       }
     }
     return config;
@@ -280,9 +282,9 @@ export const groupsAPI = {
 // Moments API
 export const momentsAPI = {
   // Get all moments
-  getAll: async (eventUrl) => {
+  getAll: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments`);
+    const response = await api.get(`/api/events/${eventId}/moments`, { params });
     return response.data;
   },
 
@@ -315,9 +317,9 @@ export const momentsAPI = {
   },
 
   // Get moment images
-  getImages: async (momentId, eventUrl) => {
+  getImages: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images`);
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images`, { params });
     return response.data;
   },
 

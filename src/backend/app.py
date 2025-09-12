@@ -632,8 +632,13 @@ def get_moments(event_id):
         return not_found(f"Event {event_id} not found or not accessible")
     
     try:
-        # Get enriched moments with image information
-        enriched_moments = event.models_manager.get_all('moments')
+        include_archived = _parse_include_archived(False)
+        sort = _parse_sort(False)
+        exclude_empty_str = request.args.get('exclude_empty_entities')
+        exclude_empty = False if exclude_empty_str is None else str(exclude_empty_str).lower() in ('1', 'true', 'yes', 'y', 'on')
+
+        # Get enriched moments with image information with proper flags
+        enriched_moments = event.models_manager.get_all('moments', include_archived=include_archived, sort=sort, exclude_empty_entities=exclude_empty)
         return jsonify({"moments": enriched_moments})
     except Exception as e:
         return bad_request(e)
@@ -760,7 +765,7 @@ def get_moment_images(event_id, moment_id):
         # Get image IDs for this moment
         image_ids = event.models_manager.get_moment_images(moment_id, include_archived)
         
-        # Get basic image info for each
+        # Get basic image info for each, including archive/favorite flags
         images_data = []
         for image_id in image_ids:
             image = event.models_manager.get_one('images', image_id, include_archived)
@@ -771,9 +776,13 @@ def get_moment_images(event_id, moment_id):
                     'date_taken': image.get('date_taken'),
                     'width': image.get('width'),
                     'height': image.get('height'),
+                    'is_archived': image.get('is_archived', 0) == 1 if isinstance(image.get('is_archived', 0), (int, bool)) else bool(image.get('is_archived')),
+                    'is_favorite': image.get('is_favorite', 0) == 1 if isinstance(image.get('is_favorite', 0), (int, bool)) else bool(image.get('is_favorite')),
                     'urls': {
-                        'display': f'/api/events/{event_id}/display/{image_id}.webp',
-                        'thumbnail': f'/api/events/{event_id}/thumb/{image_id}.webp',
+                        'display': f'/api/events/{FIXED_EVENT_ID}/display/{image_id}.webp',
+                        'thumbnail': f'/api/events/{FIXED_EVENT_ID}/thumb/{image_id}.webp',
+                        'high_quality': f'/api/events/{FIXED_EVENT_ID}/high_quality/{image_id}.webp',
+                        'original': f'/api/events/{FIXED_EVENT_ID}/original/{image_id}.webp',
                     }
                 })
         

@@ -5,6 +5,7 @@ import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useEventUrls } from '../utils/useEventUrls';
+import { useDataStore } from '../utils/dataManager';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
 import RepresentativeImageModal from './RepresentativeImageModal';
@@ -26,13 +27,15 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
+function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
   const { urlHelpers } = useEventUrls(eventUrl);
-  
+  const { moments: storeMoments } = useDataStore();
+
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-
+  const [internalMoments, setInternalMoments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [editingMoments, setEditingMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
   const [showImageSelector, setShowImageSelector] = useState(false);
@@ -47,10 +50,26 @@ function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentI
   });
 
   useEffect(() => {
-    const sortedMoments = sortMoments(moments, 'asc');
-    setEditingMoments(sortedMoments);
-    setChangedMoments(new Set());
-  }, [moments]);
+    fetchMomentsForEdit();
+  }, []);
+
+  const fetchMomentsForEdit = async () => {
+    setIsLoading(true);
+    try {
+      // Always fetch all moments for editing, including empty and archived
+      const response = await momentsAPI.getAll(eventUrl, { include_archived: 'true' });
+      const moments = response.moments || [];
+      const sortedMoments = sortMoments(moments, 'asc');
+      setInternalMoments(sortedMoments);
+      setEditingMoments(sortedMoments);
+      setChangedMoments(new Set());
+    } catch (error) {
+      console.error("Failed to fetch moments for editing:", error);
+      onToast("Failed to load moments for editing.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleClose = () => {
     if (onClose) {
@@ -60,7 +79,7 @@ function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentI
 
   const handleDiscard = () => {
     // Reset all changes and remove temporary moments
-    const sortedMoments = sortMoments(moments, 'asc');
+    const sortedMoments = sortMoments(internalMoments, 'asc');
     setEditingMoments(sortedMoments);
     setChangedMoments(new Set());
   };
@@ -377,7 +396,7 @@ function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentI
                               });
                             } else {
                               // Reset to original for existing moment
-                              const originalMoment = moments.find(m => m.momentID === moment.momentID);
+                              const originalMoment = internalMoments.find(m => m.momentID === moment.momentID);
                               if (originalMoment) {
                                 setEditingMoments(prev => prev.map(m => 
                                   m.momentID === moment.momentID ? originalMoment : m
@@ -479,7 +498,7 @@ function EditMomentsModal({ eventUrl, moments, images, onSave, onDelete, momentI
           momentImagesMap={momentImagesMap}
           onRefreshImages={onRefreshImages}
           onSave={onSave}
-          moments={moments}
+          moments={internalMoments}
           onClose={() => setEditingImagesForMoment(null)}
         />
       )}
