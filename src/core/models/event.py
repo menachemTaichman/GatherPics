@@ -3,7 +3,6 @@ from ..db import AppDB
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
 from .models_manager import ModelsManager
-from typing import Optional
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
 
@@ -12,16 +11,18 @@ class Event(JsonModel):
     ID_FIELD = 'id'
 
     # event utils
-    def __init__(self, event_id: str, load: bool = True, profile_id: Optional[str] = None):
+    def __init__(self, event_id: str, load: bool = True, profile_id: str | None = None, include_archived: bool = False):
         super().__init__(event_id, load=load)
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
-        self.db = AppDB(self.DB_PATH)
+        self.db = AppDB(self.DB_PATH, self.id)
         
         # Set profile ID for access control
         if profile_id:
             self.db.set_profile_id(profile_id)
         
+        self.db.set_include_archived(include_archived)
+
         self.models_manager = ModelsManager(self.db)
         self.face_utils = None
         self.display_dir = os.path.join(self.event_dir, 'display')
@@ -56,40 +57,31 @@ class Event(JsonModel):
         os.makedirs(self.high_quality_dir, exist_ok=True)
         # Ensure {event_id}.db exists as an SQLite DB
         if not os.path.exists(self.DB_PATH):
-            db = AppDB(self.DB_PATH)
+            db = AppDB(self.DB_PATH, self.id)
             db.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
             self._initialize_default_profiles()
 
-    def _initialize_default_profiles(self):
+    def _initialize_default_profiles(self, default_profiles: dict = {}):
         """Initialize default profiles for the event: Main Manager and Event Manager"""
-        # Check if profiles already exist to avoid duplicates
-        existing_profiles = self.models_manager.get_all('profiles')
-        if existing_profiles:
-            return  # Profiles already exist, don't create duplicates
-        
-        developer_id = self.models_manager.generate_id()
-        event_manager_id = self.models_manager.generate_id()
-        main_manager_id = self.models_manager.generate_id()
-        developer_password = ''
-        event_manager_password = ''
-        main_manager_password = ''
+        for default_profile, hierarchy_rank in {'developer': 3, 'event_manager': 2, 'main_manager': 1}:
+            profile = default_profiles.get(default_profile, {})
+            profile['profileID'] = profile.get('profileID', self.models_manager.generate_id())
+            profile['label'] = profile.get('label', default_profile)
+            profile['password'] = profile.get('password', '')
+            profile['hierarchy_rank'] = profile.get('hierarchy_rank', hierarchy_rank)
 
-        # create directly in db, include password and id
+        values = tuple(profile.values() for profile in default_profiles.values())
 
         self.db.execute_query(f'''
             INSERT INTO profiles (profileID, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
-            VALUES (?, 'Developer', ?, 3, 1, 1, 1, 1, 1),
-                   (?, 'Event Manager', ?, 2, 1, 1, 1, 1, 1),
-                   (?, 'Main Manager', ?, 1, 1, 1, 1, 1, 1)
-        ''', (developer_id, developer_password, event_manager_id, event_manager_password, main_manager_id, main_manager_password))
-
-        self.set_profile_id(developer_id)
-
-        return self.models_manager.get_all('profiles')
+            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1)
+        ''', values)
 
     def _initialize_default_albums(self):
         """Initialize default albums for the event: Main Album and Event Album"""
-        existing_albums = self.models_manager.get_all('albums')
+        existing_albums = self.models_manager.get('albums')
         if existing_albums:
             return  # Albums already exist, don't create duplicates
         
@@ -109,13 +101,13 @@ class Event(JsonModel):
         self.last_group_id = 0
         return self
 
-    def set_profile_id(self, profile_id: Optional[str]):
+    def set_profile_id(self, profile_id: str | None = None):
         """Set the profile ID for access control across all models."""
         self.db.set_profile_id(profile_id)
 
-    def get_profile_id(self) -> Optional[str]:
+    def get_profile_id(self) -> str | None:
         """Get the current profile ID."""
-        return self.db.profile_context.get('profileID')
+        return self.db.get_profile_id()
 
     def get_info(self) -> dict:
         return {
@@ -321,5 +313,5 @@ def delete_event(event_id: str) -> None:
     if os.path.exists(event_dir):
         import shutil
         shutil.rmtree(event_dir)
-get_event = lambda event_id, profile_id=None: Event(event_id, profile_id=profile_id)
+get_event = lambda event_id, profile_id=None, include_archived=False: Event(event_id, profile_id=profile_id, include_archived=include_archived)
 list_events = Event.list_all 

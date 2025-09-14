@@ -10,6 +10,18 @@ ACCESSIBLE_VIEWS = {
     'albums': 'accessible_albums'
 }
 
+SUB_TABLES = {
+    'moments': 'images',
+    'albums': 'album_images',
+    'groups': 'faces'
+}
+
+SORT_FIELDS = {
+    'moments': 'start',
+    'albums': 'CASE WHEN label IN (\'Favorites\', \'Archive\') THEN 0 ELSE 1 END, label',
+    'groups': 'label'
+}
+
 PRIMARY_KEYS = {
     'faces': 'faceID',
     'images': 'imageID',
@@ -188,14 +200,6 @@ VIEWS = {
     ''',
     'accessible_moments': '''
         SELECT moments.* FROM moments
-        WHERE NOT EXISTS (
-            SELECT 1 FROM images WHERE images.momentID = moments.momentID
-        )
-        OR EXISTS (
-            SELECT 1 FROM accessible_images 
-            INNER JOIN images ON accessible_images.imageID = images.imageID
-            WHERE images.momentID = moments.momentID
-        )
     ''',
     'accessible_albums_images': '''
         SELECT album_images.*
@@ -616,24 +620,19 @@ TRIGGERS = {
 
 class AppDB:
 
-    def __init__(self, db_path: str, profile_id: str | None = None):
+    def __init__(self, db_path: str, event_id: str, profile_id: str | None = None, include_archived: bool = False):
         self.db_path = db_path
+        self.event_id = event_id
+        self._profile_context = {}
         self.set_profile_id(profile_id)
-
-    def _get_primary_keys(self, table: str) -> Union[str, Tuple[str, ...], None]:
-        """Get the primary key(s) for a table or view."""
-        return PRIMARY_KEYS.get(table)
-
-    def _get_id_field(self, table: str) -> str:
-        """Get the ID field for a table."""
-        return PRIMARY_KEYS[table]
+        self.set_include_archived(include_archived)
 
     def _get_accessible_table_name(self, table: str) -> str:
         """
         Get the accessible view name for a table if it exists and profile filtering is enabled.
         Returns the original table name if no accessible view exists or profile filtering is disabled.
         """
-        if not self.profile_context.get('profileID') or table not in ACCESSIBLE_VIEWS:
+        if not self.get_profile_id() or table not in ACCESSIBLE_VIEWS:
             return table
         return ACCESSIBLE_VIEWS[table]
 
@@ -682,31 +681,50 @@ class AppDB:
             conn.close()
         return db_path 
 
-    def set_profile_id(self, profile_id: Optional[str]):
+    def set_profile_id(self, profile_id: str | None = None):
         """Set the current profile ID for access control."""
         
-        fields = {'profileID': '', 'hierarchy_rank': 0, 'is_profiles_manager': False, 'can_edit': False, 'all_images': False, 'all_albums': False}
-        self.profile_context = {}
+        fields = {
+            'profileID': '',
+            'hierarchy_rank': 0,
+            'is_profiles_manager': False,
+            'can_edit': False,
+            'all_images': False,
+            'all_albums': False
+        }
         profile = {}
         if profile_id:
-            profile = self.get_one('profiles', {'profileID': profile_id}, bypass_access_control=True)
+            profile = self.get('profiles', profile_id, bypass_access_control=True)
 
         if not profile:
             profile = {}
         
         for field, default_val in fields.items():
             val = profile.get(field, default_val)
-            self.profile_context[field] = val
+            self._profile_context[field] = val
+
+    def get_profile_id(self) -> str | None:
+        """Get the current profile ID."""
+        return self._profile_context.get('profileID')
+
+    def set_include_archived(self, include_archived: bool) -> bool:
+        """Set the include archived flag."""
+        self._include_archived = include_archived
+
+    def get_include_archived(self) -> bool:
+        """Get the include archived flag."""
+        return self._include_archived
 
     @contextmanager
-    def get_connection(self, include_archived: bool = False):
+    def get_connection(self, force_include_archived: bool = False):
         """Context manager for database connections."""
 
         conn = sqlite3.connect(self.db_path)
         # Enable foreign key constraints
         conn.execute("PRAGMA foreign_keys = ON")
         # Register the current profile context on every connection
-        conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
+        conn.create_function("cur_profile", 1, lambda key: self._profile_context.get(key))
+        include_archived = force_include_archived or self.get_include_archived()
         conn.create_function("include_archived", 0, lambda: include_archived)
 
         try:
@@ -714,53 +732,58 @@ class AppDB:
         finally:
             conn.close()
 
-    def get_all(self, table: str, include_archived: bool = False, order_by: Optional[str] = None, exclude_empty_entities: bool = False) -> List[Dict]:
+    def get_archive_album(self) -> str | None:
+        """Get the archive album ID."""
+        return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]
 
-        accessible_table = self._get_accessible_table_name(table)
-        query = f'SELECT * FROM {accessible_table}'
+    def get_favorites_album(self) -> str | None:
+        """Get the favorites album ID."""
+        return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
 
-        if exclude_empty_entities:
-            sub_table = {
-                'moments': 'images',
-                'albums': 'album_images',
-                'groups': 'faces'
-            }
-            accessible_sub_table = self._get_accessible_table_name(sub_table[table])
-            connection_field = self._get_id_field(accessible_table)
-            where_clause = f'EXISTS (SELECT 1 FROM {accessible_sub_table} WHERE {accessible_sub_table}.{connection_field} = {accessible_table}.{connection_field})'
-            query += f' WHERE {where_clause}'
+    def get(self,
+        table: str,
+        entity_ids: List[str] | str | None = None,
+        *,
+        bypass_access_control: bool = False,
+        exclude_empty_entities: bool = False,
+        sort: bool = False,
+    ) -> List[Dict]:
+        accessible_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        id_field = PRIMARY_KEYS.get(accessible_table)
 
-        if order_by:
-            query += f' ORDER BY {order_by}'
+        query = f'SELECT * FROM {accessible_table} WHERE 1=1'
 
-        with self.get_connection(include_archived) as conn:
-            cursor = conn.execute(query)
-            columns = [desc[0] for desc in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return_list = True
+        if entity_ids:
+            if isinstance(entity_ids, str):
+                entity_ids = [entity_ids]
+                return_list = False
 
-    def get_one(self, table: str, where: Dict, bypass_access_control: bool = False, include_archived: bool = False) -> Dict | None:
-
-        if bypass_access_control:
-            accessible_table = table
-            where_clause = '1=1'
-            where_params = ()
+            query += f' AND {id_field} IN ({",".join([f"?" for _ in range(len(entity_ids))])})'
+            
         else:
-            accessible_table = self._get_accessible_table_name(table)
-            where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-            where_params = tuple(where.values())
-        
-        with self.get_connection(include_archived) as conn:
-            cursor = conn.execute(f'SELECT * FROM {accessible_table} WHERE {where_clause}', where_params)
-            row = cursor.fetchone()
-            if row:
-                columns = [desc[0] for desc in cursor.description]
-                return dict(zip(columns, row))
-            return None
+            entity_ids = ()
+
+        if exclude_empty_entities and table in SUB_TABLES.keys():
+            sub_table = SUB_TABLES[table]
+            accessible_sub_table = self._get_accessible_table_name(sub_table)
+            sub_table_id_field = PRIMARY_KEYS.get(sub_table)
+
+            query += f' AND EXISTS (SELECT 1 FROM {accessible_sub_table} WHERE {accessible_sub_table}.{sub_table_id_field} = {accessible_table}.{id_field})'
+
+        if sort and table in SORT_FIELDS.keys():
+            query += f' ORDER BY {SORT_FIELDS[table]}'
+            
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, entity_ids)
+            columns = [desc[0] for desc in cursor.description]
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return results if return_list else results[0]
 
     def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its ID for conflict checking."""
 
-        id_field = self._get_id_field(table)
+        id_field = PRIMARY_KEYS.get(table)
 
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
@@ -775,19 +798,24 @@ class AppDB:
                 return record[id_field]
             return None
 
-    def execute_query(self, query: str, params: tuple = (), include_archived: bool = False) -> List[tuple]:
+    def execute_query(self, query: str, params: tuple = (), *, force_include_archived: bool = False, include_columns: bool = False) -> List[tuple]:
         """Execute a custom query and return results."""
-        with self.get_connection(include_archived) as conn:
+        with self.get_connection(force_include_archived) as conn:
             cursor = conn.execute(query, params)
             upper_query = query.strip().upper()
-            # For SELECT queries, fetch and return results
-            if upper_query.startswith('SELECT'):
-                return cursor.fetchall()
-            if 'RETURNING' in upper_query:
-                results = cursor.fetchall()
-                conn.commit()
+
+            if upper_query.startswith('SELECT') or 'RETURNING' in upper_query or upper_query.startswith('WITH'):
+                if include_columns:
+                    columns = [desc[0] for desc in cursor.description]
+                    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                else:
+                    results = cursor.fetchall()
+
+                if 'RETURNING' in upper_query:
+                    conn.commit()
+
                 return results
-            # For non-SELECT queries (INSERT, UPDATE, DELETE), commit and return empty list
+
             conn.commit()
             return []
 
@@ -804,7 +832,7 @@ class AppDB:
         
         sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
 
-        p_keys = self._get_primary_keys(target_table)
+        p_keys = PRIMARY_KEYS.get(target_table)
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -851,7 +879,7 @@ class AppDB:
         
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
-        p_keys = self._get_primary_keys(target_table)
+        p_keys = PRIMARY_KEYS.get(target_table)
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -891,7 +919,7 @@ class AppDB:
         
         sql = f'DELETE FROM {target_table} WHERE {where_clause}'
 
-        p_keys = self._get_primary_keys(target_table)
+        p_keys = PRIMARY_KEYS.get(target_table)
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
