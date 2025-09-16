@@ -1,48 +1,57 @@
 import sqlite3
-from typing import List, Dict, Optional, Union, Tuple, Any
+from typing import List, Dict, Union, Tuple, Any
 from contextlib import contextmanager
 
-ACCESSIBLE_VIEWS = {
-    'images': 'accessible_images',
-    'faces': 'accessible_faces',
-    'groups': 'accessible_groups',
-    'moments': 'accessible_moments',
-    'albums': 'accessible_albums'
-}
-
-SUB_TABLES = {
-    'moments': 'images',
-    'albums': 'album_images',
-    'groups': 'faces'
-}
-
-SORT_FIELDS = {
-    'moments': 'start',
-    'albums': 'CASE WHEN label IN (\'Favorites\', \'Archive\') THEN 0 ELSE 1 END, label',
-    'groups': 'label'
-}
-
-PRIMARY_KEYS = {
-    'faces': 'faceID',
-    'images': 'imageID',
-    'groups': 'groupID',
-    'moments': 'momentID',
-    'albums': 'albumID',
-    'profiles': 'profileID',
-    'album_images': ('albumID', 'imageID'),
-    'profile_images': ('profileID', 'imageID'),
-    'profile_albums': ('profileID', 'albumID'),
-    # Views mapping
-    'accessible_images': 'imageID',
-    'accessible_faces': 'faceID',
-    'accessible_groups': 'groupID',
-    'accessible_moments': 'momentID',
-    'accessible_albums': 'albumID',
-    'accessible_albums_images': ('albumID', 'imageID'),
-    'editable_profiles_details': 'profileID',
-    'editable_full_profiles': 'profileID',
-    'editable_profile_images': ('profileID', 'imageID'),
-    'editable_profile_albums': ('profileID', 'albumID'),
+STRUCTURE = {
+    'images': {
+        'primary_key': 'imageID',
+        'sort_by': 'date_taken',
+        'sub_table': '',
+        'fields_as_sub_table': '',
+        'accessible_table': 'accessible_images',
+    },
+    'faces': {
+        'primary_key': 'faceID',
+        'sort_by': '',
+        'sub_table': '',
+        'fields_as_sub_table': '',
+        'accessible_table': 'accessible_faces',
+    },
+    'groups': {
+        'primary_key': 'groupID',
+        'sort_by': 'label',
+        'sub_table': 'groups_images',
+        'fields_as_sub_table': '',
+        'accessible_table': 'accessible_groups',
+    },
+    'moments': {
+        'primary_key': 'momentID',
+        'sort_by': 'start, label',
+        'sub_table': 'images',
+        'fields_as_sub_table': '',
+        'accessible_table': 'accessible_moments',
+    },
+    'albums': {
+        'primary_key': 'albumID',
+        'sort_by': 'label',
+        'sub_table': 'album_images',
+        'fields_as_sub_table': '',
+        'accessible_table': 'accessible_albums',
+    },
+    'profiles': {
+        'primary_key': 'profileID',
+        'sort_by': 'label',
+        'sub_table': '',
+        'fields_as_sub_table': '',
+        'accessible_table': '',
+    },
+    'groups_images': {
+        'primary_key': 'groupID, imageID',
+        'sort_by': 'label',
+        'sub_table': '',
+        'fields_as_sub_table': ['imageID', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
+        'accessible_table': 'accessible_groups_images',
+    },
 }
 
 TABLES = {
@@ -142,7 +151,7 @@ VIEWS = {
     'images_with_albums': '''
         SELECT images.*,
             CASE WHEN a1.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_archived,
-            CASE WHEN a2.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_favorites_helper
+            CASE WHEN a2.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_favorite_helper
         FROM images
         LEFT JOIN (album_images a1 INNER JOIN albums b1 ON a1.albumID = b1.albumID)
         ON a1.imageID = images.imageID AND LOWER(b1.label) = 'archive'
@@ -165,7 +174,7 @@ VIEWS = {
     ''',
     'accessible_images': '''
         SELECT i.*,
-        (a2.albumID IS NOT NULL AND i.is_favorites_helper = 1) AS is_favorite
+        (a2.albumID IS NOT NULL AND i.is_favorite_helper = 1) AS is_favorite
         FROM images_with_albums as i
         LEFT JOIN accessible_albums as a1 on LOWER(a1.label) = 'archive'
         LEFT JOIN accessible_albums as a2 on LOWER(a2.label) = 'favorites'
@@ -197,6 +206,18 @@ VIEWS = {
         SELECT faces.*
         FROM faces 
         INNER JOIN accessible_images ON faces.imageID = accessible_images.imageID
+    ''',
+    'groups_images': '''
+        SELECT DISTINCT i.*, groups.groupID, min(faces.faceID) as representative_face
+        FROM images_with_albums i
+        INNER JOIN faces ON i.imageID = faces.imageID
+        INNER JOIN groups ON faces.groupID = groups.groupID
+        GROUP BY i.imageID, groups.groupID
+    ''',
+    'accessible_groups_images': '''
+        SELECT accessible_images.*, groups_images.groupID, groups_images.representative_face
+        FROM groups_images
+        INNER JOIN accessible_images ON groups_images.imageID = accessible_images.imageID
     ''',
     'accessible_moments': '''
         SELECT moments.* FROM moments
@@ -632,9 +653,9 @@ class AppDB:
         Get the accessible view name for a table if it exists and profile filtering is enabled.
         Returns the original table name if no accessible view exists or profile filtering is disabled.
         """
-        if not self.get_profile_id() or table not in ACCESSIBLE_VIEWS:
+        if not self.get_profile_id() or table not in STRUCTURE:
             return table
-        return ACCESSIBLE_VIEWS[table]
+        return STRUCTURE[table]['accessible_table']
 
     @staticmethod
     def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
@@ -749,7 +770,7 @@ class AppDB:
         sort: bool = False,
     ) -> List[Dict]:
         accessible_table = table if bypass_access_control else self._get_accessible_table_name(table)
-        id_field = PRIMARY_KEYS.get(accessible_table)
+        id_field = STRUCTURE[accessible_table]['primary_key']
 
         query = f'SELECT * FROM {accessible_table} WHERE 1=1'
 
@@ -764,15 +785,16 @@ class AppDB:
         else:
             entity_ids = ()
 
-        if exclude_empty_entities and table in SUB_TABLES.keys():
-            sub_table = SUB_TABLES[table]
+        sub_table = STRUCTURE[table]['sub_table']
+        if exclude_empty_entities and sub_table:
             accessible_sub_table = self._get_accessible_table_name(sub_table)
-            sub_table_id_field = PRIMARY_KEYS.get(sub_table)
+            sub_table_id_field = STRUCTURE[sub_table]['primary_key']
 
             query += f' AND EXISTS (SELECT 1 FROM {accessible_sub_table} WHERE {accessible_sub_table}.{sub_table_id_field} = {accessible_table}.{id_field})'
 
-        if sort and table in SORT_FIELDS.keys():
-            query += f' ORDER BY {SORT_FIELDS[table]}'
+        sort_by = STRUCTURE[table]['sort_by']
+        if sort and sort_by:
+            query += f' ORDER BY {sort_by}'
             
         with self.get_connection() as conn:
             cursor = conn.execute(query, entity_ids)
@@ -783,7 +805,7 @@ class AppDB:
     def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its ID for conflict checking."""
 
-        id_field = PRIMARY_KEYS.get(table)
+        id_field = STRUCTURE[table]['primary_key']
 
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
@@ -832,7 +854,7 @@ class AppDB:
         
         sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
 
-        p_keys = PRIMARY_KEYS.get(target_table)
+        p_keys = STRUCTURE[target_table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -879,7 +901,7 @@ class AppDB:
         
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
-        p_keys = PRIMARY_KEYS.get(target_table)
+        p_keys = STRUCTURE[target_table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -919,7 +941,7 @@ class AppDB:
         
         sql = f'DELETE FROM {target_table} WHERE {where_clause}'
 
-        p_keys = PRIMARY_KEYS.get(target_table)
+        p_keys = STRUCTURE[target_table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'

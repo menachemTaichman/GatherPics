@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Optional, Union
-from ..db import AppDB, PRIMARY_KEYS, SORT_FIELDS
+from ..db import AppDB, STRUCTURE
 import uuid
 
 MODELS = {
@@ -80,8 +80,8 @@ class ModelsManager:
         data_list = [data] if is_single_item else data
         
         for row in data_list:
-            if PRIMARY_KEYS.get(table) not in row:
-                row[PRIMARY_KEYS.get(table)] = ModelsManager.generate_id()
+            if STRUCTURE[table]['primary_key'] not in row:
+                row[STRUCTURE[table]['primary_key']] = ModelsManager.generate_id()
         
         inserted_ids = self.db.insert(table, data_list)
         
@@ -90,10 +90,10 @@ class ModelsManager:
         return inserted_ids
 
     def delete(self, table: str, entity_id: str):
-        return self.db.delete(table, {PRIMARY_KEYS.get(table): entity_id})
+        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_id})
 
     def edit(self, table: str, entity_id: str, fields: Dict) -> List[str]:
-        return self.db.update(table, {PRIMARY_KEYS.get(table): entity_id}, fields)
+        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_id}, fields)
 
     def get(
         self,
@@ -110,7 +110,7 @@ class ModelsManager:
 
         if include_sub_entities and table in ('groups', 'moments', 'albums'):
             for row in results:
-                entity_id = row.get(PRIMARY_KEYS.get(table))
+                entity_id = row.get(STRUCTURE[table]['primary_key'])
                 if not entity_id:
                     row['image_ids'] = []
                     continue
@@ -124,6 +124,79 @@ class ModelsManager:
         if isinstance(entity_ids, str):
             results = results[0]
 
+        return results
+
+    def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
+        return_list = True
+        if isinstance(entity_ids, str):
+            entity_ids = [entity_ids]
+            return_list = False
+
+        if table not in ['groups', 'moments', 'albums']:
+            return []
+
+        accessible_table = self.db._get_accessible_table_name(table)
+        sub_table = STRUCTURE[table]['sub_table']
+        id_field = STRUCTURE[table]['primary_key']
+        sort_field = STRUCTURE[table]['sort_by']
+
+        where_clause = ''
+        if entity_ids:
+            where_clause += f'WHERE t.{id_field} IN ({','.join(['?'] * len(entity_ids))})'
+        else:
+            entity_ids = []
+
+        having_clause = ''
+        if exclude_empty_entities:
+            having_clause = f'HAVING COUNT(s.{id_field}) > 0'
+
+        order_by = ''
+        if sort_field and sort:
+            order_by = f'ORDER BY t.{sort_field}'
+
+        query = f'''
+            SELECT t.*, COUNT(s.{id_field}) AS count
+            FROM {accessible_table} t
+            LEFT JOIN {sub_table} s ON t.{id_field} = s.{id_field}
+            {where_clause}
+            GROUP BY t.{id_field}
+            {having_clause}
+            {order_by}
+        '''
+        results = self.db.execute_query(query, entity_ids, include_columns=True)
+        if return_list:
+            return results
+        return results[0]
+
+    def get_sub_entities(self, table: str, entity_id: str, *, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
+        if table not in ['groups', 'moments', 'albums']:
+            return []
+
+        sub_table = STRUCTURE[table]['sub_table']
+        accessible_sub_table = self.db._get_accessible_table_name(sub_table)
+        id_field = STRUCTURE[table]['primary_key']
+        sort_field = STRUCTURE[sub_table]['sort_by']
+        fields_as_sub_table = STRUCTURE[sub_table]['fields_as_sub_table']
+        fields_as_sub_table_str = ', '.join(fields_as_sub_table) if fields_as_sub_table else '*'
+
+        order_by = ''
+        if sort_field and sort:
+            order_by = f'ORDER BY s.{sort_field}'
+
+        limit_clause = ''
+        if limit is not None:
+            limit_clause = f'LIMIT {int(limit)}'
+            if offset is not None:
+                limit_clause += f' OFFSET {int(offset)}'
+        
+        query = f'''
+            SELECT {fields_as_sub_table_str}
+            FROM {accessible_sub_table} s
+            WHERE {id_field} = ?
+            {order_by}
+            {limit_clause}
+        '''
+        results = self.db.execute_query(query, (entity_id,), include_columns=True)
         return results
 
     # -------- Cross-model helpers --------
@@ -176,7 +249,7 @@ class ModelsManager:
 
         return image_ids
 
-    def get_complete_images_data(self, image_ids: List[str] | str | None = None) -> List[Dict]:
+    def get_images(self, image_ids: List[str] | str | None = None) -> List[Dict]:
         
         return_list = isinstance(image_ids, list)
         if not image_ids:
@@ -184,6 +257,7 @@ class ModelsManager:
         elif isinstance(image_ids, str):
             image_ids = [image_ids]
 
+        image_placeholders = ','.join(['?'] * len(image_ids))
         query = f'''
             WITH albums_grouped AS (
                 SELECT 
@@ -199,6 +273,7 @@ class ModelsManager:
                 INNER JOIN accessible_albums a
                     ON a.albumID = ai.albumID
                     AND LOWER(a.label) NOT IN ('archive','favorites')
+                WHERE ai.imageID IN ({image_placeholders})
                 GROUP BY ai.imageID
             ),
             faces_grouped AS (
@@ -216,6 +291,7 @@ class ModelsManager:
                         )
                     ) AS faces_json
                 FROM accessible_faces f
+                WHERE f.imageID IN ({image_placeholders})
                 GROUP BY f.imageID
             )
             SELECT 
@@ -231,27 +307,19 @@ class ModelsManager:
                 i.is_favorite,
                 COALESCE(a.albums_json, '[]') AS albums,
                 COALESCE(f.faces_json, '[]') AS faces,
-                json_object(
-                    'display',    '/api/events/' || ? || '/display/'     || i.imageID || '.webp',
-                    'thumbnail',  '/api/events/' || ? || '/thumb/'       || i.imageID || '.webp',
-                    'high_quality','/api/events/' || ? || '/high_quality/'|| i.imageID || '.jpg',
-                    'original',   '/api/events/' || ? || '/original/'    || i.imageID || '.jpg'
-                ) AS urls
             FROM accessible_images i
             LEFT JOIN accessible_moments m ON m.momentID = i.momentID
             LEFT JOIN albums_grouped a ON a.imageID = i.imageID
             LEFT JOIN faces_grouped f ON f.imageID = i.imageID
-            WHERE i.imageID IN ({','.join(['?'] * len(image_ids))});
+            WHERE i.imageID IN ({image_placeholders});
         '''
 
-        rows = self.db.execute_query(query, [self.db.event_id] * 4 + image_ids, include_columns=True)
+        rows = self.db.execute_query(query, image_ids * 3, include_columns=True)
 
         result = []
         for image in rows:
             albums = json.loads(image["albums"]) if image["albums"] else []
             faces_data = json.loads(image["faces"]) if image["faces"] else []
-            urls = json.loads(image["urls"]) if image["urls"] else {}
-
             moment_info = {
                 "momentID": image.get("momentID"),
                 "label": image.get("moment_label")
@@ -266,11 +334,11 @@ class ModelsManager:
                 "height": image.get("height"),
                 "is_archived": bool(image.get("is_archived")),
                 "is_favorite": bool(image.get("is_favorite")),
+                "albums_count": len(albums),
                 "albums": albums,
                 "faces_count": len(faces_data),
                 "faces": faces_data,
                 "moment": moment_info,
-                "urls": urls
             }
 
             result.append(image_data)
@@ -648,7 +716,7 @@ class ModelsManager:
             WHERE ai.imageID = ?
         '''
         if sort:
-            query += f" ORDER BY {SORT_FIELDS['albums']}"
+            query += f" ORDER BY {STRUCTURE['albums']['sort_by']}"
 
         rows = self.db.execute_query(query, (image_id,))
 
