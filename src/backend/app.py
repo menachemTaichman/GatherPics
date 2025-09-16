@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, g, send_file, abort, make_response
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, get_jwt
 from functools import wraps
 import traceback
 import os
@@ -11,17 +12,16 @@ from src.core.models.event import Event
 app = Flask(__name__)
 CORS(app, origins="*", supports_credentials=True)
 
+# JWT Configuration
+app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'  # Change this in production
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for now
+jwt = JWTManager(app)
+
 # --- Placeholder values for now ---
 # FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
-def _parse_include_archived(default: bool = False) -> bool:
-    val = request.args.get('include_archived')
-    if val is None:
-        return default
-    return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
-
 def _parse_sort(default: bool = False) -> bool:
     val = request.args.get('sort')
     if val is None:
@@ -43,18 +43,28 @@ def add_change_instruction(response_data, change_type, change_data=None):
     
     return response_data
 
-def get_event(event_id, profile_id=None):
+def get_event(event_id, profile_id=None, include_archived=None):
     """Get event instance with profile context."""
     if profile_id is None:
-        profile_id = FIXED_PROFILE_ID
-    return Event(event_id, profile_id=profile_id)
+        # Try to get from Flask g context (set by require_auth decorator)
+        profile_id = getattr(g, 'profile_id', FIXED_PROFILE_ID)
+    
+    if include_archived is None:
+        claims = get_jwt()
+        if 'include_archived' in claims:
+            include_archived = claims['include_archived']
 
-# --- Auth Decorator (no-op for now) ---
+    
+    return Event(event_id, profile_id=profile_id, include_archived=include_archived)
+
+# --- Auth Decorator ---
 def require_auth(f):
     @wraps(f)
+    @jwt_required()
     def decorated(*args, **kwargs):
-        # In future: check request headers/cookies for auth, validate profile_id, etc.
-        g.profile_id = FIXED_PROFILE_ID
+        # Extract profile_id from JWT identity
+        profile_id = get_jwt_identity()
+        g.profile_id = profile_id
         return f(*args, **kwargs)
     return decorated
 
@@ -70,6 +80,22 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({"error": "Internal Server Error", "message": str(error), "trace": traceback.format_exc()}), 500
+
+# --- JWT Endpoints ---
+@app.route("/set-include-archived", methods=["POST"])
+def set_include_archived():
+    """Set the include_archived flag in a JWT token."""
+    data = request.json or {}
+    include_archived = data.get('include_archived', False)
+    
+    # Create JWT with include_archived claim
+    additional_claims = {"include_archived": include_archived}
+    access_token = create_access_token(identity=FIXED_PROFILE_ID, additional_claims=additional_claims)
+    
+    return jsonify({
+        "access_token": access_token,
+        "include_archived": include_archived
+    })
 
 # --- API Endpoints ---
 
@@ -141,7 +167,6 @@ def update_album(event_id, album_id):
         return not_found(f"Event {event_id} not found or not accessible")
 
     # Check if album exists and is accessible
-    include_archived = _parse_include_archived(False)
     album = event.models_manager.get('albums', album_id)
     if not album:
         return not_found(f"Album {album_id} not found or not accessible")
@@ -174,15 +199,12 @@ def get_album_images(event_id, album_id):
         return not_found(f"Event {event_id} not found or not accessible")
 
     try:
-        include_archived = _parse_include_archived(False)
         album = event.models_manager.get('albums', album_id)
         if not album:
             return not_found(f"Album {album_id} not found or not accessible")
 
-        image_ids = event.models_manager.get_album_images(album_id, include_archived)
+        image_ids = event.models_manager.get_album_images(album_id)
         images_data = []
-        if album.get('label', '').lower() == 'archive':
-            include_archived = True
         for image_id in image_ids:
             image = event.models_manager.get('images', image_id)
             if image:
@@ -211,7 +233,6 @@ def add_images_to_album(event_id, album_id):
 
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    include_archived = _parse_include_archived(False)
     
     try:
         result = event.models_manager.add_images_to_album(album_id, image_ids)
@@ -334,7 +355,6 @@ def delete_group(event_id, group_id):
     
     try:
         # Check if group exists and is accessible
-        include_archived = _parse_include_archived(False)
         group = event.models_manager.get('groups', group_id)
         if not group:
             return not_found(f"Group {group_id} not found or not accessible")
@@ -472,7 +492,6 @@ def get_related_groups(event_id, group_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    include_archived = _parse_include_archived(False)
     group = event.models_manager.get('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
@@ -921,7 +940,7 @@ def get_profile_permissions(event_id):
     except Exception as e:
         return bad_request(e)
 
-# Events endpoint
+# Events endpoint (public, no auth required)
 @app.route("/api/events", methods=["GET"])
 def get_events():
     """Get all available events."""
@@ -1051,7 +1070,6 @@ def get_moment_representative(event_id, moment_id):
     if str(event.id) != event_id:
         return not_found(f"Event {event_id} not found or not accessible")
     
-    include_archived = _parse_include_archived(False)
     moment = event.models_manager.get('moments', moment_id)
     if not moment:
         return not_found(f"Moment {moment_id} not found or not accessible")

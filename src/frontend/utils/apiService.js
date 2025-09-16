@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from './dataManager';
 import { resolveEventId } from './eventResolver';
 import { getSetting } from './settings';
+import jwtService from './jwtService';
 
 // API base URL - centralized configuration
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
@@ -16,19 +17,21 @@ const api = axios.create({
 
 // Request interceptor
 api.interceptors.request.use(
-  (config) => {
-    // Automatically add include_archived flag to all GET requests
-    if (config.method === 'get') {
-      const includeArchived = getSetting('include_archived_images', false);
-
-      if (!config.params) {
-        config.params = {};
-      }
-
-      if (includeArchived && config.params.include_archived === undefined) {
-        config.params.include_archived = 'true';
+  async (config) => {
+    // Add JWT token to all requests (except public endpoints)
+    const isPublicEndpoint = config.url === '/api/events' || config.url?.includes('/set-include-archived');
+    if (!isPublicEndpoint) {
+      // This is a protected endpoint, add JWT token
+      try {
+        const authHeader = await jwtService.getAuthHeader();
+        if (authHeader.Authorization) {
+          config.headers = { ...config.headers, ...authHeader };
+        }
+      } catch (error) {
+        console.warn('Failed to add JWT token to request:', error);
       }
     }
+
     return config;
   },
   (error) => {
@@ -665,6 +668,34 @@ export const showToast = (message, type = 'success', toastSetter) => {
     setTimeout(() => {
       toastSetter({ show: false, message: '', type: 'success' });
     }, 3000);
+  }
+};
+
+// JWT Authentication helpers
+export const authAPI = {
+  updateIncludeArchived: async (includeArchived) => {
+    try {
+      const token = await jwtService.updateIncludeArchived(includeArchived);
+      return { success: true, token, include_archived: includeArchived };
+    } catch (error) {
+      console.error('Failed to update include_archived setting:', error);
+      throw error;
+    }
+  },
+
+  // Get current JWT token
+  getCurrentToken: async () => {
+    try {
+      return await jwtService.getCurrentToken();
+    } catch (error) {
+      console.error('Failed to get current token:', error);
+      throw error;
+    }
+  },
+
+  // Check if user is authenticated
+  isAuthenticated: () => {
+    return jwtService.hasToken();
   }
 };
 

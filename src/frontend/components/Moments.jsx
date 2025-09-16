@@ -66,7 +66,6 @@ export default function Moments({ eventUrl }) {
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
   const [imageSize, setImageSize] = useSetting('moments_imageSize', 1.0);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
-  const [includeArchived] = useSetting('include_archived_images', false);
   const [momentImagesMap, setMomentImagesMap] = useState({});
   const [imagesLoading, setImagesLoading] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -167,19 +166,19 @@ export default function Moments({ eventUrl }) {
     fetchImages();
   }, []);
 
-  // Refetch moments and images when includeArchived setting changes
+  // Refetch moments and images when include_archived setting changes
   useEffect(() => {
     // This hook now handles refetching both moments and images
     // to correctly handle moments that might appear/disappear
     // based on whether they contain only archived images.
     fetchMoments();
-    // Force refetch all images to respect new includeArchived setting
+    // Force refetch all images to respect new include_archived setting
     fetchAllMomentImages(null, null, true);
-  }, [includeArchived]);
+  }, [getSetting('include_archived_images', false)]);
 
-  // Remove archived images from grid when includeArchived is false
+  // Remove archived images from grid when include_archived is false
   useEffect(() => {
-    if (!includeArchived) {
+    if (!getSetting('include_archived_images', false)) {
       setMomentImagesMap(prev => {
         const newMap = { ...prev };
         Object.keys(newMap).forEach(momentId => {
@@ -188,7 +187,7 @@ export default function Moments({ eventUrl }) {
         return newMap;
       });
     }
-  }, [includeArchived]);
+  }, []);
 
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
@@ -258,7 +257,7 @@ export default function Moments({ eventUrl }) {
       // Use parallel API calls for moments that need images fetched
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getImages(moment.momentID, eventUrl, { include_archived: includeArchived ? 'true' : 'false' });
+          const result = await momentsAPI.getImages(moment.momentID, eventUrl);
           return { momentId: moment.momentID, images: result.images || [] };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.momentID}:`, error);
@@ -347,7 +346,7 @@ export default function Moments({ eventUrl }) {
   // Function to update the momentImagesMap for a specific moment
   const updateMomentImagesMap = async (momentId) => {
     try {
-      const result = await momentsAPI.getImages(momentId, eventUrl, { include_archived: includeArchived ? 'true' : 'false' });
+      const result = await momentsAPI.getImages(momentId, eventUrl);
       
       setMomentImagesMap(prev => ({
         ...prev,
@@ -636,7 +635,7 @@ export default function Moments({ eventUrl }) {
         const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
         
         // If not including archived, remove from grid
-        if (!includeArchived) {
+        if (!getSetting('include_archived_images', false)) {
           setMomentImagesMap(prev => {
             const newMap = { ...prev };
             Object.keys(newMap).forEach(momentId => {
@@ -1059,7 +1058,7 @@ export default function Moments({ eventUrl }) {
                   onToggleArchive={handleSingleToggleArchive}
                   showToast={showToast}
                   eventUrl={eventUrl}
-                  includeArchived={includeArchived}
+                  includeArchived={getSetting('include_archived_images', false)}
                   ref={setMomentRef(moment.label)}
                 />
               ))}

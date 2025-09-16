@@ -10,10 +10,11 @@ import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
 import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
-import { groupsAPI } from '../utils/apiService';
+import { groupsAPI, authAPI } from '../utils/apiService';
 import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
 import { ImageViewerProvider } from './ImageViewerProvider';
+import jwtService from '../utils/jwtService';
 
 // Component to handle root redirect dynamically
 function RootRedirect() {
@@ -87,12 +88,29 @@ function AppContent({ eventUrl }) {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [loading, setLocalLoading] = useState(true);
   const [eventName, setEventName] = useState('');
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  // Initialize JWT authentication
+  useEffect(() => {
+    async function initializeAuth() {
+      try {
+        await jwtService.getToken();
+        setAuthInitialized(true);
+      } catch (error) {
+        console.error('Failed to initialize JWT authentication:', error);
+        // Still set as initialized to prevent infinite loading
+        setAuthInitialized(true);
+      }
+    }
+
+    initializeAuth();
+  }, []);
 
   useEffect(() => {
-    if (eventUrl) {
+    if (eventUrl && authInitialized) {
       fetchGroups();
     }
-  }, [eventUrl]);
+  }, [eventUrl, authInitialized]);
 
   // Load event name for document title
   useEffect(() => {
@@ -226,7 +244,7 @@ function AppContent({ eventUrl }) {
   // The API service interceptor automatically handles transfer updates
   // No need for manual updateGroupsAfterTransfer function
 
-  if (loading || urlLoading) {
+  if (loading || urlLoading || !authInitialized) {
     return <LoadingSpinner />;
   }
 

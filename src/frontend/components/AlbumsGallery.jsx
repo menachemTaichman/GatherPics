@@ -9,7 +9,6 @@ export default function AlbumsGallery({ eventUrl }) {
   const [albums, setAlbums] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useSetting('albumsGallery_sortOrder', 'asc');
-  const [includeArchived] = useSetting('include_archived_images', false);
 
   useEffect(() => {
     async function loadAlbums() {
@@ -21,7 +20,7 @@ export default function AlbumsGallery({ eventUrl }) {
       }
     }
     if (eventUrl) loadAlbums();
-  }, [eventUrl, includeArchived]);
+  }, [eventUrl]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();

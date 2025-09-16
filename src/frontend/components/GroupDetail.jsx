@@ -80,9 +80,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     persist: true,
     enableRange: true,
   });
-  const [includeArchived] = useSetting('include_archived_images', false);
   
-  // Selection persistence handled by useImageSelection
   const { 
     open: openGlobalViewer, 
     navigate: navigateGlobalViewer,
@@ -302,7 +300,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           if (imgRefresh.album_label === 'archive') {
             if (imgRefresh.isAdd) {
               // Archiving: either remove from grid (if not including archived) or mark as archived
-              if (!includeArchived) {
+              if (!getSetting('include_archived_images', false)) {
                 setSortedImages(prev => {
                   const next = prev.filter(img => !affected.has(img.id));
                   // If viewer is open and current image was removed, close it
@@ -419,7 +417,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     );
     
     return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate, includeArchived, isViewerOpen, currentImageId, viewerIndex]);
+  }, [group?.groupID, sortBy, sortOrder, navigate, isViewerOpen, currentImageId, viewerIndex]);
 
   useEffect(() => {
     // When the archive setting changes, refetch the group data to get updated image_ids count
@@ -430,7 +428,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeArchived, eventUrl, group?.groupID]);
+  }, [eventUrl, group?.groupID]);
 
   // Fetch crop data when group changes - only on initial load or manual refresh
   useEffect(() => {
@@ -1305,7 +1303,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                           );
                         } else {
                           const res = await albumsAPI.addToArchive([image.id], eventUrl);
-                          if (!includeArchived) {
+                          if (!getSetting('include_archived_images', false)) {
                             setSortedImages(prev => prev.filter(img => img.id !== image.id));
                           } else {
                             setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: true } : img));

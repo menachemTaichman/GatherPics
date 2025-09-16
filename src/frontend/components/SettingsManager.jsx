@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, RotateCcw, Trash2 } from 'lucide-react';
 import { getAllSettings, resetAllSettings, clearAllSettings, setSetting, getSetting } from '../utils/settings';
+import { authAPI } from '../utils/apiService';
 
 export default function SettingsManager() {
   const [showSettings, setShowSettings] = useState(false);
@@ -101,9 +102,17 @@ export default function SettingsManager() {
               <input
                 type="checkbox"
                 checked={!!getSetting('include_archived_images')}
-                onChange={(e) => {
-                  setSetting('include_archived_images', e.target.checked);
+                onChange={async (e) => {
+                  const newValue = e.target.checked;
+                  setSetting('include_archived_images', newValue);
                   setSettings(getAllSettings());
+                  
+                  // Update JWT token with new include_archived setting
+                  try {
+                    await authAPI.updateIncludeArchived(newValue);
+                  } catch (error) {
+                    console.error('Failed to update include_archived setting:', error);
+                  }
                 }}
               />
               <span>Include archived images</span>

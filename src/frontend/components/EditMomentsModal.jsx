@@ -57,7 +57,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setIsLoading(true);
     try {
       // Always fetch all moments for editing, including empty and archived
-      const response = await momentsAPI.getAll(eventUrl, { include_archived: 'true' });
+      const response = await momentsAPI.getAll(eventUrl);
       const moments = response.moments || [];
       const sortedMoments = sortMoments(moments, 'asc');
       setInternalMoments(sortedMoments);

@@ -4,6 +4,7 @@ boto3>=1.26.0
 # Web Framework
 Flask>=2.3.0
 flask-cors>=4.0.0
+flask-jwt-extended>=4.7.0
 
 # Image Processing
 Pillow>=9.5.0

@@ -49,8 +49,7 @@ const MomentCard = forwardRef(({
   onToggleFavorites,
   onToggleArchive,
   showToast,
-  eventUrl,
-  includeArchived
+  eventUrl
 }, ref) => {
   // Calculate selection stats for this moment
   const momentimageKeys = images.map(image => `${moment.momentID}:${image.label}`);
