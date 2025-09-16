@@ -81,7 +81,7 @@ class Event(JsonModel):
 
     def _initialize_default_albums(self):
         """Initialize default albums for the event: Main Album and Event Album"""
-        existing_albums = self.models_manager.get('albums')
+        existing_albums = self.models_manager.get_summary('albums')
         if existing_albums:
             return  # Albums already exist, don't create duplicates
         
@@ -121,14 +121,15 @@ class Event(JsonModel):
         }
 
     def delete_image(self, image_id: str) -> None:
-        faces = self.models_manager.get_image_faces(image_id)
+        faces = self.models_manager.get_sub_entities('images', image_id)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
         
         self.face_utils.rek_helper.delete_faces(faces)
         for face in faces:
+            face_id = face['faceID']
             try:
-                os.remove(os.path.join(self.faces_dir, f"{face}.jpg"))
+                os.remove(os.path.join(self.faces_dir, f"{face_id}.jpg"))
             except FileNotFoundError:
                 pass
 

@@ -178,9 +178,9 @@ export const groupsAPI = {
   },
 
   // Get specific group
-  getById: async (groupId, eventUrl) => {
+  getById: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}`);
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
     return response.data;
   },
 
@@ -225,61 +225,6 @@ export const groupsAPI = {
     const response = await api.post(`/api/events/${eventId}/groups/transfer-faces`, requestData);
     return response.data;
   },
-
-  // Get group images
-  getImages: async (groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images`);
-    return response.data;
-  },
-
-  // Get group images complete
-  getImagesComplete: async (groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/images-complete`);
-    return response.data;
-  },
-
-  // Get group crops
-  getCrops: async (groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/crops`);
-    return response.data;
-  },
-
-  // Get related groups
-  getRelatedGroups: async (groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/related-groups`);
-    return response.data;
-  },
-
-  // Get filtered images
-  getFilteredImages: async (groupId, filterGroups = [], filterMode = 'and', onlySelected = false, currentImageIds = [], eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const params = new URLSearchParams();
-    
-    params.append('mode', filterMode);
-    params.append('only', onlySelected.toString());
-    
-    if (filterGroups.length > 0) {
-      params.append('related_groups', filterGroups.join(','));
-    }
-
-    if (currentImageIds.length > 0) {
-      params.append('current_image_ids', currentImageIds.join(','));
-    }
-    
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/filtered-images?${params.toString()}`);
-    return response.data;
-  },
-
-  // Get group representative face
-  getRepresentative: async (groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/representative`);
-    return response.data;
-  }
 };
 
 // Moments API
@@ -292,9 +237,9 @@ export const momentsAPI = {
   },
 
   // Get specific moment
-  getById: async (momentId, eventUrl) => {
+  getById: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}`);
+    const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
     return response.data;
   },
 
@@ -319,59 +264,28 @@ export const momentsAPI = {
     return response.data;
   },
 
-  // Get moment images
-  getImages: async (momentId, eventUrl, params = {}) => {
+  // Add images to moment
+  addImages: async (momentId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images`, { params });
+    const response = await api.post(`/api/events/${eventId}/moments/${momentId}/images`, { image_ids: imageIds });
     return response.data;
   },
 
-  // Get moment images complete
-  getImagesComplete: async (momentId, eventUrl) => {
+  // Remove images from moment
+  removeImages: async (momentId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/images-complete`);
+    const response = await api.delete(`/api/events/${eventId}/moments/${momentId}/images`, { data: { image_ids: imageIds } });
     return response.data;
   },
-
-
-
-  // Get moment representative image
-  getRepresentative: async (momentId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}/representative`);
-    return response.data;
-  }
 };
 
 // Images API
 export const imagesAPI = {
-  // Get image faces
-  getFaces: async (imageId, eventUrl) => {
+  getDetails: async (imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images/${imageId}/faces`);
+    const response = await api.post(`/api/events/${eventId}/images`, { image_ids: imageIds });
     return response.data;
   },
-
-  // Get image info
-  getInfo: async (imageId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images/${imageId}/info`);
-    return response.data;
-  },
-
-  // Get image complete
-  getComplete: async (imageId, eventUrl, params = {}) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images/${imageId}/complete`, { params });
-    return response.data;
-  },
-
-  // Get all images
-  getAll: async (eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images.json`);
-    return response.data;
-  }
 };
 
 // Albums API

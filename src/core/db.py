@@ -6,7 +6,7 @@ STRUCTURE = {
     'images': {
         'primary_key': 'imageID',
         'sort_by': 'date_taken',
-        'sub_table': '',
+        'sub_table': 'faces',
         'fields_as_sub_table': '',
         'accessible_table': 'accessible_images',
     },
@@ -715,7 +715,7 @@ class AppDB:
         }
         profile = {}
         if profile_id:
-            profile = self.get('profiles', profile_id, bypass_access_control=True)
+            profile = self.execute_query('SELECT * FROM profiles WHERE profileID = ?', (profile_id,), include_columns=True)[0]
 
         if not profile:
             profile = {}
@@ -753,54 +753,15 @@ class AppDB:
         finally:
             conn.close()
 
+    ########## TODO: review if needed after complete refactor
     def get_archive_album(self) -> str | None:
         """Get the archive album ID."""
         return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]
 
+    ########## TODO: review if needed after complete refactor
     def get_favorites_album(self) -> str | None:
         """Get the favorites album ID."""
         return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
-
-    def get(self,
-        table: str,
-        entity_ids: List[str] | str | None = None,
-        *,
-        bypass_access_control: bool = False,
-        exclude_empty_entities: bool = False,
-        sort: bool = False,
-    ) -> List[Dict]:
-        accessible_table = table if bypass_access_control else self._get_accessible_table_name(table)
-        id_field = STRUCTURE[accessible_table]['primary_key']
-
-        query = f'SELECT * FROM {accessible_table} WHERE 1=1'
-
-        return_list = True
-        if entity_ids:
-            if isinstance(entity_ids, str):
-                entity_ids = [entity_ids]
-                return_list = False
-
-            query += f' AND {id_field} IN ({",".join([f"?" for _ in range(len(entity_ids))])})'
-            
-        else:
-            entity_ids = ()
-
-        sub_table = STRUCTURE[table]['sub_table']
-        if exclude_empty_entities and sub_table:
-            accessible_sub_table = self._get_accessible_table_name(sub_table)
-            sub_table_id_field = STRUCTURE[sub_table]['primary_key']
-
-            query += f' AND EXISTS (SELECT 1 FROM {accessible_sub_table} WHERE {accessible_sub_table}.{sub_table_id_field} = {accessible_table}.{id_field})'
-
-        sort_by = STRUCTURE[table]['sort_by']
-        if sort and sort_by:
-            query += f' ORDER BY {sort_by}'
-            
-        with self.get_connection() as conn:
-            cursor = conn.execute(query, entity_ids)
-            columns = [desc[0] for desc in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            return results if return_list else results[0]
 
     def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its ID for conflict checking."""
@@ -917,7 +878,6 @@ class AppDB:
                 conn.execute(sql.replace(f' RETURNING {returning_str}', ''), values)
             conn.commit()
         return updated_ids
-
 
     def delete(self, table: str, where: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
         """Delete records from a table/view and return their IDs."""

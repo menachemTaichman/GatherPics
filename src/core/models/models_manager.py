@@ -62,7 +62,6 @@ MODELS = {
 }
 
 class ModelsManager:
-
     # -------- Generic model helpers (CRUD) --------
     def __init__(self, db: AppDB) -> None:
         self.db = db
@@ -71,6 +70,9 @@ class ModelsManager:
     def generate_id() -> str:
         """Generate a new UUID for the entity."""
         return str(uuid.uuid4())
+
+    def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
+        return self.db.is_exists(table, fields, exclude_id)
 
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
         """Insert one or many records. If a single dict is provided, return the new ID.
@@ -94,37 +96,6 @@ class ModelsManager:
 
     def edit(self, table: str, entity_id: str, fields: Dict) -> List[str]:
         return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_id}, fields)
-
-    def get(
-        self,
-        table: str,
-        entity_ids: List[str] | str | None = None,
-        *,
-        sort: bool = False,
-        exclude_empty_entities: bool = False,
-        include_sub_entities: bool = True
-    ) -> Dict | None:
-        results = self.db.get(table, entity_ids, exclude_empty_entities=exclude_empty_entities, sort=sort)
-        if isinstance(entity_ids, str):
-            results = [results]
-
-        if include_sub_entities and table in ('groups', 'moments', 'albums'):
-            for row in results:
-                entity_id = row.get(STRUCTURE[table]['primary_key'])
-                if not entity_id:
-                    row['image_ids'] = []
-                    continue
-                if table == 'groups':
-                    row['image_ids'] = self.get_group_images(entity_id)
-                elif table == 'moments':
-                    row['image_ids'] = self.get_moment_images(entity_id)
-                elif table == 'albums':
-                    row['image_ids'] = self.get_album_images(entity_id)
-        
-        if isinstance(entity_ids, str):
-            results = results[0]
-
-        return results
 
     def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
         return_list = True
@@ -169,7 +140,7 @@ class ModelsManager:
         return results[0]
 
     def get_sub_entities(self, table: str, entity_id: str, *, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
-        if table not in ['groups', 'moments', 'albums']:
+        if table not in ['images','groups', 'moments', 'albums']:
             return []
 
         sub_table = STRUCTURE[table]['sub_table']
@@ -199,56 +170,7 @@ class ModelsManager:
         results = self.db.execute_query(query, (entity_id,), include_columns=True)
         return results
 
-    # -------- Cross-model helpers --------
-
-    def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
-        return self.db.is_exists(table, fields, exclude_id)
-
-    # -------- Images helpers --------
-    def get_image_faces(self, image_id: str, include_archived: bool = False) -> List[str]:
-        accessible_table = self.db._get_accessible_table_name('faces')
-        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE imageID=?', (image_id,), include_archived)
-        return [row[0] for row in results]
-    
-    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False, include_archived: bool = False) -> List[str]:
-        if not groups_ids:
-            return []
-
-        group_placeholders = ','.join(['?'] * len(groups_ids))
-        accessible_faces = self.db._get_accessible_table_name('faces')
-
-        if mode == 'and':
-            base_query = f'''
-                SELECT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-                GROUP BY imageID
-                HAVING COUNT(DISTINCT groupID) = ?
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)], include_archived)]
-        else:
-            base_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids, include_archived)]
-
-        if only and image_ids:
-            image_placeholders = ','.join(['?'] * len(image_ids))
-            images_with_other_groups_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE imageID IN ({image_placeholders})
-                AND groupID NOT IN ({group_placeholders})
-            '''
-            images_to_exclude = {row[0] for row in self.db.execute_query(
-                images_with_other_groups_query, image_ids + groups_ids, include_archived
-            )}
-            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
-
-        return image_ids
-
+    # -------- Images helpers --------    
     def get_images(self, image_ids: List[str] | str | None = None) -> List[Dict]:
         
         return_list = isinstance(image_ids, list)
@@ -347,7 +269,8 @@ class ModelsManager:
             result = result[0]
 
         return result
-        
+      
+    ########## TODO: make sure api is using it
     def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False, include_archived: bool = False) -> List[str]:
         """Return related group IDs ordered by relevance using co-occurrence in images."""
         if not group_ids:
@@ -399,6 +322,45 @@ class ModelsManager:
             ordered_group_ids.append(row[0])
         return ordered_group_ids
 
+    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False, include_archived: bool = False) -> List[str]:
+        if not groups_ids:
+            return []
+
+        group_placeholders = ','.join(['?'] * len(groups_ids))
+        accessible_faces = self.db._get_accessible_table_name('faces')
+
+        if mode == 'and':
+            base_query = f'''
+                SELECT imageID
+                FROM {accessible_faces}
+                WHERE groupID IN ({group_placeholders})
+                GROUP BY imageID
+                HAVING COUNT(DISTINCT groupID) = ?
+            '''
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)], include_archived)]
+        else:
+            base_query = f'''
+                SELECT DISTINCT imageID
+                FROM {accessible_faces}
+                WHERE groupID IN ({group_placeholders})
+            '''
+            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids, include_archived)]
+
+        if only and image_ids:
+            image_placeholders = ','.join(['?'] * len(image_ids))
+            images_with_other_groups_query = f'''
+                SELECT DISTINCT imageID
+                FROM {accessible_faces}
+                WHERE imageID IN ({image_placeholders})
+                AND groupID NOT IN ({group_placeholders})
+            '''
+            images_to_exclude = {row[0] for row in self.db.execute_query(
+                images_with_other_groups_query, image_ids + groups_ids, include_archived
+            )}
+            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
+
+        return image_ids
+
     # -------- Groups helpers --------
     def is_group_empty(self, group_id: str) -> bool:
         """Bypass profile access: check if group has zero faces (raw faces table)."""
@@ -406,37 +368,14 @@ class ModelsManager:
         results = self.db.execute_query(query, (group_id,), include_archived=True)
         count = results[0][0] if results else 0
         return count == 0
-        
+    
+    ########## TODO: find other way
     def get_group_faces(self, group_id: str, include_archived: bool = False) -> List[str]:
         accessible_table = self.db._get_accessible_table_name('faces')
         results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID=?', (group_id,), include_archived)
         return [row[0] for row in results]
 
-    def get_group_images(self, group_id: str) -> List[str]:
-        accessible_faces = self.db._get_accessible_table_name('faces')
-        accessible_images = self.db._get_accessible_table_name('images')
-        query = f'''
-            SELECT DISTINCT i.imageID 
-            FROM {accessible_images} i
-            JOIN {accessible_faces} f ON i.imageID = f.imageID
-            WHERE f.groupID = ?
-        '''
-        results = self.db.execute_query(query, (group_id,))
-        return [row[0] for row in results]
-
-    def get_group_unique_face_per_image(self, group_id: str) -> Dict[str, str]:
-        """For each image in the group, returns the first face that belongs to this group.
-        Returns mapping image_id -> face_id."""
-        accessible_table = self.db._get_accessible_table_name('faces')
-        query = f'''
-            SELECT DISTINCT f.imageID, f.faceID
-            FROM {accessible_table} f
-            WHERE f.groupID = ?
-            GROUP BY f.imageID
-        '''
-        results = self.db.execute_query(query, (group_id,))
-        return {row[0]: row[1] for row in results}
-
+    ########## TODO: find other way
     def get_group_faces_by_image(self, image_id: str, group_id: str) -> List[str]:
         """Return face IDs that belong to a specific group in a specific image."""
         accessible_table = self.db._get_accessible_table_name('faces')
@@ -455,7 +394,7 @@ class ModelsManager:
         updated_ids = self.db.execute_query(query, (group_id, *face_ids),)
 
         # Ensure target representative exists
-        representative_face = self.get('groups', group_id).get('representative_face')
+        representative_face = self.get_summary('groups', group_id).get('representative_face')
         if not representative_face:
             target_group_faces = self.get_group_faces(group_id)
             new_representative_face = self.get_biggest_face(target_group_faces)
@@ -483,42 +422,6 @@ class ModelsManager:
         return updated_ids
 
     # -------- Faces helpers --------
-    def get_image_faces_details(self, image_id: str, sort: bool = False) -> List[Dict]:
-        """Return a list of face details for a given image, optionally sorted by group label."""
-        accessible_faces = self.db._get_accessible_table_name('faces')
-        accessible_groups = self.db._get_accessible_table_name('groups')
-
-        query = f'''
-            SELECT f.faceID, f.imageID, f.width, f.height, f.left, f.top, f.groupID,
-                   g.label as group_label, g.representative_face as group_representative
-            FROM {accessible_faces} f
-            LEFT JOIN {accessible_groups} g ON f.groupID = g.groupID
-            WHERE f.imageID = ?
-        '''
-        if sort:
-            query += ' ORDER BY g.label ASC'
-
-        results = self.db.execute_query(query, (image_id,))
-        
-        # Manually construct dictionaries to match desired keys
-        faces_data = []
-        for row in results:
-            face_data = {
-                'face_id': row[0],
-                'face_coords': {
-                    'Left': row[4],
-                    'Top': row[5],
-                    'Width': row[2],
-                    'Height': row[3]
-                },
-                'group_id': row[6],
-                'group_label': row[7] if row[7] else 'Unknown',
-                'group_representative': row[8]
-            }
-            faces_data.append(face_data)
-            
-        return faces_data
-
     def get_biggest_face(self, face_ids: List[str]) -> str:
         if not face_ids:
             return ''
@@ -539,7 +442,7 @@ class ModelsManager:
         if not face_ids:
             return {'target_group_id': None, 'old_group_deleted': False}
 
-        old_group = self.get('groups', old_group_id)
+        old_group = self.get_summary('groups', old_group_id)
         if not old_group:
             raise ValueError(f"Source group {old_group_id} not found")
 
@@ -562,12 +465,12 @@ class ModelsManager:
                 'images_to_remove_from_source': [],
                 'images_to_add_to_target': [],
                 'updated_source_group': old_group,
-                'updated_target_group': self.get('groups', target_group_id) if target_group_id else None,
+                'updated_target_group': self.get_summary('groups', target_group_id) if target_group_id else None,
             }
 
         target_group_id_was_provided = target_group_id is not None
         if target_group_id:
-            target_group = self.get('groups', target_group_id)
+            target_group = self.get_summary('groups', target_group_id)
             if not target_group:
                 raise ValueError(f"Target group {target_group_id} not found")
         else:
@@ -583,7 +486,7 @@ class ModelsManager:
             })
             target_group_id = created_id
 
-        target_group = self.get('groups', target_group_id)
+        target_group = self.get_summary('groups', target_group_id)
         target_representative_before = target_group.get('representative_face') if target_group else ''
 
         # Determine which images are genuinely new for the target group
@@ -609,9 +512,9 @@ class ModelsManager:
 
         updated_source_group = None
         if not old_group_deleted:
-            updated_source_group = self.get('groups', old_group_id)
+            updated_source_group = self.get_summary('groups', old_group_id)
 
-        updated_target_group = self.get('groups', target_group_id)
+        updated_target_group = self.get_summary('groups', target_group_id)
         target_representative_after = updated_target_group.get('representative_face') if updated_target_group else ''
 
         result = {
@@ -648,11 +551,6 @@ class ModelsManager:
         return result
 
     # -------- Moments helpers --------
-    def get_moment_images(self, moment_id: str, include_archived: bool = False) -> List[str]:
-        accessible_table = self.db._get_accessible_table_name('images')
-        results = self.db.execute_query(f'SELECT imageID FROM {accessible_table} WHERE momentID=?', (moment_id,), include_archived)
-        return [row[0] for row in results]
-
     def add_images_to_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:  # Guard against empty lists
             return []
@@ -661,7 +559,7 @@ class ModelsManager:
         query = f'UPDATE {accessible_table} SET momentID=? WHERE imageID IN ({image_placeholders})'
         updated_ids = self.db.execute_query(query, (moment_id, *image_ids), True)
 
-        representative_image = self.get('moments', moment_id).get('representative_image')
+        representative_image = self.get_summary('moments', moment_id).get('representative_image')
         new_representative_image = ''
         if len(image_ids) > 0:
             new_representative_image = image_ids[0]
@@ -673,7 +571,7 @@ class ModelsManager:
         old_moments = self.db.execute_query(f'SELECT DISTINCT momentID, representative_image FROM {accessible_table} WHERE momentID != ? AND representative_image IN ({image_placeholders})', (moment_id, *image_ids), True)
         for moment_id, old_representative_image in old_moments:
             if old_representative_image in image_ids:
-                remaining_images = self.get_moment_images(moment_id)
+                remaining_images = self.get_sub_entities('moments', moment_id)
                 if len(remaining_images) > 0:
                     new_representative_image = remaining_images[0]
                 else:
@@ -691,69 +589,24 @@ class ModelsManager:
         updated_ids = self.db.execute_query(query, (*image_ids, moment_id), True)
 
         # Check if the current representative image is being removed
-        current_representative_image = self.get('moments', moment_id).get('representative_image')
+        current_representative_image = self.get_summary('moments', moment_id).get('representative_image')
         if current_representative_image and current_representative_image in image_ids:
             # Find a new representative image from remaining images
-            remaining_images = self.get_moment_images(moment_id, True)
+            remaining_images = self.get_sub_entities('moments', moment_id)
             new_representative_image = ''
             if remaining_images and len(remaining_images) > 0:
                 new_representative_image = remaining_images[0]
             self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
         
         return updated_ids
-
-    def get_image_albums(self, image_id: str, exclude_defaults: bool = True, sort: bool = False) -> List[Dict]:
-        """Return list of albums the image belongs to, excluding default albums if requested.
-        Each item: { 'albumID': str, 'label': str, 'representative_image': str }
-        """
-        accessible_albums = self.db._get_accessible_table_name('albums')
-        accessible_album_images = self.db._get_accessible_table_name('album_images')
-
-        query = f'''
-            SELECT a.albumID, a.label, a.representative_image
-            FROM {accessible_albums} a
-            JOIN {accessible_album_images} ai ON a.albumID = ai.albumID
-            WHERE ai.imageID = ?
-        '''
-        if sort:
-            query += f" ORDER BY {STRUCTURE['albums']['sort_by']}"
-
-        rows = self.db.execute_query(query, (image_id,))
-
-        results: List[Dict] = []
-        for album_id, label, rep in rows:
-            if exclude_defaults and (label or '').lower() in ('favorites', 'archive'):
-                continue
-            results.append({
-                'albumID': album_id,
-                'label': label or '',
-                'representative_image': rep or ''
-            })
-        return results
     
     # -------- Albums helpers --------
-    def get_album_images(self, album_id: str) -> List[str]:
-        accessible_album_images = self.db._get_accessible_table_name('album_images')
-        accessible_images = self.db._get_accessible_table_name('images')
-        
-        album = self.get('albums', album_id, include_sub_entities=False)
-        force_include_archived = album and 'label' in album and album['label'].lower() == 'archive'
-            
-        query = f'''
-            SELECT ai.imageID
-            FROM {accessible_album_images} ai
-            JOIN {accessible_images} i ON ai.imageID = i.imageID
-            WHERE ai.albumID = ?
-        '''
-        results = self.db.execute_query(query, (album_id,), force_include_archived)
-        return [row[0] for row in results]
-
     def add_images_to_album(self, album_id: str, image_ids: List[str]) -> Dict[str, Union[List[str], List[str]]]:
         """Add images to an album. Returns added image IDs and images that are now archived."""
         if not image_ids:
             return {'added_ids': [], 'archived_ids': []}
             
-        already_in_album = self.get_album_images(album_id)
+        already_in_album = self.get_sub_entities('albums', album_id)
         image_ids = [image_id for image_id in image_ids if image_id not in already_in_album]
         
         if not image_ids:
@@ -792,11 +645,11 @@ class ModelsManager:
         )
         
         # If representative_image removed, choose a new one (first remaining), or clear it
-        current_album = self.get('albums', album_id)
+        current_album = self.get_summary('albums', album_id)
         if current_album:
             rep = current_album.get('representative_image') or ''
             if rep and rep in image_ids:
-                remaining = self.get_album_images(album_id)
+                remaining = self.get_sub_entities('albums', album_id)
                 new_rep = remaining[0] if remaining else ''
                 self.edit('albums', album_id, {'representative_image': new_rep}, include_archived=True)
 

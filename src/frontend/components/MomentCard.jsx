@@ -49,7 +49,8 @@ const MomentCard = forwardRef(({
   onToggleFavorites,
   onToggleArchive,
   showToast,
-  eventUrl
+  eventUrl,
+  urlHelpers
 }, ref) => {
   // Calculate selection stats for this moment
   const momentimageKeys = images.map(image => `${moment.momentID}:${image.label}`);
@@ -184,7 +185,7 @@ const MomentCard = forwardRef(({
                       <SingleImageTile
                         image={image}
                         aspectClass={aspectRatioClass}
-                        thumbSrc={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
+                        thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
                         selectionMode={selectionMode || viewMode === 'list'}
                         isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
                         onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
@@ -199,7 +200,7 @@ const MomentCard = forwardRef(({
                     ) : (
                       <SingleImageRow
                         image={image}
-                        thumbSrc={image.urls?.thumbnail || `/${image.thumbFilename || image.id}.webp`}
+                        thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
                         isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
                         onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
                         onOpen={() => onOpenImageViewer(images, image, index)}

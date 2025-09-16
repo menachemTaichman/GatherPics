@@ -187,7 +187,7 @@ def update_group(event_id, group_id):
 def delete_group(event_id, group_id):
     # delete a group
     event = get_event(event_id)
-    group = event.models_manager.get('groups', group_id)
+    group = event.models_manager.get_summary('groups', group_id)
     if not group:
         return not_found(f"Group {group_id} not found or not accessible")
     
@@ -535,7 +535,7 @@ def get_file_webp(event_id, file_type, file_id):
         abort(404)
     
     table_to_check = table_map[file_type]
-    if not event.models_manager.get(table_to_check, file_id):
+    if not event.models_manager.is_exists(table_to_check, file_id):
         abort(403)
     
     file_path = os.path.join(dir_map[file_type], f'{file_id}.webp')
@@ -587,7 +587,7 @@ def download_images(event_id):
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w') as zf:
             for image_id in image_ids:
-                if not event.models_manager.get('images', image_id):
+                if not event.models_manager.is_exists('images', image_id):
                     continue
                 
                 src_dir = event.high_quality_dir if quality != 'original' else event.original_dir

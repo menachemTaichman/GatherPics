@@ -17,13 +17,13 @@ export const CHANGE_TYPES = {
   MOMENT_IMAGES_REMOVED: 'MOMENT_IMAGES_REMOVED',
   
   // Image changes
+  IMAGE_ALBUMS_UPDATED: 'IMAGE_ALBUMS_UPDATED',
   IMAGE_SELECTION_CHANGED: 'IMAGE_SELECTION_CHANGED',
   IMAGE_VIEWER_UPDATED: 'IMAGE_VIEWER_UPDATED',
   
   // Global changes
   GROUPS_REFRESH: 'GROUPS_REFRESH',
   MOMENTS_REFRESH: 'MOMENTS_REFRESH',
-  IMAGES_REFRESH: 'IMAGES_REFRESH'
 };
 
 // Data store using Zustand for centralized state management
@@ -46,7 +46,7 @@ export const useDataStore = create((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   clearLastTransferResult: () => set({ lastTransferResult: null }),
-  setImagesRefresh: (data) => set({ lastImagesRefresh: data }),
+  setImagesRefresh: (data) => set({ lastImagesRefresh: { timestamp: Date.now(), imageIds: data.image_ids } }),
   addImagesToAlbum: (result) => set({ lastAlbumAdd: result }),
   setFavoritesAlbumId: (id) => set({ favoritesAlbumId: id }),
   setArchiveAlbumId: (id) => set({ archiveAlbumId: id }),
@@ -189,6 +189,10 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
       
 
       
+    case CHANGE_TYPES.IMAGE_ALBUMS_UPDATED:
+      store.setImagesRefresh(data);
+      break;
+      
     case CHANGE_TYPES.MOMENT_UPDATED:
       store.updateMoment(data.momentID, data);
       break;
@@ -209,24 +213,6 @@ export const handleDataChange = (changeType, data, store = useDataStore.getState
       // This will trigger a full refresh of moments
       break;
     
-    case CHANGE_TYPES.IMAGES_REFRESH: {
-      // Normalize payload from backend change instructions
-      const albumLabel = data?.album_label;
-      const imageIds = Array.isArray(data?.image_ids) ? data.image_ids : [];
-      const isAdd = typeof data?.isAdd === 'boolean' ? data.isAdd : (data?.action ? data.action !== 'remove' : true);
-      const addedCount =
-        typeof data?.added === 'number'
-          ? data.added
-          : (Array.isArray(data?.added_ids)
-              ? data.added_ids.length
-              : (Array.isArray(data?.removed_ids)
-                  ? data.removed_ids.length
-                  : (Array.isArray(imageIds) ? imageIds.length : 0)));
-      if (!albumLabel || imageIds.length === 0) break;
-      store.setImagesRefresh({ album_label: albumLabel, image_ids: imageIds, isAdd, addedCount });
-      break;
-    }
-      
     default:
       console.warn(`Unknown change type: ${changeType}`);
   }

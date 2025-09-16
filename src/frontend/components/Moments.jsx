@@ -257,7 +257,7 @@ export default function Moments({ eventUrl }) {
       // Use parallel API calls for moments that need images fetched
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getImages(moment.momentID, eventUrl);
+          const result = await momentsAPI.getById(moment.momentID, eventUrl);
           return { momentId: moment.momentID, images: result.images || [] };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.momentID}:`, error);
@@ -305,7 +305,7 @@ export default function Moments({ eventUrl }) {
 
   const fetchImages = async () => {
     try {
-      const response = await imagesAPI.getAll(eventUrl);
+      const response = await imagesAPI.getDetails([], eventUrl);
       setImages(response.images || []);
     } catch (err) {
       console.error('Error fetching images:', err);
@@ -346,7 +346,7 @@ export default function Moments({ eventUrl }) {
   // Function to update the momentImagesMap for a specific moment
   const updateMomentImagesMap = async (momentId) => {
     try {
-      const result = await momentsAPI.getImages(momentId, eventUrl);
+      const result = await momentsAPI.getById(momentId, eventUrl);
       
       setMomentImagesMap(prev => ({
         ...prev,
@@ -1058,6 +1058,7 @@ export default function Moments({ eventUrl }) {
                   onToggleArchive={handleSingleToggleArchive}
                   showToast={showToast}
                   eventUrl={eventUrl}
+                  urlHelpers={urlHelpers}
                   includeArchived={getSetting('include_archived_images', false)}
                   ref={setMomentRef(moment.label)}
                 />

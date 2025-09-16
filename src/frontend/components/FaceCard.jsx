@@ -75,7 +75,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
                 {group.label || `Person ${group.groupID}`}
               </h3>
               <p className="text-xs text-gray-500">
-                {group.image_ids?.length || 0} photos
+                {group.count || 0} photos
               </p>
             </div>
             

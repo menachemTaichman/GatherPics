@@ -108,7 +108,6 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 >
                   <option value="name">Sort by Name</option>
                   <option value="count">Sort by Count</option>
-                  <option value="date">Sort by Date</option>
                 </select>
                 <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
               </div>
