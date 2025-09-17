@@ -1,7 +1,6 @@
 import axios from 'axios';
-import { useDataStore, CHANGE_TYPES, handleDataChange } from './dataManager';
+import { useDataStore, handleDataChange } from './dataManager';
 import { resolveEventId } from './eventResolver';
-import { getSetting } from './settings';
 import jwtService from './jwtService';
 
 // API base URL - centralized configuration
@@ -225,6 +224,13 @@ export const groupsAPI = {
     const response = await api.post(`/api/events/${eventId}/groups/transfer-faces`, requestData);
     return response.data;
   },
+
+  // Get related groups
+  getRelated: async (groupId, eventUrl, params = {}) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/related`, { params });
+    return response.data;
+  },
 };
 
 // Moments API
@@ -343,10 +349,8 @@ export const albumsAPI = {
 
     if (!favoritesAlbumId) {
       const eventId = await getEventIdForApi(eventUrl);
-      const all = await api.get(`/api/events/${eventId}/albums`);
-      const fav = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'favorites');
-      if (fav) {
-        favoritesAlbumId = fav.albumID;
+      const favoritesAlbumId = await api.get(`/api/events/${eventId}/albums/defualts/favorites`);
+      if (favoritesAlbumId) {
         store.setFavoritesAlbumId(favoritesAlbumId);
       }
     }
@@ -369,10 +373,9 @@ export const albumsAPI = {
     
     if (!archiveAlbumId) {
         const eventId = await getEventIdForApi(eventUrl);
-        const all = await api.get(`/api/events/${eventId}/albums`);
-        const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
-        if (archive) {
-            archiveAlbumId = archive.albumID;
+        const archiveAlbumId = await api.get(`/api/events/${eventId}/albums/defualts/archive`);
+        if (archiveAlbumId) {
+            archiveAlbumId = archiveAlbumId.album_id;
             store.setArchiveAlbumId(archiveAlbumId);
         }
     }
@@ -391,10 +394,9 @@ export const albumsAPI = {
 
     if (!archiveAlbumId) {
       const eventId = await getEventIdForApi(eventUrl);
-      const all = await api.get(`/api/events/${eventId}/albums`);
-      const archive = (all.data.albums || []).find(a => (a.label || '').toLowerCase() === 'archive');
-      if (archive) {
-        archiveAlbumId = archive.albumID;
+      const archiveAlbumId = await api.get(`/api/events/${eventId}/albums/defualts/archive`);
+      if (archiveAlbumId) {
+        archiveAlbumId = archiveAlbumId.album_id;
         store.setArchiveAlbumId(archiveAlbumId);
       }
     }
@@ -427,8 +429,6 @@ export const downloadAPI = {
     return response.data; // Blob
   }
 };
-
-
 
 // Profile API
 export const profileAPI = {

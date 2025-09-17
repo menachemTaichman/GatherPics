@@ -54,6 +54,7 @@ import useBucketStore from '../utils/bucketStore';
 import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
 import SingleImageTile from './SingleImageTile';
 import SingleImageRow from './SingleImageRow';
+import GroupsFilter from './GroupsFilter';
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
@@ -104,6 +105,13 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [albums, setAlbums] = useState([]);
+  
+  // Filter states
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [relatedGroups, setRelatedGroups] = useState([]);
+  const [filterGroups, setFilterGroups] = useSetting('groupDetail_filterGroups', []);
+  const [filterMode, setFilterMode] = useSetting('groupDetail_filterMode', 'and');
+  const [onlySelected, setOnlySelected] = useSetting('groupDetail_onlySelected', false);
   
   // No complex flag checking needed - the data store handles everything
 
@@ -275,19 +283,31 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     return unsubscribe;
   }, [group?.groupID, sortBy, sortOrder, navigate, isViewerOpen, currentImageId, viewerIndex]);
 
-  const fetchGroupData = async (currentOffset) => {
+  const fetchGroupData = useCallback(async (currentOffset, resetImages = false) => {
     if (!group?.groupID) {
       return;
     }
     setLoading(!isFetchingMore);
+
+    const params = { 
+      offset: currentOffset, 
+      limit: 50 
+    };
+
+    if (filterGroups.length > 0) {
+      params.filter_groups = filterGroups.join(',');
+      params.filter_mode = filterMode;
+      params.only_selected = onlySelected;
+    }
+
     try {
-      const response = await groupsAPI.getById(group.groupID, eventUrl, { offset: currentOffset, limit: 50 });
+      const response = await groupsAPI.getById(group.groupID, eventUrl, params);
       
       setGroup(prev => ({...prev, ...response.group}));
       
       const sorted = sortImages(response.images || [], sortBy, sortOrder);
       
-      setSortedImages(prev => currentOffset === 0 ? sorted : [...prev, ...sorted]);
+      setSortedImages(prev => (resetImages || currentOffset === 0) ? sorted : [...prev, ...sorted]);
       
       setHasMore((response.images || []).length === 50);
       
@@ -297,15 +317,30 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       setLoading(false);
       setIsFetchingMore(false);
     }
-  };
+  }, [group?.groupID, eventUrl, sortBy, sortOrder, filterGroups, filterMode, onlySelected, isFetchingMore]);
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
     if (!group?.groupID) return;
     setOffset(0); // Reset offset when group changes
-    setSortedImages([]); // Clear images when group changes
-    fetchGroupData(0);
-  }, [group?.groupID]); // Re-run whenever the main group changes
+    fetchGroupData(0, true);
+  }, [group?.groupID, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
+
+  // Effect to fetch related groups
+  useEffect(() => {
+    if (!group?.groupID) return;
+
+    const fetchRelated = async () => {
+      try {
+        const data = await groupsAPI.getRelated(group.groupID, eventUrl);
+        setRelatedGroups(data.related_groups || []);
+      } catch (error) {
+        console.error('Error fetching related groups:', error);
+      }
+    };
+
+    fetchRelated();
+  }, [group?.groupID, eventUrl]);
 
 
   const handleLoadMore = () => {
@@ -322,6 +357,28 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     setSortOrder(newOrder);
     // Re-sort current images with new order
             setSortedImages(prevImages => sortImages(prevImages, sortBy, newOrder));
+  };
+
+  const handleFilterVisibilityToggle = () => {
+    setFilterVisible(prev => !prev);
+  };
+
+  const handleFilterChange = (newFilterGroups) => {
+    setFilterGroups(newFilterGroups);
+  };
+
+  const handleFilterModeChange = (newMode) => {
+    setFilterMode(newMode);
+  };
+
+  const handleOnlySelectedChange = (newOnlySelected) => {
+    setOnlySelected(newOnlySelected);
+  };
+
+  const handleFilterReset = () => {
+    setFilterGroups([]);
+    setFilterMode('and');
+    setOnlySelected(false);
   };
 
   const formatDate = (dateString) => {
@@ -829,8 +886,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               </button>
 
               {/* Filter Toggle */}
-              {/* Filter functionality removed, so this button is no longer relevant */}
-              {/* <button
+              <button
                 onClick={handleFilterVisibilityToggle}
                 className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
@@ -838,7 +894,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 title={filterVisible ? 'Hide group filter' : 'Show group filter'}
               >
                 <Filter className="w-4 h-4" />
-              </button> */}
+              </button>
             </div>
             
             {/* Group 2: Zoom, List/Grid, Crops */}
@@ -943,8 +999,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         </div>
 
         {/* Groups Filter - Now part of the header */}
-        {/* Filter functionality removed, so this section is no longer relevant */}
-        {/* <AnimatePresence>
+        <AnimatePresence>
           {filterVisible && (
             <GroupsFilter
               group={group}
@@ -960,7 +1015,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               eventUrl={eventUrl}
             />
           )}
-        </AnimatePresence> */}
+        </AnimatePresence>
       </div>
 
       {/* Content Area */}

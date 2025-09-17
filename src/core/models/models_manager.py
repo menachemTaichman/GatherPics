@@ -74,6 +74,13 @@ class ModelsManager:
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         return self.db.is_exists(table, fields, exclude_id)
 
+    def is_empty(self, table: str, entity_id: str) -> bool:
+        sub_query = STRUCTURE[table]['sub_table']
+        id_field = STRUCTURE[table]['primary_key']
+        query = f'SELECT COUNT(*) FROM {sub_query} WHERE {id_field} = ?'
+        results = self.db.execute_query(query, (entity_id,))
+        return results[0][0] == 0
+
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
         """Insert one or many records. If a single dict is provided, return the new ID.
         If a list is provided, return the inserted records list.
@@ -91,11 +98,11 @@ class ModelsManager:
             return inserted_ids[0] if inserted_ids else None
         return inserted_ids
 
-    def delete(self, table: str, entity_id: str):
-        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_id})
+    def delete(self, table: str, entity_ids: List[str] | str):
+        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_ids})
 
-    def edit(self, table: str, entity_id: str, fields: Dict) -> List[str]:
-        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_id}, fields)
+    def edit(self, table: str, entity_ids: List[str] | str, fields: Dict) -> List[str]:
+        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_ids}, fields)
 
     def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
         return_list = True
@@ -375,98 +382,89 @@ class ModelsManager:
         results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID=?', (group_id,), include_archived)
         return [row[0] for row in results]
 
-    ########## TODO: find other way
-    def get_group_faces_by_image(self, image_id: str, group_id: str) -> List[str]:
-        """Return face IDs that belong to a specific group in a specific image."""
+    def get_group_faces_in_images(self, group_id: str, image_ids: List[str] | str | None = None) -> List[str]:
+        """Return face IDs that belong to a specific group in a specific images."""
         accessible_table = self.db._get_accessible_table_name('faces')
-        query = f'SELECT faceID FROM {accessible_table} WHERE imageID=? AND groupID=?'
-        results = self.db.execute_query(query, (image_id, group_id))
+        where_clause = 'WHERE groupID = ?'
+        if not image_ids:
+            image_ids = []
+        else:
+            where_clause += f'AND imageID IN ({','.join(['?'] * len(image_ids))})'
+            if isinstance(image_ids, str):
+                image_ids = [image_ids]
+        query = f'SELECT faceID FROM {accessible_table} {where_clause}'
+        results = self.db.execute_query(query, (group_id, *image_ids))
         return [row[0] for row in results]
 
-    def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> List[str]:
-        if not face_ids or not group_id:
-            return []
-
-        # Move faces to the target group
-        accessible_faces = self.db._get_accessible_table_name('faces')
-        placeholders = ','.join(['?'] * len(face_ids))
-        query = f"UPDATE {accessible_faces} SET groupID=? WHERE faceID IN ({placeholders})"
-        updated_ids = self.db.execute_query(query, (group_id, *face_ids),)
-
-        # Ensure target representative exists
-        representative_face = self.get_summary('groups', group_id).get('representative_face')
-        if not representative_face:
-            target_group_faces = self.get_group_faces(group_id)
-            new_representative_face = self.get_biggest_face(target_group_faces)
-            if new_representative_face:
-                self.edit('groups', group_id, {'representative_face': new_representative_face})
-
-        # Update old groups representatives when needed
-        # Find previous groups of the moved faces and their representatives
-        accessible_groups = self.db._get_accessible_table_name('groups')
-        query = f"""
-        SELECT {accessible_faces}.groupID, {accessible_groups}.representative_face
-        FROM {accessible_faces} INNER JOIN {accessible_groups}
-        ON {accessible_faces}.groupID = {accessible_groups}.groupID AND {accessible_groups}.groupID != ?
-        WHERE faceID IN ({placeholders})
-        GROUP BY {accessible_groups}.groupID
-        """
-        old_groups_rows = self.db.execute_query(query, (group_id, *face_ids))
-        for old_group_id, old_representative_face in old_groups_rows:
-            if old_representative_face in face_ids:
-                new_representative_face = self.get_biggest_face(self.get_group_faces(old_group_id))
-                if not new_representative_face:
-                    new_representative_face = ''
-                self.edit('groups', old_group_id, {'representative_face': new_representative_face})
+    def ensure_group_representative(self, group_id: str) -> str:
+        accessible_table = self.db._get_accessible_table_name('faces')
+        group = self.get_summary('groups', group_id)
+        if group and group.get('representative_face'):
+            return group.get('representative_face')
         
-        return updated_ids
+        biggest_face = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID = ? ORDER BY width * height DESC LIMIT 1', (group_id,))[0][0]
+        self.edit('groups', group_id, {'representative_face': biggest_face})
+        
+        return biggest_face
 
-    # -------- Faces helpers --------
-    def get_biggest_face(self, face_ids: List[str]) -> str:
-        if not face_ids:
-            return ''
+    def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> dict[str, List[str]]:
+        if not face_ids or not group_id:
+            return {'updated_groups': [], 'deleted_groups': []}
+
         accessible_table = self.db._get_accessible_table_name('faces')
         placeholders = ','.join(['?'] * len(face_ids))
-        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE faceID IN ({placeholders}) ORDER BY width * height DESC LIMIT 1', (*face_ids,))        
-        return results[0][0]    
+        query = f'SELECT DISTINCT groupID FROM {accessible_table} WHERE faceID IN ({placeholders})'
+        
+        deleted_groups = []
+        updated_groups = []
+        old_groups = self.db.execute_query(query, face_ids)        
+        for old_group in old_groups:
+            old_group_id = old_group[0]
+            if self.is_empty('groups', old_group_id):
+                self.delete('groups', old_group_id)
+                deleted_groups.append(old_group_id)
+            else:
+                self.ensure_group_representative(old_group_id)
+                updated_groups.append(old_group_id)
 
+        self.edit('faces', face_ids, {'groupID': group_id})
+        self.ensure_group_representative(group_id)
+  
+        return {'updated_groups': updated_groups, 'deleted_groups': deleted_groups}
+
+    ########## TODO: complete later
     def transfer_faces(
         self,
-        old_group_id: str,
-        face_ids: List[str],
+        source_group_id: str,
         *,
-        target_group_id: Optional[str] = None,
-        new_group_name: Optional[str] = None,
+        face_id: str | None = None,
+        image_ids: List[str] | None = None,
+        target_group_id: str | None = None,
+        new_group_name: str | None = None,
     ) -> Dict:
-        """Transfer faces to an existing/new group and update representatives as needed."""
-        if not face_ids:
-            return {'target_group_id': None, 'old_group_deleted': False}
+        return {}
 
-        old_group = self.get_summary('groups', old_group_id)
-        if not old_group:
-            raise ValueError(f"Source group {old_group_id} not found")
+        source_group = self.get_summary('groups', source_group_id)
+        if not source_group:
+            raise ValueError(f"Source group {source_group} not found")
+        if not face_id and not image_ids:
+            raise ValueError("face_id or image_ids is required")
 
-        accessible_table = self.db._get_accessible_table_name('faces')
-        placeholders = ','.join(['?'] * len(face_ids))
+        faces_ids = [face_id] if face_id else self.get_group_faces_in_images(source_group_id, image_ids)
         
-        # Get all unique images affected by this transfer BEFORE making changes
-        query = f'''
-            SELECT DISTINCT imageID
-            FROM {accessible_table}
-            WHERE faceID IN ({placeholders}) AND groupID = ?
-        '''
-        original_affected_images = {row[0] for row in self.db.execute_query(query, (*face_ids, old_group_id), True)}
+        if faces_ids:
+            if not target_group_id:
+                if self.is_exists('groups', {'label': new_group_name}):
+                    raise ValueError(f"Group name '{new_group_name}' already exists")
+                
+                target_group_id = self.add('groups', {'label': new_group_name})
+            
+            target_group = self.get_summary('groups', target_group_id)
+            if not target_group:
+                raise ValueError(f"Target group {target_group_id} not found")
+            
+            added_to_target = self.add_faces_to_group(target_group_id, faces_ids)
 
-        if not original_affected_images:
-            return {
-                'target_group_id': target_group_id,
-                'old_group_deleted': False,
-                'transferred_faces_ids': [],
-                'images_to_remove_from_source': [],
-                'images_to_add_to_target': [],
-                'updated_source_group': old_group,
-                'updated_target_group': self.get_summary('groups', target_group_id) if target_group_id else None,
-            }
 
         target_group_id_was_provided = target_group_id is not None
         if target_group_id:
@@ -500,19 +498,19 @@ class ModelsManager:
         # Determine which of the affected images no longer have any faces from the source group
         images_to_remove_from_source = set()
         for image_id in original_affected_images:
-            if not self.get_group_faces_by_image(image_id, old_group_id, True):
+            if not self.get_group_faces_in_image(image_id, source_group, True):
                 images_to_remove_from_source.add(image_id)
 
         old_representative = old_group.get('representative_face', '')
 
         old_group_deleted = False
-        if self.is_group_empty(old_group_id):
-            self.delete('groups', old_group_id)
+        if self.is_group_empty(source_group):
+            self.delete('groups', source_group)
             old_group_deleted = True
 
         updated_source_group = None
         if not old_group_deleted:
-            updated_source_group = self.get_summary('groups', old_group_id)
+            updated_source_group = self.get_summary('groups', source_group)
 
         updated_target_group = self.get_summary('groups', target_group_id)
         target_representative_after = updated_target_group.get('representative_face') if updated_target_group else ''
@@ -654,6 +652,14 @@ class ModelsManager:
                 self.edit('albums', album_id, {'representative_image': new_rep}, include_archived=True)
 
         return [pair[1] for pair in deleted_pairs]
+
+    def get_archive_album(self) -> str | None:
+        """Get the archive album ID."""
+        return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]
+
+    def get_favorites_album(self) -> str | None:
+        """Get the favorites album ID."""
+        return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
 
     # -------- Profiles helpers --------
     def add_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:

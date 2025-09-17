@@ -753,16 +753,6 @@ class AppDB:
         finally:
             conn.close()
 
-    ########## TODO: review if needed after complete refactor
-    def get_archive_album(self) -> str | None:
-        """Get the archive album ID."""
-        return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]
-
-    ########## TODO: review if needed after complete refactor
-    def get_favorites_album(self) -> str | None:
-        """Get the favorites album ID."""
-        return self.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
-
     def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its ID for conflict checking."""
 
@@ -781,7 +771,7 @@ class AppDB:
                 return record[id_field]
             return None
 
-    def execute_query(self, query: str, params: tuple = (), *, force_include_archived: bool = False, include_columns: bool = False) -> List[tuple]:
+    def execute_query(self, query: str, params: tuple = (), *, force_include_archived: bool = False, include_columns: bool = False) -> List[tuple | dict]:
         """Execute a custom query and return results."""
         with self.get_connection(force_include_archived) as conn:
             cursor = conn.execute(query, params)
@@ -802,6 +792,7 @@ class AppDB:
             conn.commit()
             return []
 
+    ########## TODO: use execute_query instead
     def insert(self, table: str, data_list: List[Dict], bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
         """Insert multiple records into a table/view and return their IDs."""
         if not data_list:
@@ -834,6 +825,7 @@ class AppDB:
             conn.commit()
         return inserted_ids
 
+    ########## TODO: use execute_query instead
     def update(self, table: str, where: Dict, fields: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
         """Update records in a table/view and return their IDs."""
         if not fields:
@@ -879,6 +871,7 @@ class AppDB:
             conn.commit()
         return updated_ids
 
+    ########## TODO: use execute_query instead
     def delete(self, table: str, where: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
         """Delete records from a table/view and return their IDs."""
         target_table = table if bypass_access_control else self._get_accessible_table_name(table)

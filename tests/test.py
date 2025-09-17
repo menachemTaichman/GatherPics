@@ -351,22 +351,8 @@ def recreate_view_triggers_and_indexes():
 
 # image_ids = ['08637091-df73-4e87-8f0b-42dd759599b0', '4589a114-6d9b-4a8e-a5e2-6ae7a8082bc0', '4a37d6bb-c4c0-4948-99c5-c0ed7a997b28', '52bc7104-f56e-4d98-bafe-fc5ce3b66e5b', '53bed515-c414-416a-80d0-1f97cd64944e', '60601a9e-6d6e-4a0f-8b73-bd917f90200b', 'ba9ca86a-ac92-49e9-b379-63812f355867', 'ff15918c-327f-43c2-a9ee-aa66d906d645']
 # recreate_view_triggers_and_indexes()
-image_ids = '4a37d6bb-c4c0-4948-99c5-c0ed7a997b28'
+image_ids = ['4a37d6bb-c4c0-4948-99c5-c0ed7a997b28']
 group_id = '7a81acd3-98ee-40c8-aa66-71b60b34bda8'
 
-result = event.models_manager.get_sub_entities('groups', group_id, limit=2, offset=1)
-print(result)
-
-print('--------------------------------')
-result = event.models_manager.get_summary('groups', group_id)
-print(result)
-
-print('--------------------------------')
-
-result = event.models_manager.get_summary('moments', sort=True)
-print(result)
-
-print('--------------------------------')
-
-result = event.models_manager.get_summary('moments', exclude_empty_entities=True, sort=True)
+result = event.models_manager.get_group_faces_in_images(group_id, image_ids)
 print(result)

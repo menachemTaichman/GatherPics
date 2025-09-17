@@ -135,6 +135,7 @@ def get_groups(event_id):
     groups = event.models_manager.get_summary('groups', sort=sort, exclude_empty_entities=True)
     return jsonify({"groups": groups})
 
+########## TODO: simplify
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
 def get_group(event_id, group_id):
@@ -148,15 +149,70 @@ def get_group(event_id, group_id):
     sort = _parse_sort(True)
     limit, offset = _parse_pagination()
     
-    images = event.models_manager.get_sub_entities(
-        'groups', group_id, sort=sort, limit=limit, offset=offset
-    )
+    # Filtering logic
+    filter_groups_str = request.args.get('filter_groups')
+    
+    if filter_groups_str:
+        filter_group_ids = filter_groups_str.split(',')
+        # Always include the main group in filtering
+        all_group_ids = [group_id] + [gid for gid in filter_group_ids if gid != group_id]
+        
+        filter_mode = request.args.get('filter_mode', 'and')
+        only_selected = _parse_bool(request.args.get('only_selected'), False)
+        
+        image_ids = event.models_manager.get_filtered_images(
+            all_group_ids,
+            mode=filter_mode,
+            only=only_selected
+        )
+        
+        # Paginate the IDs first
+        if offset is None:
+            offset = 0
+        if limit is None:
+            paginated_image_ids = image_ids[offset:]
+        else:
+            paginated_image_ids = image_ids[offset:offset+limit]
+
+        if paginated_image_ids:
+            # TODO: sort images by date
+            images = event.models_manager.get_images(paginated_image_ids)
+        else:
+            images = []
+    else:
+        images = event.models_manager.get_sub_entities(
+            'groups', group_id, sort=sort, limit=limit, offset=offset
+        )
     
     response = {
         "group": group_summary,
         'images': images
     }
     return jsonify(response)
+
+########## TODO: simplify
+@app.route("/api/events/<event_id>/groups/<group_id>/related", methods=["GET"])
+@require_auth
+def get_related_groups(event_id, group_id):
+    """Get related groups for a specific group, ordered by co-occurrence."""
+    event = get_event(event_id)
+    if not event.models_manager.get_summary('groups', group_id):
+        return not_found(f"Group {group_id} not found or not accessible")
+
+    mode = request.args.get('mode', 'and')
+    only = _parse_bool(request.args.get('only'), False)
+
+    related_group_ids = event.models_manager.get_related_groups([group_id], mode=mode, only=only)
+    
+    if not related_group_ids:
+        return jsonify({"related_groups": []})
+
+    related_groups_summary = event.models_manager.get_summary('groups', related_group_ids)
+    
+    group_map = {g['groupID']: g for g in related_groups_summary}
+    ordered_groups = [group_map[gid] for gid in related_group_ids if gid in group_map]
+
+    return jsonify({"related_groups": ordered_groups})
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
 @require_auth
@@ -425,6 +481,20 @@ def get_album(event_id, album_id):
         'images': images
     }
     return jsonify(response)
+
+@app.route("/api/events/<event_id>/albums/defualts/favorites", methods=["GET"])
+@require_auth
+def get_favorites_album(event_id):
+    """Get the favorites album id."""
+    event = get_event(event_id)
+    return jsonify({"album_id": event.models_manager.get_favorites_album()})
+
+@app.route("/api/events/<event_id>/albums/defualts/archive", methods=["GET"])
+@require_auth
+def get_archive_album(event_id):
+    """Get the archive album id."""
+    event = get_event(event_id)
+    return jsonify({"album_id": event.models_manager.get_archive_album()})
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["PUT"])
 @require_auth
