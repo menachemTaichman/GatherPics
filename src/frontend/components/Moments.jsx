@@ -83,7 +83,7 @@ export default function Moments({ eventUrl }) {
     const items = [];
     Object.entries(momentImagesMap).forEach(([momentId, imgs]) => {
       (imgs || []).forEach(img => {
-        const key = `${momentId}:${img.label}`;
+        const key = `${momentId}:${img && img.id}`;
         items.push({ key, group: momentId });
       });
     });
@@ -405,7 +405,7 @@ export default function Moments({ eventUrl }) {
     
     if (currentMoment) {
       const currentMomentImages = momentImagesMap[currentMoment.momentID] || [];
-              const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image.label}`);
+      const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image && image.id}`);
       
               // Check if all images in current moment are already selected
         const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
@@ -428,7 +428,7 @@ export default function Moments({ eventUrl }) {
 
   const selectAllInMoment = (momentId) => {
     const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image.label}`);
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image && image.id}`);
     
     // Check if all images in this moment are already selected
     const allSelected = momentImageKeys.every(key => selectedKeys.has(key));
@@ -444,7 +444,7 @@ export default function Moments({ eventUrl }) {
 
   const clearMomentSelection = (momentId) => {
     const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image.label}`);
+    const momentImageKeys = momentImages.map(image => `${momentId}:${image && image.id}`);
     
     deselectMany(momentImageKeys);
     
@@ -476,10 +476,8 @@ export default function Moments({ eventUrl }) {
   // Helper function to convert selectedKeys to actual image IDs
   const getSelectedImageIds = () => {
     return Array.from(selectedKeys).map(key => {
-      const [mId, label] = key.split(':');
-      const list = momentImagesMap[mId] || [];
-      const found = list.find(img => img.id === label || img.label === label || img.name === label);
-      return found ? found.id : null;
+      const [, imageId] = key.split(':');
+      return imageId || null;
     }).filter(Boolean);
   };
 
@@ -514,12 +512,10 @@ export default function Moments({ eventUrl }) {
     // Get all selected image objects
     const selectedImageObjects = [];
     Array.from(selectedKeys).forEach(key => {
-      const [mId, label] = key.split(':');
+      const [mId, imageId] = key.split(':');
       const list = momentImagesMap[mId] || [];
-      const found = list.find(img => img.id === label || img.label === label || img.name === label);
-      if (found) {
-        selectedImageObjects.push(found);
-      }
+      const found = list.find(img => img && img.id === imageId);
+      if (found) selectedImageObjects.push(found);
     });
 
     if (selectedImageObjects.length === 0) return;
@@ -550,7 +546,7 @@ export default function Moments({ eventUrl }) {
     const imageObjects = [];
     Object.values(momentImagesMap).forEach(images => {
       images.forEach(img => {
-        if (imageIds.includes(img.id)) {
+        if (img && imageIds.includes(img.id)) {
           imageObjects.push(img);
         }
       });
@@ -563,7 +559,7 @@ export default function Moments({ eventUrl }) {
       const newMap = { ...prev };
       Object.keys(newMap).forEach(momentId => {
         newMap[momentId] = newMap[momentId].map(img => 
-          imageIds.includes(img.id) ? { ...img, is_favorite: !allAreFavorites } : img
+          imageIds.includes(img && img.id) ? { ...img, is_favorite: !allAreFavorites } : img
         );
       });
       return newMap;
@@ -639,7 +635,7 @@ export default function Moments({ eventUrl }) {
           setMomentImagesMap(prev => {
             const newMap = { ...prev };
             Object.keys(newMap).forEach(momentId => {
-              newMap[momentId] = newMap[momentId].filter(img => !imageIds.includes(img.id));
+              newMap[momentId] = newMap[momentId].filter(img => !imageIds.includes(img && img.id));
             });
             return newMap;
           });
@@ -649,7 +645,7 @@ export default function Moments({ eventUrl }) {
             const newMap = { ...prev };
             Object.keys(newMap).forEach(momentId => {
               newMap[momentId] = newMap[momentId].map(img => 
-                imageIds.includes(img.id) ? { ...img, is_archived: true } : img
+                imageIds.includes(img && img.id) ? { ...img, is_archived: true } : img
               );
             });
             return newMap;

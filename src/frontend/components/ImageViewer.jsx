@@ -284,21 +284,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  // Handle both image objects and image IDs
-  let imageMeta = image;
-  let imageId = null;
-  
-  if (typeof image === 'string') {
-    // If image is a string, treat it as an image ID
-    imageId = image;
-    imageMeta = { id: image, label: image };
-  } else if (image && typeof image === 'object') {
-    // If image is an object, extract the ID
-    imageId = image.id || image.label || image.name;
-  }
-  
-  // Use the image data directly
-  const displayFilename = imageMeta.display_path || imageMeta.thumb_path || imageMeta.original_path || imageMeta.label || imageMeta.id || imageMeta.name;
+  // Handle image as ID string only
+  const imageId = typeof image === 'string' ? image : (image?.id || null);
+  const imageMeta = { id: imageId, label: imageId };
+  const displayFilename = imageMeta.label;
 
   // Fetch image info when image changes
   useEffect(() => {
@@ -341,8 +330,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   useEffect(() => {
     if (lastTransferResult && lastTransferResult.transferred_images_data && imageId) {
       // Check if the current image was affected by the transfer
-      const updatedImageData = lastTransferResult.transferred_images_data.find(
-        imageData => imageData.id === imageId || imageData.label === imageId
+          const updatedImageData = lastTransferResult.transferred_images_data.find(
+        imageData => imageData.id === imageId
       );
       
       if (updatedImageData) {
@@ -600,9 +589,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getImageSrc = () => {
-    if (!imageInfo?.id) return PLACEHOLDER_DATA_URL;
+    const id = imageInfo?.id;
+    if (!id) return PLACEHOLDER_DATA_URL;
     if (!urlHelpers) return PLACEHOLDER_DATA_URL;
-    return urlHelpers.getDisplayImageUrl(imageInfo.id);
+    return urlHelpers.getDisplayImageUrl(id);
   };
 
   const getFaceImageSrc = (face) => {

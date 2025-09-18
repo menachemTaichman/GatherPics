@@ -63,7 +63,7 @@ TABLES = {
         left REAL,
         top REAL,
         groupID TEXT,
-        FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE SET NULL
+        FOREIGN KEY (imageID) REFERENCES images(imageID) ON DELETE SET NULL,
         FOREIGN KEY (groupID) REFERENCES groups(groupID) ON DELETE SET NULL
     ''',
     'images': '''

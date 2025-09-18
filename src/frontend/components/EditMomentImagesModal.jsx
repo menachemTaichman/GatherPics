@@ -85,7 +85,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       const data = await imagesAPI.getAll(eventUrl);
       // Filter out invalid images and ensure they have required properties
       const validImages = (data.images || []).filter(img => 
-        img && (img.id || img.imageID) && typeof img === 'object'
+        img && img.id && typeof img === 'object'
       );
       setAllImagesWithTimestamps(validImages);
     } catch (error) {
@@ -151,9 +151,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
         if (onRefreshImages) {
           // Get the current images for that moment and remove the moved image
           const otherMomentImages = momentImagesMap[momentInfo.momentId] || [];
-          const updatedOtherMomentImages = otherMomentImages.filter(p => 
-            (p.id || p.imageID) !== imageId
-          );
+          const updatedOtherMomentImages = otherMomentImages.filter(p => p.id !== imageId);
           // Update the other moment's images
           onRefreshImages(momentInfo.momentId, updatedOtherMomentImages);
         }
@@ -307,7 +305,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   // Check if an image is currently in the moment
   const isImageInMoment = (imageId) => {
-    return (momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === imageId);
+    return (momentImagesMap[moment?.momentID] || []).some(p => p.id === imageId);
   };
 
   // Get the effective selection state for an image (considering pending changes)
@@ -333,7 +331,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const getImageMomentInfo = (imageId) => {
     for (const momentId in momentImagesMap) {
       const momentImages = momentImagesMap[momentId] || [];
-      const foundImage = momentImages.find(p => (p.id || p.imageID) === imageId);
+      const foundImage = momentImages.find(p => p.id === imageId);
       if (foundImage) {
         const momentObj = moments.find(m => m.momentID === momentId);
         return {
@@ -350,7 +348,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     // Check if image is in period based on moment date range
     if (!moment || !moment.start || !moment.end) return false;
     
-    const image = allImagesWithTimestamps.find(img => (img.id || img.imageID) === imageId);
+    const image = allImagesWithTimestamps.find(img => img.id === imageId);
     if (!image || !image.date_taken) return false;
     
     const startDate = new Date(moment.start);
@@ -364,11 +362,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && (img.id || img.imageID) && (momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
+        img && img.id && (momentImagesMap[moment?.momentID] || []).some(p => p.id === img.id)
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && (img.id || img.imageID) && !(momentImagesMap[moment?.momentID] || []).some(p => (p.id || p.imageID) === (img.id || img.imageID))
+        img && img.id && !(momentImagesMap[moment?.momentID] || []).some(p => p.id === img.id)
       );
     } else if (filterType === 'in-period') {
       // Filter images locally based on date_taken and moment date range
@@ -389,7 +387,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     }
     
     // Filter out any invalid images and sort using global utility with date priority
-    filteredImages = filteredImages.filter(img => img && (img.id || img.imageID));
+    filteredImages = filteredImages.filter(img => img && img.id);
     return sortImagesWithDatePriority(filteredImages, sortOrder);
   };
 
@@ -401,7 +399,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   // Handle select all for filtered images
   const handleSelectAllFiltered = () => {
     const filteredImages = getFilteredImages();
-    const filteredImageIds = filteredImages.map(img => img.id || img.imageID);
+    const filteredImageIds = filteredImages.map(img => img.id);
     
     // Check if all filtered are already effectively selected
     const allSelected = filteredImageIds.every(id => {
@@ -447,7 +445,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   // Handle clear selection for filtered images
   const handleClearFilteredSelection = () => {
     const filteredImages = getFilteredImages();
-    const filteredImageIds = filteredImages.map(img => img.id || img.imageID);
+    const filteredImageIds = filteredImages.map(img => img.id);
     
     filteredImageIds.forEach(id => {
       const isCurrentlyInMoment = isImageInMoment(id);
@@ -471,7 +469,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     if (filteredImages.length === 0) return false;
     
     return filteredImages.every(img => {
-      const id = img.id || img.imageID;
+      const id = img.id;
       const state = getImageSelectionState(id);
       return state === 'marked-for-addition' || state === 'in-moment';
     });
@@ -483,7 +481,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     if (filteredImages.length === 0) return false;
     
     return filteredImages.some(img => {
-      const id = img.id || img.imageID;
+      const id = img.id;
       const state = getImageSelectionState(id);
       return state === 'marked-for-addition' || state === 'in-moment';
     });
@@ -756,9 +754,9 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {filteredImages.map((image, index) => {
-              const selectionState = getImageSelectionState(image.id || image.imageID);
-              const momentInfo = getImageMomentInfo(image.id || image.imageID);
-              const isInPeriod = isImageInPeriod(image.id || image.imageID);
+              const selectionState = getImageSelectionState(image.id);
+              const momentInfo = getImageMomentInfo(image.id);
+              const isInPeriod = isImageInPeriod(image.id);
               const isFocused = index === focusedImageIndex;
               
               // Determine border color based on selection state
@@ -781,12 +779,12 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                 <div
                   key={image.id}
                   ref={el => imageRefs.current[index] = el}
-                  onClick={() => toggleImage(image.id || image.imageID)}
+                  onClick={() => toggleImage(image.id)}
                   onFocus={() => setFocusedImageIndex(index)}
                   onKeyDown={(e) => {
                     if (e.key === ' ' || e.key === 'Enter') {
                       e.preventDefault();
-                      toggleImage(image.id || image.imageID);
+                      toggleImage(image.id);
                     }
                   }}
                   className={`image-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
@@ -795,11 +793,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                   tabIndex={0}
                   role="button"
                   aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
-                  data-image-id={image.id || image.imageID}
+                  data-image-id={image.id}
                 >
                   <img
-                    src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id || image.imageID))}
-                    alt={image.label || `Image ${image.id || image.imageID}`}
+                    src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id))}
+                    alt={image.label || `Image ${image.id}`}
                     className="w-full h-24 object-cover"
                     loading="lazy"
                     onError={(e) => {

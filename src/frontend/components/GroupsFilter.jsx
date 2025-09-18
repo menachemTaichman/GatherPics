@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useEventUrls } from '../utils/useEventUrls';
+import { groupsAPI } from '../utils/apiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -25,19 +26,44 @@ export default function GroupsFilter({
   onOnlySelectedChange,
   onReset,
   isVisible,
-  eventUrl
+  eventUrl,
+  imageIds = [],
+  onRelatedGroupsUpdate
 }) {
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
   const { urlHelpers } = useEventUrls(eventUrl);
 
+  const fetchRelatedGroups = async () => {
+    if (!group?.groupID || !imageIds.length) return;
+    
+    setIsLoadingRelatedGroups(true);
+    try {
+      const params = {
+        image_ids: imageIds.join(','),
+        selected_groups: selectedGroups.join(',')
+      };
+      const data = await groupsAPI.getRelated(group.groupID, eventUrl, params);
+      // The API should return updated related groups based on current filters
+      // We'll need to update the parent component with these new related groups
+      if (data.related_groups) {
+        // Call a callback to update related groups in parent
+        onRelatedGroupsUpdate?.(data.related_groups);
+      }
+    } catch (error) {
+      console.error('Error fetching related groups:', error);
+    } finally {
+      setIsLoadingRelatedGroups(false);
+    }
+  };
+
   const handleGroupClick = (groupId) => {
-    onFilterChange(
-      selectedGroups.includes(groupId)
-        ? selectedGroups.filter((id) => id !== groupId)
-        
-        : [...selectedGroups, groupId]
-    );
+    const newSelectedGroups = selectedGroups.includes(groupId)
+      ? selectedGroups.filter((id) => id !== groupId)
+      : [...selectedGroups, groupId];
+    
+    onFilterChange(newSelectedGroups);
   };
 
   const handleMouseEnter = (groupId, event) => {
@@ -71,6 +97,13 @@ export default function GroupsFilter({
       document.removeEventListener('mousemove', handleGlobalMouseMove);
     };
   }, [hoveredGroup]);
+
+  // Fetch related groups when selectedGroups or imageIds change
+  useEffect(() => {
+    if (selectedGroups.length > 0 || imageIds.length > 0) {
+      fetchRelatedGroups();
+    }
+  }, [selectedGroups, imageIds, group?.groupID, eventUrl]);
 
   const getGroupDisplayName = (group) => {
     return group.label || `Person ${group.groupID}`;

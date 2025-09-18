@@ -155,6 +155,54 @@ export const urlHelpers = {
   },
 };
 
+// Normalization helpers to provide consistent id fields and camelCase refs
+function normalizeFace(face) {
+  if (!face || typeof face !== 'object') return face;
+  const normalized = { ...face };
+  if (normalized.face_id && !normalized.id) normalized.id = normalized.face_id;
+  if (normalized.group_id && !normalized.groupId) normalized.groupId = normalized.group_id;
+  if (normalized.image_id && !normalized.imageId) normalized.imageId = normalized.image_id;
+  return normalized;
+}
+
+function normalizeImage(img) {
+  if (!img || typeof img !== 'object') return img;
+  const normalized = { ...img };
+  const computedId = normalized.id || normalized.imageID;
+  if (computedId && !normalized.id) normalized.id = computedId;
+  if (Array.isArray(normalized.faces)) {
+    normalized.faces = normalized.faces.map(normalizeFace);
+  }
+  return normalized;
+}
+
+function normalizeGroup(group) {
+  if (!group || typeof group !== 'object') return group;
+  const normalized = { ...group };
+  const computedId = normalized.id || normalized.groupID;
+  if (computedId && !normalized.id) normalized.id = computedId;
+  if (!normalized.groupID && normalized.id) normalized.groupID = normalized.id; // legacy alias
+  return normalized;
+}
+
+function normalizeMoment(moment) {
+  if (!moment || typeof moment !== 'object') return moment;
+  const normalized = { ...moment };
+  const computedId = normalized.id || normalized.momentID;
+  if (computedId && !normalized.id) normalized.id = computedId;
+  if (!normalized.momentID && normalized.id) normalized.momentID = normalized.id; // legacy alias
+  return normalized;
+}
+
+function normalizeAlbum(album) {
+  if (!album || typeof album !== 'object') return album;
+  const normalized = { ...album };
+  const computedId = normalized.id || normalized.albumID;
+  if (computedId && !normalized.id) normalized.id = computedId;
+  if (!normalized.albumID && normalized.id) normalized.albumID = normalized.id; // legacy alias
+  return normalized;
+}
+
 // Helper function to get event ID for API calls
 async function getEventIdForApi(eventUrl) {
   if (!eventUrl) {
@@ -173,14 +221,21 @@ export const groupsAPI = {
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups`);
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.groups)) {
+      data.groups = data.groups.map(normalizeGroup);
+    }
+    return data;
   },
 
   // Get specific group
   getById: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
-    return response.data;
+    const data = response.data || {};
+    if (data.group) data.group = normalizeGroup(data.group);
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 
   // Update group
@@ -229,7 +284,11 @@ export const groupsAPI = {
   getRelated: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}/related`, { params });
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.related_groups)) {
+      data.related_groups = data.related_groups.map(normalizeGroup);
+    }
+    return data;
   },
 };
 
@@ -239,14 +298,21 @@ export const momentsAPI = {
   getAll: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments`, { params });
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.moments)) {
+      data.moments = data.moments.map(normalizeMoment);
+    }
+    return data;
   },
 
   // Get specific moment
   getById: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
-    return response.data;
+    const data = response.data || {};
+    if (data.moment) data.moment = normalizeMoment(data.moment);
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 
   // Create moment
@@ -274,7 +340,9 @@ export const momentsAPI = {
   addImages: async (momentId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/moments/${momentId}/images`, { image_ids: imageIds });
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 
   // Remove images from moment
@@ -290,7 +358,9 @@ export const imagesAPI = {
   getDetails: async (imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/images`, { image_ids: imageIds });
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 };
 
@@ -311,7 +381,10 @@ export const albumsAPI = {
   getById: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
-    return response.data;
+    const data = response.data || {};
+    if (data.album) data.album = normalizeAlbum(data.album);
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 
   // Update album
@@ -325,7 +398,9 @@ export const albumsAPI = {
   getImages: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
-    return response.data;
+    const data = response.data || {};
+    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+    return data;
   },
 
   // Add images to album

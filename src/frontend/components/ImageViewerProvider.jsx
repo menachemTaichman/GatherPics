@@ -29,14 +29,16 @@ export function ImageViewerProvider({ children }) {
       image = null,
     } = config || {};
 
-    // Normalize images to an array of IDs or objects
-    const normalized = Array.isArray(images) ? images : [];
+    // Normalize images to an array of IDs (strings)
+    const normalized = Array.isArray(images)
+      ? images.map(it => (typeof it === 'string' ? it : it?.id)).filter(Boolean)
+      : [];
     let nextIndex = index;
 
     // If explicit image provided, prefer it to calculate index
     if (image) {
-      const imageId = typeof image === 'string' ? image : (image.id || image.label || image.name);
-      const found = normalized.findIndex((it) => (typeof it === 'string' ? it : (it.id || it.label || it.name)) === imageId);
+      const imageId = typeof image === 'string' ? image : image?.id;
+      const found = normalized.findIndex(it => it === imageId);
       if (found >= 0) nextIndex = found;
     }
 
@@ -76,11 +78,13 @@ export function ImageViewerProvider({ children }) {
   const updateSession = useCallback((config) => {
     setSession((prev) => {
       const { images = prev.images, index = prev.index, image = null } = config || {};
-      const normalized = Array.isArray(images) ? images : prev.images;
+      const normalized = Array.isArray(images)
+        ? images.map(it => (typeof it === 'string' ? it : it?.id)).filter(Boolean)
+        : prev.images;
       let nextIndex = index;
       if (image) {
-        const imageId = typeof image === 'string' ? image : (image.id || image.label || image.name);
-        const found = normalized.findIndex((it) => (typeof it === 'string' ? it : (it.id || it.label || it.name)) === imageId);
+        const imageId = typeof image === 'string' ? image : image?.id;
+        const found = normalized.findIndex((it) => it === imageId);
         if (found >= 0) nextIndex = found;
       }
       return {
@@ -94,7 +98,7 @@ export function ImageViewerProvider({ children }) {
   const currentImageId = useMemo(() => {
     const current = session.images[session.index];
     if (!current) return null;
-    return typeof current === 'string' ? current : (current.id || current.label || current.name) || null;
+    return current;
   }, [session.images, session.index]);
 
   const value = useMemo(() => ({

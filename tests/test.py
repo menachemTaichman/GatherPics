@@ -311,7 +311,7 @@ def clear_moments_images():
         for image in images:
             event.moments_model.remove_image_from_moment(moment['momentID'], image)
 
-def recreate_view_triggers_and_indexes():
+def drop_views_triggers_and_indexes():
     db = event.db
 
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
@@ -337,7 +337,10 @@ def recreate_view_triggers_and_indexes():
         except Exception as e:
             print(f'Error dropping index {index[0]}: {e}')
 
+
+def create_views_triggers_and_indexes():
     from src.core.db import INDEXES, VIEWS, TRIGGERS
+    db = event.db
 
     # import them again
     for view_name, view_query in VIEWS.items():
@@ -348,6 +351,10 @@ def recreate_view_triggers_and_indexes():
 
     for index in INDEXES:
         db.execute_query('CREATE INDEX if not exists ' + index)
+
+def recreate_views_triggers_and_indexes():
+    drop_views_triggers_and_indexes()
+    create_views_triggers_and_indexes()
 
 # image_ids = ['08637091-df73-4e87-8f0b-42dd759599b0', '4589a114-6d9b-4a8e-a5e2-6ae7a8082bc0', '4a37d6bb-c4c0-4948-99c5-c0ed7a997b28', '52bc7104-f56e-4d98-bafe-fc5ce3b66e5b', '53bed515-c414-416a-80d0-1f97cd64944e', '60601a9e-6d6e-4a0f-8b73-bd917f90200b', 'ba9ca86a-ac92-49e9-b379-63812f355867', 'ff15918c-327f-43c2-a9ee-aa66d906d645']
 # recreate_view_triggers_and_indexes()

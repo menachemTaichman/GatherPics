@@ -72,7 +72,7 @@ export default function RepresentativeImageModal({
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {images.map((img, index) => (
                 <div
-                  key={img.id || img.label || `image-${index}`}
+                  key={img.id}
                   onClick={() => {
                     onImageSelect(img.id);
                     onClose();

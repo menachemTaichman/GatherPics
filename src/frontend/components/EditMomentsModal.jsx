@@ -177,20 +177,20 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (momentID) => {
     try {
       // Call the parent's onDelete function
       if (onDelete) {
-        await onDelete(id);
+        await onDelete(momentID);
       }
       
       // Remove the moment from editingMoments
-      setEditingMoments(prev => prev.filter(m => m.momentID !== id));
+      setEditingMoments(prev => prev.filter(m => m.momentID !== momentID));
       
       // Remove from changedMoments if it was there
       setChangedMoments(prev => {
         const next = new Set(prev);
-        next.delete(id);
+        next.delete(momentID);
         return next;
       });
       
@@ -209,10 +209,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
-  const updateMoment = (id, updates) => {
-    setEditingMoments(prev => prev.map(m => m.momentID === id ? { ...m, ...updates } : m));
+  const updateMoment = (momentID, updates) => {
+    setEditingMoments(prev => prev.map(m => m.momentID === momentID ? { ...m, ...updates } : m));
     // Mark this moment as changed
-    setChangedMoments(prev => new Set([...prev, id]));
+    setChangedMoments(prev => new Set([...prev, momentID]));
   };
 
   const handleEditImages = (moment) => {
@@ -235,23 +235,23 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     
     // Jump to the newly added moment by scrolling to it
     setTimeout(() => {
-      const momentElement = document.querySelector(`[data-moment-id="${newMoment.momentID}"]`);
+      const momentElement = document.querySelector(`[data-moment-momentID="${newMoment.momentID}"]`);
       if (momentElement) {
         momentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 100);
   };
 
-  const handleTitleEdit = (momentId, newTitle) => {
-    updateMoment(momentId, { label: newTitle });
+  const handleTitleEdit = (momentID, newTitle) => {
+    updateMoment(momentID, { label: newTitle });
     setEditingTitle(null);
   };
 
-  const startTitleEdit = (momentId, currentTitle) => {
-    setEditingTitle({ id: momentId, title: currentTitle });
+  const startTitleEdit = (momentID, currentTitle) => {
+    setEditingTitle({ momentID: momentID, title: currentTitle });
   };
 
-  const getRepresentativeImagePath = (imageID) => {
+  const getRepresentativeImagePath = (imageId) => {
     // Note: We need to resolve the event ID from eventUrl for the image URLs
     // For now, we'll use placeholders until we implement proper event ID resolution
     return PLACEHOLDER_DATA_URL;
@@ -294,7 +294,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-3">
             {editingMoments.filter(m => m && m.momentID).map((moment, index) => (
-              <div key={moment.momentID} data-moment-id={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div key={moment.momentID} data-moment-momentID={moment.momentID} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
                     {/* Representative image */}
@@ -337,10 +337,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
                     {/* Inline Editable Title */}
                     <div className="flex-1">
-                      {editingTitle?.id === moment.momentID ? (
+                      {editingTitle?.momentID === moment.momentID ? (
                         <input
                           type="text"
-                          id={`edit-moment-title-${moment.momentID}`}
+                          momentID={`edit-moment-title-${moment.momentID}`}
                           name={`edit-moment-title-${moment.momentID}`}
                           value={editingTitle.title}
                           onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
@@ -438,7 +438,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
                     <textarea
-                      id={`moment-description-${moment.momentID}`}
+                      momentID={`moment-description-${moment.momentID}`}
                       name={`moment-description-${moment.momentID}`}
                       value={moment.description}
                       onChange={(e) => updateMoment(moment.momentID, { description: e.target.value })}
@@ -453,7 +453,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       <label className="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
                       <input
                         type="datetime-local"
-                        id={`moment-start-${moment.momentID}`}
+                        momentID={`moment-start-${moment.momentID}`}
                         name={`moment-start-${moment.momentID}`}
                         value={moment.start}
                         onChange={(e) => updateMoment(moment.momentID, { start: e.target.value })}
@@ -470,7 +470,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       <label className="block text-xs font-medium text-gray-600 mb-1">End Time</label>
                       <input
                         type="datetime-local"
-                        id={`moment-end-${moment.momentID}`}
+                        momentID={`moment-end-${moment.momentID}`}
                         name={`moment-end-${moment.momentID}`}
                         value={moment.end}
                         onChange={(e) => updateMoment(moment.momentID, { end: e.target.value })}
@@ -509,14 +509,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         onClose={() => setShowImageSelector(false)}
         moment={selectedMoment}
         momentImagesMap={momentImagesMap}
-        onImageSelect={(imageID) => {
+        onImageSelect={(imageId) => {
           if (selectedMoment) {
-            if (imageID === '') {
+            if (imageId === '') {
               // Remove representative image
               updateMoment(selectedMoment.momentID, { representative_image: '' });
             } else {
               // Store the representative image as a full API path, not just the image ID
-              const representativeImagePath = getRepresentativeImagePath(imageID);
+              const representativeImagePath = getRepresentativeImagePath(imageId);
               updateMoment(selectedMoment.momentID, { representative_image: representativeImagePath });
             }
           }

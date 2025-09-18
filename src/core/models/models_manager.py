@@ -277,111 +277,71 @@ class ModelsManager:
 
         return result
       
-    ########## TODO: make sure api is using it
-    def get_related_groups(self, group_ids: List[str], mode: str = 'and', only: bool = False, include_archived: bool = False) -> List[str]:
+    def get_related_groups(self, group_ids: List[str], base_image_ids: List[str]) -> List[str]:
         """Return related group IDs ordered by relevance using co-occurrence in images."""
-        if not group_ids:
+        if not base_image_ids or not group_ids:
             return []
 
         group_id_placeholders = ','.join(['?'] * len(group_ids))
-
-        if mode == 'or':
-            accessible_groups = self.db._get_accessible_table_name('groups')
-            accessible_faces = self.db._get_accessible_table_name('faces')
-            query = f'''
-                SELECT
-                    g.groupID,
-                    g.label,
-                    COUNT(DISTINCT CASE WHEN f.imageID IN (SELECT DISTINCT imageID FROM {accessible_faces} WHERE groupID IN ({group_id_placeholders})) THEN f.imageID END) as common_images_count
-                FROM {accessible_groups} g
-                LEFT JOIN {accessible_faces} f ON g.groupID = f.groupID
-                WHERE g.groupID NOT IN ({group_id_placeholders})
-                GROUP BY g.groupID, g.label
-                ORDER BY common_images_count DESC, g.label ASC
-            '''
-            query_params = group_ids + group_ids
-            related_group_rows = self.db.execute_query(query, query_params, include_archived)
-        else:
-            base_image_ids = self.get_filtered_images(group_ids, 'and', False, include_archived)
-            if not base_image_ids:
-                related_group_rows = []
-            else:
-                image_placeholders = ','.join(['?'] * len(base_image_ids))
-                accessible_groups = self.db._get_accessible_table_name('groups')
-                accessible_faces = self.db._get_accessible_table_name('faces')
-                query = f'''
-                    SELECT
-                        g.groupID,
-                        g.label,
-                        COUNT(DISTINCT f.imageID) AS common_images_count
-                    FROM {accessible_groups} g
-                    JOIN {accessible_faces} f ON g.groupID = f.groupID
-                    WHERE f.imageID IN ({image_placeholders})
-                    AND g.groupID NOT IN ({group_id_placeholders})
-                    GROUP BY g.groupID, g.label
-                    ORDER BY common_images_count DESC, g.label ASC
-                '''
-                query_params = base_image_ids + group_ids
-                related_group_rows = self.db.execute_query(query, query_params, include_archived)
-
-        ordered_group_ids = list(group_ids)
-        for row in related_group_rows:
-            ordered_group_ids.append(row[0])
-        return ordered_group_ids
-
-    def get_filtered_images(self, groups_ids: List[str], mode: str = 'and', only: bool = False, include_archived: bool = False) -> List[str]:
-        if not groups_ids:
-            return []
-
-        group_placeholders = ','.join(['?'] * len(groups_ids))
+        image_placeholders = ','.join(['?'] * len(base_image_ids))
+        accessible_groups = self.db._get_accessible_table_name('groups')
         accessible_faces = self.db._get_accessible_table_name('faces')
 
+        query = f'''
+            SELECT
+                g.groupID
+            FROM {accessible_groups} g
+            JOIN {accessible_faces} f ON g.groupID = f.groupID
+            WHERE f.imageID IN ({image_placeholders})
+            AND g.groupID NOT IN ({group_id_placeholders})
+            GROUP BY g.groupID, g.label
+            ORDER BY COUNT(DISTINCT f.imageID) DESC, g.label ASC
+        '''
+        
+        query_params = base_image_ids + group_ids
+        related_group_rows = self.db.execute_query(query, query_params)
+
+        return [row[0] for row in related_group_rows]
+
+    def get_filtered_images(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
+        
+        if not group_ids:
+            return []
+
+        N = len(group_ids)
+        group_placeholders = ','.join(['?'] * N)
+        accessible_faces = self.db._get_accessible_table_name('faces')
+        having_clause = []
+        params = group_ids.copy()
+
+        query = f"""
+            SELECT imageID
+            FROM {accessible_faces}
+        """
+
         if mode == 'and':
-            base_query = f'''
-                SELECT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-                GROUP BY imageID
-                HAVING COUNT(DISTINCT groupID) = ?
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids + [len(groups_ids)], include_archived)]
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN groupID IN ({group_placeholders}) THEN groupID END) = {N}")
         else:
-            base_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE groupID IN ({group_placeholders})
-            '''
-            image_ids = [row[0] for row in self.db.execute_query(base_query, groups_ids, include_archived)]
+            query += f"WHERE groupID IN ({group_placeholders})"
 
-        if only and image_ids:
-            image_placeholders = ','.join(['?'] * len(image_ids))
-            images_with_other_groups_query = f'''
-                SELECT DISTINCT imageID
-                FROM {accessible_faces}
-                WHERE imageID IN ({image_placeholders})
-                AND groupID NOT IN ({group_placeholders})
-            '''
-            images_to_exclude = {row[0] for row in self.db.execute_query(
-                images_with_other_groups_query, image_ids + groups_ids, include_archived
-            )}
-            image_ids = [img_id for img_id in image_ids if img_id not in images_to_exclude]
+        if only:
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN groupID NOT IN ({group_placeholders}) THEN groupID END) = 0")
+            params.extend(group_ids)
 
-        return image_ids
+        if having_clause:
+            query += f" GROUP BY imageID"
+            query += f" HAVING {' AND '.join(having_clause)}"
+
+        return [row[0] for row in self.db.execute_query(query, params)]
 
     # -------- Groups helpers --------
     def is_group_empty(self, group_id: str) -> bool:
         """Bypass profile access: check if group has zero faces (raw faces table)."""
         query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
-        results = self.db.execute_query(query, (group_id,), include_archived=True)
+        results = self.db.execute_query(query, (group_id,))
         count = results[0][0] if results else 0
         return count == 0
     
-    ########## TODO: find other way
-    def get_group_faces(self, group_id: str, include_archived: bool = False) -> List[str]:
-        accessible_table = self.db._get_accessible_table_name('faces')
-        results = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID=?', (group_id,), include_archived)
-        return [row[0] for row in results]
-
     def get_group_faces_in_images(self, group_id: str, image_ids: List[str] | str | None = None) -> List[str]:
         """Return face IDs that belong to a specific group in a specific images."""
         accessible_table = self.db._get_accessible_table_name('faces')

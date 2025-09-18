@@ -3,37 +3,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
-  ArrowRight, 
   ArrowUp,
   ArrowDown,
-  Download, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  EyeOff, 
   Filter, 
-  Settings, 
   Check, 
   X, 
   AlertTriangle,
   User,
-  Users,
-  Clock,
   Image as ImageIcon,
   Grid,
   List,
-  ChevronDown,
-  ChevronUp,
   Plus,
   Minus,
-  RotateCcw,
-  Search,
   Square,
   CheckSquare,
-  CheckCheck,
-  ShoppingBag,
-  Heart,
-  Archive
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import { useImageViewer } from './ImageViewerProvider';
@@ -239,7 +222,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 // Create a map of existing image IDs for efficient lookup
                 const existingImageIds = new Set(prevImages.map(image => image.id));
                 
-                              // Filter out images that already exist in the current array
+                // Filter out images that already exist in the current array
               const newImages = transferResult.transferred_images_data.filter(
                 image => !existingImageIds.has(image.id) && transferResult.images_to_add_to_target.includes(image.id)
               );
@@ -490,7 +473,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const getSelectedFaceIds = () => {
     const selectedFaceIds = new Set();
-          for (const imageId of selectedImages) {
+    for (const imageId of selectedImages) {
       const image = sortedImages.find(p => p.id === imageId);
       if (image && image.faces) {
         image.faces.forEach(face => {
@@ -1013,6 +996,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               onReset={handleFilterReset}
               isVisible={filterVisible}
               eventUrl={eventUrl}
+              imageIds={sortedImages.map(img => img.id)}
+              onRelatedGroupsUpdate={setRelatedGroups}
             />
           )}
         </AnimatePresence>
@@ -1054,7 +1039,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
             >
               {sortedImages.map((image, index) => (
                 <motion.div
-                  key={`${image.id || 'unknown'}-${index}`}
+                  key={`${(image.id || 'unknown')}-${index}`}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -1065,6 +1050,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     <SingleImageTile
                       image={image}
                       aspectClass={'square'}
+                      imageFit={showCrops ? 'contain' : 'cover'}
                       thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                       selectionMode={selectionMode}
                       isSelected={selectedImages.has(image.id)}

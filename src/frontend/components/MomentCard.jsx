@@ -53,7 +53,7 @@ const MomentCard = forwardRef(({
   urlHelpers
 }, ref) => {
   // Calculate selection stats for this moment
-  const momentimageKeys = images.map(image => `${moment.momentID}:${image.label}`);
+  const momentimageKeys = images.map(image => `${moment.momentID}:${image.id}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
@@ -173,8 +173,8 @@ const MomentCard = forwardRef(({
                 }
                 
                 return (
-                  <motion.div
-                    key={image.id}
+                <motion.div
+                  key={image.id}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
@@ -187,8 +187,8 @@ const MomentCard = forwardRef(({
                         aspectClass={aspectRatioClass}
                         thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
                         selectionMode={selectionMode || viewMode === 'list'}
-                        isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
-                        onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
+                        isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
+                        onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
                         onOpen={() => onOpenImageViewer(images, image, index)}
                         isFavorite={isImageFavorite(image)}
                         onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
@@ -201,8 +201,8 @@ const MomentCard = forwardRef(({
                       <SingleImageRow
                         image={image}
                         thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
-                        isSelected={globalSelection.has(`${moment.momentID}:${image.label}`)}
-                        onToggleSelect={(e) => onImageSelect(image.label, moment.momentID, e)}
+                        isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
+                        onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
                         onOpen={() => onOpenImageViewer(images, image, index)}
                       />
                     )}

@@ -199,18 +199,29 @@ def get_related_groups(event_id, group_id):
     if not event.models_manager.get_summary('groups', group_id):
         return not_found(f"Group {group_id} not found or not accessible")
 
-    mode = request.args.get('mode', 'and')
-    only = _parse_bool(request.args.get('only'), False)
-
-    related_group_ids = event.models_manager.get_related_groups([group_id], mode=mode, only=only)
+    image_ids_str = request.args.get('image_ids', '')
+    selected_groups_str = request.args.get('selected_groups', '')
     
-    if not related_group_ids:
+    # Parse image_ids
+    image_ids = image_ids_str.split(',') if image_ids_str else []
+    
+    # Parse selected_groups and combine with main group_id
+    selected_groups = selected_groups_str.split(',') if selected_groups_str else []
+    # Combine main group_id with selected groups for the group_ids parameter
+    group_ids = [group_id] + selected_groups
+
+    related_group_ids = event.models_manager.get_related_groups(
+        group_ids=group_ids,
+        base_image_ids=image_ids
+    )
+    
+    # The original group is always first in the list
+    ordered_group_ids = [group_id] + related_group_ids
+    
+    if not ordered_group_ids:
         return jsonify({"related_groups": []})
 
-    related_groups_summary = event.models_manager.get_summary('groups', related_group_ids)
-    
-    group_map = {g['groupID']: g for g in related_groups_summary}
-    ordered_groups = [group_map[gid] for gid in related_group_ids if gid in group_map]
+    ordered_groups = event.models_manager.get_summary('groups', ordered_group_ids)
 
     return jsonify({"related_groups": ordered_groups})
 
