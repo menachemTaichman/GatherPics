@@ -19,6 +19,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const { urlHelpers } = useEventUrls(eventUrl);
   const lastTransferResult = useDataStore(state => state.lastTransferResult);
   const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
+  const groupsById = useDataStore(state => state.entities?.groupsById || {});
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -308,6 +309,21 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           setFaces(info.faces || []);
           setMomentInfo(info.moment || null);
           setImageAlbums(info.albums || []);
+          try {
+            const store = useDataStore.getState();
+            const seen = new Set();
+            const items = [];
+            (info.faces || []).forEach((f) => {
+              const gid = f && (f.groupID || f.group_id);
+              if (!gid || seen.has(gid)) return;
+              seen.add(gid);
+              const label = f.group_label || (groupsById[gid] && groupsById[gid].label) || undefined;
+              items.push(label ? { groupID: gid, label } : { groupID: gid });
+            });
+            if (items.length > 0) {
+              store.applyChanges([{ type: 'UPSERT', entity: 'group', items }]);
+            }
+          } catch {}
         } else {
           setImageInfo(null);
           setFaces([]);
@@ -416,12 +432,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleFaceNavigation = (face) => {
-    if (face.groupID && groups) {
-      const group = groups.find(g => g.groupID === face.groupID);
-      if (group) {
-        navigate(`/persons/${encodeURIComponent(group.label)}`);
-        onClose();
-      }
+    const gid = face?.groupId || face?.groupID;
+    const label = gid ? groupsById[gid]?.label : '';
+    if (label) {
+      navigate(`/persons/${encodeURIComponent(label)}`);
+      onClose();
     }
   };
 
@@ -468,7 +483,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     e.stopPropagation();
     e.preventDefault();
     const groupLabel = getGroupLabel(face);
-    if (!groupLabel || groupLabel === 'Unknown Person') return;
+    if (!groupLabel) return;
     navigate(`/${eventUrl}/persons/${encodeURIComponent(groupLabel)}`);
     onClose();
   };
@@ -598,14 +613,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getFaceImageSrc = (face) => {
-    if (!face?.faceID || !urlHelpers) return PLACEHOLDER_DATA_URL;
-    return urlHelpers.getFaceCropUrl(face.faceID);
+    const fid = face?.id || face?.faceID;
+    if (!fid || !urlHelpers) return PLACEHOLDER_DATA_URL;
+    return urlHelpers.getFaceCropUrl(fid);
   };
 
   const getGroupLabel = (face) => {
-    if (!face?.groupID || !groups) return 'Unknown Person';
-    const group = groups.find(g => g.groupID === face.groupID);
-    return group?.label || `Person ${face.groupID}`;
+    const gid = face?.groupId || face?.groupID;
+    const label = gid ? (groupsById[gid]?.label || '') : '';
+    return label;
   };
 
 
@@ -708,7 +724,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }
                       return (
                         <div
-                          key={`face-rect-${face.faceID || `index-${index}`}-${rectangleKey}-${index}-${imageId}`}
+                          key={`face-rect-${(face.id || face.faceID || `index-${index}`)}-${rectangleKey}-${index}-${imageId}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -1053,7 +1069,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                           <div className="space-y-2">
                             {faces.map((face, index) => (
                               <div
-                                key={`face-list-${face.faceID || `index-${index}`}-${face.groupID || 'unknown'}-${index}-${imageId}`}
+                                key={`face-list-${(face.id || face.faceID || `index-${index}`)}-${(face.groupId || face.groupID || 'unknown')}-${index}-${imageId}`}
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                 onClick={() => handleFaceClick(index)}
                               >

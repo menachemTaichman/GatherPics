@@ -26,7 +26,11 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
     async function loadGroups() {
         try {
             const res = await groupsAPI.getAll(eventUrl);
-            setGroups(res.groups || []);
+            // Populate normalized store
+            const store = useDataStore.getState();
+            const groups = res.groups || [];
+            store.applyChanges([{ type: 'UPSERT', entity: 'group', items: groups }]);
+            setGroups(groups);
         } catch (e) {
             console.error('Failed to load groups', e);
         }

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useDataStore, handleDataChange } from './dataManager';
+import { useDataStore } from './dataManager';
 import { resolveEventId } from './eventResolver';
 import jwtService from './jwtService';
 
@@ -26,14 +26,12 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle change instructions
 api.interceptors.response.use(
   (response) => {
-    // Process change instructions from backend
     if (response.data && response.data.changes) {
-      response.data.changes.forEach(change => {
-        handleDataChange(change.type, change.data);
-      });
+      const store = useDataStore.getState();
+      const changes = response.data.changes;
+      store.applyChanges(Array.isArray(changes) ? changes : []);
     }
     return response;
   },
@@ -44,7 +42,6 @@ api.interceptors.response.use(
 
 // URL construction helpers - centralized
 export const urlHelpers = {
-  // Get full API URL for event-scoped endpoints
   getEventUrl: async (eventUrl, endpoint) => {
     const eventId = await resolveEventId(eventUrl);
     if (!eventId) {
@@ -53,7 +50,6 @@ export const urlHelpers = {
     return `${API_BASE}/api/events/${eventId}${endpoint}`;
   },
   
-  // Get image URLs (async versions for when you need to resolve eventUrl)
   getDisplayImageUrl: async (eventUrl, imageId) => {
     const eventId = await resolveEventId(eventUrl);
     if (!eventId) {
@@ -90,7 +86,6 @@ export const urlHelpers = {
     return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
   },
   
-  // Get relative URLs (for use in components that need relative paths)
   getRelativeDisplayUrl: async (eventUrl, imageId) => {
     const eventId = await resolveEventId(eventUrl);
     if (!eventId) {
@@ -113,8 +108,6 @@ export const urlHelpers = {
     return `/api/events/${eventId}/faces/${faceId}.webp`;
   },
 
-  // Synchronous versions that work with already-resolved eventId
-  // These are for use in components where eventId is already available
   getDisplayImageUrlSync: (eventId, imageId) => {
     return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp`;
   },
@@ -131,7 +124,6 @@ export const urlHelpers = {
     return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
   },
   
-  // Synchronous relative URLs
   getRelativeDisplayUrlSync: (eventId, imageId) => {
     return `/api/events/${eventId}/display/${imageId}.webp`;
   },
@@ -191,7 +183,6 @@ function normalizeAlbum(album) {
   return normalized;
 }
 
-// Helper function to get event ID for API calls
 async function getEventIdForApi(eventUrl) {
   if (!eventUrl) {
     throw new Error('Event URL is required');
@@ -205,7 +196,6 @@ async function getEventIdForApi(eventUrl) {
 
 // Groups API
 export const groupsAPI = {
-  // Get all groups
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups`);
@@ -216,7 +206,6 @@ export const groupsAPI = {
     return data;
   },
 
-  // Get specific group
   getById: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
@@ -226,21 +215,18 @@ export const groupsAPI = {
     return data;
   },
 
-  // Update group
   update: async (groupId, updates, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/groups/${groupId}`, updates);
     return response.data;
   },
 
-  // Delete group
   delete: async (groupId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/groups/${groupId}`);
     return response.data;
   },
 
-  // Check group name conflict
   checkName: async (label, excludeGroupId = '', eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/groups/check-name`, {
@@ -250,7 +236,6 @@ export const groupsAPI = {
     return response.data;
   },
 
-  // Transfer faces between groups
   transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventUrl, newGroupName = null) => {
     const eventId = await getEventIdForApi(eventUrl);
     const requestData = {
@@ -268,7 +253,6 @@ export const groupsAPI = {
     return response.data;
   },
 
-  // Get related groups (no groupId in path; relies on selected_groups/image_ids)
   getRelated: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/related`, { params });
@@ -282,7 +266,6 @@ export const groupsAPI = {
 
 // Moments API
 export const momentsAPI = {
-  // Get all moments
   getAll: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments`, { params });
@@ -293,7 +276,6 @@ export const momentsAPI = {
     return data;
   },
 
-  // Get specific moment
   getById: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
@@ -303,28 +285,24 @@ export const momentsAPI = {
     return data;
   },
 
-  // Create moment
   create: async (momentData, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/moments`, momentData);
     return response.data;
   },
 
-  // Update moment
   update: async (momentId, updates, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/moments/${momentId}`, updates);
     return response.data;
   },
 
-  // Delete moment
   delete: async (momentId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/moments/${momentId}`);
     return response.data;
   },
 
-  // Add images to moment
   addImages: async (momentId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/moments/${momentId}/images`, { image_ids: imageIds });
@@ -333,7 +311,6 @@ export const momentsAPI = {
     return data;
   },
 
-  // Remove images from moment
   removeImages: async (momentId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/moments/${momentId}/images`, { data: { image_ids: imageIds } });
@@ -354,7 +331,6 @@ export const imagesAPI = {
 
 // Albums API
 export const albumsAPI = {
-  // Get all albums
   getAll: async (eventUrl, options = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const params = {};
@@ -365,7 +341,6 @@ export const albumsAPI = {
     return response.data;
   },
 
-  // Get specific album
   getById: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
@@ -375,14 +350,12 @@ export const albumsAPI = {
     return data;
   },
 
-  // Update album
   update: async (albumId, updates, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/albums/${albumId}`, updates);
     return response.data;
   },
 
-  // Get album images
   getImages: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
@@ -391,21 +364,18 @@ export const albumsAPI = {
     return data;
   },
 
-  // Add images to album
   addImages: async (albumId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/albums/${albumId}/images`, { image_ids: imageIds });
     return response.data;
   },
 
-  // Remove images from album
   removeImages: async (albumId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/albums/${albumId}/images`, { data: { image_ids: imageIds } });
     return response.data;
   },
 
-  // Favorites helpers (uses default album label lookups client-side)
   toggleFavorite: async (imageIds, isFavorite, eventUrl) => {
     const store = useDataStore.getState();
     let favoritesAlbumId = store.favoritesAlbumId;
@@ -432,7 +402,6 @@ export const albumsAPI = {
     }
   },
 
-  // Archive helpers
   addToArchive: async (imageIds, eventUrl) => {
     const store = useDataStore.getState();
     let archiveAlbumId = store.archiveAlbumId;
@@ -455,7 +424,6 @@ export const albumsAPI = {
     return albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
   },
 
-  // Toggle archive status for images
   toggleArchive: async (imageIds, isArchived, eventUrl) => {
     const store = useDataStore.getState();
     let archiveAlbumId = store.archiveAlbumId;
@@ -522,14 +490,9 @@ export const optimisticUpdates = {
     
     try {
       const result = await groupsAPI.update(groupId, updates, eventUrl);
-      
-      // Process any change instructions from the backend
-      if (result.changes) {
-        result.changes.forEach(change => {
-          handleDataChange(change.type, change.data);
-        });
+      if (Array.isArray(result.changes)) {
+        store.applyChanges(result.changes);
       }
-      
       return result;
     } catch (error) {
       // Rollback on error
@@ -570,10 +533,10 @@ export const optimisticUpdates = {
 
     try {
       const result = await momentsAPI.create(momentData, eventUrl);
-      
-      // Update the temporary moment with the real data from the server
       store.updateMoment(tempId, result.moment);
-      
+      if (Array.isArray(result.changes)) {
+        store.applyChanges(result.changes);
+      }
       return result;
     } catch (error) {
       // Rollback on error
@@ -595,6 +558,9 @@ export const optimisticUpdates = {
     
     try {
       const result = await momentsAPI.update(momentId, updates, eventUrl);
+      if (Array.isArray(result.changes)) {
+        store.applyChanges(result.changes);
+      }
       return result;
     } catch (error) {
       // Rollback on error

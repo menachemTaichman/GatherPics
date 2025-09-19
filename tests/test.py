@@ -364,5 +364,6 @@ album_id = event.models_manager.get_favorites_album()
 #image_ids = event.models_manager.get_sub_entities('albums', album_id)
 
 image_ids = [image_id]
+group_ids = ['7a81acd3-98ee-40c8-aa66-71b60b34bda8', '428a3484-63f2-44c6-86ee-2110d2434b59']
 result = event.models_manager.get_images(image_ids)
 print(result)

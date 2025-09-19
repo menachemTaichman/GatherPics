@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
+import { useDataStore } from '../utils/dataManager';
 import ImageViewer from './ImageViewer';
 
 const ImageViewerContext = createContext(null);
@@ -110,6 +111,39 @@ export function ImageViewerProvider({ children }) {
     currentImageId,
     currentIndex: session.index,
   }), [open, close, navigate, updateSession, isOpen, currentImageId, session.index]);
+
+  // React to store changes: if current image leaves the group's grid, advance/close
+  useEffect(() => {
+    const unsubscribe = useDataStore.subscribe((state) => {
+      try {
+        if (!isOpen) return;
+        const groupId = session.currentGroupId;
+        if (!groupId) return;
+        const grid = (state.relations?.groupImages?.[groupId] || []);
+        if (!Array.isArray(grid)) return;
+        const visibleSet = new Set(grid);
+        const filtered = (session.images || []).filter((id) => visibleSet.has(id));
+        if (filtered.length === 0) {
+          setIsOpen(false);
+          return;
+        }
+        // If list changed or current id removed, update session gracefully
+        const currentId = session.images[session.index];
+        const nextIndex = Math.min(
+          currentId && visibleSet.has(currentId) ? filtered.indexOf(currentId) : Math.max(0, Math.min(session.index, filtered.length - 1)),
+          filtered.length - 1
+        );
+        if (
+          filtered.length !== session.images.length ||
+          filtered.some((id, i) => id !== session.images[i]) ||
+          filtered.indexOf(currentId) !== session.index
+        ) {
+          setSession((prev) => ({ ...prev, images: filtered, index: Math.max(0, nextIndex) }));
+        }
+      } catch {}
+    });
+    return unsubscribe;
+  }, [isOpen, session.currentGroupId, session.images, session.index]);
 
   return (
     <ImageViewerContext.Provider value={value}>

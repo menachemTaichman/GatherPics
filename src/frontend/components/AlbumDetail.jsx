@@ -5,13 +5,14 @@ import { ArrowLeft, ArrowUp, ArrowDown, Minus, Plus, Image as ImageIcon, Trash2 
 import { useSetting } from '../utils/useSettings';
 import { albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 
 export default function AlbumDetail({ showToast }) {
   const { album_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const { urlHelpers } = useEventUrls(eventUrl);
   const [album, setAlbum] = useState(null);
-  const [images, setImages] = useState([]);
+  const store = useDataStore.getState();
   const [imageClasses, setImageClasses] = useState({});
   const [sortOrder, setSortOrder] = useSetting('albumDetail_sortOrder', 'asc');
   const [imageSize, setImageSize] = useSetting('albumDetail_imageSize', 1.0);
@@ -29,8 +30,16 @@ export default function AlbumDetail({ showToast }) {
           return;
         }
         setAlbum(found);
+        // Seed store with album entity
+        store.applyChanges([{ type: 'UPSERT', entity: 'album', items: [found] }]);
+        // Fetch album images and seed store relations
         const res = await albumsAPI.getImages(found.albumID, eventUrl);
-        setImages(res.images || []);
+        const imgs = res.images || [];
+        const ids = imgs.map(i => i && i.id).filter(Boolean);
+        const changes = [];
+        if (imgs.length > 0) changes.push({ type: 'UPSERT', entity: 'image', items: imgs });
+        changes.push({ type: 'RELATION_SET', relation: 'album.images', parentId: found.albumID, ids });
+        store.applyChanges(changes);
       } catch (e) {
         console.error('Failed to load album', e);
       }
@@ -38,15 +47,16 @@ export default function AlbumDetail({ showToast }) {
     if (eventUrl && album_name) fetchAlbum();
   }, [eventUrl, album_name, navigate]);
 
+  const albumImages = useDataStore(state => (album?.albumID ? storeSelectors.albumImages(state, album.albumID) : []));
   const sortedImages = useMemo(() => {
-    const arr = [...images];
+    const arr = [...albumImages];
     arr.sort((a, b) => {
       const da = (a.date_taken || '');
       const db = (b.date_taken || '');
       return sortOrder === 'asc' ? String(da).localeCompare(String(db)) : String(db).localeCompare(String(da));
     });
     return arr;
-  }, [images, sortOrder]);
+  }, [albumImages, sortOrder]);
 
   const toggleSelection = (id) => {
     const next = new Set(selection);
@@ -58,13 +68,8 @@ export default function AlbumDetail({ showToast }) {
     if (!album || selection.size === 0) return;
     try {
       const result = await albumsAPI.removeImages(album.albumID, Array.from(selection), eventUrl);
-      if (result.success && result.removed_ids) {
-        setImages(prev => prev.filter(img => !result.removed_ids.includes(img.id)));
-        setSelection(new Set());
-        showToast('Removed from album', 'success');
-      } else {
-        throw new Error('Failed to remove images');
-      }
+      setSelection(new Set());
+      showToast('Removed from album', 'success');
     } catch (e) {
       showToast('Failed to remove from album', 'error');
     }
@@ -91,7 +96,7 @@ export default function AlbumDetail({ showToast }) {
             </Link>
             <div className="flex items-center space-x-3">
               <h1 className="text-3xl font-bold text-gray-900">{album.label}</h1>
-              <p className="text-gray-600">{images.length} images</p>
+              <p className="text-gray-600">{albumImages.length} images</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">

@@ -303,6 +303,7 @@ class ModelsManager:
                     json_group_array(
                         json_object(
                             'faceID', f.faceID,
+                            'group_label', g.label,
                             'imageID', f.imageID,
                             'width', f.width,
                             'height', f.height,
@@ -312,6 +313,7 @@ class ModelsManager:
                         )
                     ) AS faces_json
                 FROM accessible_faces f
+                INNER JOIN accessible_groups g ON f.groupID = g.groupID
                 WHERE f.imageID IN ({image_placeholders})
                 GROUP BY f.imageID
             )
@@ -400,9 +402,8 @@ class ModelsManager:
             return []
 
         accessible_faces = STRUCTURE['faces']['accessible_table']
-        images_table = 'groups_images'
-        accessible_images = STRUCTURE[images_table]['accessible_table']
-        fields_as_sub_table = AppDB.get_fields_as_sub_table(images_table, 'i')
+        accessible_images = STRUCTURE['images']['accessible_table']
+        fields_as_sub_table = AppDB.get_fields_as_sub_table('groups_images', 'i').replace(', i.representative_face', '')
 
         N = len(group_ids)
         M = min(N, 8)
@@ -410,38 +411,39 @@ class ModelsManager:
         having_clause = []
         params = []
 
-        priority_case = "CASE i.groupID " + " ".join(
-            f"WHEN ? THEN {idx+1}" for idx in range(M)
-        ) + " ELSE 9999 END"
-        params.extend(group_ids[:M])
+        priority_case = "CASE sf.groupID " + " ".join(f"WHEN ? THEN {idx+1}" for idx in range(M)) + " ELSE 9999 END"
 
         query = f"""
-            WITH ranked AS (
-                SELECT i.*, 
-                    ROW_NUMBER() OVER (
-                        PARTITION BY i.imageID
-                        ORDER BY {priority_case}
-                    ) AS rn
-                FROM {accessible_faces} f
-                INNER JOIN {accessible_images} i ON f.imageID = i.imageID
-            )
-            SELECT DISTINCT {fields_as_sub_table}
-            FROM ranked i
-            WHERE i.rn = 1
+            SELECT
+                {fields_as_sub_table},
+                (
+                    SELECT sf.faceID
+                    FROM {accessible_faces} sf
+                    WHERE sf.imageID = i.imageID AND sf.groupID IN ({group_placeholders})
+                    GROUP BY sf.imageID, sf.groupID
+                    ORDER BY
+                        {priority_case},
+                        (sf.width * sf.height) DESC
+                    LIMIT 1
+                ) as representative_face
+            FROM {accessible_faces} f
+            INNER JOIN {accessible_images} i ON f.imageID = i.imageID
         """
+        params.extend(group_ids)
+        params.extend(group_ids[:M])
 
         if mode == 'and':
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN i.groupID IN ({group_placeholders}) THEN i.groupID END) = {N}")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.groupID IN ({group_placeholders}) THEN f.groupID END) = {N}")
         else:
-            query += f"WHERE i.groupID IN ({group_placeholders})"
+            query += f"WHERE f.groupID IN ({group_placeholders})"
 
         params.extend(group_ids)
         if only:
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN i.groupID NOT IN ({group_placeholders}) THEN i.groupID END) = 0")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.groupID NOT IN ({group_placeholders}) THEN f.groupID END) = 0")
             params.extend(group_ids)
 
         if having_clause:
-            query += f" GROUP BY i.imageID"
+            query += f" GROUP BY f.imageID"
             query += f" HAVING {' AND '.join(having_clause)}"
 
         limit_clause = ''
@@ -454,285 +456,19 @@ class ModelsManager:
 
         return self.db.execute_query(query, params, include_columns=True)
 
-    ######## TODO: delete after moving to edit_sub_entities
-    def is_group_empty(self, group_id: str) -> bool:
-        """Bypass profile access: check if group has zero faces (raw faces table)."""
-        query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
-        results = self.db.execute_query(query, (group_id,))
-        count = results[0][0] if results else 0
-        return count == 0
-    
-    def get_group_faces_in_images(self, group_id: str, image_ids: List[str] | str | None = None) -> List[str]:
-        """Return face IDs that belong to a specific group in a specific images."""
-        accessible_table = STRUCTURE['faces']['accessible_table']
-        where_clause = 'WHERE groupID = ?'
-        if not image_ids:
-            image_ids = []
-        else:
-            where_clause += f'AND imageID IN ({','.join(['?'] * len(image_ids))})'
-            if isinstance(image_ids, str):
-                image_ids = [image_ids]
-        query = f'SELECT faceID FROM {accessible_table} {where_clause}'
-        results = self.db.execute_query(query, (group_id, *image_ids))
-        return [row[0] for row in results]
-
-    ######## TODO: delete after moving to edit_sub_entities
-    def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> dict[str, List[str]]:
-        if not face_ids or not group_id:
-            return {'updated_groups': [], 'deleted_groups': []}
-
-        accessible_table = STRUCTURE['faces']['accessible_table']
-        placeholders = ','.join(['?'] * len(face_ids))
-        query = f'SELECT DISTINCT groupID FROM {accessible_table} WHERE faceID IN ({placeholders})'
-        
-        deleted_groups = []
-        updated_groups = []
-        old_groups = self.db.execute_query(query, face_ids)        
-        for old_group in old_groups:
-            old_group_id = old_group[0]
-            if self.is_empty('groups', old_group_id):
-                self.delete('groups', old_group_id)
-                deleted_groups.append(old_group_id)
-            else:
-                self.ensure_representative('groups', old_group_id)
-                updated_groups.append(old_group_id)
-
-        self.edit('faces', face_ids, {'groupID': group_id})
-        self.ensure_representative('groups', group_id)
-  
-        return {'updated_groups': updated_groups, 'deleted_groups': deleted_groups}
-
-    ########## TODO: delete after moving to edit_sub_entities
-    def transfer_faces(
-        self,
-        face_ids: List[str],
-        *,
-        target_group_id: str | None = None,
-        new_group_name: str | None = None,
-    ) -> Dict:
+    # -------- Faces helpers --------
+    def transfer_faces(self, face_ids: List[str], *, target_group_id: str | None = None, new_group_name: str | None = None) -> Dict:
         
         if new_group_name:
             if self.is_exists('groups', {'label': new_group_name}):
                 raise ValueError(f"Group name '{new_group_name}' already exists")
             target_group_id = self.add('groups', {'label': new_group_name})
 
-        faces_ids, old_group_ids = self.edit_sub_entities('faces', face_ids, {'groupID': target_group_id}, add=True)
+        faces_ids, old_group_ids = self.edit_sub_entities('faces', target_group_id, face_ids, add=True)
 
         return faces_ids, old_group_ids, target_group_id
 
-        source_group = self.get_summary('groups', source_group_id)
-        if not source_group:
-            raise ValueError(f"Source group {source_group} not found")
-        if not face_id and not image_ids:
-            raise ValueError("face_id or image_ids is required")
-
-        faces_ids = [face_id] if face_id else self.get_group_faces_in_images(source_group_id, image_ids)
-        
-        if faces_ids:
-            if not target_group_id:
-                if self.is_exists('groups', {'label': new_group_name}):
-                    raise ValueError(f"Group name '{new_group_name}' already exists")
-                
-                target_group_id = self.add('groups', {'label': new_group_name})
-            
-            target_group = self.get_summary('groups', target_group_id)
-            if not target_group:
-                raise ValueError(f"Target group {target_group_id} not found")
-            
-            added_to_target = self.add_faces_to_group(target_group_id, faces_ids)
-
-
-        target_group_id_was_provided = target_group_id is not None
-        if target_group_id:
-            target_group = self.get_summary('groups', target_group_id)
-            if not target_group:
-                raise ValueError(f"Target group {target_group_id} not found")
-        else:
-            if not new_group_name:
-                raise ValueError("new_group_name is required when target_group_id is not provided")
-            conflict_check = self.is_exists('groups', {'label': new_group_name})
-            if conflict_check:
-                raise ValueError(f"Group name '{new_group_name}' already exists")
-            # Create new group with empty representative; it will be set by add_faces_to_group
-            created_id = self.add('groups', {
-                'label': new_group_name,
-                'representative_face': ''
-            })
-            target_group_id = created_id
-
-        target_group = self.get_summary('groups', target_group_id)
-        target_representative_before = target_group.get('representative_face') if target_group else ''
-
-        # Determine which images are genuinely new for the target group
-        images_to_add_to_target = set(original_affected_images)
-        if target_group and 'image_ids' in target_group:
-            existing_target_images = set(target_group['image_ids'])
-            images_to_add_to_target.difference_update(existing_target_images)
-
-        transferred_faces_ids = self.add_faces_to_group(target_group_id, face_ids)
-
-        # Determine which of the affected images no longer have any faces from the source group
-        images_to_remove_from_source = set()
-        for image_id in original_affected_images:
-            if not self.get_group_faces_in_image(image_id, source_group, True):
-                images_to_remove_from_source.add(image_id)
-
-        old_representative = old_group.get('representative_face', '')
-
-        old_group_deleted = False
-        if self.is_group_empty(source_group):
-            self.delete('groups', source_group)
-            old_group_deleted = True
-
-        updated_source_group = None
-        if not old_group_deleted:
-            updated_source_group = self.get_summary('groups', source_group)
-
-        updated_target_group = self.get_summary('groups', target_group_id)
-        target_representative_after = updated_target_group.get('representative_face') if updated_target_group else ''
-
-        result = {
-            'target_group_id': target_group_id,
-            'old_group_deleted': old_group_deleted,
-            'transferred_faces_ids': transferred_faces_ids,
-            'images_to_remove_from_source': list(images_to_remove_from_source),
-            'images_to_add_to_target': list(images_to_add_to_target),
-            'updated_source_group': updated_source_group,
-            'updated_target_group': updated_target_group,
-            'representatives': {
-                'source_before': old_representative,
-                'source_after': (updated_source_group or {}).get('representative_face') if not old_group_deleted else '',
-                'target_before': target_representative_before,
-                'target_after': target_representative_after,
-            }
-        }
-
-        if not target_group_id_was_provided and new_group_name is not None:
-            result['new_group_name'] = new_group_name
-
-        # Get complete data for all images affected by the transfer to update ImageViewer
-        transferred_image_ids = set()
-        if result.get('transferred_faces_ids'):
-            accessible_faces = STRUCTURE['faces']['accessible_table']
-            placeholders = ','.join(['?'] * len(result['transferred_faces_ids']))
-            query = f"SELECT DISTINCT imageID FROM {accessible_faces} WHERE faceID IN ({placeholders})"
-            rows = self.db.execute_query(query, (*result['transferred_faces_ids'],), True)
-            for row in rows:
-                transferred_image_ids.add(row[0])
-        
-        result['transferred_image_ids'] = list(original_affected_images)
-
-        return result
-
-    # -------- Moments helpers --------
-    ######## TODO: delete after moving to edit_sub_entities
-    def add_images_to_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
-        if not image_ids:  # Guard against empty lists
-            return []
-        accessible_table = STRUCTURE['images']['accessible_table']
-        image_placeholders = ','.join(['?'] * len(image_ids))   
-        query = f'UPDATE {accessible_table} SET momentID=? WHERE imageID IN ({image_placeholders})'
-        updated_ids = self.db.execute_query(query, (moment_id, *image_ids), True)
-
-        representative_image = self.get_summary('moments', moment_id).get('representative_image')
-        new_representative_image = ''
-        if len(image_ids) > 0:
-            new_representative_image = image_ids[0]
-        # Set the first image ID as representative image if none exists
-        if (representative_image == '' or representative_image is None) and new_representative_image:
-            self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
-
-        accessible_table = STRUCTURE['moments']['accessible_table']
-        old_moments = self.db.execute_query(f'SELECT DISTINCT momentID, representative_image FROM {accessible_table} WHERE momentID != ? AND representative_image IN ({image_placeholders})', (moment_id, *image_ids), True)
-        for moment_id, old_representative_image in old_moments:
-            if old_representative_image in image_ids:
-                remaining_images = self.get_sub_entities('moments', moment_id)
-                if len(remaining_images) > 0:
-                    new_representative_image = remaining_images[0]
-                else:
-                    new_representative_image = ''
-                self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
-        
-        return updated_ids
-
-    ######## TODO: delete after moving to edit_sub_entities
-    def remove_images_from_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
-        if not image_ids:  # Guard against empty lists
-            return []
-        accessible_table = STRUCTURE['images']['accessible_table']
-        image_placeholders = ','.join(['?'] * len(image_ids))
-        query = f'UPDATE {accessible_table} SET momentID=NULL WHERE imageID IN ({image_placeholders}) AND momentID=?'
-        updated_ids = self.db.execute_query(query, (*image_ids, moment_id), True)
-
-        # Check if the current representative image is being removed
-        current_representative_image = self.get_summary('moments', moment_id).get('representative_image')
-        if current_representative_image and current_representative_image in image_ids:
-            # Find a new representative image from remaining images
-            remaining_images = self.get_sub_entities('moments', moment_id)
-            new_representative_image = ''
-            if remaining_images and len(remaining_images) > 0:
-                new_representative_image = remaining_images[0]
-            self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
-        
-        return updated_ids
-    
     # -------- Albums helpers --------
-    ######## TODO: delete after moving to edit_sub_entities
-    def add_images_to_album(self, album_id: str, image_ids: List[str]) -> Dict[str, Union[List[str], List[str]]]:
-        """Add images to an album. Returns added image IDs and images that are now archived."""
-        if not image_ids:
-            return {'added_ids': [], 'archived_ids': []}
-            
-        already_in_album = self.get_sub_entities('albums', album_id)
-        image_ids = [image_id for image_id in image_ids if image_id not in already_in_album]
-        
-        if not image_ids:
-            return {'added_ids': [], 'archived_ids': []}
-        
-        rows = [{'albumID': album_id, 'imageID': image_id} for image_id in image_ids]
-        # inserted_pairs is a list of (album_id, image_id) tuples
-        inserted_pairs = self.db.insert('albums_images', rows)
-        added_ids = [pair[1] for pair in inserted_pairs]
-        
-        if not added_ids:
-            return {'added_ids': [], 'archived_ids': []}
-        
-        archived_ids = []
-        image_placeholders = ','.join(['?'] * len(added_ids))
-        query = f'''
-            SELECT imageID
-            FROM images_with_albums
-            WHERE imageID IN ({image_placeholders}) AND is_archived = 1
-        '''
-        results = self.db.execute_query(query, (*added_ids,))
-        if results:
-            archived_ids.extend([row[0] for row in results])
-
-        return {'added_ids': added_ids, 'archived_ids': archived_ids}
-
-    ######## TODO: delete after moving to edit_sub_entities
-    def remove_images_from_album(self, album_id: str, image_ids: List[str]) -> List[str]:
-        """Remove images from an album. Rely on DB triggers for permissions and then update representative image if needed."""
-        if not image_ids:
-            return []
-        
-        del_placeholders = ','.join(['?'] * len(image_ids))
-        deleted_pairs = self.db.delete(
-            'albums_images',
-            {'albumID': album_id, 'imageID': image_ids}
-        )
-        
-        # If representative_image removed, choose a new one (first remaining), or clear it
-        current_album = self.get_summary('albums', album_id)
-        if current_album:
-            rep = current_album.get('representative_image') or ''
-            if rep and rep in image_ids:
-                remaining = self.get_sub_entities('albums', album_id)
-                new_rep = remaining[0] if remaining else ''
-                self.edit('albums', album_id, {'representative_image': new_rep}, include_archived=True)
-
-        return [pair[1] for pair in deleted_pairs]
-
     def get_archive_album(self) -> str | None:
         """Get the archive album ID."""
         return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]

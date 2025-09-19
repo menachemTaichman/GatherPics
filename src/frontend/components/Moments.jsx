@@ -8,7 +8,7 @@ import FloatingSelectionControls from './FloatingSelectionControls';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
 import { useSetting } from '../utils/useSettings';
-import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
+import { useDataStore } from '../utils/dataManager';
 import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
@@ -258,7 +258,14 @@ export default function Moments({ eventUrl }) {
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
           const result = await momentsAPI.getById(moment.momentID, eventUrl);
-          return { momentId: moment.momentID, images: result.images || [] };
+          const imgs = result.images || [];
+          const ids = imgs.map(i => i && i.id).filter(Boolean);
+          try {
+            const store = useDataStore.getState();
+            if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+            store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: moment.momentID, ids }]);
+          } catch {}
+          return { momentId: moment.momentID, images: imgs };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.momentID}:`, error);
           return { momentId: moment.momentID, images: [] };
@@ -306,7 +313,12 @@ export default function Moments({ eventUrl }) {
   const fetchImages = async () => {
     try {
       const response = await imagesAPI.getDetails([], eventUrl);
-      setImages(response.images || []);
+      const imgs = response.images || [];
+      setImages(imgs);
+      if (imgs.length > 0) {
+        const store = useDataStore.getState();
+        store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+      }
     } catch (err) {
       console.error('Error fetching images:', err);
     }
@@ -315,24 +327,11 @@ export default function Moments({ eventUrl }) {
   const handleSaveMoments = async (updatedMoment) => {
     try {
       const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment, eventUrl);
-
-      // Handle any change instructions from the backend
-      if (response.changes) {
-        response.changes.forEach(change => {
-          handleDataChange(change.type, change.data);
-
-          // If this is a moment update, also update the momentImagesMap
-          if (change.type === CHANGE_TYPES.MOMENT_UPDATED) {
-            updateMomentImagesMap(change.data.momentID);
-          }
-        });
-      } else {
-        // Fallback to direct update if no change instructions
-        updateMoment(updatedMoment.momentID, response.moment || response);
-        // Also update the momentImagesMap
-        updateMomentImagesMap(updatedMoment.momentID);
-      }
-
+      const store = useDataStore.getState();
+      if (Array.isArray(response.changes)) store.applyChanges(response.changes);
+      updateMoment(updatedMoment.momentID, response.moment || updatedMoment);
+      updateMomentImagesMap(updatedMoment.momentID);
+      
       // Return the response so the caller knows the operation succeeded
       return response;
 
@@ -347,10 +346,17 @@ export default function Moments({ eventUrl }) {
   const updateMomentImagesMap = async (momentId) => {
     try {
       const result = await momentsAPI.getById(momentId, eventUrl);
+      const imgs = result.images || [];
+      const ids = imgs.map(i => i && i.id).filter(Boolean);
+      try {
+        const store = useDataStore.getState();
+        if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+        store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: momentId, ids }]);
+      } catch {}
       
       setMomentImagesMap(prev => ({
         ...prev,
-        [momentId]: result.images || []
+        [momentId]: imgs
       }));
       
     } catch (error) {
@@ -361,16 +367,9 @@ export default function Moments({ eventUrl }) {
   const handleDeleteMoment = async (id) => {
     try {
       const response = await momentsAPI.delete(id, eventUrl);
-      
-      // Handle any change instructions from the backend
-      if (response.changes) {
-        response.changes.forEach(change => {
-          handleDataChange(change.type, change.data);
-        });
-      } else {
-        // Fallback to direct delete if no change instructions
-        deleteMoment(id);
-      }
+      const store = useDataStore.getState();
+      if (Array.isArray(response.changes)) store.applyChanges(response.changes);
+      deleteMoment(id);
     } catch (error) {
       console.error('Error deleting moment:', error);
     }
@@ -407,7 +406,7 @@ export default function Moments({ eventUrl }) {
       const currentMomentImages = momentImagesMap[currentMoment.momentID] || [];
       const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image && image.id}`);
       
-              // Check if all images in current moment are already selected
+            // Check if all images in current moment are already selected
         const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
           currentMomentImageKeys.every(key => selectedKeys.has(key));
         
@@ -701,7 +700,6 @@ export default function Moments({ eventUrl }) {
 
 
 
-
   const openImageViewer = (images, image, index) => {
     const ids = Array.isArray(images) ? images.map(i => i.id || i.label || i.name) : [];
     openGlobalViewer({
@@ -775,7 +773,7 @@ export default function Moments({ eventUrl }) {
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               title="Edit moments"
             >
-              <Pencil className="w-5 h-5 text-gray-600" />
+              <Pencil className="w-5 h-5 text_gray-600" />
             </button>
           </div>
         </div>
@@ -926,7 +924,7 @@ export default function Moments({ eventUrl }) {
                     key={moment.momentID} 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="relative bg-white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+                    className="relative bg_white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => {
                       // Use timeline manager for navigation with moment name
                       timelineManager.navigateToMoment(moment.label, moment.label);
@@ -939,7 +937,7 @@ export default function Moments({ eventUrl }) {
                             ? `${API_BASE}${moment.representative_image}` 
                             : moment.representative_image.startsWith('http') 
                               ? moment.representative_image 
-                              : urlHelpers && urlHelpers.getThumbnailUrl(moment.representative_image)
+                              : (urlHelpers ? urlHelpers.getThumbnailUrl(moment.representative_image) : '')
                           } 
                           alt="" 
                           className="object-cover w-full h-full" 
@@ -969,7 +967,7 @@ export default function Moments({ eventUrl }) {
       <div className="px-4 py-8">
         {moments.length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
+            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items_center justify-center mb-4">
               <Calendar className="w-12 h-12 text-gray-400" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No moments yet</h3>

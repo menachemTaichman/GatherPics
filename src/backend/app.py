@@ -30,7 +30,6 @@ app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Simplify for now
 jwt = JWTManager(app)
 
 # --- Placeholder values for now ---
-# FIXED_EVENT_ID = "75cb6635-879d-4386-b023-366444dc0fb2"
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
@@ -52,19 +51,17 @@ def _parse_bool(val: str | None, default: bool) -> bool:
         return default
     return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
 
-def add_change_instruction(response_data, change_type, change_data=None):
-    """Add change instruction to API response for frontend data updates."""
-    if 'changes' not in response_data:
-        response_data['changes'] = []
-    
-    change_instruction = {
-        'type': change_type,
-        'data': change_data if change_data is not None else {}
-    }
-    
-    response_data['changes'].append(change_instruction)
-    
-    return response_data
+# TODO: Remove this
+def add_change_instruction():
+    """Deprecated: Old change format no longer used. Keep for reference.
+    Use the generic schema below across all endpoints:
+    - UPSERT: { type: 'UPSERT', entity: 'image'|'group'|'moment'|'album', items: [ ... ] }
+    - REMOVE: { type: 'REMOVE', entity: 'image'|'group'|'moment'|'album', ids: [ ... ] }
+    - RELATION_ADD: { type: 'RELATION_ADD', relation: 'group.images'|'moment.images'|'album.images', parentId, ids, position? }
+    - RELATION_REMOVE: { type: 'RELATION_REMOVE', relation: 'group.images'|'moment.images'|'album.images', parentId, ids }
+    - RELATION_MOVE: { type: 'RELATION_MOVE', relation: 'group.images'|'moment.images', fromParentId, toParentId, ids, position? }
+    - RELATION_SET: { type: 'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images', parentId, ids }
+    """
 
 def get_event(event_id, profile_id=None, include_archived=None):
     """Get event instance with profile context."""
@@ -229,7 +226,11 @@ def update_group(event_id, group_id):
         updated_group = event.models_manager.get_summary('groups', group_id)
         
         response_data = {"success": True, "group": updated_group}
-        response_data = add_change_instruction(response_data, 'GROUP_UPDATED', updated_group)
+        response_data.setdefault('changes', []).append({
+            'type': 'UPSERT',
+            'entity': 'group',
+            'items': [updated_group]
+        })
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -273,17 +274,37 @@ def transfer_faces(event_id):
     
     try:
         faces_ids, old_group_ids, target_group_id = event.models_manager.transfer_faces(face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
-        
+
         response = {"success": True, "transferred_count": len(faces_ids)}
-        response.update({'faces_ids': faces_ids, 'old_group_ids': old_group_ids, 'target_group_id': target_group_id})
-        
-        change_data = {
-            'faces_ids': faces_ids,
-            'old_group_ids': old_group_ids,
-            'target_group_id': target_group_id
-        }
-        
-        response = add_change_instruction(response, 'FACES_TRANSFERRED', change_data)
+
+        # NOTE: models_manager.transfer_faces currently returns face IDs and groups involved,
+        # but NOT the image IDs per face for precise relation diffs. For the frontend to
+        # update grids without refetch, the preferred changes are:
+        #   { type: 'RELATION_MOVE', relation: 'group.images', fromParentId: <old_group_id>, toParentId: <target_group_id>, ids: [<image_ids>] }
+        #   { type: 'UPSERT', entity: 'group', items: [updated_source_group, updated_target_group] }
+        #   (optional) { type: 'UPSERT', entity: 'image', items: [ { id, faces: [...] }, ... ] }
+        # Please extend models_manager.transfer_faces to also return the affected image IDs per face,
+        # e.g. a mapping { old_group_id: [image_ids], target_group_id: [image_ids] } or flat list with old_group_id.
+
+        # Until then, we at least upsert the updated group summaries.
+        updated_groups = []
+        # Source groups updated (counts/representative may change)
+        for gid in (old_group_ids or []):
+            try:
+                updated_groups.append(event.models_manager.get_summary('groups', gid))
+            except Exception:
+                pass
+        # Target group summary
+        try:
+            updated_groups.append(event.models_manager.get_summary('groups', target_group_id))
+        except Exception:
+            pass
+
+        response.setdefault('changes', []).append({
+            'type': 'UPSERT',
+            'entity': 'group',
+            'items': [g for g in updated_groups if g]
+        })
 
         return jsonify(response)
     except Exception as e:
@@ -337,7 +358,11 @@ def create_moment(event_id):
         created_moment = event.models_manager.get_summary('moments', moment_id)
         
         response_data = {"success": True, "moment_id": moment_id, "moment": created_moment}
-        response_data = add_change_instruction(response_data, 'MOMENT_CREATED', created_moment)
+        response_data.setdefault('changes', []).append({
+            'type': 'UPSERT',
+            'entity': 'moment',
+            'items': [created_moment]
+        })
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -360,7 +385,11 @@ def update_moment(event_id, moment_id):
         updated_moment = event.models_manager.get_summary('moments', moment_id)
         
         response_data = {"success": True, "moment": updated_moment}
-        response_data = add_change_instruction(response_data, 'MOMENT_UPDATED', updated_moment)
+        response_data.setdefault('changes', []).append({
+            'type': 'UPSERT',
+            'entity': 'moment',
+            'items': [updated_moment]
+        })
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -376,12 +405,37 @@ def add_images_to_moment(event_id, moment_id):
     try:
         added_ids, old_moment_ids = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=True)
         response = {"success": True, "added_ids": added_ids}
-        response = add_change_instruction(response, 'IMAGE_MOMENTS_UPDATED', {"image_ids": added_ids})
-        
-        # Also update the moment summary in case representative/count changed
-        updated_moment = event.models_manager.get_summary('moments', moment_id)
-        response = add_change_instruction(response, 'MOMENT_UPDATED', [updated_moment] + old_moment_ids)
-        
+
+        # Generic changes
+        response.setdefault('changes', []).append({
+            'type': 'RELATION_ADD',
+            'relation': 'moment.images',
+            'parentId': moment_id,
+            'ids': added_ids
+        })
+        # If images were moved from other moments (exclusive), remove them from old parents
+        for old_id in old_moment_ids or []:
+            response['changes'].append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'moment.images',
+                'parentId': old_id,
+                'ids': added_ids
+            })
+
+        # Upsert updated moments (current and any old ones whose counts/representatives changed)
+        try:
+            updated_current = event.models_manager.get_summary('moments', moment_id)
+        except Exception:
+            updated_current = None
+        upserts = [m for m in [updated_current] if m]
+        for old_id in old_moment_ids or []:
+            try:
+                upserts.append(event.models_manager.get_summary('moments', old_id))
+            except Exception:
+                pass
+        if upserts:
+            response['changes'].append({ 'type': 'UPSERT', 'entity': 'moment', 'items': upserts })
+
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -394,14 +448,21 @@ def remove_images_from_moment(event_id, moment_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_ids, old_moment_ids = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=False)
+        removed_ids, _ = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=False)
         response = {"success": True, "removed_ids": removed_ids}
-        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": removed_ids})
 
-        # Also update the moment summary in case representative/count changed
-        updated_moment = event.models_manager.get_summary('moments', moment_id)
-        response = add_change_instruction(response, 'MOMENT_UPDATED', [updated_moment] + old_moment_ids)
-        
+        response.setdefault('changes', []).append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'moment.images',
+            'parentId': moment_id,
+            'ids': removed_ids
+        })
+
+        try:
+            updated_current = event.models_manager.get_summary('moments', moment_id)
+            response['changes'].append({ 'type': 'UPSERT', 'entity': 'moment', 'items': [updated_current] })
+        except Exception:
+            pass
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -418,7 +479,11 @@ def delete_moment(event_id, moment_id):
         deleted_ids = event.models_manager.delete('moments', moment_id)
         
         response_data = {"success": True, "deleted_ids": deleted_ids}
-        response_data = add_change_instruction(response_data, 'MOMENT_DELETED', {"moment_id": moment_id})
+        response_data.setdefault('changes', []).append({
+            'type': 'REMOVE',
+            'entity': 'moment',
+            'ids': [moment_id]
+        })
         return jsonify(response_data)
     except Exception as e:
         return bad_request(e)
@@ -510,9 +575,19 @@ def add_images_to_album(event_id, album_id):
     try:
         added_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=True)
         response = {"success": True, "added_ids": added_ids}
-        
-        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": added_ids})
-        
+
+        # Generic relation change
+        response.setdefault('changes', []).append({
+            'type': 'RELATION_ADD',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': added_ids
+        })
+        # NOTE: If this is the Archive or Favorites album, also prefer to update image flags:
+        #   Archive: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_archived: true })) }
+        #   Favorites: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_favorite: true })) }
+        # models_manager currently does not emit these flags; consider updating the DB or deriving flags.
+
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -527,7 +602,16 @@ def remove_images_from_album(event_id, album_id):
     try:
         removed_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=False)
         response = {"success": True, "removed_ids": removed_ids}
-        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": removed_ids})
+
+        response.setdefault('changes', []).append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': removed_ids
+        })
+        # NOTE: If this is the Archive or Favorites album, prefer to update flags as well:
+        #   Archive: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_archived: false })) }
+        #   Favorites: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_favorite: false })) }
 
         return jsonify(response)
     except Exception as e:

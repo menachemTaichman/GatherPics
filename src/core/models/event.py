@@ -183,13 +183,11 @@ class Event(JsonModel):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             for cluster in clusters:
                 group_num = self.last_group_id + 1
-                # Create group without computing representative here; it will be set by add_faces_to_group
                 group_data = self.models_manager.add('groups', [{
                     'label': f"Person {group_num}",
-                    'representative_face': ''
                 }])[0]
                 group_id = group_data['groupID']
-                self.models_manager.add_faces_to_group(group_id, cluster)
+                self.models_manager.edit_sub_entities('faces', group_id, cluster, add=True)
                 self.last_group_id = group_num
             return len(clusters)
 

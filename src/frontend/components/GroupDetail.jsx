@@ -29,6 +29,7 @@ import useImageSelection from '../utils/useImageSelection';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore } from '../utils/dataManager';
+import { selectors as storeSelectors } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
@@ -38,6 +39,9 @@ import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
 import SingleImageTile from './SingleImageTile';
 import SingleImageRow from './SingleImageRow';
 import GroupsFilter from './GroupsFilter';
+import { shallow } from 'zustand/shallow';
+
+const EMPTY_ARRAY = Object.freeze([]);
 
 export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
@@ -45,25 +49,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const location = useLocation();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const [group, setGroup] = useState(null);
-  const skipNextFetch = useRef(false);
   const [viewMode, setViewMode] = useSetting('groupDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [sortedImages, setSortedImages] = useState([]);
+  // Derived list; avoid state to prevent effect loops
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const {
-    selectedKeys: selectedImages,
-    toggleKey: toggleSelectedImageKey,
-    clear: clearSelection,
-    selectAll: selectAllImages,
-    deselectMany,
-  } = useImageSelection({
-    items: sortedImages,
-    getKey: (img) => img?.id,
-    enableRange: true,
-  });
+  // (moved below after sortedImages is defined)
   
   const { 
     open: openGlobalViewer, 
@@ -102,14 +95,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const suppressSpinnerRef = useRef(false);
   const restoreScrollYRef = useRef(null);
 
-  // Memoize props for GroupsFilter to prevent infinite re-renders
-  const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
+  // Memoize props for GroupsFilter to prevent infinite re-renders (defined after sortedImages below)
+  let memoizedImageIds = EMPTY_ARRAY;
   const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.groupID !== group?.groupID), [relatedGroups, group?.groupID]);
   
   // No complex flag checking needed - the data store handles everything
 
-  // Use the data store for groups
-  const { groups: storeGroups, updateGroup: storeUpdateGroup, deleteGroup: storeDeleteGroup, replaceGroup } = useDataStore();
+  // Subscribe only to groups to avoid re-renders on unrelated store changes
+  const storeGroups = useDataStore(state => state.groups, shallow);
 
   // Use groups from store if available, otherwise fall back to props
   const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
@@ -130,151 +123,61 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
+  // Derive images from normalized store relations (ids with shallow equality) for smooth updates
+  const relatedImageIds = useDataStore(
+    state => (group?.groupID ? (state.relations?.groupImages?.[group.groupID] || EMPTY_ARRAY) : EMPTY_ARRAY),
+    shallow
+  );
+  const imagesById = useDataStore(state => state.entities.imagesById);
+  const relatedImages = useMemo(() => (relatedImageIds || []).map(id => imagesById[id]).filter(Boolean), [relatedImageIds, imagesById]);
+
+  // Subscribe to album ids arrays (stable references) and derive Sets locally
+  const favoriteIds = useDataStore((state) => {
+    const favId = state.favoritesAlbumId;
+    return (favId && state.relations?.albumImages?.[favId]) || EMPTY_ARRAY;
+  }, shallow);
+  const archiveIds = useDataStore((state) => {
+    const arcId = state.archiveAlbumId;
+    return (arcId && state.relations?.albumImages?.[arcId]) || EMPTY_ARRAY;
+  }, shallow);
+  const favoritesSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const archiveSet = useMemo(() => new Set(archiveIds), [archiveIds]);
+
+  const sortedImages = useMemo(() => {
+    if (!group?.groupID) return EMPTY_ARRAY;
+    const includeArchived = getSetting('include_archived_images', false);
+    const visible = (relatedImages || []).filter(img => includeArchived || !img?.is_archived);
+    return sortImages(visible, sortBy, sortOrder);
+  }, [group?.groupID, relatedImages, sortBy, sortOrder]);
+
+  // Now compute memoizedImageIds after sortedImages exists
+  memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
+
+  const {
+    selectedKeys: selectedImages,
+    toggleKey: toggleSelectedImageKey,
+    clear: clearSelection,
+    selectAll: selectAllImages,
+    deselectMany,
+  } = useImageSelection({
+    items: sortedImages,
+    getKey: (img) => img?.id,
+    enableRange: true,
+  });
+
   useEffect(() => {
     const groupsArray = currentGroups?.groups || currentGroups;
     const foundGroup = groupsArray.find(g => g.label === group_name);
     if (foundGroup) {
-      setGroup(foundGroup);
+      if (!group || group.groupID !== foundGroup.groupID) setGroup(foundGroup);
     } else if (group && group.groupID) {
-      // If we have a group but the label doesn't match the URL, 
-      // it might be because we just updated the group name
-      // Don't redirect in this case
       return;
     } else {
       navigate(`/${eventUrl}/persons`);
     }
-  }, [group_name, currentGroups, navigate, group]);
+  }, [group_name, currentGroups, navigate]);
 
-  // Re-sort images when sort settings change
-  useEffect(() => {
-            setSortedImages(prevImages => sortImages(prevImages, sortBy, sortOrder));
-  }, [sortBy, sortOrder]);
-
-  // Subscribe to global groups state changes to keep local images in sync
-  useEffect(() => {
-    const unsubscribe = useDataStore.subscribe(
-      (state) => {
-        // Handle images refresh events (favorites/archive)
-        const imgRefresh = state.lastImagesRefresh;
-        if (imgRefresh && imgRefresh.imageIds) {
-          const affected = new Set(imgRefresh.imageIds || []);
-          if (imgRefresh.album_label === 'favorites') {
-            setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_favorite: imgRefresh.isAdd } : img));
-          }
-          if (imgRefresh.album_label === 'archive') {
-            if (imgRefresh.isAdd) {
-              // Archiving: either remove from grid (if not including archived) or mark as archived
-              if (!getSetting('include_archived_images', false)) {
-                setSortedImages(prev => {
-                  const next = prev.filter(img => !affected.has(img.id));
-                  // If viewer is open and current image was removed, close it
-                  try {
-                    if (isViewerOpen && currentImageId && affected.has(currentImageId)) {
-                      closeGlobalViewer();
-                    }
-                  } catch {}
-                  return next;
-                });
-              } else {
-                setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: true } : img));
-              }
-            } else {
-              // Unarchive
-              setSortedImages(prev => prev.map(img => affected.has(img.id) ? { ...img, is_archived: false } : img));
-            }
-          }
-        }
-
-        // Handle images to remove from album add
-        const albumAddResult = state.lastAlbumAdd;
-        if (albumAddResult && albumAddResult.images_to_remove && albumAddResult.images_to_remove.length > 0) {
-            const removedSet = new Set(albumAddResult.images_to_remove);
-            setSortedImages(prev => prev.filter(img => !removedSet.has(img.id)));
-            // Reset after processing
-            useDataStore.getState().addImagesToAlbum(null); 
-        }
-
-        // Handle transfer results
-        const transferResult = state.lastTransferResult;
-        if (transferResult) {
-          // If the source group was deleted (complete transfer/merge),
-          // ignore local remove/add to prevent flicker; the complete
-          // transfer handler will load authoritative target data.
-          if (transferResult.old_group_deleted) {
-            // No-op here; handled in handleTransferComplete
-          } else {
-          // If this is the source group, remove images that should be removed
-          if (transferResult.old_group_id === group?.groupID && transferResult.images_to_remove_from_source) {
-            setSortedImages(prevImages => {
-              const removedSet = new Set(transferResult.images_to_remove_from_source);
-              const updatedImages = prevImages.filter(image => !removedSet.has(image.id));
-
-              // If viewer is open and current image was removed, move to the next logical image
-              try {
-                if (isViewerOpen && currentImageId && removedSet.has(currentImageId)) {
-                  if (updatedImages.length === 0) {
-                    closeGlobalViewer();
-                  } else {
-                    const newIndex = Math.min(viewerIndex || 0, updatedImages.length - 1);
-                    updateViewerSession({ images: updatedImages.map(i => i.id), index: newIndex });
-                  }
-                }
-              } catch {}
-
-              return updatedImages;
-            });
-          }
-          // If this is the target group, add images that should be added
-          else if (transferResult.target_group_id === group?.groupID && transferResult.images_to_add_to_target) {
-            // Use the full image data from the transfer result
-            if (transferResult.transferred_images_data && transferResult.transferred_images_data.length > 0) {
-              setSortedImages(prevImages => {
-                // Create a map of existing image IDs for efficient lookup
-                const existingImageIds = new Set(prevImages.map(image => image.id));
-                
-                // Filter out images that already exist in the current array
-              const newImages = transferResult.transferred_images_data.filter(
-                image => !existingImageIds.has(image.id) && transferResult.images_to_add_to_target.includes(image.id)
-              );
-                
-                            // Add only new images and sort them
-            const updatedImages = [...prevImages, ...newImages];
-            return sortImages(updatedImages, sortBy, sortOrder);
-          });
-        }
-        // Update crop data by adding crops for new images if available in transfer result
-        if (transferResult.crop_mapping) {
-          // This part of the logic is no longer needed as representative_face is used directly
-          // setImageCrops(prevCrops => ({
-          //   ...prevCrops,
-          //   ...transferResult.crop_mapping
-          // }));
-        }
-      }
-          }
-        }
-        
-        // Handle group updates (including name and representative changes)
-        const updatedGroup = state.groups.find(g => g.groupID === group?.groupID);
-        if (updatedGroup && group) {
-                  const hasChanges = 
-          updatedGroup.label !== group.label ||
-          updatedGroup.representative_face !== group.representative_face;
-          
-          if (hasChanges) {
-            setGroup(updatedGroup);
-          }
-        }
-        
-        // Also check if this group was updated in a transfer result
-        if (transferResult && transferResult.updated_source_group && transferResult.updated_source_group.groupID === group?.groupID) {
-          setGroup(transferResult.updated_source_group);
-        }
-      }
-    );
-    
-    return unsubscribe;
-  }, [group?.groupID, sortBy, sortOrder, navigate, isViewerOpen, currentImageId, viewerIndex]);
+  // Legacy subscription removed; updates flow from normalized selectors
 
   const fetchGroupData = useCallback(async (currentOffset, resetImages = false) => {
     if (!group?.groupID) {
@@ -300,36 +203,35 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     try {
       const response = await groupsAPI.getById(group.groupID, eventUrl, params);
       
-      setGroup(prev => ({...prev, ...response.group}));
-      
-      const sorted = sortImages(response.images || [], sortBy, sortOrder);
-      if (resetImages || currentOffset === 0) {
-        setSortedImages(() => {
-          const seen = new Set();
-          const unique = [];
-          for (const img of sorted) {
-            const id = img?.id;
-            if (!id || seen.has(id)) continue;
-            seen.add(id);
-            unique.push(img);
-          }
-          return unique;
-        });
-      } else {
-        // merge without full reset to avoid grid flicker and dedupe by id
-        setSortedImages(prev => {
-          const seen = new Set(prev.map(i => i?.id).filter(Boolean));
-          const merged = [...prev];
-          for (const img of sorted) {
-            const id = img?.id;
-            if (!id || seen.has(id)) continue;
-            seen.add(id);
-            merged.push(img);
-          }
-          return merged;
-        });
+      setGroup(prev => {
+        const next = { ...(prev || {}), ...(response.group || {}) };
+        if (prev && prev.groupID === next.groupID && prev.label === next.label && prev.representative_face === next.representative_face && prev.count === next.count) {
+          return prev;
+        }
+        return next;
+      });
+      // Populate normalized store entities and relations for smooth updates
+      try {
+        const store = useDataStore.getState();
+        const imageIds = (response.images || []).map(img => img?.id).filter(Boolean);
+        const changes = [];
+        if (response.group) {
+          changes.push({ type: 'UPSERT', entity: 'group', items: [response.group] });
+        }
+        if (Array.isArray(response.images)) {
+          changes.push({ type: 'UPSERT', entity: 'image', items: response.images });
+        }
+        if (resetImages || currentOffset === 0) {
+          changes.push({ type: 'RELATION_SET', relation: 'group.images', parentId: group.groupID, ids: imageIds });
+        } else if (imageIds.length > 0) {
+          changes.push({ type: 'RELATION_ADD', relation: 'group.images', parentId: group.groupID, ids: imageIds });
+        }
+        if (changes.length > 0) {
+          store.applyChanges(changes);
+        }
+      } catch (e) {
+        // no-op if store unavailable
       }
-      
       setHasMore((response.images || []).length === 50);
       
     } catch (error) {
@@ -345,7 +247,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         } catch {}
       }
     }
-  }, [group?.groupID, eventUrl, sortBy, sortOrder, filterGroups, filterMode, onlySelected, isFetchingMore]);
+  }, [group?.groupID, eventUrl, filterGroups, filterMode, onlySelected, isFetchingMore]);
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
@@ -382,8 +284,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const handleToggleSortOrder = () => {
     const newOrder = toggleSortOrder(sortOrder);
     setSortOrder(newOrder);
-    // Re-sort current images with new order
-            setSortedImages(prevImages => sortImages(prevImages, sortBy, newOrder));
   };
 
   const handleFilterVisibilityToggle = () => {
@@ -435,29 +335,13 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
 
   // Determine if an image is in Favorites, with a fallback to album labels
-  const isImageFavorite = (img) => {
-    if (!img) return false;
-    if (img.is_favorite !== undefined && img.is_favorite !== null) {
-      return !!img.is_favorite;
-    }
-    if (img.is_favorites !== undefined && img.is_favorites !== null) {
-      return !!img.is_favorites;
-    }
-    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
-  };
+  const isImageFavorite = (img) => favoritesSet.has(img?.id);
 
   // Unified favorites toggle for single or multiple images
   const toggleFavoritesForIds = async (imageIds) => {
     if (!Array.isArray(imageIds) || imageIds.length === 0) return;
     const selectedImageObjects = sortedImages.filter(img => imageIds.includes(img.id));
     const allAreFavorites = selectedImageObjects.length > 0 && selectedImageObjects.every(isImageFavorite);
-
-    // Optimistic update
-    setSortedImages(prevImages =>
-      prevImages.map(img =>
-        imageIds.includes(img.id) ? { ...img, is_favorite: !allAreFavorites } : img
-      )
-    );
 
     try {
       if (allAreFavorites) {
@@ -479,20 +363,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           'success'
         );
       }
-    } catch (e) {
-      // Rollback on error
-      showToast('Failed to update favorites', 'error');
-      setSortedImages(prev => {
-        const newImages = [...prev];
-        selectedImageObjects.forEach(originalImage => {
-          const index = newImages.findIndex(i => i.id === originalImage.id);
-          if (index !== -1) {
-            newImages[index] = originalImage;
-          }
-        });
-        return newImages;
-      });
-    }
+    } catch (e) { showToast('Failed to update favorites', 'error'); }
   };
 
   const handleImageLoad = (imageId, e) => {
@@ -565,85 +436,32 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
   const handleTransferComplete = async (result) => {
-    // Use the full API result which contains transfer metadata
     const transferData = { ...(result || {}) };
-    // Ensure old_group_id is present for downstream logic
     transferData.old_group_id = transferData.old_group_id || group?.groupID || null;
-    // Push transfer result into the global store to trigger grid updates
-    try {
-      useDataStore.getState().transferFaces(transferData);
-    } catch (e) {
-      console.warn('Failed to update store after transfer:', e);
-    }
-    const isCompleteTransfer = !!transferData.old_group_deleted;
 
-    // Clear selection and remove transferred images from cache
+    // Clear selection and remove transferred images from the local cache used by selection
     clearSelection();
-    
-    // If images were transferred away from this group, remove them from the cached selection
     if (transferData) {
       clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
     }
 
-    if (isCompleteTransfer) {
-      skipNextFetch.current = true; // Prevent fetch on next group change
-      // 1. Remove source group from store
-      if (transferData.old_group_id) {
-        useDataStore.getState().deleteGroup(transferData.old_group_id);
-      }
-      // 2. Add/update target group in store
-      if (transferData.updated_target_group) {
-        useDataStore.getState().replaceGroup(transferData.target_group_id, transferData.updated_target_group);
-      }
-      // 3. Update UI to show target group
-      const newGroup = transferData.updated_target_group;
-      setGroup(newGroup);
-      // 4. Fetch full, authoritative data for the target group to avoid client-side drift
-      try {
-        const response = await groupsAPI.getById(newGroup.groupID, eventUrl);
-        const images = response.images || [];
-        setSortedImages(sortImages(images, sortBy, sortOrder));
-      } catch (err) {
-        console.error('Error fetching target group images after merge:', err);
-      }
-      setLoading(false); // Ensure spinner is not shown
-      if (newGroup && newGroup.label) {
-        navigate(`/${eventUrl}/persons/${encodeURIComponent(newGroup.label)}`, { replace: true });
-      }
-      showToast('All faces transferred. Now viewing the merged group.', 'success');
-      return;
-    }
-    
-    // For partial transfers, just show success message
+    // Rely on API responses to update the normalized store; no manual store edits or navigation here
     if (transferData?.target_group_id) {
-      // For new groups, construct the target group info from the transfer data
       let targetGroup = currentGroups.find(g => g.groupID === transferData.target_group_id);
       if (!targetGroup && transferData.new_group_name) {
-        targetGroup = {
-          groupID: transferData.target_group_id,
-          label: transferData.new_group_name
-        };
+        targetGroup = { groupID: transferData.target_group_id, label: transferData.new_group_name };
       }
-      
       if (targetGroup) {
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
-        const isNewGroup = transferData.new_group_name;
         showToast(
           <span>
             Transferred {transferData.images_to_remove_from_source?.length || 0} faces to{' '}
-            {isNewGroup && 'a new group '}
-            <Link to={link} className="underline hover:text-gray-100">
-              {targetGroup.label}
-            </Link>
+            <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
           </span>,
           'success'
         );
       }
     }
-    
-    // The change instruction system will handle all updates automatically
-    // No need for manual updates here - the API service interceptor
-    // will process the GROUP_FACES_TRANSFERRED change instruction
   };
 
   const toggleImageSelection = (imageId, event) => {
@@ -691,7 +509,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     });
   };
 
-  const closeImageViewer = () => {};
+  
 
   const navigateImage = (direction, index) => {
     navigateGlobalViewer(direction, index);
@@ -1121,20 +939,19 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     <SingleImageTile
                       image={image}
                       aspectClass={imageClasses[image.id] || 'square'}
-                      imageFit={showCrops ? 'contain' : 'cover'}
+                      imageFit={'cover'}
                       thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                       selectionMode={selectionMode}
                       isSelected={selectedImages.has(image.id)}
                       onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
-                      isFavorite={isImageFavorite(image)}
+                      isFavorite={favoritesSet.has(image.id)}
                       onToggleFavorite={async () => { const id = image.id; await toggleFavoritesForIds([id]); }}
-                      isArchived={!!image.is_archived}
+                      isArchived={archiveSet.has(image.id)}
                       onToggleArchive={async (isRemove) => {
                         try {
                           if (isRemove) {
                             const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
-                            setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: false } : img));
                             showToast(
                               <span>
                                 {(Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0))} removed from{' '}
@@ -1144,11 +961,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                             );
                           } else {
                             const res = await albumsAPI.addToArchive([image.id], eventUrl);
-                            if (!getSetting('include_archived_images', false)) {
-                              setSortedImages(prev => prev.filter(img => img.id !== image.id));
-                            } else {
-                              setSortedImages(prev => prev.map(img => img.id === image.id ? { ...img, is_archived: true } : img));
-                            }
                             showToast(
                               <span>
                                 {(Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0))} moved to{' '}
@@ -1157,9 +969,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                               'success'
                             );
                           }
-                        } catch (err) {
-                          showToast('Failed to update archive', 'error');
-                        }
+                        } catch (err) { showToast('Failed to update archive', 'error'); }
                       }}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={formatDate(image.date_taken)}
