@@ -639,6 +639,60 @@ TRIGGERS = {
     """,
 }
 
+def get_fields_as_sub_table(table: str, as_table: str | None = None) -> str:
+    if table not in STRUCTURE:
+        return table
+    
+    if as_table:
+        as_table += '.'
+
+    fields_as_sub_table = STRUCTURE[table]['fields_as_sub_table']
+    return ', '.join([f"{as_table}{field}" for field in fields_as_sub_table]) if fields_as_sub_table else f'{as_table}*'
+
+def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
+    """Create a new SQLite DB in the given directory, initializing all tables and settings."""
+    import os
+    if db_name is None:
+        db_name = os.path.basename(os.path.normpath(dir_path)) + '.db'
+    db_path = os.path.join(dir_path, db_name)
+    os.makedirs(dir_path, exist_ok=True)
+    # Create DB and all tables
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        # Create tables
+        for table, schema in TABLES.items():
+            conn.execute(f'''CREATE TABLE IF NOT EXISTS {table} ({schema})''')
+        
+        # Create indexes
+        for index_sql in INDEXES:
+            conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
+        
+        # Create views
+        for view_name, view_sql in VIEWS.items():
+            conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
+        
+        # Create triggers
+        trigger_sql = f"""
+        CREATE TRIGGER IF NOT EXISTS trg_insert_images_count_limit
+        BEFORE INSERT ON images
+        BEGIN
+            SELECT CASE
+                WHEN (SELECT COUNT(*) FROM images) >= {images_count_limit} THEN
+                    RAISE(ABORT, 'Images count limit reached')
+            END;
+        END;
+        """
+        conn.execute(trigger_sql)
+        
+        for trigger_name, trigger_sql in TRIGGERS.items():
+            conn.execute(trigger_sql)
+
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path 
+
 class AppDB:
 
     def __init__(self, db_path: str, event_id: str, profile_id: str | None = None, include_archived: bool = False):
@@ -656,51 +710,6 @@ class AppDB:
         if not self.get_profile_id() or table not in STRUCTURE:
             return table
         return STRUCTURE[table]['accessible_table']
-
-    @staticmethod
-    def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
-        """Create a new SQLite DB in the given directory, initializing all tables and settings."""
-        import os
-        if db_name is None:
-            db_name = os.path.basename(os.path.normpath(dir_path)) + '.db'
-        db_path = os.path.join(dir_path, db_name)
-        os.makedirs(dir_path, exist_ok=True)
-        # Create DB and all tables
-        conn = sqlite3.connect(db_path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        try:
-            # Create tables
-            for table, schema in TABLES.items():
-                conn.execute(f'''CREATE TABLE IF NOT EXISTS {table} ({schema})''')
-            
-            # Create indexes
-            for index_sql in INDEXES:
-                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
-            
-            # Create views
-            for view_name, view_sql in VIEWS.items():
-                conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
-            
-            # Create triggers
-            trigger_sql = f"""
-            CREATE TRIGGER IF NOT EXISTS trg_insert_images_count_limit
-            BEFORE INSERT ON images
-            BEGIN
-                SELECT CASE
-                    WHEN (SELECT COUNT(*) FROM images) >= {images_count_limit} THEN
-                        RAISE(ABORT, 'Images count limit reached')
-                END;
-            END;
-            """
-            conn.execute(trigger_sql)
-            
-            for trigger_name, trigger_sql in TRIGGERS.items():
-                conn.execute(trigger_sql)
-
-            conn.commit()
-        finally:
-            conn.close()
-        return db_path 
 
     def set_profile_id(self, profile_id: str | None = None):
         """Set the current profile ID for access control."""

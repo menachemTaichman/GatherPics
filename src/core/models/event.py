@@ -1,5 +1,5 @@
 import os
-from ..db import AppDB
+from ..db import AppDB, create_new_db_in_dir
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
 from .models_manager import ModelsManager
@@ -57,9 +57,9 @@ class Event(JsonModel):
         os.makedirs(self.high_quality_dir, exist_ok=True)
         # Ensure {event_id}.db exists as an SQLite DB
         if not os.path.exists(self.DB_PATH):
-            db = AppDB(self.DB_PATH, self.id)
-            db.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
+            create_new_db_in_dir(self.event_dir, f'{self.id}.db')
             self._initialize_default_profiles()
+            self._initialize_default_albums()
 
     def _initialize_default_profiles(self, default_profiles: dict = {}):
         """Initialize default profiles for the event: Main Manager and Event Manager"""

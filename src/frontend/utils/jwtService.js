@@ -87,6 +87,21 @@ class JWTService {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  // Synchronous read of current token (does not trigger refresh)
+  getTokenSync() {
+    if (this.token) return this.token;
+    try {
+      const stored = localStorage.getItem('jwt_token');
+      if (stored) {
+        this.token = stored;
+        return stored;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
   // Check if we have a valid token
   hasToken() {
     return !!this.token;

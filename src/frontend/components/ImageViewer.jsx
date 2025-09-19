@@ -301,23 +301,24 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       setLoading(true);
       // Fetch real image info
       if (imageId && eventUrl) {
-        try {
-          const info = await imagesAPI.getComplete(imageId, eventUrl, { sort: true });
+        const response = await imagesAPI.getDetails([imageId], eventUrl);
+        if (response.images && response.images.length > 0) {
+          const info = response.images[0];
           setImageInfo(info);
           setFaces(info.faces || []);
           setMomentInfo(info.moment || null);
           setImageAlbums(info.albums || []);
-        } catch (err) {
-          // Fallback: try basic info
-          const info = await imagesAPI.getInfo(imageId, eventUrl);
-          setImageInfo(info);
-          setFaces(info.faces || []);
-          setMomentInfo(info.moment || null);
+        } else {
+          setImageInfo(null);
+          setFaces([]);
+          setMomentInfo(null);
+          setImageAlbums([]);
         }
       } else {
         setImageInfo(null);
         setFaces([]);
         setMomentInfo(null);
+        setImageAlbums([]);
       }
     } catch (error) {
       console.error('Error fetching image info:', error);
@@ -415,8 +416,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleFaceNavigation = (face) => {
-    if (face.group_id && groups) {
-      const group = groups.find(g => g.groupID === face.group_id);
+    if (face.groupID && groups) {
+      const group = groups.find(g => g.groupID === face.groupID);
       if (group) {
         navigate(`/persons/${encodeURIComponent(group.label)}`);
         onClose();
@@ -466,8 +467,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     if (shouldLetBrowserHandle(e)) return; // Let browser handle
     e.stopPropagation();
     e.preventDefault();
-    if (!face?.group_label) return;
-    navigate(`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`);
+    const groupLabel = getGroupLabel(face);
+    if (!groupLabel || groupLabel === 'Unknown Person') return;
+    navigate(`/${eventUrl}/persons/${encodeURIComponent(groupLabel)}`);
     onClose();
   };
 
@@ -566,10 +568,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       const imageHeightPercent = (imgRect.height / containerRect.height) * 100;
       
       // Calculate the face rectangle position and size
-      const left = offsetX + (face.face_coords.Left * imageWidthPercent);
-      const top = offsetY + (face.face_coords.Top * imageHeightPercent);
-      const width = face.face_coords.Width * imageWidthPercent;
-      const height = face.face_coords.Height * imageHeightPercent;
+      const left = offsetX + (face.left * imageWidthPercent);
+      const top = offsetY + (face.top * imageHeightPercent);
+      const width = face.width * imageWidthPercent;
+      const height = face.height * imageHeightPercent;
       
       return {
         left: `${left}%`,
@@ -581,10 +583,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     
     // Fallback to simple calculation only when image is not loaded
     return {
-      left: `${face.face_coords.Left * 100}%`,
-      top: `${face.face_coords.Top * 100}%`,
-      width: `${face.face_coords.Width * 100}%`,
-      height: `${face.face_coords.Height * 100}%`,
+      left: `${face.left * 100}%`,
+      top: `${face.top * 100}%`,
+      width: `${face.width * 100}%`,
+      height: `${face.height * 100}%`,
     };
   };
 
@@ -596,8 +598,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getFaceImageSrc = (face) => {
-    if (!face?.face_id || !urlHelpers) return PLACEHOLDER_DATA_URL;
-    return urlHelpers.getFaceCropUrl(face.face_id);
+    if (!face?.faceID || !urlHelpers) return PLACEHOLDER_DATA_URL;
+    return urlHelpers.getFaceCropUrl(face.faceID);
+  };
+
+  const getGroupLabel = (face) => {
+    if (!face?.groupID || !groups) return 'Unknown Person';
+    const group = groups.find(g => g.groupID === face.groupID);
+    return group?.label || `Person ${face.groupID}`;
   };
 
 
@@ -689,7 +697,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         borderColor = 'border-red-500';
                         bgColor = 'bg-red-500';
                         labelBgColor = 'bg-red-500';
-                      } else if (face.group_id === currentGroupId) {
+                      } else if (face.groupID === currentGroupId) {
                         borderColor = 'border-green-500';
                         bgColor = 'bg-green-500';
                         labelBgColor = 'bg-green-500';
@@ -700,21 +708,21 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }
                       return (
                         <div
-                          key={`face-rect-${face.face_id || `index-${index}`}-${rectangleKey}-${index}-${imageId}`}
+                          key={`face-rect-${face.faceID || `index-${index}`}-${rectangleKey}-${index}-${imageId}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
                             ...getFaceRectangleStyle(face),
                             pointerEvents: 'auto',
                           }}
-                          title={`${face.group_label}`}
+                          title={`${getGroupLabel(face)}`}
                           onClick={(e) => {
                             e.stopPropagation(); // Prevent triggering drag
                             handleFaceClick(index);
                           }}
                         >
                           <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
-                            {face.group_label}
+                            {getGroupLabel(face)}
                           </div>
                           <button
                             onClick={(e) => {
@@ -1045,13 +1053,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                           <div className="space-y-2">
                             {faces.map((face, index) => (
                               <div
-                                key={`face-list-${face.face_id || `index-${index}`}-${face.group_id || 'unknown'}-${index}-${imageId}`}
+                                key={`face-list-${face.faceID || `index-${index}`}-${face.groupID || 'unknown'}-${index}-${imageId}`}
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                 onClick={() => handleFaceClick(index)}
                               >
                                 <img
                                   src={getFaceImageSrc(face)}
-                                  alt={face.group_label}
+                                  alt={getGroupLabel(face)}
                                   className="w-10 h-10 object-cover rounded-full"
                                   loading="lazy"
                                   onError={(e) => {
@@ -1061,11 +1069,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-gray-900 truncate">
-                                    {face.group_label}
+                                    {getGroupLabel(face)}
                                   </p>
                                 </div>
                                 <a
-                                  href={`/${eventUrl}/persons/${encodeURIComponent(face.group_label)}`}
+                                  href={`/${eventUrl}/persons/${encodeURIComponent(getGroupLabel(face))}`}
                                   onClick={(e) => handlePersonLinkClick(e, face)}
                                   className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
                                   title="Go to person page"

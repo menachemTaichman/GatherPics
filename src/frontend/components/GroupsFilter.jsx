@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useEventUrls } from '../utils/useEventUrls';
 import { groupsAPI } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -16,35 +17,40 @@ import {
 } from 'lucide-react';
 
 export default function GroupsFilter({ 
-  group, 
-  relatedGroups, 
-  selectedGroups, 
-  filterMode, 
+  group,
+  relatedGroups,
+  filterMode,
   onlySelected,
-  onFilterChange,
   onModeChange,
   onOnlySelectedChange,
   onReset,
   isVisible,
   eventUrl,
   imageIds = [],
-  onRelatedGroupsUpdate
+  onRelatedGroupsUpdate,
+  currentGroupId,
+  onSelectedGroupsChange,
+  initialSelectedGroups = []
 }) {
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
   const { urlHelpers } = useEventUrls(eventUrl);
+  const [selectedGroups, setSelectedGroups] = useState(initialSelectedGroups || []); // excludes currentGroupId
+  const { groups: storeGroups } = useDataStore();
 
   const fetchRelatedGroups = async () => {
-    if (!group?.groupID || !imageIds.length) return;
+    if (!isVisible) return; // fetch only when panel is open
+    if (!imageIds.length) return;
     
     setIsLoadingRelatedGroups(true);
     try {
+      const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
       const params = {
         image_ids: imageIds.join(','),
-        selected_groups: selectedGroups.join(',')
+        selected_groups: selectedParam
       };
-      const data = await groupsAPI.getRelated(group.groupID, eventUrl, params);
+      const data = await groupsAPI.getRelated(eventUrl, params);
       // The API should return updated related groups based on current filters
       // We'll need to update the parent component with these new related groups
       if (data.related_groups) {
@@ -59,11 +65,12 @@ export default function GroupsFilter({
   };
 
   const handleGroupClick = (groupId) => {
+    if (groupId === currentGroupId) return; // lock current
     const newSelectedGroups = selectedGroups.includes(groupId)
       ? selectedGroups.filter((id) => id !== groupId)
       : [...selectedGroups, groupId];
-    
-    onFilterChange(newSelectedGroups);
+    setSelectedGroups(newSelectedGroups);
+    onSelectedGroupsChange?.(newSelectedGroups);
   };
 
   const handleMouseEnter = (groupId, event) => {
@@ -98,15 +105,46 @@ export default function GroupsFilter({
     };
   }, [hoveredGroup]);
 
-  // Fetch related groups when selectedGroups or imageIds change
+  // Keep internal selection in sync if parent persisted selection changes (without emitting back)
   useEffect(() => {
-    if (selectedGroups.length > 0 || imageIds.length > 0) {
-      fetchRelatedGroups();
-    }
-  }, [selectedGroups, imageIds, group?.groupID, eventUrl]);
+    setSelectedGroups(initialSelectedGroups || []);
+  }, [initialSelectedGroups]);
+
+  // Avoid loops: memoize last request signature
+  const lastReqRef = useState({ current: '' })[0];
+
+  // Fetch related groups when selection or imageIds change
+  useEffect(() => {
+    const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
+    const signature = `${isVisible}|${eventUrl}|${selectedParam}|${imageIds.join(',')}`;
+    if (signature === lastReqRef.current) return;
+    lastReqRef.current = signature;
+    fetchRelatedGroups();
+  }, [selectedGroups, imageIds, currentGroupId, eventUrl, isVisible]);
+
+  // Reset handler: clear selection (current remains locked implicitly)
+  const handleReset = () => {
+    setSelectedGroups([]);
+    onSelectedGroupsChange?.([]);
+    onReset?.();
+  };
+
+  // Build display list: selected first (in order), then API related (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
+  const displayGroups = useMemo(() => {
+    const seen = new Set(selectedGroups);
+    const groupMap = new Map((storeGroups || []).map(g => [g.groupID, g]));
+    const byRelated = new Map((relatedGroups || []).map(g => [g.groupID, g]));
+    const selectedObjs = selectedGroups
+      .filter(id => id !== currentGroupId)
+      .map(id => byRelated.get(id) || groupMap.get(id) || { groupID: id, label: `Person ${id}` });
+    const tail = (relatedGroups || []).filter(g => !seen.has(g.groupID) && g.groupID !== currentGroupId);
+    return [...selectedObjs, ...tail];
+  }, [selectedGroups, relatedGroups, currentGroupId, storeGroups]);
 
   const getGroupDisplayName = (group) => {
-    return group.label || `Person ${group.groupID}`;
+    if (!group) return 'Person';
+    const id = group.groupID || group.id || '';
+    return group.label || `Person ${id}`;
   };
 
   const showResetButton = selectedGroups.length > 0 || onlySelected || filterMode !== 'and';
@@ -131,7 +169,7 @@ export default function GroupsFilter({
             <div className="font-medium">
               {hoveredGroup === group.groupID 
                 ? getGroupDisplayName(group)
-                : getGroupDisplayName(relatedGroups.find(g => g.groupID === hoveredGroup))
+                : getGroupDisplayName(displayGroups.find(g => g.groupID === hoveredGroup))
               }
             </div>
             {/* Removed subtitle text for cleaner tooltip */}
@@ -187,7 +225,7 @@ export default function GroupsFilter({
             {/* Reset Button - Now after the "only" button */}
             {showResetButton && (
               <button
-                onClick={onReset}
+                onClick={handleReset}
                 className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
                 title="Reset all filters"
               >
@@ -226,7 +264,7 @@ export default function GroupsFilter({
           </div>
 
           {/* Related Groups */}
-          {relatedGroups.map((relatedGroup) => (
+          {displayGroups.map((relatedGroup) => (
             <div
               key={relatedGroup.groupID}
               className="flex-shrink-0 relative group"

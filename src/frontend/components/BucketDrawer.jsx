@@ -231,8 +231,11 @@ function BucketThumb({ eventUrl, imageId, tiny = false, withRemove = false, remo
   // Resolve a human-readable label for hover title
   const getLabel = async () => {
     try {
-      const info = await imagesAPI.getInfo(imageId, eventUrl);
-      return info?.label || imageId;
+      const response = await imagesAPI.getDetails([imageId], eventUrl);
+      if (response.images && response.images.length > 0) {
+        return response.images[0]?.label || imageId;
+      }
+      return imageId;
     } catch {
       return imageId;
     }

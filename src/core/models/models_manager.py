@@ -1,6 +1,6 @@
 import json
-from typing import List, Dict, Optional, Union
-from ..db import AppDB, STRUCTURE
+from typing import List, Dict, Union
+from ..db import AppDB, STRUCTURE, get_fields_as_sub_table
 import uuid
 
 MODELS = {
@@ -81,6 +81,13 @@ class ModelsManager:
         results = self.db.execute_query(query, (entity_id,))
         return results[0][0] == 0
 
+    def is_accessible(self, table: str, entity_id: str) -> bool:
+        accessible_table = self.db._get_accessible_table_name(table)
+        id_field = STRUCTURE[table]['primary_key']
+        query = f'SELECT {id_field} FROM {accessible_table} WHERE {id_field} = ?'
+        results = self.db.execute_query(query, (entity_id,))
+        return results is not None and len(results) > 0
+
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
         """Insert one or many records. If a single dict is provided, return the new ID.
         If a list is provided, return the inserted records list.
@@ -154,8 +161,7 @@ class ModelsManager:
         accessible_sub_table = self.db._get_accessible_table_name(sub_table)
         id_field = STRUCTURE[table]['primary_key']
         sort_field = STRUCTURE[sub_table]['sort_by']
-        fields_as_sub_table = STRUCTURE[sub_table]['fields_as_sub_table']
-        fields_as_sub_table_str = ', '.join(fields_as_sub_table) if fields_as_sub_table else '*'
+        fields_as_sub_table = get_fields_as_sub_table(sub_table, 's')
 
         order_by = ''
         if sort_field and sort:
@@ -168,7 +174,7 @@ class ModelsManager:
                 limit_clause += f' OFFSET {int(offset)}'
         
         query = f'''
-            SELECT {fields_as_sub_table_str}
+            SELECT {fields_as_sub_table}
             FROM {accessible_sub_table} s
             WHERE {id_field} = ?
             {order_by}
@@ -235,7 +241,7 @@ class ModelsManager:
                 i.is_archived,
                 i.is_favorite,
                 COALESCE(a.albums_json, '[]') AS albums,
-                COALESCE(f.faces_json, '[]') AS faces,
+                COALESCE(f.faces_json, '[]') AS faces
             FROM accessible_images i
             LEFT JOIN accessible_moments m ON m.momentID = i.momentID
             LEFT JOIN albums_grouped a ON a.imageID = i.imageID
@@ -288,8 +294,7 @@ class ModelsManager:
         accessible_faces = self.db._get_accessible_table_name('faces')
 
         query = f'''
-            SELECT
-                g.groupID
+            SELECT g.*
             FROM {accessible_groups} g
             JOIN {accessible_faces} f ON g.groupID = f.groupID
             WHERE f.imageID IN ({image_placeholders})
@@ -299,42 +304,71 @@ class ModelsManager:
         '''
         
         query_params = base_image_ids + group_ids
-        related_group_rows = self.db.execute_query(query, query_params)
 
-        return [row[0] for row in related_group_rows]
+        return self.db.execute_query(query, query_params, include_columns=True)
 
-    def get_filtered_images(self, group_ids: List[str], mode: str = 'and', only: bool = False) -> List[str]:
+    def get_filtered_images(self, group_ids: List[str], mode: str = 'and', only: bool = False, limit: int | None = None, offset: int | None = None) -> List[str]:
         
         if not group_ids:
             return []
 
-        N = len(group_ids)
-        group_placeholders = ','.join(['?'] * N)
         accessible_faces = self.db._get_accessible_table_name('faces')
+        images_table = 'groups_images'
+        accessible_images = self.db._get_accessible_table_name(images_table)
+        fields_as_sub_table = get_fields_as_sub_table(images_table, 'i')
+
+        N = len(group_ids)
+        M = min(N, 8)
+        group_placeholders = ','.join(['?'] * N)
         having_clause = []
-        params = group_ids.copy()
+        params = []
+
+        priority_case = "CASE i.groupID " + " ".join(
+            f"WHEN ? THEN {idx+1}" for idx in range(M)
+        ) + " ELSE 9999 END"
+        params.extend(group_ids[:M])
 
         query = f"""
-            SELECT imageID
-            FROM {accessible_faces}
+            WITH ranked AS (
+                SELECT i.*, 
+                    ROW_NUMBER() OVER (
+                        PARTITION BY i.imageID
+                        ORDER BY {priority_case}
+                    ) AS rn
+                FROM {accessible_faces} f
+                INNER JOIN {accessible_images} i ON f.imageID = i.imageID
+            )
+            SELECT DISTINCT {fields_as_sub_table}
+            FROM ranked i
+            WHERE i.rn = 1
         """
 
         if mode == 'and':
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN groupID IN ({group_placeholders}) THEN groupID END) = {N}")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN i.groupID IN ({group_placeholders}) THEN i.groupID END) = {N}")
         else:
-            query += f"WHERE groupID IN ({group_placeholders})"
+            query += f"WHERE i.groupID IN ({group_placeholders})"
 
+        params.extend(group_ids)
         if only:
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN groupID NOT IN ({group_placeholders}) THEN groupID END) = 0")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN i.groupID NOT IN ({group_placeholders}) THEN i.groupID END) = 0")
             params.extend(group_ids)
 
         if having_clause:
-            query += f" GROUP BY imageID"
+            query += f" GROUP BY i.imageID"
             query += f" HAVING {' AND '.join(having_clause)}"
 
-        return [row[0] for row in self.db.execute_query(query, params)]
+        limit_clause = ''
+        if limit is not None:
+            limit_clause = f' LIMIT {int(limit)}'
+            if offset is not None:
+                limit_clause += f' OFFSET {int(offset)}'
+
+        query += limit_clause
+
+        return self.db.execute_query(query, params, include_columns=True)
 
     # -------- Groups helpers --------
+    ######## TODO: use is_empty instead
     def is_group_empty(self, group_id: str) -> bool:
         """Bypass profile access: check if group has zero faces (raw faces table)."""
         query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'

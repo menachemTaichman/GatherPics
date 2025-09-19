@@ -85,6 +85,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
+  const [imageClasses, setImageClasses] = useState({});
 
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [albums, setAlbums] = useState([]);
@@ -92,9 +93,18 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   // Filter states
   const [filterVisible, setFilterVisible] = useState(false);
   const [relatedGroups, setRelatedGroups] = useState([]);
+  // Selection now lives in GroupsFilter; keep a derived copy here for fetching images
   const [filterGroups, setFilterGroups] = useSetting('groupDetail_filterGroups', []);
   const [filterMode, setFilterMode] = useSetting('groupDetail_filterMode', 'and');
   const [onlySelected, setOnlySelected] = useSetting('groupDetail_onlySelected', false);
+  const lastFetchSignatureRef = useRef('');
+  const prevGroupIdRef = useRef(null);
+  const suppressSpinnerRef = useRef(false);
+  const restoreScrollYRef = useRef(null);
+
+  // Memoize props for GroupsFilter to prevent infinite re-renders
+  const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
+  const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.groupID !== group?.groupID), [relatedGroups, group?.groupID]);
   
   // No complex flag checking needed - the data store handles everything
 
@@ -270,15 +280,19 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     if (!group?.groupID) {
       return;
     }
-    setLoading(!isFetchingMore);
+    if (!suppressSpinnerRef.current) {
+      setLoading(!isFetchingMore);
+    }
 
     const params = { 
       offset: currentOffset, 
       limit: 50 
     };
 
-    if (filterGroups.length > 0) {
-      params.filter_groups = filterGroups.join(',');
+    if (onlySelected || filterGroups.length > 0) {
+      if (filterGroups.length > 0) {
+        params.filter_groups = filterGroups.join(',');
+      }
       params.filter_mode = filterMode;
       params.only_selected = onlySelected;
     }
@@ -289,8 +303,32 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       setGroup(prev => ({...prev, ...response.group}));
       
       const sorted = sortImages(response.images || [], sortBy, sortOrder);
-      
-      setSortedImages(prev => (resetImages || currentOffset === 0) ? sorted : [...prev, ...sorted]);
+      if (resetImages || currentOffset === 0) {
+        setSortedImages(() => {
+          const seen = new Set();
+          const unique = [];
+          for (const img of sorted) {
+            const id = img?.id;
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            unique.push(img);
+          }
+          return unique;
+        });
+      } else {
+        // merge without full reset to avoid grid flicker and dedupe by id
+        setSortedImages(prev => {
+          const seen = new Set(prev.map(i => i?.id).filter(Boolean));
+          const merged = [...prev];
+          for (const img of sorted) {
+            const id = img?.id;
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            merged.push(img);
+          }
+          return merged;
+        });
+      }
       
       setHasMore((response.images || []).length === 50);
       
@@ -299,31 +337,37 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     } finally {
       setLoading(false);
       setIsFetchingMore(false);
+      if (restoreScrollYRef.current !== null) {
+        const y = restoreScrollYRef.current;
+        restoreScrollYRef.current = null;
+        try {
+          requestAnimationFrame(() => window.scrollTo(0, y));
+        } catch {}
+      }
     }
   }, [group?.groupID, eventUrl, sortBy, sortOrder, filterGroups, filterMode, onlySelected, isFetchingMore]);
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
     if (!group?.groupID) return;
-    setOffset(0); // Reset offset when group changes
+    const sig = `${group.groupID}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
+    if (sig === lastFetchSignatureRef.current) return;
+    const isGroupChange = prevGroupIdRef.current !== group.groupID;
+    prevGroupIdRef.current = group.groupID;
+    // If this is only a filter change, do a silent fetch and preserve scroll
+    if (!isGroupChange) {
+      suppressSpinnerRef.current = true;
+      try { restoreScrollYRef.current = window.scrollY; } catch {}
+    } else {
+      suppressSpinnerRef.current = false;
+      restoreScrollYRef.current = null;
+    }
+    lastFetchSignatureRef.current = sig;
+    setOffset(0);
     fetchGroupData(0, true);
   }, [group?.groupID, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
 
-  // Effect to fetch related groups
-  useEffect(() => {
-    if (!group?.groupID) return;
-
-    const fetchRelated = async () => {
-      try {
-        const data = await groupsAPI.getRelated(group.groupID, eventUrl);
-        setRelatedGroups(data.related_groups || []);
-      } catch (error) {
-        console.error('Error fetching related groups:', error);
-      }
-    };
-
-    fetchRelated();
-  }, [group?.groupID, eventUrl]);
+  // Related groups are fetched inside GroupsFilter; keep local state updated via callback
 
 
   const handleLoadMore = () => {
@@ -346,7 +390,18 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     setFilterVisible(prev => !prev);
   };
 
+  const arraysEqual = (a = [], b = []) => {
+    if (a === b) return true;
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  };
+
   const handleFilterChange = (newFilterGroups) => {
+    if (arraysEqual(filterGroups, newFilterGroups)) return;
     setFilterGroups(newFilterGroups);
   };
 
@@ -440,7 +495,22 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     }
   };
 
-
+  const handleImageLoad = (imageId, e) => {
+    const img = e.target;
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+    
+    let imageClass = 'square';
+    if (aspectRatio > 1.2) {
+      imageClass = 'landscape';
+    } else if (aspectRatio < 0.8) {
+      imageClass = 'portrait';
+    }
+    
+    setImageClasses(prev => ({
+      ...prev,
+      [imageId]: imageClass
+    }));
+  };
 
   const handleAddSelectedToBucket = async () => {
     if (selectedImages.size === 0) return;
@@ -986,18 +1056,19 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           {filterVisible && (
             <GroupsFilter
               group={group}
-              relatedGroups={relatedGroups.filter(g => g.groupID !== group?.groupID)}
-              selectedGroups={filterGroups}
+              relatedGroups={memoizedRelatedGroups}
               filterMode={filterMode}
               onlySelected={onlySelected}
-              onFilterChange={handleFilterChange}
               onModeChange={handleFilterModeChange}
               onOnlySelectedChange={handleOnlySelectedChange}
               onReset={handleFilterReset}
               isVisible={filterVisible}
               eventUrl={eventUrl}
-              imageIds={sortedImages.map(img => img.id)}
+              imageIds={memoizedImageIds}
               onRelatedGroupsUpdate={setRelatedGroups}
+              currentGroupId={group?.groupID}
+              onSelectedGroupsChange={setFilterGroups}
+              initialSelectedGroups={filterGroups}
             />
           )}
         </AnimatePresence>
@@ -1039,17 +1110,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
             >
               {sortedImages.map((image, index) => (
                 <motion.div
-                  key={`${(image.id || 'unknown')}-${index}`}
+                  key={image.id || `unknown-${index}`}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className={`${viewMode === 'grid' ? `photo-card square` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
+                  className={`${viewMode === 'grid' ? `photo-card ${imageClasses[image.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
                 >
                   {viewMode === 'grid' ? (
                     <SingleImageTile
                       image={image}
-                      aspectClass={'square'}
+                      aspectClass={imageClasses[image.id] || 'square'}
                       imageFit={showCrops ? 'contain' : 'cover'}
                       thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                       selectionMode={selectionMode}
@@ -1090,6 +1161,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                           showToast('Failed to update archive', 'error');
                         }
                       }}
+                      onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={formatDate(image.date_taken)}
                       showDate={!!image.date_taken}
                       showCropBadge={showCrops && !!image.representative_face}
