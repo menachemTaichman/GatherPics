@@ -360,6 +360,9 @@ group_id = "428a3484-63f2-44c6-86ee-2110d2434b59"
 image_id = "4589a114-6d9b-4a8e-a5e2-6ae7a8082bc0"
 representative_face = "49408e9f-4614-48aa-b2fc-2cca81a376fa"
 
-favorites_id = event.models_manager.get_favorites_album()
-result = event.models_manager.get_summary('albums', favorites_id)
+album_id = event.models_manager.get_favorites_album()
+#image_ids = event.models_manager.get_sub_entities('albums', album_id)
+
+image_ids = [image_id]
+result = event.models_manager.get_images(image_ids)
 print(result)

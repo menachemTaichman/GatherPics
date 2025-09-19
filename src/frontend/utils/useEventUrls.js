@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { resolveEventId } from './eventResolver';
 import { API_BASE } from './apiService';
-import jwtService from './jwtService';
 
 export function useEventUrls(eventUrl) {
   const [eventId, setEventId] = useState(null);
@@ -39,53 +38,37 @@ export function useEventUrls(eventUrl) {
   const urlHelpers = {
     getDisplayImageUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp${qs}`;
+      return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp`;
     },
     getThumbnailUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/api/events/${eventId}/thumb/${imageId}.webp${qs}`;
+      return `${API_BASE}/api/events/${eventId}/thumb/${imageId}.webp`;
     },
     getHighQualityUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp${qs}`;
+      return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp`;
     },
     getOriginalUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp${qs}`;
+      return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp`;
     },
     getFaceCropUrl: (faceId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp${qs}`;
+      return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
     },
     
     // Relative URLs
     getRelativeDisplayUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `/api/events/${eventId}/display/${imageId}.webp${qs}`;
+      return `/api/events/${eventId}/display/${imageId}.webp`;
     },
     getRelativeThumbnailUrl: (imageId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `/api/events/${eventId}/thumb/${imageId}.webp${qs}`;
+      return `/api/events/${eventId}/thumb/${imageId}.webp`;
     },
     getRelativeFaceCropUrl: (faceId) => {
       if (!eventId) return null;
-      const token = jwtService.getTokenSync();
-      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-      return `/api/events/${eventId}/faces/${faceId}.webp${qs}`;
+      return `/api/events/${eventId}/faces/${faceId}.webp`;
     },
   };
 

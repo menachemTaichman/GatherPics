@@ -2,55 +2,68 @@ import sqlite3
 from typing import List, Dict, Union, Tuple, Any
 from contextlib import contextmanager
 
+"""
+sub_tables:
+groups: edit - faces (exclusive), view - groups_images
+moments: edit - images (exclusive), view - images
+albums: edit - albums_images (inclusive), view - albums_images
+profiles: edit - profile_images (inclusive), profile_albums (inclusive), view - profile_images, profile_albums
+"""
+
 STRUCTURE = {
     'images': {
         'primary_key': 'imageID',
         'sort_by': 'date_taken',
-        'sub_table': 'faces',
-        'fields_as_sub_table': '',
         'accessible_table': 'accessible_images',
     },
     'faces': {
         'primary_key': 'faceID',
-        'sort_by': '',
-        'sub_table': '',
-        'fields_as_sub_table': '',
         'accessible_table': 'accessible_faces',
     },
     'groups': {
         'primary_key': 'groupID',
         'sort_by': 'label',
-        'sub_table': 'groups_images',
-        'fields_as_sub_table': '',
         'accessible_table': 'accessible_groups',
+        'representative_field': 'representative_face',
+        'sub_tables': {'view': ['groups_images'], 'edit': {'faces': 'exclusive'}},
     },
     'moments': {
         'primary_key': 'momentID',
         'sort_by': 'start, label',
-        'sub_table': 'images',
-        'fields_as_sub_table': '',
         'accessible_table': 'accessible_moments',
+        'representative_field': 'representative_image',
+        'sub_tables': {'view': ['images'], 'edit': {'images': 'exclusive'}},
     },
     'albums': {
         'primary_key': 'albumID',
         'sort_by': 'label',
-        'sub_table': 'album_images',
-        'fields_as_sub_table': '',
         'accessible_table': 'accessible_albums',
+        'representative_field': 'representative_image',
+        'sub_tables': {'view': ['albums_images'], 'edit': {'albums_images': 'images'}},
     },
     'profiles': {
         'primary_key': 'profileID',
         'sort_by': 'label',
-        'sub_table': '',
-        'fields_as_sub_table': '',
         'accessible_table': '',
+        'sub_tables': {'view': ['profile_images', 'profile_albums'], 'edit': {'profile_images': 'inages', 'profile_albums': 'albums'}},
     },
     'groups_images': {
         'primary_key': 'groupID, imageID',
         'sort_by': 'label',
-        'sub_table': '',
         'fields_as_sub_table': ['imageID', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
         'accessible_table': 'accessible_groups_images',
+    },
+    'albums_images': {
+        'primary_key': 'albumID, imageID',
+        'accessible_table': 'accessible_albums_images',
+    },
+    'profile_images': {
+        'primary_key': 'profileID, imageID',
+        'accessible_table': 'editable_profile_images',
+    },
+    'profile_albums': {
+        'primary_key': 'profileID, albumID',
+        'accessible_table': 'editable_profile_albums',
     },
 }
 
@@ -97,7 +110,7 @@ TABLES = {
         representative_image TEXT,
         FOREIGN KEY (representative_image) REFERENCES images(imageID) ON DELETE SET NULL
     ''',
-    'album_images': '''
+    'albums_images': '''
         albumID TEXT,
         imageID TEXT,
         FOREIGN KEY (albumID) REFERENCES albums(albumID) ON DELETE CASCADE,
@@ -153,9 +166,9 @@ VIEWS = {
             CASE WHEN a1.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_archived,
             CASE WHEN a2.imageID IS NOT NULL THEN 1 ELSE 0 END AS is_favorite_helper
         FROM images
-        LEFT JOIN (album_images a1 INNER JOIN albums b1 ON a1.albumID = b1.albumID)
+        LEFT JOIN (albums_images a1 INNER JOIN albums b1 ON a1.albumID = b1.albumID)
         ON a1.imageID = images.imageID AND LOWER(b1.label) = 'archive'
-        LEFT JOIN (album_images a2 INNER JOIN albums b2 ON a2.albumID = b2.albumID)
+        LEFT JOIN (albums_images a2 INNER JOIN albums b2 ON a2.albumID = b2.albumID)
         ON a2.imageID = images.imageID AND LOWER(b2.label) = 'favorites';
     ''',
     'accessible_albums': '''
@@ -223,10 +236,10 @@ VIEWS = {
         SELECT moments.* FROM moments
     ''',
     'accessible_albums_images': '''
-        SELECT album_images.*
-        FROM album_images
-        INNER JOIN accessible_images ON album_images.imageID = accessible_images.imageID
-        INNER JOIN accessible_albums ON album_images.albumID = accessible_albums.albumID
+        SELECT albums_images.*
+        FROM albums_images
+        INNER JOIN accessible_images ON albums_images.imageID = accessible_images.imageID
+        INNER JOIN accessible_albums ON albums_images.albumID = accessible_albums.albumID
     ''',
     'editable_profiles_details': '''
         SELECT profileID, label, password FROM profiles
@@ -435,7 +448,7 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied')
         END;
 
-        INSERT OR IGNORE INTO album_images (albumID, imageID)
+        INSERT OR IGNORE INTO albums_images (albumID, imageID)
         SELECT accessible_albums.albumID, accessible_images.imageID
         FROM accessible_albums
         JOIN accessible_images
@@ -452,7 +465,7 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied')
         END;
 
-        DELETE FROM album_images
+        DELETE FROM albums_images
         WHERE albumID = OLD.albumID
         AND imageID = OLD.imageID;
     END;
@@ -639,61 +652,82 @@ TRIGGERS = {
     """,
 }
 
-def get_fields_as_sub_table(table: str, as_table: str | None = None) -> str:
-    if table not in STRUCTURE:
-        return table
-    
-    if as_table:
-        as_table += '.'
-
-    fields_as_sub_table = STRUCTURE[table]['fields_as_sub_table']
-    return ', '.join([f"{as_table}{field}" for field in fields_as_sub_table]) if fields_as_sub_table else f'{as_table}*'
-
-def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
-    """Create a new SQLite DB in the given directory, initializing all tables and settings."""
-    import os
-    if db_name is None:
-        db_name = os.path.basename(os.path.normpath(dir_path)) + '.db'
-    db_path = os.path.join(dir_path, db_name)
-    os.makedirs(dir_path, exist_ok=True)
-    # Create DB and all tables
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    try:
-        # Create tables
-        for table, schema in TABLES.items():
-            conn.execute(f'''CREATE TABLE IF NOT EXISTS {table} ({schema})''')
-        
-        # Create indexes
-        for index_sql in INDEXES:
-            conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
-        
-        # Create views
-        for view_name, view_sql in VIEWS.items():
-            conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
-        
-        # Create triggers
-        trigger_sql = f"""
-        CREATE TRIGGER IF NOT EXISTS trg_insert_images_count_limit
-        BEFORE INSERT ON images
-        BEGIN
-            SELECT CASE
-                WHEN (SELECT COUNT(*) FROM images) >= {images_count_limit} THEN
-                    RAISE(ABORT, 'Images count limit reached')
-            END;
-        END;
-        """
-        conn.execute(trigger_sql)
-        
-        for trigger_name, trigger_sql in TRIGGERS.items():
-            conn.execute(trigger_sql)
-
-        conn.commit()
-    finally:
-        conn.close()
-    return db_path 
-
 class AppDB:
+
+    @staticmethod
+    def create_new_db_in_dir(dir_path: str, db_name: str | None = None, images_count_limit: int = 10000):
+        """Create a new SQLite DB in the given directory, initializing all tables and settings."""
+        import os
+        if db_name is None:
+            db_name = os.path.basename(os.path.normpath(dir_path)) + '.db'
+        db_path = os.path.join(dir_path, db_name)
+        os.makedirs(dir_path, exist_ok=True)
+        # Create DB and all tables
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            # Create tables
+            for table, schema in TABLES.items():
+                conn.execute(f'''CREATE TABLE IF NOT EXISTS {table} ({schema})''')
+            
+            # Create indexes
+            for index_sql in INDEXES:
+                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
+            
+            # Create views
+            for view_name, view_sql in VIEWS.items():
+                conn.execute(f'''CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}''')
+            
+            # Create triggers
+            trigger_sql = f"""
+            CREATE TRIGGER IF NOT EXISTS trg_insert_images_count_limit
+            BEFORE INSERT ON images
+            BEGIN
+                SELECT CASE
+                    WHEN (SELECT COUNT(*) FROM images) >= {images_count_limit} THEN
+                        RAISE(ABORT, 'Images count limit reached')
+                END;
+            END;
+            """
+            conn.execute(trigger_sql)
+            
+            for trigger_name, trigger_sql in TRIGGERS.items():
+                conn.execute(trigger_sql)
+
+            conn.commit()
+        finally:
+            conn.close()
+        return db_path 
+
+    @staticmethod
+    def get_view_sub_table(table: str, sub_table: str | None = None) -> str:
+        sub_tables = STRUCTURE[table]['sub_tables'].get('view', None)
+        sub_table = sub_table or sub_tables[0]
+
+        return sub_table
+
+    @staticmethod
+    def get_edit_sub_table(table: str, sub_table: str | None = None) -> str | tuple[str, str]:
+        sub_tables = STRUCTURE[table]['sub_tables'].get('edit', None)
+        if not sub_table:
+            sub_table = list(sub_tables.keys())[0]
+
+        other_super_table = sub_tables[sub_table]
+        if other_super_table == 'exclusive':
+            other_super_table = table
+        
+        return sub_table, other_super_table
+
+    @staticmethod
+    def get_fields_as_sub_table(table: str, as_table: str | None = None) -> str:
+        if table not in STRUCTURE:
+            return table
+        
+        if as_table:
+            as_table += '.'
+
+        fields_as_sub_table = STRUCTURE[table].get('fields_as_sub_table', None)
+        return ', '.join([f"{as_table}{field}" for field in fields_as_sub_table]) if fields_as_sub_table else f'{as_table}*'
 
     def __init__(self, db_path: str, event_id: str, profile_id: str | None = None, include_archived: bool = False):
         self.db_path = db_path
@@ -701,15 +735,6 @@ class AppDB:
         self._profile_context = {}
         self.set_profile_id(profile_id)
         self.set_include_archived(include_archived)
-
-    def _get_accessible_table_name(self, table: str) -> str:
-        """
-        Get the accessible view name for a table if it exists and profile filtering is enabled.
-        Returns the original table name if no accessible view exists or profile filtering is disabled.
-        """
-        if not self.get_profile_id() or table not in STRUCTURE:
-            return table
-        return STRUCTURE[table]['accessible_table']
 
     def set_profile_id(self, profile_id: str | None = None):
         """Set the current profile ID for access control."""
@@ -802,12 +827,12 @@ class AppDB:
             return []
 
     ########## TODO: use execute_query instead
-    def insert(self, table: str, data_list: List[Dict], bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+    def insert(self, table: str, data_list: List[Dict]) -> List[Union[Any, Tuple[Any, ...]]]:
         """Insert multiple records into a table/view and return their IDs."""
         if not data_list:
             return []
         
-        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        target_table = STRUCTURE[table]['accessible_table']
         
         keys = list(data_list[0].keys())
         keys_str = ', '.join(keys)
@@ -815,7 +840,7 @@ class AppDB:
         
         sql = f'INSERT INTO {target_table} ({keys_str}) VALUES {placeholders}'
 
-        p_keys = STRUCTURE[target_table]['primary_key']
+        p_keys = STRUCTURE[table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -835,12 +860,12 @@ class AppDB:
         return inserted_ids
 
     ########## TODO: use execute_query instead
-    def update(self, table: str, where: Dict, fields: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+    def update(self, table: str, where: Dict, fields: Dict) -> List[Union[Any, Tuple[Any, ...]]]:
         """Update records in a table/view and return their IDs."""
         if not fields:
             return []
 
-        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        target_table = STRUCTURE[table]['accessible_table']
         
         set_clause = ', '.join([f'{k}=?' for k in fields.keys()])
         
@@ -863,7 +888,7 @@ class AppDB:
         
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
-        p_keys = STRUCTURE[target_table]['primary_key']
+        p_keys = STRUCTURE[table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'
@@ -881,9 +906,9 @@ class AppDB:
         return updated_ids
 
     ########## TODO: use execute_query instead
-    def delete(self, table: str, where: Dict, bypass_access_control: bool = False) -> List[Union[Any, Tuple[Any, ...]]]:
+    def delete(self, table: str, where: Dict) -> List[Union[Any, Tuple[Any, ...]]]:
         """Delete records from a table/view and return their IDs."""
-        target_table = table if bypass_access_control else self._get_accessible_table_name(table)
+        target_table = STRUCTURE[table]['accessible_table']
         
         where_clauses = []
         where_values = []
@@ -903,7 +928,7 @@ class AppDB:
         
         sql = f'DELETE FROM {target_table} WHERE {where_clause}'
 
-        p_keys = STRUCTURE[target_table]['primary_key']
+        p_keys = STRUCTURE[table]['primary_key']
         if p_keys:
             returning_str = ', '.join(p_keys) if isinstance(p_keys, tuple) else p_keys
             sql += f' RETURNING {returning_str}'

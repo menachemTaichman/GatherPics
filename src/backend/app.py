@@ -1,6 +1,14 @@
 from flask import Flask, jsonify, request, g, send_file, abort, make_response
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, get_jwt
+from flask_jwt_extended import (
+    JWTManager,
+    jwt_required,
+    create_access_token,
+    get_jwt_identity,
+    get_jwt,
+    set_access_cookies,
+    unset_jwt_cookies,
+)
 from functools import wraps
 import traceback
 import os
@@ -15,8 +23,10 @@ CORS(app, origins="*", supports_credentials=True)
 # JWT Configuration
 app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'  # Change this in production
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for now
-app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
-app.config['JWT_QUERY_STRING_NAME'] = 'token'
+app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
+app.config['JWT_COOKIE_SAMESITE'] = 'Lax'
+app.config['JWT_COOKIE_SECURE'] = False  # True in production over HTTPS
+app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Simplify for now
 jwt = JWTManager(app)
 
 # --- Placeholder values for now ---
@@ -119,10 +129,18 @@ def set_include_archived():
     additional_claims = {"include_archived": include_archived}
     access_token = create_access_token(identity=FIXED_PROFILE_ID, additional_claims=additional_claims)
     
-    return jsonify({
+    resp = jsonify({
         "access_token": access_token,
         "include_archived": include_archived
     })
+    set_access_cookies(resp, access_token)
+    return resp
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    resp = jsonify({"msg": "logout successful"})
+    unset_jwt_cookies(resp)
+    return resp
 
 # ==============================================================================
 # II. GROUPS (PERSONS) ENDPOINTS
@@ -216,25 +234,6 @@ def update_group(event_id, group_id):
     except Exception as e:
         return bad_request(e)
 
-"""
-@app.route("/api/events/<event_id>/groups/<group_id>", methods=["DELETE"])
-@require_auth
-def delete_group(event_id, group_id):
-    # delete a group
-    event = get_event(event_id)
-    group = event.models_manager.get_summary('groups', group_id)
-    if not group:
-        return not_found(f"Group {group_id} not found or not accessible")
-    
-    try:
-        event.models_manager.delete('groups', group_id)
-        
-        response_data = {"success": True}
-        response_data = add_change_instruction(response_data, 'GROUP_DELETED', {"group_id": group_id})
-        return jsonify(response_data)
-    except Exception as e:
-        return bad_request(e)
-"""
 
 @app.route("/api/events/<event_id>/groups/check-name", methods=["POST"])
 @require_auth
@@ -265,30 +264,28 @@ def transfer_faces(event_id):
     """Transfer faces between groups."""
     event = get_event(event_id)
     data = request.json or {}
-    source_group_id = data.get('source_group_id')
     target_group_id = data.get('target_group_id')
-    face_ids = data.get('face_ids', [])
     new_group_name = data.get('new_group_name', '')
+    face_ids = data.get('face_ids', [])
     
-    if not source_group_id or not face_ids or (not target_group_id and not new_group_name):
+    if not face_ids or (not target_group_id and not new_group_name):
         return jsonify({"error": "Missing required parameters"}), 400
     
     try:
-        if not event.models_manager.get_summary('groups', source_group_id):
-            return not_found("Source group not found or not accessible")
+        faces_ids, old_group_ids, target_group_id = event.models_manager.transfer_faces(face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
         
-        result = event.models_manager.transfer_faces(source_group_id, face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
+        response = {"success": True, "transferred_count": len(faces_ids)}
+        response.update({'faces_ids': faces_ids, 'old_group_ids': old_group_ids, 'target_group_id': target_group_id})
         
-        response_data = {"success": True, "transferred_count": len(result.get('transferred_faces_ids', []))}
-        response_data.update(result)
+        change_data = {
+            'faces_ids': faces_ids,
+            'old_group_ids': old_group_ids,
+            'target_group_id': target_group_id
+        }
         
-        change_data = result.copy()
-        change_data['updated_source_group'] = result.get('updated_source_group')
-        change_data['updated_target_group'] = result.get('updated_target_group')
-        
-        response_data = add_change_instruction(response_data, 'GROUP_FACES_TRANSFERRED', change_data)
+        response = add_change_instruction(response, 'FACES_TRANSFERRED', change_data)
 
-        return jsonify(response_data)
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
@@ -377,13 +374,13 @@ def add_images_to_moment(event_id, moment_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        added_ids = event.models_manager.add_images_to_moment(moment_id, image_ids)
+        added_ids, old_moment_ids = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=True)
         response = {"success": True, "added_ids": added_ids}
-        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": added_ids})
+        response = add_change_instruction(response, 'IMAGE_MOMENTS_UPDATED', {"image_ids": added_ids})
         
         # Also update the moment summary in case representative/count changed
         updated_moment = event.models_manager.get_summary('moments', moment_id)
-        response = add_change_instruction(response, 'MOMENT_UPDATED', updated_moment)
+        response = add_change_instruction(response, 'MOMENT_UPDATED', [updated_moment] + old_moment_ids)
         
         return jsonify(response)
     except Exception as e:
@@ -397,13 +394,13 @@ def remove_images_from_moment(event_id, moment_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_ids = event.models_manager.remove_images_from_moment(moment_id, image_ids)
+        removed_ids, old_moment_ids = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=False)
         response = {"success": True, "removed_ids": removed_ids}
         response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": removed_ids})
 
         # Also update the moment summary in case representative/count changed
         updated_moment = event.models_manager.get_summary('moments', moment_id)
-        response = add_change_instruction(response, 'MOMENT_UPDATED', updated_moment)
+        response = add_change_instruction(response, 'MOMENT_UPDATED', [updated_moment] + old_moment_ids)
         
         return jsonify(response)
     except Exception as e:
@@ -464,16 +461,18 @@ def get_album(event_id, album_id):
 @app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
 @require_auth
 def get_favorites_album(event_id):
-    """Get the favorites album id."""
+    """Get the favorites album."""
     event = get_event(event_id)
-    return jsonify({"album_id": event.models_manager.get_favorites_album()})
+    favorites_album_id = event.models_manager.get_favorites_album()
+    return get_album(event_id, favorites_album_id)
 
 @app.route("/api/events/<event_id>/albums/defaults/archive", methods=["GET"])
 @require_auth
 def get_archive_album(event_id):
-    """Get the archive album id."""
+    """Get the archive album."""
     event = get_event(event_id)
-    return jsonify({"album_id": event.models_manager.get_archive_album()})
+    archive_album_id = event.models_manager.get_archive_album()
+    return get_album(event_id, archive_album_id)
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["PUT"])
 @require_auth
@@ -509,10 +508,10 @@ def add_images_to_album(event_id, album_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        result = event.models_manager.add_images_to_album(album_id, image_ids)
-        response = {"success": True, "added_ids": result['added_ids'], "archived_ids": result['archived_ids']}
+        added_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=True)
+        response = {"success": True, "added_ids": added_ids}
         
-        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": result['added_ids']})
+        response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": added_ids})
         
         return jsonify(response)
     except Exception as e:
@@ -526,7 +525,7 @@ def remove_images_from_album(event_id, album_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_ids = event.models_manager.remove_images_from_album(album_id, image_ids)
+        removed_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=False)
         response = {"success": True, "removed_ids": removed_ids}
         response = add_change_instruction(response, 'IMAGE_ALBUMS_UPDATED', {"image_ids": removed_ids})
 

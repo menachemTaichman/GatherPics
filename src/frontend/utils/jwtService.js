@@ -40,9 +40,11 @@ class JWTService {
       // Use provided value or current setting
       const newIncludeArchived = includeArchived !== null ? includeArchived : this.includeArchived;
       
-      const response = await axios.post(`${API_BASE}/set-include-archived`, {
-        include_archived: newIncludeArchived
-      });
+      const response = await axios.post(
+        `${API_BASE}/set-include-archived`,
+        { include_archived: newIncludeArchived },
+        { withCredentials: true }
+      );
 
       this.token = response.data.access_token;
       this.includeArchived = response.data.include_archived;
@@ -111,6 +113,14 @@ class JWTService {
   clearToken() {
     this.token = null;
     this.saveToStorage();
+  }
+
+  // Logout and clear cookie
+  async logout() {
+    try {
+      await axios.post(`${API_BASE}/logout`, {}, { withCredentials: true });
+    } catch (_) {}
+    this.clearToken();
   }
 
   // Get current include_archived setting

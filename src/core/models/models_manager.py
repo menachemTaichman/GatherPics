@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Union
-from ..db import AppDB, STRUCTURE, get_fields_as_sub_table
+from ..db import AppDB, STRUCTURE
 import uuid
 
 MODELS = {
@@ -62,7 +62,7 @@ MODELS = {
 }
 
 class ModelsManager:
-    # -------- Generic model helpers (CRUD) --------
+
     def __init__(self, db: AppDB) -> None:
         self.db = db
 
@@ -75,41 +75,18 @@ class ModelsManager:
         return self.db.is_exists(table, fields, exclude_id)
 
     def is_empty(self, table: str, entity_id: str) -> bool:
-        sub_query = STRUCTURE[table]['sub_table']
+        sub_query = STRUCTURE[table]['sub_view_table']
         id_field = STRUCTURE[table]['primary_key']
         query = f'SELECT COUNT(*) FROM {sub_query} WHERE {id_field} = ?'
         results = self.db.execute_query(query, (entity_id,))
         return results[0][0] == 0
 
     def is_accessible(self, table: str, entity_id: str) -> bool:
-        accessible_table = self.db._get_accessible_table_name(table)
+        accessible_table = STRUCTURE[table]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
         query = f'SELECT {id_field} FROM {accessible_table} WHERE {id_field} = ?'
         results = self.db.execute_query(query, (entity_id,))
         return results is not None and len(results) > 0
-
-    def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
-        """Insert one or many records. If a single dict is provided, return the new ID.
-        If a list is provided, return the inserted records list.
-        """
-        is_single_item = isinstance(data, dict)
-        data_list = [data] if is_single_item else data
-        
-        for row in data_list:
-            if STRUCTURE[table]['primary_key'] not in row:
-                row[STRUCTURE[table]['primary_key']] = ModelsManager.generate_id()
-        
-        inserted_ids = self.db.insert(table, data_list)
-        
-        if is_single_item:
-            return inserted_ids[0] if inserted_ids else None
-        return inserted_ids
-
-    def delete(self, table: str, entity_ids: List[str] | str):
-        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_ids})
-
-    def edit(self, table: str, entity_ids: List[str] | str, fields: Dict) -> List[str]:
-        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_ids}, fields)
 
     def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
         return_list = True
@@ -120,8 +97,8 @@ class ModelsManager:
         if table not in ['groups', 'moments', 'albums']:
             return []
 
-        accessible_table = self.db._get_accessible_table_name(table)
-        sub_table = STRUCTURE[table]['sub_table']
+        accessible_table = STRUCTURE[table]['accessible_table']
+        sub_table = AppDB.get_view_sub_table(table)
         id_field = STRUCTURE[table]['primary_key']
         sort_field = STRUCTURE[table]['sort_by']
 
@@ -153,15 +130,16 @@ class ModelsManager:
             return results
         return results[0]
 
-    def get_sub_entities(self, table: str, entity_id: str, *, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
-        if table not in ['images','groups', 'moments', 'albums']:
+    def get_sub_entities(self, table: str, entity_id: str, *, sub_table: str | None = None, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
+
+        sub_table = AppDB.get_view_sub_table(table, sub_table=sub_table)
+        if not sub_table:
             return []
 
-        sub_table = STRUCTURE[table]['sub_table']
-        accessible_sub_table = self.db._get_accessible_table_name(sub_table)
+        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        sort_field = STRUCTURE[sub_table]['sort_by']
-        fields_as_sub_table = get_fields_as_sub_table(sub_table, 's')
+        sort_field = STRUCTURE[sub_table].get('sort_by','')
+        fields_as_sub_table = AppDB.get_fields_as_sub_table(sub_table, 's')
 
         order_by = ''
         if sort_field and sort:
@@ -182,6 +160,114 @@ class ModelsManager:
         '''
         results = self.db.execute_query(query, (entity_id,), include_columns=True)
         return results
+
+    def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
+        """Insert one or many records. If a single dict is provided, return the new ID.
+        If a list is provided, return the inserted records list.
+        """
+        is_single_item = isinstance(data, dict)
+        data_list = [data] if is_single_item else data
+        
+        for row in data_list:
+            if STRUCTURE[table]['primary_key'] not in row:
+                row[STRUCTURE[table]['primary_key']] = ModelsManager.generate_id()
+        
+        inserted_ids = self.db.insert(table, data_list)
+        
+        if is_single_item:
+            return inserted_ids[0] if inserted_ids else None
+        return inserted_ids
+
+    def delete(self, table: str, entity_ids: List[str] | str):
+        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_ids})
+
+    def edit(self, table: str, entity_ids: List[str] | str, fields: Dict) -> List[str]:
+        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_ids}, fields)
+
+    def ensure_representative(self, table: str, entity_id: str) -> str:
+        representative_field = STRUCTURE[table].get('representative_field','')
+        if not representative_field:
+            raise ValueError(f"Representative field not found for table {table}")
+
+        id_field = STRUCTURE[table]['primary_key']
+        sub_table, other_super_table = AppDB.get_edit_sub_table(table)
+        other_super_id_field = STRUCTURE[other_super_table]['primary_key']
+
+        entity = self.get_summary(table, entity_id)
+        if entity and entity.get(representative_field):
+            representative_id = entity.get(representative_field)
+            query = f"""SELECT *
+            FROM {sub_table} s
+            WHERE s.{id_field} = ? AND s.{other_super_id_field} = ?
+            """
+            is_sub_entity = self.db.execute_query(query, (entity_id, representative_id))
+            if is_sub_entity:
+                return representative_id
+        
+        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
+
+        query = f"""SELECT o.{other_super_id_field}
+        FROM {accessible_sub_table} s
+        LEFT JOIN {other_super_table} o ON s.{other_super_id_field} = o.{other_super_id_field}
+        WHERE s.{id_field} = ?
+        ORDER BY width * height DESC
+        LIMIT 1
+        """
+        biggest = self.db.execute_query(query, (entity_id,))[0][0]
+        if biggest:
+            self.edit(table, entity_id, {representative_field: biggest})
+        
+        return biggest
+
+    def edit_sub_entities(self, table: str, entity_id: str, sub_entities: List[str], *, add: bool, sub_table: str | None = None) -> tuple[List[str], List[str]]:
+        sub_table, other_super_table = AppDB.get_edit_sub_table(table, sub_table=sub_table)
+        exclusive = other_super_table == table
+        accessible_other_super_table = STRUCTURE[other_super_table]['accessible_table']
+        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
+        id_field = STRUCTURE[table]['primary_key']
+        other_super_id_field = STRUCTURE[other_super_table]['primary_key']
+
+        placeholders = ','.join(['?'] * len(sub_entities))
+        is_null = 'NULL' if add else 'NOT NULL'
+        query = f"""SELECT o.{other_super_id_field}
+        FROM {accessible_other_super_table} o
+        LEFT JOIN {accessible_sub_table} s ON o.{other_super_id_field} = s.{other_super_id_field} AND s.{id_field} = ?
+        WHERE s.{id_field} IS {is_null} AND o.{other_super_id_field} IN ({placeholders})
+        """
+        sub_entities = self.db.execute_query(query, (entity_id, *sub_entities))
+        sub_entities = [row[0] for row in sub_entities]
+        placeholders = ','.join(['?'] * len(sub_entities))
+
+        if not sub_entities:
+            return [], []
+
+        query = f"""
+            SELECT DISTINCT {id_field}
+            FROM {accessible_sub_table}
+            WHERE {other_super_id_field} in ({placeholders})
+        """
+        old_super_entities = []
+
+        if exclusive:
+            old_super_entities = self.db.execute_query(query, sub_entities)
+            old_super_entities = [row[0] for row in old_super_entities]
+            if add:
+                query = f'UPDATE {accessible_sub_table} SET {id_field} = ? WHERE {other_super_id_field} IN ({placeholders})'
+            else:
+                query = f'UPDATE {accessible_sub_table} SET {id_field} = NULL WHERE {id_field} = ? AND {other_super_id_field} IN ({placeholders})'
+        else:
+            if add:
+                query = f'INSERT INTO {accessible_sub_table} ({id_field}, {other_super_id_field}) VALUES (?, {placeholders})'
+            else:
+                query = f'DELETE FROM {accessible_sub_table} WHERE {id_field} = ? AND {other_super_id_field} IN ({placeholders})'
+
+        if STRUCTURE[table].get('representative_field',''):
+            for super_entity in [entity_id] + old_super_entities:
+                self.ensure_representative(table, super_entity)
+
+        self.db.execute_query(query, (entity_id, *sub_entities))
+        
+        return sub_entities, old_super_entities
 
     # -------- Images helpers --------    
     def get_images(self, image_ids: List[str] | str | None = None) -> List[Dict]:
@@ -204,7 +290,7 @@ class ModelsManager:
                             'representative_image', a.representative_image
                         )
                     ) AS albums_json
-                FROM album_images ai
+                FROM accessible_albums_images ai
                 INNER JOIN accessible_albums a
                     ON a.albumID = ai.albumID
                     AND LOWER(a.label) NOT IN ('archive','favorites')
@@ -283,6 +369,7 @@ class ModelsManager:
 
         return result
       
+    # -------- Groups helpers --------
     def get_related_groups(self, group_ids: List[str], base_image_ids: List[str]) -> List[str]:
         """Return related group IDs ordered by relevance using co-occurrence in images."""
         if not base_image_ids or not group_ids:
@@ -290,8 +377,8 @@ class ModelsManager:
 
         group_id_placeholders = ','.join(['?'] * len(group_ids))
         image_placeholders = ','.join(['?'] * len(base_image_ids))
-        accessible_groups = self.db._get_accessible_table_name('groups')
-        accessible_faces = self.db._get_accessible_table_name('faces')
+        accessible_groups = STRUCTURE['groups']['accessible_table']
+        accessible_faces = STRUCTURE['faces']['accessible_table']
 
         query = f'''
             SELECT g.*
@@ -312,10 +399,10 @@ class ModelsManager:
         if not group_ids:
             return []
 
-        accessible_faces = self.db._get_accessible_table_name('faces')
+        accessible_faces = STRUCTURE['faces']['accessible_table']
         images_table = 'groups_images'
-        accessible_images = self.db._get_accessible_table_name(images_table)
-        fields_as_sub_table = get_fields_as_sub_table(images_table, 'i')
+        accessible_images = STRUCTURE[images_table]['accessible_table']
+        fields_as_sub_table = AppDB.get_fields_as_sub_table(images_table, 'i')
 
         N = len(group_ids)
         M = min(N, 8)
@@ -367,8 +454,7 @@ class ModelsManager:
 
         return self.db.execute_query(query, params, include_columns=True)
 
-    # -------- Groups helpers --------
-    ######## TODO: use is_empty instead
+    ######## TODO: delete after moving to edit_sub_entities
     def is_group_empty(self, group_id: str) -> bool:
         """Bypass profile access: check if group has zero faces (raw faces table)."""
         query = 'SELECT COUNT(*) FROM faces WHERE groupID=?'
@@ -378,7 +464,7 @@ class ModelsManager:
     
     def get_group_faces_in_images(self, group_id: str, image_ids: List[str] | str | None = None) -> List[str]:
         """Return face IDs that belong to a specific group in a specific images."""
-        accessible_table = self.db._get_accessible_table_name('faces')
+        accessible_table = STRUCTURE['faces']['accessible_table']
         where_clause = 'WHERE groupID = ?'
         if not image_ids:
             image_ids = []
@@ -390,22 +476,12 @@ class ModelsManager:
         results = self.db.execute_query(query, (group_id, *image_ids))
         return [row[0] for row in results]
 
-    def ensure_group_representative(self, group_id: str) -> str:
-        accessible_table = self.db._get_accessible_table_name('faces')
-        group = self.get_summary('groups', group_id)
-        if group and group.get('representative_face'):
-            return group.get('representative_face')
-        
-        biggest_face = self.db.execute_query(f'SELECT faceID FROM {accessible_table} WHERE groupID = ? ORDER BY width * height DESC LIMIT 1', (group_id,))[0][0]
-        self.edit('groups', group_id, {'representative_face': biggest_face})
-        
-        return biggest_face
-
+    ######## TODO: delete after moving to edit_sub_entities
     def add_faces_to_group(self, group_id: str, face_ids: List[str]) -> dict[str, List[str]]:
         if not face_ids or not group_id:
             return {'updated_groups': [], 'deleted_groups': []}
 
-        accessible_table = self.db._get_accessible_table_name('faces')
+        accessible_table = STRUCTURE['faces']['accessible_table']
         placeholders = ','.join(['?'] * len(face_ids))
         query = f'SELECT DISTINCT groupID FROM {accessible_table} WHERE faceID IN ({placeholders})'
         
@@ -418,25 +494,31 @@ class ModelsManager:
                 self.delete('groups', old_group_id)
                 deleted_groups.append(old_group_id)
             else:
-                self.ensure_group_representative(old_group_id)
+                self.ensure_representative('groups', old_group_id)
                 updated_groups.append(old_group_id)
 
         self.edit('faces', face_ids, {'groupID': group_id})
-        self.ensure_group_representative(group_id)
+        self.ensure_representative('groups', group_id)
   
         return {'updated_groups': updated_groups, 'deleted_groups': deleted_groups}
 
-    ########## TODO: complete later
+    ########## TODO: delete after moving to edit_sub_entities
     def transfer_faces(
         self,
-        source_group_id: str,
+        face_ids: List[str],
         *,
-        face_id: str | None = None,
-        image_ids: List[str] | None = None,
         target_group_id: str | None = None,
         new_group_name: str | None = None,
     ) -> Dict:
-        return {}
+        
+        if new_group_name:
+            if self.is_exists('groups', {'label': new_group_name}):
+                raise ValueError(f"Group name '{new_group_name}' already exists")
+            target_group_id = self.add('groups', {'label': new_group_name})
+
+        faces_ids, old_group_ids = self.edit_sub_entities('faces', face_ids, {'groupID': target_group_id}, add=True)
+
+        return faces_ids, old_group_ids, target_group_id
 
         source_group = self.get_summary('groups', source_group_id)
         if not source_group:
@@ -531,7 +613,7 @@ class ModelsManager:
         # Get complete data for all images affected by the transfer to update ImageViewer
         transferred_image_ids = set()
         if result.get('transferred_faces_ids'):
-            accessible_faces = self.db._get_accessible_table_name('faces')
+            accessible_faces = STRUCTURE['faces']['accessible_table']
             placeholders = ','.join(['?'] * len(result['transferred_faces_ids']))
             query = f"SELECT DISTINCT imageID FROM {accessible_faces} WHERE faceID IN ({placeholders})"
             rows = self.db.execute_query(query, (*result['transferred_faces_ids'],), True)
@@ -543,10 +625,11 @@ class ModelsManager:
         return result
 
     # -------- Moments helpers --------
+    ######## TODO: delete after moving to edit_sub_entities
     def add_images_to_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:  # Guard against empty lists
             return []
-        accessible_table = self.db._get_accessible_table_name('images')
+        accessible_table = STRUCTURE['images']['accessible_table']
         image_placeholders = ','.join(['?'] * len(image_ids))   
         query = f'UPDATE {accessible_table} SET momentID=? WHERE imageID IN ({image_placeholders})'
         updated_ids = self.db.execute_query(query, (moment_id, *image_ids), True)
@@ -559,7 +642,7 @@ class ModelsManager:
         if (representative_image == '' or representative_image is None) and new_representative_image:
             self.edit('moments', moment_id, {'representative_image': new_representative_image}, True)
 
-        accessible_table = self.db._get_accessible_table_name('moments')
+        accessible_table = STRUCTURE['moments']['accessible_table']
         old_moments = self.db.execute_query(f'SELECT DISTINCT momentID, representative_image FROM {accessible_table} WHERE momentID != ? AND representative_image IN ({image_placeholders})', (moment_id, *image_ids), True)
         for moment_id, old_representative_image in old_moments:
             if old_representative_image in image_ids:
@@ -572,10 +655,11 @@ class ModelsManager:
         
         return updated_ids
 
+    ######## TODO: delete after moving to edit_sub_entities
     def remove_images_from_moment(self, moment_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:  # Guard against empty lists
             return []
-        accessible_table = self.db._get_accessible_table_name('images')
+        accessible_table = STRUCTURE['images']['accessible_table']
         image_placeholders = ','.join(['?'] * len(image_ids))
         query = f'UPDATE {accessible_table} SET momentID=NULL WHERE imageID IN ({image_placeholders}) AND momentID=?'
         updated_ids = self.db.execute_query(query, (*image_ids, moment_id), True)
@@ -593,6 +677,7 @@ class ModelsManager:
         return updated_ids
     
     # -------- Albums helpers --------
+    ######## TODO: delete after moving to edit_sub_entities
     def add_images_to_album(self, album_id: str, image_ids: List[str]) -> Dict[str, Union[List[str], List[str]]]:
         """Add images to an album. Returns added image IDs and images that are now archived."""
         if not image_ids:
@@ -606,7 +691,7 @@ class ModelsManager:
         
         rows = [{'albumID': album_id, 'imageID': image_id} for image_id in image_ids]
         # inserted_pairs is a list of (album_id, image_id) tuples
-        inserted_pairs = self.db.insert('accessible_albums_images', rows)
+        inserted_pairs = self.db.insert('albums_images', rows)
         added_ids = [pair[1] for pair in inserted_pairs]
         
         if not added_ids:
@@ -619,12 +704,13 @@ class ModelsManager:
             FROM images_with_albums
             WHERE imageID IN ({image_placeholders}) AND is_archived = 1
         '''
-        results = self.db.execute_query(query, (*added_ids,), True)
+        results = self.db.execute_query(query, (*added_ids,))
         if results:
             archived_ids.extend([row[0] for row in results])
 
         return {'added_ids': added_ids, 'archived_ids': archived_ids}
 
+    ######## TODO: delete after moving to edit_sub_entities
     def remove_images_from_album(self, album_id: str, image_ids: List[str]) -> List[str]:
         """Remove images from an album. Rely on DB triggers for permissions and then update representative image if needed."""
         if not image_ids:
@@ -632,7 +718,7 @@ class ModelsManager:
         
         del_placeholders = ','.join(['?'] * len(image_ids))
         deleted_pairs = self.db.delete(
-            'accessible_albums_images',
+            'albums_images',
             {'albumID': album_id, 'imageID': image_ids}
         )
         
@@ -656,6 +742,7 @@ class ModelsManager:
         return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
 
     # -------- Profiles helpers --------
+    ######## TODO: check if edit_sub_entities replaces these
     def add_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:
             return []

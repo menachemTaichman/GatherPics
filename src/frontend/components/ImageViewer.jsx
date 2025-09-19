@@ -931,12 +931,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                        <div className="text-xs text-gray-500">
                          <span className="font-semibold">Moment:</span> 
                          <a
-                           href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`}
+                           href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
                            onClick={handleMomentLinkClick}
                            className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
                            title="Jump to moment"
                          >
-                           {momentInfo.title}
+                           {momentInfo.label}
                          </a>
                        </div>
                      </div>
