@@ -28,7 +28,7 @@ import { useSetting } from '../utils/useSettings';
 import useImageSelection from '../utils/useImageSelection';
 import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors } from '../utils/dataManager';
 import { selectors as storeSelectors } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
@@ -128,17 +128,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const imagesById = useDataStore(state => state.entities.imagesById);
   const relatedImages = useMemo(() => (relatedImageIds || []).map(id => imagesById[id]).filter(Boolean), [relatedImageIds, imagesById]);
 
-  // Subscribe to album ids arrays (stable references) and derive Sets locally
-  const favoriteIds = useDataStore((state) => {
-    const favId = state.favoritesAlbumId;
-    return (favId && state.relations?.albumImages?.[favId]) || EMPTY_ARRAY;
-  }, shallow);
-  const archiveIds = useDataStore((state) => {
-    const arcId = state.archiveAlbumId;
-    return (arcId && state.relations?.albumImages?.[arcId]) || EMPTY_ARRAY;
-  }, shallow);
-  const favoritesSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
-  const archiveSet = useMemo(() => new Set(archiveIds), [archiveIds]);
+  // Note: Favorite and archive states are now determined by image.is_favorite and image.is_archived properties
+  // from the database, not by Set-based tracking from the data store
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
@@ -328,8 +319,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
 
-  // Determine if an image is in Favorites, with a fallback to album labels
-  const isImageFavorite = (img) => favoritesSet.has(img?.id);
+  // Determine if an image is in Favorites using the image property
+  const isImageFavorite = (img) => !!img?.is_favorite;
 
   // Unified favorites toggle for single or multiple images
   const toggleFavoritesForIds = async (imageIds) => {
@@ -340,7 +331,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     try {
       if (allAreFavorites) {
         const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
         showToast(
           <span>
             {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
@@ -349,7 +340,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         );
       } else {
         const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
         showToast(
           <span>
             {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
@@ -393,7 +384,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     if (selectedImages.size === 0) return;
     try {
       const res = await albumsAPI.addImages(album.albumID, Array.from(selectedImages), eventUrl);
-      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+      const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
       showToast(
         <span>
           {added} added to{' '}
@@ -406,19 +397,42 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     }
   };
 
-  const getSelectedFaceIds = () => {
-    const selectedFaceIds = new Set();
+  const getSelectedFaces = () => {
+    const selectedFaces = [];
     for (const imageId of selectedImages) {
       const image = sortedImages.find(p => p.id === imageId);
-      if (image && image.faces) {
-        image.faces.forEach(face => {
-          if (face.groupId === group.id) {
-            selectedFaceIds.add(face.face_id);
-          }
-        });
+      if (image && image.representative_face) {
+        // The representative_face is the faceID of the face belonging to the current group
+        // We need to find this face in the faces array or create a face object
+        const face = image.faces?.find(f => f.faceID === image.representative_face);
+        if (face) {
+          selectedFaces.push({
+            faceID: face.faceID,
+            imageID: face.imageID,
+            groupID: face.groupID,
+            width: face.width,
+            height: face.height,
+            left: face.left,
+            top: face.top,
+            group_label: face.group_label
+          });
+        } else {
+          // If we can't find the face in the faces array, create a minimal face object
+          // This shouldn't happen in normal operation, but provides a fallback
+          selectedFaces.push({
+            faceID: image.representative_face,
+            imageID: image.id,
+            groupID: group.id,
+            width: 0,
+            height: 0,
+            left: 0,
+            top: 0,
+            group_label: group.label
+          });
+        }
       }
     }
-    return Array.from(selectedFaceIds);
+    return selectedFaces;
   };
 
   const handleTransferFaces = () => {
@@ -554,7 +568,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       }
       
       // No conflict, proceed with update
-      await optimisticUpdates.updateGroup(group.id, { label: trimmedTitle });
+      await optimisticUpdates.updateGroup(group.id, { label: trimmedTitle }, null, eventUrl);
       
       // Update the URL to reflect the new group name
               const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
@@ -939,16 +953,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       isSelected={selectedImages.has(image.id)}
                       onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
-                      isFavorite={favoritesSet.has(image.id)}
                       onToggleFavorite={async () => { const id = image.id; await toggleFavoritesForIds([id]); }}
-                      isArchived={archiveSet.has(image.id)}
                       onToggleArchive={async (isRemove) => {
                         try {
                           if (isRemove) {
                             const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
                             showToast(
                               <span>
-                                {(Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0))} removed from{' '}
+                                {(Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0))} removed from{' '}
                                 <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
                               </span>,
                               'success'
@@ -957,7 +969,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                             const res = await albumsAPI.addToArchive([image.id], eventUrl);
                             showToast(
                               <span>
-                                {(Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0))} moved to{' '}
+                                {(Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0))} moved to{' '}
                                 <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
                               </span>,
                               'success'
@@ -1016,7 +1028,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           if (selectedImages.size === 0) return;
           try {
             const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
-            const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+            const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
             // Remove archived from selection immediately
             deselectMany(Array.from(selectedImages));
             showToast(
@@ -1035,7 +1047,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         showToast={showToast}
         urlHelpers={urlHelpers}
         placeholderDataUrl={PLACEHOLDER_DATA_URL}
-        showTransferFaces={false} // Filter functionality removed
+        showTransferFaces={true}
         showRemoveFromMoment={false}
         showMoveToMoment={false}
         showArchive={true}
@@ -1052,7 +1064,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           eventUrl={eventUrl}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            const result = await optimisticUpdates.updateGroup(group.id, updates, eventUrl);
+            const result = await optimisticUpdates.updateGroup(group.id, updates, null, eventUrl);
             
             // Update the URL if the group name changed
             if (updates.label && updates.label !== group.label) {
@@ -1106,7 +1118,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
            onClose={() => setShowTransferModal(false)}
            groups={currentGroups}
            currentGroup={group}
-           selectedFaces={Array.from(getSelectedFaceIds())}
+           selectedFaces={getSelectedFaces()}
            onTransferComplete={handleTransferComplete}
            showToast={showToast}
          />

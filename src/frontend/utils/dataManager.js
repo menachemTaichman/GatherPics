@@ -343,11 +343,9 @@ export const selectors = {
     return !!img?.is_archived;
   },
   visibleImages: (state, ids, { includeArchived = true } = {}) => {
-    const arcId = state.archiveAlbumId;
-    const archiveSet = new Set((arcId && state.relations?.albumImages?.[arcId]) || []);
     const list = (ids || []).map((id) => state.entities?.imagesById?.[id]).filter(Boolean);
     if (includeArchived) return list;
-    return list.filter((img) => !archiveSet.has(img.id) && !img?.is_archived);
+    return list.filter((img) => !img?.is_archived);
   },
 };
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDataStore, selectors } from '../utils/dataManager';
 
 export default function SingleImageTile({
   image,
@@ -8,9 +9,9 @@ export default function SingleImageTile({
   isSelected = false,
   onToggleSelect,
   onOpen,
-  isFavorite = false,
+  isFavorite: propIsFavorite,
   onToggleFavorite,
-  isArchived = false,
+  isArchived: propIsArchived,
   onToggleArchive,
   onImageLoad,
   onImageError,
@@ -20,6 +21,13 @@ export default function SingleImageTile({
   imageFit = 'cover',
   placeholderDataUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>'
 }) {
+  // Use data store for state, fallback to props for backward compatibility
+  const storeIsFavorite = useDataStore(state => selectors.isFavorite(state, image?.id));
+  const storeIsArchived = useDataStore(state => selectors.isArchived(state, image?.id));
+  
+  // Use store values if available, otherwise fallback to props
+  const isFavorite = storeIsFavorite !== undefined ? storeIsFavorite : (propIsFavorite || false);
+  const isArchived = storeIsArchived !== undefined ? storeIsArchived : (propIsArchived || false);
   return (
     <div className={`relative group cursor-pointer h-full photo-card ${aspectClass}`} onClick={(e) => {
       if (!e.target.closest('input[type="checkbox"]')) {

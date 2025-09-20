@@ -2,14 +2,6 @@ import sqlite3
 from typing import List, Dict, Union, Tuple, Any
 from contextlib import contextmanager
 
-"""
-sub_tables:
-groups: edit - faces (exclusive), view - groups_images
-moments: edit - images (exclusive), view - images
-albums: edit - albums_images (inclusive), view - albums_images
-profiles: edit - profile_images (inclusive), profile_albums (inclusive), view - profile_images, profile_albums
-"""
-
 STRUCTURE = {
     'images': {
         'primary_key': 'imageID',
@@ -19,38 +11,75 @@ STRUCTURE = {
     'faces': {
         'primary_key': 'faceID',
         'accessible_table': 'accessible_faces',
+        'fields_as_child': ['faceID'],
     },
     'groups': {
         'primary_key': 'groupID',
         'sort_by': 'label',
         'accessible_table': 'accessible_groups',
         'representative_field': 'representative_face',
-        'sub_tables': {'view': ['groups_images'], 'edit': {'faces': 'exclusive'}},
+        'childs': {
+            'view': ['groups_images', 'faces'],
+            'edit': {
+                'faces': {
+                    'other_parent': 'groups',
+                    'relation': 'group.images'
+                }
+            }
+        },
     },
     'moments': {
         'primary_key': 'momentID',
         'sort_by': 'start, label',
         'accessible_table': 'accessible_moments',
         'representative_field': 'representative_image',
-        'sub_tables': {'view': ['images'], 'edit': {'images': 'exclusive'}},
+        'childs': {
+            'view': ['images'],
+            'edit': {
+                'images': {
+                    'other_parent': 'moments',
+                    'relation': 'moment.images'
+                }
+            }
+        },
     },
     'albums': {
         'primary_key': 'albumID',
         'sort_by': 'label',
         'accessible_table': 'accessible_albums',
         'representative_field': 'representative_image',
-        'sub_tables': {'view': ['albums_images'], 'edit': {'albums_images': 'images'}},
+        'childs': {
+            'view': ['albums_images'],
+            'edit': {
+                'albums_images': {
+                    'other_parent': 'images',
+                    'relation': 'album.images'
+                }
+            }
+        },
     },
     'profiles': {
         'primary_key': 'profileID',
         'sort_by': 'label',
         'accessible_table': '',
-        'sub_tables': {'view': ['profile_images', 'profile_albums'], 'edit': {'profile_images': 'inages', 'profile_albums': 'albums'}},
+        'childs': {
+            'view': ['profile_images', 'profile_albums'],
+            'edit': {
+                'profile_images': {
+                    'other_parent': 'images',
+                    'relation': 'profile.images'
+                },
+                'profile_albums': {
+                    'other_parent': 'albums',
+                    'relation': 'profile.albums'
+                }
+            }
+        },
     },
     'groups_images': {
         'primary_key': 'groupID, imageID',
         'sort_by': 'label',
-        'fields_as_sub_table': ['imageID', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
+        'fields_as_child': ['imageID', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
         'accessible_table': 'accessible_groups_images',
     },
     'albums_images': {
@@ -700,34 +729,39 @@ class AppDB:
         return db_path 
 
     @staticmethod
-    def get_view_sub_table(table: str, sub_table: str | None = None) -> str:
-        sub_tables = STRUCTURE[table]['sub_tables'].get('view', None)
-        sub_table = sub_table or sub_tables[0]
-
-        return sub_table
-
-    @staticmethod
-    def get_edit_sub_table(table: str, sub_table: str | None = None) -> str | tuple[str, str]:
-        sub_tables = STRUCTURE[table]['sub_tables'].get('edit', None)
-        if not sub_table:
-            sub_table = list(sub_tables.keys())[0]
-
-        other_super_table = sub_tables[sub_table]
-        if other_super_table == 'exclusive':
-            other_super_table = table
+    def get_view_child(table: str, child: str | None = None, *, all: bool = False) -> str:
+        if child:
+            return child
         
-        return sub_table, other_super_table
+        childs = STRUCTURE[table]['childs'].get('view', None)
+        if all:
+            return childs
+
+        return childs[0]
 
     @staticmethod
-    def get_fields_as_sub_table(table: str, as_table: str | None = None) -> str:
+    def get_edit_child(table: str, child: str | None = None) -> str | tuple[str, str, str, str]:
+        childs = STRUCTURE[table]['childs'].get('edit', None)
+        if not child:
+            child = list(childs.keys())[0]
+        child_meta = childs[child]
+
+        other_parent = child_meta['other_parent']
+        exclusive = other_parent == table
+        child_id_field = STRUCTURE[child]['primary_key'] if exclusive else STRUCTURE[other_parent]['primary_key']
+
+        return child, other_parent, child_meta['relation'], child_id_field
+
+    @staticmethod
+    def get_fields_as_child(table: str, as_table: str | None = None) -> str:
         if table not in STRUCTURE:
             return table
         
         if as_table:
             as_table += '.'
 
-        fields_as_sub_table = STRUCTURE[table].get('fields_as_sub_table', None)
-        return ', '.join([f"{as_table}{field}" for field in fields_as_sub_table]) if fields_as_sub_table else f'{as_table}*'
+        fields_as_child = STRUCTURE[table].get('fields_as_child', None)
+        return ', '.join([f"{as_table}{field}" for field in fields_as_child]) if fields_as_child else f'{as_table}*'
 
     def __init__(self, db_path: str, event_id: str, profile_id: str | None = None, include_archived: bool = False):
         self.db_path = db_path
@@ -795,7 +829,7 @@ class AppDB:
         where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
         where_params = tuple(where.values())
         
-        with self.get_connection(include_archived=True) as conn:
+        with self.get_connection() as conn:
             cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause} AND {id_field} != ?', where_params + (exclude_id,))
             row = cursor.fetchone()
             if row:

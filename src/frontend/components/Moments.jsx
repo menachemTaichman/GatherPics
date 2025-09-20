@@ -527,11 +527,11 @@ export default function Moments({ eventUrl }) {
     try {
       if (allAreFavorites) {
         const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
         showToast(`${removed} removed from Favorites`, 'success');
       } else {
         const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
         showToast(`${added} added to Favorites`, 'success');
       }
     } catch (e) {
@@ -555,21 +555,10 @@ export default function Moments({ eventUrl }) {
 
     const allAreFavorites = imageObjects.length > 0 && imageObjects.every(isImageFavorite);
 
-    // Optimistic update
-    setMomentImagesMap(prev => {
-      const newMap = { ...prev };
-      Object.keys(newMap).forEach(momentId => {
-        newMap[momentId] = newMap[momentId].map(img => 
-          imageIds.includes(img && img.id) ? { ...img, is_favorite: !allAreFavorites } : img
-        );
-      });
-      return newMap;
-    });
-
     try {
       if (allAreFavorites) {
         const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
+        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
         showToast(
           <span>
             {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
@@ -578,7 +567,7 @@ export default function Moments({ eventUrl }) {
         );
       } else {
         const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
         showToast(
           <span>
             {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
@@ -587,17 +576,7 @@ export default function Moments({ eventUrl }) {
         );
       }
     } catch (e) {
-      // Rollback on error
       showToast('Failed to update favorites', 'error');
-      setMomentImagesMap(prev => {
-        const newMap = { ...prev };
-        Object.keys(newMap).forEach(momentId => {
-          newMap[momentId] = newMap[momentId].map(img => 
-            imageIds.includes(img.id) ? { ...img, is_favorite: allAreFavorites } : img
-          );
-        });
-        return newMap;
-      });
     }
   };
 
@@ -608,18 +587,7 @@ export default function Moments({ eventUrl }) {
     try {
       if (isRemove) {
         const res = await albumsAPI.toggleArchive(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.removed_ids) ? res.removed_ids.length : (res.removed || 0);
-        
-        // Optimistic update
-        setMomentImagesMap(prev => {
-          const newMap = { ...prev };
-          Object.keys(newMap).forEach(momentId => {
-            newMap[momentId] = newMap[momentId].map(img => 
-              imageIds.includes(img.id) ? { ...img, is_archived: false } : img
-            );
-          });
-          return newMap;
-        });
+        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
 
         showToast(
           <span>
@@ -629,29 +597,7 @@ export default function Moments({ eventUrl }) {
         );
       } else {
         const res = await albumsAPI.addToArchive(imageIds, eventUrl);
-        const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
-        
-        // If not including archived, remove from grid
-        if (!getSetting('include_archived_images', false)) {
-          setMomentImagesMap(prev => {
-            const newMap = { ...prev };
-            Object.keys(newMap).forEach(momentId => {
-              newMap[momentId] = newMap[momentId].filter(img => !imageIds.includes(img && img.id));
-            });
-            return newMap;
-          });
-        } else {
-          // Mark as archived
-          setMomentImagesMap(prev => {
-            const newMap = { ...prev };
-            Object.keys(newMap).forEach(momentId => {
-              newMap[momentId] = newMap[momentId].map(img => 
-                imageIds.includes(img && img.id) ? { ...img, is_archived: true } : img
-              );
-            });
-            return newMap;
-          });
-        }
+        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
 
         showToast(
           <span>
@@ -673,7 +619,7 @@ export default function Moments({ eventUrl }) {
 
     try {
       const res = await albumsAPI.addToArchive(imageIds, eventUrl);
-      const added = Array.isArray(res.added_ids) ? res.added_ids.length : (res.added || 0);
+      const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
       showToast(`${added} moved to Archive`, 'success');
       clearGlobalSelection();
     } catch (e) {

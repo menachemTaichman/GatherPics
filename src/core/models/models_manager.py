@@ -3,64 +3,6 @@ from typing import List, Dict, Union
 from ..db import AppDB, STRUCTURE
 import uuid
 
-MODELS = {
-    'images': {
-        'add_data': {
-            'label': '',
-            'date_taken': '',
-            'file_size': 0,
-            'width': 0,
-            'height': 0,
-            'momentID': ''
-        },
-    },
-    'groups': {
-        'add_data': {
-            'label': '',
-            'representative_face': ''
-        },
-    },
-    'faces': {
-        'add_data': {
-            'imageID': '',
-            'width': 0,
-            'height': 0,
-            'left': 0,
-            'top': 0,
-            'faceID': '',
-            'groupID': ''
-        },
-    },
-    'moments': {
-        'add_data': {
-            'label': '',
-            'description': '',
-            'start': '',
-            'end': '',
-            'representative_image': ''
-        },
-    },
-    'albums': {
-        'add_data': {
-            'label': '',
-            'description': '',
-            'representative_image': ''
-        },
-    },
-    'profiles': {
-        'add_data': {
-            'label': '',
-            'password': '',
-            'hierarchy_rank': 0,
-            'is_profiles_manager': False,
-            'can_edit': False,
-            'all_images': False,
-            'all_albums': False,
-            'save_preferences': False
-        }
-    },
-}
-
 class ModelsManager:
 
     def __init__(self, db: AppDB) -> None:
@@ -75,11 +17,15 @@ class ModelsManager:
         return self.db.is_exists(table, fields, exclude_id)
 
     def is_empty(self, table: str, entity_id: str) -> bool:
-        sub_query = STRUCTURE[table]['sub_view_table']
+        childs = AppDB.get_view_child(table, all=True)
         id_field = STRUCTURE[table]['primary_key']
-        query = f'SELECT COUNT(*) FROM {sub_query} WHERE {id_field} = ?'
-        results = self.db.execute_query(query, (entity_id,))
-        return results[0][0] == 0
+        for child in childs:
+            query = f'SELECT COUNT(*) FROM {child} WHERE {id_field} = ?'
+            results = self.db.execute_query(query, (entity_id,))
+            if results[0][0] > 0:
+                return False
+        
+        return True
 
     def is_accessible(self, table: str, entity_id: str) -> bool:
         accessible_table = STRUCTURE[table]['accessible_table']
@@ -98,7 +44,8 @@ class ModelsManager:
             return []
 
         accessible_table = STRUCTURE[table]['accessible_table']
-        sub_table = AppDB.get_view_sub_table(table)
+        child = AppDB.get_view_child(table)
+        accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
         sort_field = STRUCTURE[table]['sort_by']
 
@@ -119,7 +66,7 @@ class ModelsManager:
         query = f'''
             SELECT t.*, COUNT(s.{id_field}) AS count
             FROM {accessible_table} t
-            LEFT JOIN {sub_table} s ON t.{id_field} = s.{id_field}
+            LEFT JOIN {accessible_child} s ON t.{id_field} = s.{id_field}
             {where_clause}
             GROUP BY t.{id_field}
             {having_clause}
@@ -130,20 +77,20 @@ class ModelsManager:
             return results
         return results[0]
 
-    def get_sub_entities(self, table: str, entity_id: str, *, sub_table: str | None = None, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
+    def get_childs(self, table: str, entity_id: str, *, child: str | None = None, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
 
-        sub_table = AppDB.get_view_sub_table(table, sub_table=sub_table)
-        if not sub_table:
+        child = AppDB.get_view_child(table, child=child)
+        if not child:
             return []
 
-        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
+        accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        sort_field = STRUCTURE[sub_table].get('sort_by','')
-        fields_as_sub_table = AppDB.get_fields_as_sub_table(sub_table, 's')
-
+        sort_field = STRUCTURE[child].get('sort_by','')
+        fields_as_child = AppDB.get_fields_as_child(child, 'c')
+        
         order_by = ''
         if sort_field and sort:
-            order_by = f'ORDER BY s.{sort_field}'
+            order_by = f'ORDER BY c.{sort_field}'
 
         limit_clause = ''
         if limit is not None:
@@ -152,8 +99,8 @@ class ModelsManager:
                 limit_clause += f' OFFSET {int(offset)}'
         
         query = f'''
-            SELECT {fields_as_sub_table}
-            FROM {accessible_sub_table} s
+            SELECT {fields_as_child}
+            FROM {accessible_child} c
             WHERE {id_field} = ?
             {order_by}
             {limit_clause}
@@ -187,87 +134,152 @@ class ModelsManager:
     def ensure_representative(self, table: str, entity_id: str) -> str:
         representative_field = STRUCTURE[table].get('representative_field','')
         if not representative_field:
-            raise ValueError(f"Representative field not found for table {table}")
+            raise ValueError(f"Representative field not found")
 
         id_field = STRUCTURE[table]['primary_key']
-        sub_table, other_super_table = AppDB.get_edit_sub_table(table)
-        other_super_id_field = STRUCTURE[other_super_table]['primary_key']
+        child, other_parent, relation_name, child_id_field = AppDB.get_edit_child(table)
 
         entity = self.get_summary(table, entity_id)
-        if entity and entity.get(representative_field):
+        if not entity:
+            raise ValueError(f"Entity not found")
+
+        if entity.get(representative_field):
             representative_id = entity.get(representative_field)
-            query = f"""SELECT *
-            FROM {sub_table} s
-            WHERE s.{id_field} = ? AND s.{other_super_id_field} = ?
+            query = f"""SELECT c.{child_id_field}
+            FROM {child} c
+            WHERE c.{id_field} = ?
+            AND c.{child_id_field} = ?
             """
-            is_sub_entity = self.db.execute_query(query, (entity_id, representative_id))
-            if is_sub_entity:
+            if len(self.db.execute_query(query, (entity_id, representative_id))) > 0:
                 return representative_id
         
-        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
+        accessible_child = STRUCTURE[child]['accessible_table']
 
-        query = f"""SELECT o.{other_super_id_field}
-        FROM {accessible_sub_table} s
-        LEFT JOIN {other_super_table} o ON s.{other_super_id_field} = o.{other_super_id_field}
+        query = f"""SELECT s.{child_id_field}
+        FROM {accessible_child} s
         WHERE s.{id_field} = ?
         ORDER BY width * height DESC
         LIMIT 1
         """
-        biggest = self.db.execute_query(query, (entity_id,))[0][0]
+        biggest = self.db.execute_query(query, (entity_id,), force_include_archived=True)
         if biggest:
-            self.edit(table, entity_id, {representative_field: biggest})
+            self.edit(table, entity_id, {representative_field: biggest[0][0]})
         
         return biggest
 
-    def edit_sub_entities(self, table: str, entity_id: str, sub_entities: List[str], *, add: bool, sub_table: str | None = None) -> tuple[List[str], List[str]]:
-        sub_table, other_super_table = AppDB.get_edit_sub_table(table, sub_table=sub_table)
-        exclusive = other_super_table == table
-        accessible_other_super_table = STRUCTURE[other_super_table]['accessible_table']
-        accessible_sub_table = STRUCTURE[sub_table]['accessible_table']
+    ######## TODO: simplify a bit the cases
+    def edit_childs(self, table: str, entity_id: str, child_ids: List[str], *, add: bool, child: str | None = None, force_include_archived: bool = False) -> Dict:
+        child, other_parent, relation_name, child_id_field = AppDB.get_edit_child(table, child=child)
+        exclusive = other_parent == table
+        accessible_other_parent = STRUCTURE[other_parent]['accessible_table']
+        accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        other_super_id_field = STRUCTURE[other_super_table]['primary_key']
 
-        placeholders = ','.join(['?'] * len(sub_entities))
-        is_null = 'NULL' if add else 'NOT NULL'
-        query = f"""SELECT o.{other_super_id_field}
-        FROM {accessible_other_super_table} o
-        LEFT JOIN {accessible_sub_table} s ON o.{other_super_id_field} = s.{other_super_id_field} AND s.{id_field} = ?
-        WHERE s.{id_field} IS {is_null} AND o.{other_super_id_field} IN ({placeholders})
-        """
-        sub_entities = self.db.execute_query(query, (entity_id, *sub_entities))
-        sub_entities = [row[0] for row in sub_entities]
-        placeholders = ','.join(['?'] * len(sub_entities))
+        placeholders = ','.join(['?'] * len(child_ids)) if child_ids else ''
 
-        if not sub_entities:
-            return [], []
+        # Determine valid childs for this operation
+        if exclusive:
+            where_clause = f'(c.{id_field} <> {'?'} OR c.{id_field} IS NULL)' if add else f'c.{id_field} = ?'
+            query = f"""SELECT c.{child_id_field}
+            FROM {accessible_child} c
+            WHERE {where_clause} AND c.{child_id_field} IN ({placeholders})
+            """
+        else:
+            is_null = 'NULL' if add else 'NOT NULL'
+            query = f"""SELECT o.{child_id_field}
+            FROM {accessible_other_parent} o
+            LEFT JOIN {accessible_child} c ON o.{child_id_field} = c.{child_id_field} AND c.{id_field} = ?
+            WHERE c.{child_id_field} IS {is_null} AND o.{child_id_field} IN ({placeholders})
+            """
+        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), force_include_archived=force_include_archived)
+        valid_child_ids = [row[0] for row in valid_child_ids]
 
-        query = f"""
-            SELECT DISTINCT {id_field}
-            FROM {accessible_sub_table}
-            WHERE {other_super_id_field} in ({placeholders})
-        """
-        old_super_entities = []
+        if not valid_child_ids:
+            return {
+                'affected_images_ids': [],
+                'old_parent_ids': [],
+                'changes': []
+            }
+
+        placeholders = ','.join(['?'] * len(valid_child_ids))
+
+        old_childs = self.get_childs(table, entity_id, child=child)
+        old_childs = set([row[child_id_field] for row in old_childs])
+
+        old_parent_ids = set()
+        if not add:
+            old_parent_ids.add(entity_id)
 
         if exclusive:
-            old_super_entities = self.db.execute_query(query, sub_entities)
-            old_super_entities = [row[0] for row in old_super_entities]
+            query = f"""
+                SELECT DISTINCT c.{id_field}
+                FROM {accessible_child} c
+                WHERE c.{child_id_field} in ({placeholders})
+                AND c.{id_field} IS NOT NULL
+            """
+            rows = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
+            old_parent_ids.update([row[0] for row in rows])
+
+        query = f"""
+            SELECT DISTINCT c.imageID
+            FROM {accessible_child} c
+            WHERE c.{child_id_field} in ({placeholders})
+        """
+        rows = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
+        affected_images_ids = [row[0] for row in rows]
+
+        # Apply change
+        if exclusive:
             if add:
-                query = f'UPDATE {accessible_sub_table} SET {id_field} = ? WHERE {other_super_id_field} IN ({placeholders})'
+                query = f'UPDATE {accessible_child} SET {id_field} = ? WHERE {child_id_field} IN ({placeholders})'
             else:
-                query = f'UPDATE {accessible_sub_table} SET {id_field} = NULL WHERE {id_field} = ? AND {other_super_id_field} IN ({placeholders})'
+                query = f'UPDATE {accessible_child} SET {id_field} = NULL WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
+            self.db.execute_query(query, (entity_id, *valid_child_ids), force_include_archived=force_include_archived)
         else:
             if add:
-                query = f'INSERT INTO {accessible_sub_table} ({id_field}, {other_super_id_field}) VALUES (?, {placeholders})'
+                values_clause = ','.join(['(?, ?)'] * len(valid_child_ids))
+                params = []
+                for sid in valid_child_ids:
+                    params.extend([entity_id, sid])
+                query = f'INSERT OR IGNORE INTO {accessible_child} ({id_field}, {child_id_field}) VALUES {values_clause}'
+                self.db.execute_query(query, tuple(params), force_include_archived=force_include_archived)
             else:
-                query = f'DELETE FROM {accessible_sub_table} WHERE {id_field} = ? AND {other_super_id_field} IN ({placeholders})'
+                query = f'DELETE FROM {accessible_child} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
+                self.db.execute_query(query, (entity_id, *valid_child_ids), force_include_archived=force_include_archived)
 
         if STRUCTURE[table].get('representative_field',''):
-            for super_entity in [entity_id] + old_super_entities:
-                self.ensure_representative(table, super_entity)
+            parents = old_parent_ids.union([entity_id])
+            for parent_id in parents:
+                    self.ensure_representative(table, parent_id)
 
-        self.db.execute_query(query, (entity_id, *sub_entities))
-        
-        return sub_entities, old_super_entities
+        changes = []
+        for old_parent_id in old_parent_ids:
+            current_childs = self.get_childs(table, old_parent_id, child=child)
+            removed = [row if row not in current_childs else None for row in valid_child_ids]
+            
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': relation_name,
+                'parentId': old_parent_id,
+                'ids': removed
+            })
+
+        current_childs = set([row[child_id_field] for row in self.get_childs(table, entity_id, child=child)])
+        added_relations = list(current_childs - old_childs)
+
+        if added_relations:
+            changes.append({
+                'type': 'RELATION_ADD',
+                'relation': relation_name,
+                'parentId': entity_id,
+                'ids': added_relations
+            })
+
+        return {
+            'affected_images_ids': affected_images_ids,
+            'old_parent_ids': old_parent_ids,
+            'changes': changes
+        }
 
     # -------- Images helpers --------    
     def get_images(self, image_ids: List[str] | str | None = None) -> List[Dict]:
@@ -403,7 +415,7 @@ class ModelsManager:
 
         accessible_faces = STRUCTURE['faces']['accessible_table']
         accessible_images = STRUCTURE['images']['accessible_table']
-        fields_as_sub_table = AppDB.get_fields_as_sub_table('groups_images', 'i').replace(', i.representative_face', '')
+        fields_as_child = AppDB.get_fields_as_child('groups_images', 'i').replace(', i.representative_face', '')
 
         N = len(group_ids)
         M = min(N, 8)
@@ -415,7 +427,7 @@ class ModelsManager:
 
         query = f"""
             SELECT
-                {fields_as_sub_table},
+                {fields_as_child},
                 (
                     SELECT sf.faceID
                     FROM {accessible_faces} sf
@@ -457,16 +469,37 @@ class ModelsManager:
         return self.db.execute_query(query, params, include_columns=True)
 
     # -------- Faces helpers --------
-    def transfer_faces(self, face_ids: List[str], *, target_group_id: str | None = None, new_group_name: str | None = None) -> Dict:
-        
+    def add_faces_to_group(self, face_ids: List[str], *, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
+
         if new_group_name:
             if self.is_exists('groups', {'label': new_group_name}):
                 raise ValueError(f"Group name '{new_group_name}' already exists")
             target_group_id = self.add('groups', {'label': new_group_name})
+        if not target_group_id:
+            raise ValueError("target_group_id or new_group_name must be provided")
 
-        faces_ids, old_group_ids = self.edit_sub_entities('faces', target_group_id, face_ids, add=True)
+        result = self.edit_childs('groups', target_group_id, face_ids, add=True, child='faces')
+        result['target_group_id'] = target_group_id
 
-        return faces_ids, old_group_ids, target_group_id
+        if source_group_id:
+            if len(self.get_childs('groups', source_group_id)) == 0:
+                result['changes'].append({
+                    'type': 'REMOVE',
+                    'entity': 'group',
+                    'ids': [source_group_id]
+                })
+
+            if self.is_empty('groups', source_group_id):
+                self.delete('groups', source_group_id)
+
+        if new_group_name:
+            result['changes'].append({
+                'type': 'UPSERT',
+                'entity': 'group',
+                'items': [self.get_summary('groups', target_group_id)]
+            })
+
+        return result
 
     # -------- Albums helpers --------
     def get_archive_album(self) -> str | None:
@@ -477,8 +510,26 @@ class ModelsManager:
         """Get the favorites album ID."""
         return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
 
+    def edit_album_images(self, album_id: str, image_ids: List[str], add: bool) -> Dict:
+
+        archive_album_id = self.get_archive_album()
+        favorites_album_id = self.get_favorites_album()
+        force_include_archived = album_id == archive_album_id
+        result = self.edit_childs('albums', album_id, image_ids, add=add, force_include_archived=force_include_archived)
+        
+        if album_id == archive_album_id or album_id == favorites_album_id:
+            flag = 'is_archived' if album_id == archive_album_id else 'is_favorite'
+            affected_images_ids = result['affected_images_ids']
+            result['changes'].append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': [{'id': img_id, flag: add} for img_id in affected_images_ids]
+            })
+        
+        return result
+
     # -------- Profiles helpers --------
-    ######## TODO: check if edit_sub_entities replaces these
+    ######## TODO: check if edit_childs replaces these
     def add_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
         if not image_ids:
             return []

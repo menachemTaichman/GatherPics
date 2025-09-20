@@ -15,7 +15,7 @@ print('Created Event:', event.get_info())
 """
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
 profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-event = Event(event_id, profile_id=profile_id)
+event = Event(event_id, profile_id=profile_id, include_archived=True)
 
 def reset_event(event: Event):
     images = event.images_model.list()
@@ -355,15 +355,14 @@ def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
 
+moment_id = "70e46c11-f6a6-4b8c-b925-0b0a17411d7f"
+group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
+image_id = "778a6e66-04bd-4a36-b769-527ddb7da4bc"
+face_id = "c61090e9-80bd-428e-8885-0f583a74703d"
 
-group_id = "428a3484-63f2-44c6-86ee-2110d2434b59"
-image_id = "4589a114-6d9b-4a8e-a5e2-6ae7a8082bc0"
-representative_face = "49408e9f-4614-48aa-b2fc-2cca81a376fa"
-
-album_id = event.models_manager.get_favorites_album()
-#image_ids = event.models_manager.get_sub_entities('albums', album_id)
-
+album_id = event.models_manager.get_archive_album()
 image_ids = [image_id]
-group_ids = ['7a81acd3-98ee-40c8-aa66-71b60b34bda8', '428a3484-63f2-44c6-86ee-2110d2434b59']
-result = event.models_manager.get_images(image_ids)
+face_ids = [face_id]
+event.db.set_include_archived(False)
+result = event.models_manager.edit_album_images(album_id, image_ids, add=True)
 print(result)

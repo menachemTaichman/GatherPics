@@ -23,7 +23,7 @@ export default function MergeConflictModal({
 }) {
   const { urlHelpers } = useEventUrls(eventUrl);
   const [loading, setLoading] = useState(false);
-  const dataStore = useDataStore();
+  const dataStore = useDataStore.getState;
   
   // Custom keyboard handler for MergeConflictModal
   const handleMergeModalKeys = (e) => {
@@ -59,35 +59,42 @@ export default function MergeConflictModal({
       // Collect all face IDs belonging to current person (robust approach)
       let allFaceIds = [];
       try {
-        const cropsResp = await groupsAPI.getCrops(currentGroup.groupID, eventUrl);
-        const cropMapping = cropsResp?.crop_mapping || {};
-        allFaceIds = Object.values(cropMapping).filter(Boolean);
+        const facesResp = await groupsAPI.getFaces(currentGroup.groupID, eventUrl);
+        const faces = facesResp?.faces || [];
+        allFaceIds = faces.map(face => face.faceID).filter(Boolean);
       } catch (e) {
         // ignore and try fallback
       }
       if (!allFaceIds || allFaceIds.length === 0) {
         try {
-          const imagesResp = await groupsAPI.getImagesComplete(currentGroup.groupID, eventUrl);
-                      const images = imagesResp?.images || [];
+          // Get images from the normalized store
+          const state = dataStore();
+          const imageIds = state.relations?.groupImages?.[currentGroup.id] || [];
+          const imagesById = state.entities?.imagesById || {};
+          
           const ids = new Set();
-                      images.forEach((p) => {
-            (p.faces || []).forEach((f) => {
-              if (f.group_id === currentGroup.groupID && f.face_id) ids.add(f.face_id);
-            });
+          imageIds.forEach(imageId => {
+            const image = imagesById[imageId];
+            if (image && image.representative_face) {
+              // The representative_face is the faceID for the current group
+              ids.add(image.representative_face);
+            }
           });
           allFaceIds = Array.from(ids);
         } catch (e) {
-          // fall through
+          console.error('Error getting faces from store:', e);
         }
       }
       if (!allFaceIds || allFaceIds.length === 0) {
-        throw new Error('No faces found to transfer for this person.');
+        // If no faces found, pass empty array instead of throwing error
+        allFaceIds = [];
       }
       
       // Use transfer logic instead of merge
+      
       const result = await groupsAPI.transferFaces(
-        currentGroup.groupID,
-        conflictingGroup.groupID,
+        currentGroup.id || currentGroup.groupID,
+        conflictingGroup.id || conflictingGroup.groupID,
         allFaceIds,
         eventUrl
       );

@@ -10,6 +10,7 @@ import {
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { albumsAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
+import { useDataStore, selectors } from '../utils/dataManager';
 
 export default function SingleImageActions({
   imageId,
@@ -21,17 +22,11 @@ export default function SingleImageActions({
   onImageUpdated
 }) {
   const { addImages, removeFromQueue, queue, open } = useBucketStore();
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [isArchived, setIsArchived] = useState(false);
   const isInBucket = imageId ? queue.includes(imageId) : false;
-
-  // Update local state when imageInfo changes
-  useEffect(() => {
-    if (imageInfo) {
-      setIsFavorite(!!(imageInfo.is_favorite ?? imageInfo.is_favorites));
-      setIsArchived(!!imageInfo.is_archived);
-    }
-  }, [imageInfo]);
+  
+  // Use data store for state instead of local state
+  const isFavorite = useDataStore(state => selectors.isFavorite(state, imageId));
+  const isArchived = useDataStore(state => selectors.isArchived(state, imageId));
 
   const handleToggleFavorite = async () => {
     if (!imageId) return;
@@ -39,7 +34,8 @@ export default function SingleImageActions({
       const currentFavorite = isFavorite;
       const result = await albumsAPI.toggleFavorite([imageId], currentFavorite, eventUrl);
       if (result) {
-        setIsFavorite(!currentFavorite);
+        // The API response interceptor will automatically update the data store
+        // No need to manually update local state
         if (onImageUpdated) {
           onImageUpdated({ is_favorite: !currentFavorite });
         }
@@ -62,7 +58,8 @@ export default function SingleImageActions({
       if (isArchived) {
         const result = await albumsAPI.toggleArchive([imageId], true, eventUrl);
         if (result) {
-          setIsArchived(false);
+          // The API response interceptor will automatically update the data store
+          // No need to manually update local state
           if (onImageUpdated) {
             onImageUpdated({ is_archived: false });
           }
@@ -77,7 +74,8 @@ export default function SingleImageActions({
       } else {
         const result = await albumsAPI.addToArchive([imageId], eventUrl);
         if (result) {
-          setIsArchived(true);
+          // The API response interceptor will automatically update the data store
+          // No need to manually update local state
           if (onImageUpdated) {
             onImageUpdated({ is_archived: true });
           }

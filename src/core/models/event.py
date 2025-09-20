@@ -121,7 +121,7 @@ class Event(JsonModel):
         }
 
     def delete_image(self, image_id: str) -> None:
-        faces = self.models_manager.get_sub_entities('images', image_id)
+        faces = self.models_manager.get_childs('images', image_id)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
         
@@ -187,7 +187,7 @@ class Event(JsonModel):
                     'label': f"Person {group_num}",
                 }])[0]
                 group_id = group_data['groupID']
-                self.models_manager.edit_sub_entities('faces', group_id, cluster, add=True)
+                self.models_manager.edit_childs('faces', group_id, cluster, add=True)
                 self.last_group_id = group_num
             return len(clusters)
 

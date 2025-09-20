@@ -12,8 +12,8 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     representative_face: group.representative_face
   });
   const [loading, setLoading] = useState(false);
-  const [cropMappings, setCropMappings] = useState({});
-  const [cropsLoading, setCropsLoading] = useState(true);
+  const [faces, setFaces] = useState([]);
+  const [facesLoading, setFacesLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editingName, setEditingName] = useState('');
   // Use original group data for header display until saved
@@ -73,34 +73,34 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
   };
 
-  // Fetch crop mappings for all images in the group
+  // Fetch faces for the group
   useEffect(() => {
-    const fetchCropMappings = async () => {
+    const fetchFaces = async () => {
       try {
-        setCropsLoading(true);
-        const response = await groupsAPI.getCrops(group.groupID, eventUrl);
-        setCropMappings(response.crop_mapping || {});
+        setFacesLoading(true);
+        const response = await groupsAPI.getFaces(group.groupID, eventUrl);
+        setFaces(response.faces || []);
         
-        // After loading crop mappings, check if we need to set a default representative
+        // After loading faces, check if we need to set a default representative
         // if none is currently selected
-        if (!currentSelection && response.crop_mapping) {
-          // Find the first image that has a face ID
-          const firstFaceId = Object.values(response.crop_mapping).find(faceId => faceId);
-          if (firstFaceId) {
-            setCurrentSelection(firstFaceId);
-            setFormData(prev => ({ ...prev, representative_face: firstFaceId }));
+        if (!currentSelection && response.faces && response.faces.length > 0) {
+          // Use the first face as default representative
+          const firstFace = response.faces[0];
+          if (firstFace && firstFace.faceID) {
+            setCurrentSelection(firstFace.faceID);
+            setFormData(prev => ({ ...prev, representative_face: firstFace.faceID }));
           }
         }
       } catch (error) {
-        console.error('Error fetching crop mappings:', error);
-        const errorInfo = handleAPIError(error, 'Failed to fetch crop mappings');
+        console.error('Error fetching faces:', error);
+        const errorInfo = handleAPIError(error, 'Failed to fetch faces');
         console.error(errorInfo.message);
       } finally {
-        setCropsLoading(false);
+        setFacesLoading(false);
       }
     };
 
-    fetchCropMappings();
+    fetchFaces();
   }, [group.groupID, eventUrl]);
 
 
@@ -303,23 +303,23 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Select Representative Photo
                   </label>
-                  {cropsLoading ? (
+                  {facesLoading ? (
                     <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
-                      {group.image_ids?.map((imageId, index) => (
-                        <div key={imageId} className="w-full h-16 bg-gray-200 rounded-lg animate-pulse" />
+                      {Array.from({ length: 6 }, (_, index) => (
+                        <div key={index} className="w-full h-16 bg-gray-200 rounded-lg animate-pulse" />
                       ))}
                     </div>
                   ) : (
                     <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
-                      {group.image_ids?.map((imageId, index) => {
-                                                  const faceId = cropMappings[imageId];
-                          const imageSrc = faceId && urlHelpers
-                            ? urlHelpers.getFaceCropUrl(faceId)
-                            : PLACEHOLDER_DATA_URL;
+                      {faces.map((face, index) => {
+                        const faceId = face.faceID;
+                        const imageSrc = faceId && urlHelpers
+                          ? urlHelpers.getFaceCropUrl(faceId)
+                          : PLACEHOLDER_DATA_URL;
                         
                         return (
                           <button
-                            key={imageId}
+                            key={faceId}
                             type="button"
                             onClick={() => {
                               // Only set representative if faceId exists
@@ -342,7 +342,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                           >
                             <img
                               src={imageSrc}
-                              alt={`Photo ${index + 1}`}
+                              alt={`Face ${index + 1}`}
                               className="w-full h-16 object-cover"
                               loading="lazy"
                               onError={(e) => {

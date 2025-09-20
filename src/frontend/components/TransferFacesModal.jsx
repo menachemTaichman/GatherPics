@@ -67,8 +67,8 @@ export default function TransferFacesModal({
         aValue = a.label || `Person ${a.id}`;
         bValue = b.label || `Person ${b.id}`;
       } else {
-        aValue = a.image_ids?.length || 0;
-        bValue = b.image_ids?.length || 0;
+        aValue = a.count || 0;
+        bValue = b.count || 0;
       }
       
       if (sortOrder === 'asc') {
@@ -164,10 +164,13 @@ export default function TransferFacesModal({
     setError('');
 
     try {
+      // Extract face IDs from face objects
+      const faceIds = selectedFaces.map(face => face.faceID);
+      
       const result = await groupsAPI.transferFaces(
         currentGroup?.id || sourceGroupId || null,
         selectedGroupId || null,
-        selectedFaces,
+        faceIds,
         eventUrl,
         newGroupName.trim() || undefined
       );
@@ -242,6 +245,11 @@ export default function TransferFacesModal({
                <p className="text-sm text-gray-500">
                  Choose destination group or create new one
                </p>
+               {selectedFaces.length > 0 && (
+                 <div className="mt-2 text-xs text-gray-600">
+                   From: {currentGroup?.label || 'Unknown Group'}
+                 </div>
+               )}
              </div>
           </div>
           <button
@@ -352,7 +360,7 @@ export default function TransferFacesModal({
                         {group.label || `Person ${group.id}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {group.image_ids?.length || 0} images
+                        {group.count || 0} images
                       </p>
                     </div>
                   </div>

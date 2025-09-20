@@ -245,8 +245,19 @@ export const groupsAPI = {
       requestData.new_group_name = newGroupName;
     }
     
+    
     const response = await api.post(`/api/events/${eventId}/groups/transfer-faces`, requestData);
     return response.data;
+  },
+
+  getFaces: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces`);
+    const data = response.data || {};
+    if (Array.isArray(data.faces)) {
+      data.faces = data.faces.map(normalizeFace);
+    }
+    return data;
   },
 
   getRelated: async (eventUrl, params = {}) => {

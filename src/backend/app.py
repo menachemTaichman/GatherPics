@@ -149,7 +149,7 @@ def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
     event = get_event(event_id)
     sort = _parse_sort(True)
-    groups = event.models_manager.get_summary('groups', sort=sort, exclude_empty_entities=True)
+    groups = event.models_manager.get_summary('groups', sort=sort)
     return jsonify({"groups": groups})
 
 ########## TODO: simplify
@@ -208,6 +208,14 @@ def get_related_groups(event_id):
     )
     return jsonify({"related_groups": related_groups})
 
+@app.route("/api/events/<event_id>/groups/<group_id>/faces", methods=["GET"])
+@require_auth
+def get_group_faces(event_id, group_id):
+    """Get the faces of a group."""
+    event = get_event(event_id)
+    faces = event.models_manager.get_childs('groups', group_id, child='faces')
+    return jsonify({"faces": faces})
+
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
 @require_auth
 def update_group(event_id, group_id):
@@ -250,7 +258,6 @@ def check_group_name(event_id):
 
     try:
         conflict_group_id = event.models_manager.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
-        
         if conflict_group_id:
             conflicting_group = event.models_manager.get_summary('groups', conflict_group_id)
             return jsonify({"conflict": True, "conflicting_group": conflicting_group})
@@ -266,46 +273,25 @@ def transfer_faces(event_id):
     """Transfer faces between groups."""
     event = get_event(event_id)
     data = request.json or {}
+    source_group_id = data.get('source_group_id')
     target_group_id = data.get('target_group_id')
     new_group_name = data.get('new_group_name', '')
     face_ids = data.get('face_ids', [])
     
-    if not face_ids or (not target_group_id and not new_group_name):
+    if not target_group_id and not new_group_name:
         return jsonify({"error": "Missing required parameters"}), 400
     
     try:
-        faces_ids, old_group_ids, target_group_id = event.models_manager.transfer_faces(face_ids, target_group_id=target_group_id, new_group_name=new_group_name)
+        result = event.models_manager.add_faces_to_group(
+            face_ids,
+            target_group_id=target_group_id,
+            new_group_name=new_group_name,
+            source_group_id=source_group_id
+        )
 
-        response = {"success": True, "transferred_count": len(faces_ids)}
-
-        # NOTE: models_manager.transfer_faces currently returns face IDs and groups involved,
-        # but NOT the image IDs per face for precise relation diffs. For the frontend to
-        # update grids without refetch, the preferred changes are:
-        #   { type: 'RELATION_MOVE', relation: 'group.images', fromParentId: <old_group_id>, toParentId: <target_group_id>, ids: [<image_ids>] }
-        #   { type: 'UPSERT', entity: 'group', items: [updated_source_group, updated_target_group] }
-        #   (optional) { type: 'UPSERT', entity: 'image', items: [ { id, faces: [...] }, ... ] }
-        # Please extend models_manager.transfer_faces to also return the affected image IDs per face,
-        # e.g. a mapping { old_group_id: [image_ids], target_group_id: [image_ids] } or flat list with old_group_id.
-
-        # Until then, we at least upsert the updated group summaries.
-        updated_groups = []
-        # Source groups updated (counts/representative may change)
-        for gid in (old_group_ids or []):
-            try:
-                updated_groups.append(event.models_manager.get_summary('groups', gid))
-            except Exception:
-                pass
-        # Target group summary
-        try:
-            updated_groups.append(event.models_manager.get_summary('groups', target_group_id))
-        except Exception:
-            pass
-
-        response.setdefault('changes', []).append({
-            'type': 'UPSERT',
-            'entity': 'group',
-            'items': [g for g in updated_groups if g]
-        })
+        response = {"success": True}
+        if result.get('changes'):
+            response['changes'] = result['changes']
 
         return jsonify(response)
     except Exception as e:
@@ -337,7 +323,7 @@ def get_moment(event_id, moment_id):
     sort = _parse_sort(True)
     limit, offset = _parse_pagination()
     
-    images = event.models_manager.get_sub_entities(
+    images = event.models_manager.get_childs(
         'moments', moment_id, sort=sort, limit=limit, offset=offset
     )
     
@@ -405,38 +391,12 @@ def add_images_to_moment(event_id, moment_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        added_ids, old_moment_ids = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=True)
-        response = {"success": True, "added_ids": added_ids}
-
-        # Generic changes
-        response.setdefault('changes', []).append({
-            'type': 'RELATION_ADD',
-            'relation': 'moment.images',
-            'parentId': moment_id,
-            'ids': added_ids
-        })
-        # If images were moved from other moments (exclusive), remove them from old parents
-        for old_id in old_moment_ids or []:
-            response['changes'].append({
-                'type': 'RELATION_REMOVE',
-                'relation': 'moment.images',
-                'parentId': old_id,
-                'ids': added_ids
-            })
-
-        # Upsert updated moments (current and any old ones whose counts/representatives changed)
-        try:
-            updated_current = event.models_manager.get_summary('moments', moment_id)
-        except Exception:
-            updated_current = None
-        upserts = [m for m in [updated_current] if m]
-        for old_id in old_moment_ids or []:
-            try:
-                upserts.append(event.models_manager.get_summary('moments', old_id))
-            except Exception:
-                pass
-        if upserts:
-            response['changes'].append({ 'type': 'UPSERT', 'entity': 'moment', 'items': upserts })
+        result = event.models_manager.edit_childs('moments', moment_id, image_ids, add=True)
+        response = {"success": True}
+        if result.get('changes'):
+            response['changes'] = result['changes']
+        # Include affected_images_ids for frontend toast notifications
+        response['affected_images_ids'] = result.get('affected_images_ids', [])
 
         return jsonify(response)
     except Exception as e:
@@ -450,21 +410,13 @@ def remove_images_from_moment(event_id, moment_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_ids, _ = event.models_manager.edit_sub_entities('moments', moment_id, image_ids, add=False)
-        response = {"success": True, "removed_ids": removed_ids}
+        result = event.models_manager.edit_childs('moments', moment_id, image_ids, add=False)
+        response = {"success": True}
+        if result.get('changes'):
+            response['changes'] = result['changes']
+        # Include affected_images_ids for frontend toast notifications
+        response['affected_images_ids'] = result.get('affected_images_ids', [])
 
-        response.setdefault('changes', []).append({
-            'type': 'RELATION_REMOVE',
-            'relation': 'moment.images',
-            'parentId': moment_id,
-            'ids': removed_ids
-        })
-
-        try:
-            updated_current = event.models_manager.get_summary('moments', moment_id)
-            response['changes'].append({ 'type': 'UPSERT', 'entity': 'moment', 'items': [updated_current] })
-        except Exception:
-            pass
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -515,7 +467,7 @@ def get_album(event_id, album_id):
     sort = _parse_sort(True)
     limit, offset = _parse_pagination()
     
-    images = event.models_manager.get_sub_entities(
+    images = event.models_manager.get_childs(
         'albums', album_id, sort=sort, limit=limit, offset=offset
     )
     
@@ -576,21 +528,12 @@ def add_images_to_album(event_id, album_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        added_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=True)
-        response = {"success": True, "added_ids": added_ids}
-
-        # Generic relation change
-        response.setdefault('changes', []).append({
-            'type': 'RELATION_ADD',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'ids': added_ids
-        })
-        # NOTE: If this is the Archive or Favorites album, also prefer to update image flags:
-        #   Archive: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_archived: true })) }
-        #   Favorites: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_favorite: true })) }
-        # models_manager currently does not emit these flags; consider updating the DB or deriving flags.
-
+        result = event.models_manager.edit_album_images(album_id, image_ids, add=True)
+        response = {"success": True}
+        if result.get('changes'):
+            response['changes'] = result['changes']
+        # Include affected_images_ids for frontend toast notifications
+        response['affected_images_ids'] = result.get('affected_images_ids', [])
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -604,19 +547,12 @@ def remove_images_from_album(event_id, album_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_ids, _ = event.models_manager.edit_sub_entities('albums', album_id, image_ids, add=False)
-        response = {"success": True, "removed_ids": removed_ids}
-
-        response.setdefault('changes', []).append({
-            'type': 'RELATION_REMOVE',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'ids': removed_ids
-        })
-        # NOTE: If this is the Archive or Favorites album, prefer to update flags as well:
-        #   Archive: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_archived: false })) }
-        #   Favorites: { type: 'UPSERT', entity: 'image', items: image_ids.map(id => ({ id, is_favorite: false })) }
-
+        result = event.models_manager.edit_album_images(album_id, image_ids, add=False)
+        response = {"success": True}
+        if result.get('changes'):
+            response['changes'] = result['changes']
+        # Include affected_images_ids for frontend toast notifications
+        response['affected_images_ids'] = result.get('affected_images_ids', [])
         return jsonify(response)
     except Exception as e:
         return bad_request(e)

@@ -190,9 +190,7 @@ const MomentCard = forwardRef(({
                         isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
                         onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
                         onOpen={() => onOpenImageViewer(images, image, index)}
-                        isFavorite={isImageFavorite(image)}
                         onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
-                        isArchived={!!image.is_archived}
                         onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}
                         dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
                         showDate={!!image.date_taken}

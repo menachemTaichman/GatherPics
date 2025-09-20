@@ -1122,7 +1122,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setSelectedFaceForTransfer(null);
           }}
           currentGroup={groups && selectedFaceForTransfer?.group_id ? groups.find(g => (g.id || g.groupID) === selectedFaceForTransfer.group_id) : null}
-          selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer?.face_id ? [selectedFaceForTransfer.face_id] : [])}
+          selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
           showToast={showToast}
           sourceGroupId={selectedFaceForTransfer?.group_id}
