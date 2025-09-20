@@ -139,47 +139,43 @@ export const urlHelpers = {
 function normalizeFace(face) {
   if (!face || typeof face !== 'object') return face;
   const normalized = { ...face };
-  if (normalized.face_id && !normalized.id) normalized.id = normalized.face_id;
-  if (normalized.group_id && !normalized.groupId) normalized.groupId = normalized.group_id;
-  if (normalized.image_id && !normalized.imageId) normalized.imageId = normalized.image_id;
+  // id
+  if (!normalized.id) normalized.id = normalized.face_id || normalized.faceID || normalized.id;
+  // groupId
+  if (!normalized.groupId) normalized.groupId = normalized.group_id || normalized.groupID || normalized.groupId;
+  // imageId (for convenience in some payloads)
+  if (!normalized.imageId) normalized.imageId = normalized.image_id || normalized.imageID || normalized.imageId;
   return normalized;
 }
 
 function normalizeImage(img) {
   if (!img || typeof img !== 'object') return img;
   const normalized = { ...img };
-  const computedId = normalized.id || normalized.imageID;
-  if (computedId && !normalized.id) normalized.id = computedId;
-  if (Array.isArray(normalized.faces)) {
-    normalized.faces = normalized.faces.map(normalizeFace);
-  }
+  if (!normalized.id) normalized.id = normalized.image_id || normalized.imageID || normalized.id;
+  if (Array.isArray(normalized.faces)) normalized.faces = normalized.faces.map(normalizeFace);
+  if (Array.isArray(normalized.albums)) normalized.albums = normalized.albums.map(normalizeAlbum);
+  if (normalized.moment && typeof normalized.moment === 'object') normalized.moment = normalizeMoment(normalized.moment);
   return normalized;
 }
 
 function normalizeGroup(group) {
   if (!group || typeof group !== 'object') return group;
   const normalized = { ...group };
-  const computedId = normalized.id || normalized.groupID;
-  if (computedId && !normalized.id) normalized.id = computedId;
-  if (!normalized.groupID && normalized.id) normalized.groupID = normalized.id; // legacy alias
+  if (!normalized.id) normalized.id = normalized.group_id || normalized.groupID || normalized.id;
   return normalized;
 }
 
 function normalizeMoment(moment) {
   if (!moment || typeof moment !== 'object') return moment;
   const normalized = { ...moment };
-  const computedId = normalized.id || normalized.momentID;
-  if (computedId && !normalized.id) normalized.id = computedId;
-  if (!normalized.momentID && normalized.id) normalized.momentID = normalized.id; // legacy alias
+  if (!normalized.id) normalized.id = normalized.moment_id || normalized.momentID || normalized.id;
   return normalized;
 }
 
 function normalizeAlbum(album) {
   if (!album || typeof album !== 'object') return album;
   const normalized = { ...album };
-  const computedId = normalized.id || normalized.albumID;
-  if (computedId && !normalized.id) normalized.id = computedId;
-  if (!normalized.albumID && normalized.id) normalized.albumID = normalized.id; // legacy alias
+  if (!normalized.id) normalized.id = normalized.album_id || normalized.albumID || normalized.id;
   return normalized;
 }
 
@@ -385,7 +381,7 @@ export const albumsAPI = {
       const response = await api.get(`/api/events/${eventId}/albums/defaults/favorites`);
       const data = response.data || {};
       if (data.album) {
-        const albumId = data.album.albumID;
+        const albumId = data.album.id || data.album.albumID;
         store.setFavoritesAlbumId(albumId);
         favoritesAlbumId = albumId;
       }
@@ -411,7 +407,7 @@ export const albumsAPI = {
         const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
         const data = response.data || {};
         if (data.album) {
-            const albumId = data.album.albumID;
+            const albumId = data.album.id || data.album.albumID;
             store.setArchiveAlbumId(albumId);
             archiveAlbumId = albumId;
         }
@@ -433,7 +429,7 @@ export const albumsAPI = {
       const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
       const data = response.data || {};
       if (data.album) {
-        const albumId = data.album.albumID;
+        const albumId = data.album.id || data.album.albumID;
         store.setArchiveAlbumId(albumId);
         archiveAlbumId = albumId;
       }
@@ -483,7 +479,7 @@ export const optimisticUpdates = {
   // Optimistic group update
   updateGroup: async (groupId, updates, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
-    const previousState = store.groups.find(g => g.groupID === groupId);
+    const previousState = store.entities?.groupsById?.[groupId];
     
     // Apply optimistic update
     store.updateGroup(groupId, updates);
@@ -506,7 +502,7 @@ export const optimisticUpdates = {
   // Optimistic group delete
   deleteGroup: async (groupId, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
-    const previousState = store.groups.find(g => g.groupID === groupId);
+    const previousState = store.entities?.groupsById?.[groupId];
     
     // Apply optimistic update
     store.deleteGroup(groupId);
@@ -533,7 +529,9 @@ export const optimisticUpdates = {
 
     try {
       const result = await momentsAPI.create(momentData, eventUrl);
-      store.updateMoment(tempId, result.moment);
+      if (result.moment) {
+        store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: [result.moment] }]);
+      }
       if (Array.isArray(result.changes)) {
         store.applyChanges(result.changes);
       }
@@ -551,7 +549,7 @@ export const optimisticUpdates = {
   // Optimistic moment update
   updateMoment: async (momentId, updates, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
-    const previousState = store.moments.find(m => m.momentID === momentId);
+    const previousState = store.entities?.momentsById?.[momentId];
     
     // Apply optimistic update
     store.updateMoment(momentId, updates);
@@ -576,7 +574,7 @@ export const optimisticUpdates = {
   // Optimistic moment delete
   deleteMoment: async (momentId, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
-    const previousState = store.moments.find(m => m.momentID === momentId);
+    const previousState = store.entities?.momentsById?.[momentId];
     
     // Apply optimistic update
     store.deleteMoment(momentId);
@@ -589,7 +587,7 @@ export const optimisticUpdates = {
       if (rollbackFn && previousState) {
         rollbackFn(previousState);
       } else if (previousState) {
-        store.addMoment(previousState);
+        store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: [previousState] }]);
       }
       throw error;
     }

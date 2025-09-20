@@ -208,8 +208,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const handleRemoveFromAlbum = async (album) => {
     if (!imageInfo) return;
     try {
-      await albumsAPI.removeImages(album.albumID, [imageInfo.id], eventUrl);
-      setImageAlbums(prev => prev.filter(a => a.albumID !== album.albumID));
+      await albumsAPI.removeImages(album.id, [imageInfo.id], eventUrl);
+      setImageAlbums(prev => prev.filter(a => a.id !== album.id));
       const lbl = (album.label || '').toLowerCase();
       if (lbl === 'favorites') {
         setImageInfo(prev => ({ ...prev, is_favorite: false }));
@@ -242,7 +242,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     // Add the album to the local imageAlbums state immediately
     setImageAlbums(prev => {
       // Check if album is already in the list to avoid duplicates
-      if (prev.some(a => a.albumID === album.albumID)) {
+      if (prev.some(a => a.id === album.id)) {
         return prev;
       }
       
@@ -314,11 +314,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             const seen = new Set();
             const items = [];
             (info.faces || []).forEach((f) => {
-              const gid = f && (f.groupID || f.group_id);
+              const gid = f && (f.groupId || f.group_id || f.groupID);
               if (!gid || seen.has(gid)) return;
               seen.add(gid);
               const label = f.group_label || (groupsById[gid] && groupsById[gid].label) || undefined;
-              items.push(label ? { groupID: gid, label } : { groupID: gid });
+              items.push(label ? { id: gid, label } : { id: gid });
             });
             if (items.length > 0) {
               store.applyChanges([{ type: 'UPSERT', entity: 'group', items }]);
@@ -432,7 +432,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleFaceNavigation = (face) => {
-    const gid = face?.groupId || face?.groupID;
+    const gid = face?.groupId || face?.group_id || face?.groupID;
     const label = gid ? groupsById[gid]?.label : '';
     if (label) {
       navigate(`/persons/${encodeURIComponent(label)}`);
@@ -505,7 +505,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       // Show a generic success toast if the parent isn't GroupDetail handling its own.
       if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
         const targetGroup = transferData.updated_target_group || 
-                              (transferData.target_group_id && groups.find(g => g.groupID === transferData.target_group_id));
+                              (transferData.target_group_id && groups.find(g => (g.id || g.groupID) === transferData.target_group_id));
         
         if (targetGroup) {
           const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
@@ -619,7 +619,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getGroupLabel = (face) => {
-    const gid = face?.groupId || face?.groupID;
+    const gid = face?.groupId || face?.group_id || face?.groupID;
     const label = gid ? (groupsById[gid]?.label || '') : '';
     return label;
   };
@@ -713,7 +713,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         borderColor = 'border-red-500';
                         bgColor = 'bg-red-500';
                         labelBgColor = 'bg-red-500';
-                      } else if (face.groupID === currentGroupId) {
+                      } else if ((face.groupId || face.group_id || face.groupID) === currentGroupId) {
                         borderColor = 'border-green-500';
                         bgColor = 'bg-green-500';
                         labelBgColor = 'bg-green-500';
@@ -981,9 +981,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         style={facesOpen ? { height: albumsHeight } : {}}
                       >
                         <div className="px-4">
-                          {imageAlbums.map(album => (
+                          {imageAlbums.map((album, index) => (
                             <div
-                              key={album.albumID}
+                              key={album.id || `${album.label || 'album'}-${index}`}
                               className="flex items-center p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-1 last:mb-0"
                             >
                               <a
@@ -1069,7 +1069,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                           <div className="space-y-2">
                             {faces.map((face, index) => (
                               <div
-                                key={`face-list-${(face.id || face.faceID || `index-${index}`)}-${(face.groupId || face.groupID || 'unknown')}-${index}-${imageId}`}
+                                key={`face-list-${(face.id || face.faceID || `index-${index}`)}-${(face.groupId || face.group_id || face.groupID || 'unknown')}-${index}-${imageId}`}
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                 onClick={() => handleFaceClick(index)}
                               >
@@ -1121,7 +1121,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
           }}
-          currentGroup={groups && selectedFaceForTransfer?.group_id ? groups.find(g => g.groupID === selectedFaceForTransfer.group_id) : null}
+          currentGroup={groups && selectedFaceForTransfer?.group_id ? groups.find(g => (g.id || g.groupID) === selectedFaceForTransfer.group_id) : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer?.face_id ? [selectedFaceForTransfer.face_id] : [])}
           onTransferComplete={handleTransferComplete}
           showToast={showToast}

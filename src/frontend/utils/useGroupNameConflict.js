@@ -15,7 +15,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
     }
 
     try {
-      const result = await groupsAPI.checkName(name.trim(), currentGroup?.groupID, eventUrl);
+      const result = await groupsAPI.checkName(name.trim(), currentGroup?.id, eventUrl);
       
       if (result.conflict) {
         setNameConflict(result.conflicting_group);
@@ -62,8 +62,8 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
     
     // If still no valid conflicting group, try to find it by name in the data store
     if (!validConflictingGroup && newName) {
-      const groups = useDataStore.getState().groups;
-      validConflictingGroup = groups.find(g => g.label === newName);
+      const groupsById = useDataStore.getState().entities?.groupsById || {};
+      validConflictingGroup = Object.values(groupsById).find(g => g.label === newName);
     }
     
     if (!validConflictingGroup) {

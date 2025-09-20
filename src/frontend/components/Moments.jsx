@@ -8,7 +8,8 @@ import FloatingSelectionControls from './FloatingSelectionControls';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
 import { useSetting } from '../utils/useSettings';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { shallow } from 'zustand/shallow';
 import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
@@ -50,17 +51,14 @@ export default function Moments({ eventUrl }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
-  const { 
-    moments, 
-    setMoments, 
-    updateMoment, 
-    deleteMoment, 
-    addMoment,
-    loading: storeLoading,
-    error: storeError,
-    setLoading: setStoreLoading,
-    setError: setStoreError
-  } = useDataStore();
+  const moments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  const updateMoment = useDataStore(state => state.updateMoment);
+  const deleteMoment = useDataStore(state => state.deleteMoment);
+  const addMoment = useDataStore(state => state.addMoment);
+  const storeLoading = useDataStore(state => state.loading);
+  const storeError = useDataStore(state => state.error);
+  const setStoreLoading = useDataStore(state => state.setLoading);
+  const setStoreError = useDataStore(state => state.setError);
   
   const [images, setImages] = useState([]);
   const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
@@ -194,7 +192,7 @@ export default function Moments({ eventUrl }) {
     if (location.state?.scrollToMoment && moments.length > 0) {
       const momentId = location.state.scrollToMoment;
       window.history.replaceState({}, document.title);
-      const moment = moments.find(m => m.momentID === momentId);
+      const moment = moments.find(m => m.id === momentId);
       if (moment) {
         timelineManager.navigateToMoment(moment.label, moment.label);
       }
@@ -243,10 +241,10 @@ export default function Moments({ eventUrl }) {
         return;
       }
       
-      const validMoments = moments.filter(moment => moment.momentID && !moment.momentID.startsWith('temp-'));
+      const validMoments = moments.filter(moment => moment.id && !String(moment.id).startsWith('temp-'));
       
       // Check which moments need images fetched (or all if forceRefetch is true)
-      const momentsToFetch = forceRefetch ? validMoments : validMoments.filter(moment => !momentImagesMap[moment.momentID]);
+      const momentsToFetch = forceRefetch ? validMoments : validMoments.filter(moment => !momentImagesMap[moment.id]);
       
       if (momentsToFetch.length === 0) {
         // All images are already loaded
@@ -257,18 +255,18 @@ export default function Moments({ eventUrl }) {
       // Use parallel API calls for moments that need images fetched
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
-          const result = await momentsAPI.getById(moment.momentID, eventUrl);
+          const result = await momentsAPI.getById(moment.id, eventUrl);
           const imgs = result.images || [];
           const ids = imgs.map(i => i && i.id).filter(Boolean);
           try {
             const store = useDataStore.getState();
             if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
-            store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: moment.momentID, ids }]);
+            store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: moment.id, ids }]);
           } catch {}
-          return { momentId: moment.momentID, images: imgs };
+          return { momentId: moment.id, images: imgs };
         } catch (error) {
-          console.error(`Error fetching images for moment ${moment.momentID}:`, error);
-          return { momentId: moment.momentID, images: [] };
+          console.error(`Error fetching images for moment ${moment.id}:`, error);
+          return { momentId: moment.id, images: [] };
         }
       });
 
@@ -301,7 +299,11 @@ export default function Moments({ eventUrl }) {
     try {
       setStoreLoading(true);
       const response = await momentsAPI.getAll(eventUrl, { exclude_empty_entities: true });
-      setMoments(response.moments || []);
+    const store = useDataStore.getState();
+    const moments = response.moments || [];
+    if (moments.length) {
+      store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: moments }]);
+    }
       setStoreError(null);
     } catch (err) {
       setStoreError('Failed to load moments.');
@@ -326,11 +328,11 @@ export default function Moments({ eventUrl }) {
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
-      const response = await momentsAPI.update(updatedMoment.momentID, updatedMoment, eventUrl);
+      const response = await momentsAPI.update(updatedMoment.id, updatedMoment, eventUrl);
       const store = useDataStore.getState();
       if (Array.isArray(response.changes)) store.applyChanges(response.changes);
-      updateMoment(updatedMoment.momentID, response.moment || updatedMoment);
-      updateMomentImagesMap(updatedMoment.momentID);
+      updateMoment(updatedMoment.id, response.moment || updatedMoment);
+      updateMomentImagesMap(updatedMoment.id);
       
       // Return the response so the caller knows the operation succeeded
       return response;
@@ -403,8 +405,8 @@ export default function Moments({ eventUrl }) {
     const currentMoment = currentVisibleMoment;
     
     if (currentMoment) {
-      const currentMomentImages = momentImagesMap[currentMoment.momentID] || [];
-      const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.momentID}:${image && image.id}`);
+      const currentMomentImages = momentImagesMap[currentMoment.id] || [];
+      const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.id}:${image && image.id}`);
       
             // Check if all images in current moment are already selected
         const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
@@ -717,10 +719,10 @@ export default function Moments({ eventUrl }) {
 
   const handleJumpToMoment = (momentInfo) => {
     // Find the moment in our moments list and scroll to it
-    const moment = moments.find(m => m.momentID === momentInfo.id);
+            const moment = moments.find(m => m.id === momentInfo.id);
     if (moment) {
       // Use timeline manager for navigation
-      timelineManager.navigateToMoment(moment.momentID, moment.label);
+            timelineManager.navigateToMoment(moment.id, moment.label);
     }
   };
 
@@ -921,7 +923,7 @@ export default function Moments({ eventUrl }) {
                 )}
                 {moments.map(moment => (
                   <motion.div 
-                    key={moment.momentID} 
+                    key={moment.id} 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="relative bg_white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
@@ -949,7 +951,7 @@ export default function Moments({ eventUrl }) {
                         <Image className="w-8 h-8 text-white" />
                       )}
                     </div>
-                    <div className="text-center">
+                      <div className="text-center">
                       <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
                       <div className="text-xs text-gray-500 truncate max-w-[7rem]">
                         {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
@@ -1006,9 +1008,9 @@ export default function Moments({ eventUrl }) {
             {/* Timeline line */}
             <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500">
                              {/* Colorful dots for each moment */}
-               {moments.map((moment, index) => (
+              {moments.map((moment, index) => (
                  <div
-                   key={moment.momentID}
+                  key={moment.id}
                    className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10"
                   style={{
                     left: '-6px'
@@ -1037,9 +1039,9 @@ export default function Moments({ eventUrl }) {
               )}
               {moments.map((moment, index) => (
                 <MomentCard
-                  key={moment.momentID}
+                  key={moment.id}
                   moment={moment}
-                  images={momentImagesMap[moment.momentID] || []}
+                  images={momentImagesMap[moment.id] || []}
                   viewMode={viewMode}
                   imageSize={imageSize}
                   globalSelection={selectedKeys}
@@ -1094,13 +1096,13 @@ export default function Moments({ eventUrl }) {
           >
             <h4 className="font-semibold mb-4">Move Photos to Moment</h4>
             <select
-              value={targetMoment?.momentID || ''}
-              onChange={(e) => setTargetMoment(moments.find(m => m.momentID === e.target.value))}
+              value={targetMoment?.id || ''}
+              onChange={(e) => setTargetMoment(moments.find(m => String(m.id) === e.target.value))}
               className="w-full border rounded px-3 py-2 mb-4"
             >
               <option value="">Select a moment for photos...</option>
               {moments.map(m => (
-                <option key={m.momentID} value={m.momentID}>{m.label}</option>
+                <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
             <div className="flex justify-end space-x-2">

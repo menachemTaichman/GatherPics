@@ -4,7 +4,7 @@ import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useSetting } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,7 +20,7 @@ export default function TransferFacesModal({
 }) {
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const navigate = useNavigate();
-  const groups = useDataStore(state => state.groups);
+  const groups = useDataStore(state => storeSelectors.groupsAll(state));
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -50,22 +50,22 @@ export default function TransferFacesModal({
 
   // Filter out current group and source group from available groups
   const availableGroups = groups.filter(g => 
-    g.groupID !== currentGroup?.groupID && 
-    g.groupID !== sourceGroupId
+    g.id !== currentGroup?.id && 
+    g.id !== sourceGroupId
   );
 
   // Filter and sort groups
   const filteredAndSortedGroups = availableGroups
     .filter(group => {
-      const label = group.label || `Person ${group.groupID}`;
+      const label = group.label || `Person ${group.id}`;
       return label.toLowerCase().includes(searchTerm.toLowerCase());
     })
     .sort((a, b) => {
       let aValue, bValue;
       
       if (sortBy === 'name') {
-        aValue = a.label || `Person ${a.groupID}`;
-        bValue = b.label || `Person ${b.groupID}`;
+        aValue = a.label || `Person ${a.id}`;
+        bValue = b.label || `Person ${b.id}`;
       } else {
         aValue = a.image_ids?.length || 0;
         bValue = b.image_ids?.length || 0;
@@ -79,7 +79,7 @@ export default function TransferFacesModal({
     })
     // Remove duplicate groups by groupID to prevent React key conflicts
     .reduce((unique, group) => {
-      if (!unique.some(g => g.groupID === group.groupID)) {
+      if (!unique.some(g => g.id === group.id)) {
         unique.push(group);
       }
       return unique;
@@ -165,7 +165,7 @@ export default function TransferFacesModal({
 
     try {
       const result = await groupsAPI.transferFaces(
-        currentGroup?.groupID || sourceGroupId || null,
+        currentGroup?.id || sourceGroupId || null,
         selectedGroupId || null,
         selectedFaces,
         eventUrl,
@@ -322,14 +322,14 @@ export default function TransferFacesModal({
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
               {filteredAndSortedGroups.map((group) => (
                 <div
-                  key={group.groupID}
+                  key={group.id}
                   className={`p-2 border border-transparent rounded-lg cursor-pointer transition-colors ${
-                    selectedGroupId === group.groupID
+                    selectedGroupId === group.id
                       ? 'border-orange-500 bg-orange-50'
                       : 'hover:border-gray-300'
                   }`}
                   onClick={() => {
-                    setSelectedGroupId(group.groupID);
+                    setSelectedGroupId(group.id);
                     setNewGroupName(''); // Clear new group name when selecting existing
                   }}
                 >
@@ -338,7 +338,7 @@ export default function TransferFacesModal({
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                       <img
                         src={group.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(group.representative_face) : PLACEHOLDER_DATA_URL}
-                        alt={group.label || `Person ${group.groupID}`}
+                        alt={group.label || `Person ${group.id}`}
                         className="w-full h-full object-cover"
                         loading="lazy"
                         onError={(e) => {
@@ -349,7 +349,7 @@ export default function TransferFacesModal({
                     </div>
                     <div className="text-center">
                       <p className="font-medium text-gray-900 text-xs truncate w-full">
-                        {group.label || `Person ${group.groupID}`}
+                        {group.label || `Person ${group.id}`}
                       </p>
                       <p className="text-xs text-gray-500">
                         {group.image_ids?.length || 0} images

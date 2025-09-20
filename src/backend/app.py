@@ -259,6 +259,7 @@ def check_group_name(event_id):
     except Exception as e:
         return bad_request(e)
 
+# TODO: update models_manager
 @app.route("/api/events/<event_id>/groups/transfer-faces", methods=["POST"])
 @require_auth
 def transfer_faces(event_id):
@@ -394,6 +395,7 @@ def update_moment(event_id, moment_id):
     except Exception as e:
         return bad_request(e)
 
+# TODO: refactor to new store
 @app.route("/api/events/<event_id>/moments/<moment_id>/images", methods=["POST"])
 @require_auth
 def add_images_to_moment(event_id, moment_id):
@@ -564,6 +566,7 @@ def update_album(event_id, album_id):
     except Exception as e:
         return bad_request(e)
 
+# TODO: refactor to new store
 @app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["POST"])
 @require_auth
 def add_images_to_album(event_id, album_id):
@@ -592,6 +595,7 @@ def add_images_to_album(event_id, album_id):
     except Exception as e:
         return bad_request(e)
 
+# TODO: refactor to new store
 @app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["DELETE"])
 @require_auth
 def remove_images_from_album(event_id, album_id):

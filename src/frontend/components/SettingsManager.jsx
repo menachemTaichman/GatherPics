@@ -3,11 +3,24 @@ import { motion } from 'framer-motion';
 import { Settings, RotateCcw, Trash2 } from 'lucide-react';
 import { getAllSettings, resetAllSettings, clearAllSettings, setSetting, getSetting } from '../utils/settings';
 import { authAPI } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
 
 export default function SettingsManager() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState(getAllSettings());
   const settingsRef = useRef(null);
+  const openStoreSnapshot = () => {
+    const store = useDataStore.getState();
+    const replacer = (_key, value) => {
+      if (value instanceof Set) return Array.from(value);
+      return value;
+    };
+    const snapshot = JSON.stringify(store || {}, replacer, 2);
+    const blob = new Blob([snapshot], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
 
   // Close settings when clicking outside
   useEffect(() => {
@@ -66,6 +79,13 @@ export default function SettingsManager() {
                 title="Refresh"
               >
                 <RotateCcw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openStoreSnapshot}
+                className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                title="Open current store JSON in a new tab"
+              >
+                Open store
               </button>
               <button
                 onClick={handleResetSettings}

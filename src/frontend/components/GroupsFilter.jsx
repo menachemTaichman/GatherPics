@@ -132,18 +132,18 @@ export default function GroupsFilter({
   // Build display list: selected first (in order), then API related (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
     const seen = new Set(selectedGroups);
-    const groupMap = new Map((storeGroups || []).map(g => [g.groupID, g]));
-    const byRelated = new Map((relatedGroups || []).map(g => [g.groupID, g]));
+    const groupMap = new Map((storeGroups || []).map(g => [g.id || g.groupID, g]));
+    const byRelated = new Map((relatedGroups || []).map(g => [g.id || g.groupID, g]));
     const selectedObjs = selectedGroups
       .filter(id => id !== currentGroupId)
-      .map(id => byRelated.get(id) || groupMap.get(id) || { groupID: id, label: `Person ${id}` });
-    const tail = (relatedGroups || []).filter(g => !seen.has(g.groupID) && g.groupID !== currentGroupId);
+      .map(id => byRelated.get(id) || groupMap.get(id) || { id, label: `Person ${id}` });
+    const tail = (relatedGroups || []).filter(g => !seen.has(g.id || g.groupID) && (g.id || g.groupID) !== currentGroupId);
     return [...selectedObjs, ...tail];
   }, [selectedGroups, relatedGroups, currentGroupId, storeGroups]);
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';
-    const id = group.groupID || group.id || '';
+    const id = group.id || group.groupID || '';
     return group.label || `Person ${id}`;
   };
 
@@ -238,8 +238,8 @@ export default function GroupsFilter({
         {/* Groups Row */}
         <div className="flex items-center space-x-3 overflow-x-auto pb-2">
           {/* Main Group (always selected) */}
-          <div 
-            key={`main-${group.groupID}`}
+            <div 
+            key={`main-${group.id || group.groupID}`}
             className="flex-shrink-0 relative group"
             onMouseEnter={(event) => handleMouseEnter(group.groupID, event)}
             onMouseLeave={handleMouseLeave}
@@ -266,7 +266,7 @@ export default function GroupsFilter({
           {/* Related Groups */}
           {displayGroups.map((relatedGroup) => (
             <div
-              key={relatedGroup.groupID}
+              key={relatedGroup.id || relatedGroup.groupID}
               className="flex-shrink-0 relative group"
               onMouseEnter={(event) => handleMouseEnter(relatedGroup.groupID, event)}
               onMouseLeave={handleMouseLeave}
@@ -274,10 +274,10 @@ export default function GroupsFilter({
             >
               <div 
                 className="cursor-pointer"
-                onClick={() => handleGroupClick(relatedGroup.groupID)}
+                onClick={() => handleGroupClick(relatedGroup.id || relatedGroup.groupID)}
               >
                 <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
-                  selectedGroups.includes(relatedGroup.groupID)
+                  selectedGroups.includes(relatedGroup.id || relatedGroup.groupID)
                     ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                     : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                 }`}>

@@ -97,15 +97,12 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   // Memoize props for GroupsFilter to prevent infinite re-renders (defined after sortedImages below)
   let memoizedImageIds = EMPTY_ARRAY;
-  const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.groupID !== group?.groupID), [relatedGroups, group?.groupID]);
+  const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.id !== group?.id), [relatedGroups, group?.id]);
   
   // No complex flag checking needed - the data store handles everything
 
-  // Subscribe only to groups to avoid re-renders on unrelated store changes
-  const storeGroups = useDataStore(state => state.groups, shallow);
-
-  // Use groups from store if available, otherwise fall back to props
-  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
+  // Subscribe to normalized groups list
+  const currentGroups = useDataStore(state => storeSelectors.groupsAll(state), shallow);
 
   // Use the custom hook for conflict handling
   const {
@@ -125,7 +122,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   // Derive images from normalized store relations (ids with shallow equality) for smooth updates
   const relatedImageIds = useDataStore(
-    state => (group?.groupID ? (state.relations?.groupImages?.[group.groupID] || EMPTY_ARRAY) : EMPTY_ARRAY),
+    state => (group?.id ? (state.relations?.groupImages?.[group.id] || EMPTY_ARRAY) : EMPTY_ARRAY),
     shallow
   );
   const imagesById = useDataStore(state => state.entities.imagesById);
@@ -144,11 +141,11 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const archiveSet = useMemo(() => new Set(archiveIds), [archiveIds]);
 
   const sortedImages = useMemo(() => {
-    if (!group?.groupID) return EMPTY_ARRAY;
+    if (!group?.id) return EMPTY_ARRAY;
     const includeArchived = getSetting('include_archived_images', false);
     const visible = (relatedImages || []).filter(img => includeArchived || !img?.is_archived);
     return sortImages(visible, sortBy, sortOrder);
-  }, [group?.groupID, relatedImages, sortBy, sortOrder]);
+  }, [group?.id, relatedImages, sortBy, sortOrder]);
 
   // Now compute memoizedImageIds after sortedImages exists
   memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
@@ -166,21 +163,18 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   });
 
   useEffect(() => {
-    const groupsArray = currentGroups?.groups || currentGroups;
-    const foundGroup = groupsArray.find(g => g.label === group_name);
+    const foundGroup = (currentGroups || []).find(g => g.label === group_name);
     if (foundGroup) {
-      if (!group || group.groupID !== foundGroup.groupID) setGroup(foundGroup);
-    } else if (group && group.groupID) {
-      return;
-    } else {
+      if (!group || group.id !== foundGroup.id) setGroup(foundGroup);
+    } else if (!group || !group.id) {
       navigate(`/${eventUrl}/persons`);
     }
-  }, [group_name, currentGroups, navigate]);
+  }, [group_name, currentGroups, navigate, eventUrl]);
 
   // Legacy subscription removed; updates flow from normalized selectors
 
   const fetchGroupData = useCallback(async (currentOffset, resetImages = false) => {
-    if (!group?.groupID) {
+    if (!group?.id) {
       return;
     }
     if (!suppressSpinnerRef.current) {
@@ -201,11 +195,11 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     }
 
     try {
-      const response = await groupsAPI.getById(group.groupID, eventUrl, params);
+      const response = await groupsAPI.getById(group.id, eventUrl, params);
       
       setGroup(prev => {
         const next = { ...(prev || {}), ...(response.group || {}) };
-        if (prev && prev.groupID === next.groupID && prev.label === next.label && prev.representative_face === next.representative_face && prev.count === next.count) {
+        if (prev && prev.id === next.id && prev.label === next.label && prev.representative_face === next.representative_face && prev.count === next.count) {
           return prev;
         }
         return next;
@@ -222,9 +216,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           changes.push({ type: 'UPSERT', entity: 'image', items: response.images });
         }
         if (resetImages || currentOffset === 0) {
-          changes.push({ type: 'RELATION_SET', relation: 'group.images', parentId: group.groupID, ids: imageIds });
+          changes.push({ type: 'RELATION_SET', relation: 'group.images', parentId: group.id, ids: imageIds });
         } else if (imageIds.length > 0) {
-          changes.push({ type: 'RELATION_ADD', relation: 'group.images', parentId: group.groupID, ids: imageIds });
+          changes.push({ type: 'RELATION_ADD', relation: 'group.images', parentId: group.id, ids: imageIds });
         }
         if (changes.length > 0) {
           store.applyChanges(changes);
@@ -247,15 +241,15 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         } catch {}
       }
     }
-  }, [group?.groupID, eventUrl, filterGroups, filterMode, onlySelected, isFetchingMore]);
+  }, [group?.id, eventUrl, filterGroups, filterMode, onlySelected, isFetchingMore]);
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
-    if (!group?.groupID) return;
-    const sig = `${group.groupID}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
+    if (!group?.id) return;
+    const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
     if (sig === lastFetchSignatureRef.current) return;
-    const isGroupChange = prevGroupIdRef.current !== group.groupID;
-    prevGroupIdRef.current = group.groupID;
+    const isGroupChange = prevGroupIdRef.current !== group.id;
+    prevGroupIdRef.current = group.id;
     // If this is only a filter change, do a silent fetch and preserve scroll
     if (!isGroupChange) {
       suppressSpinnerRef.current = true;
@@ -267,7 +261,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     lastFetchSignatureRef.current = sig;
     setOffset(0);
     fetchGroupData(0, true);
-  }, [group?.groupID, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
+  }, [group?.id, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
 
   // Related groups are fetched inside GroupsFilter; keep local state updated via callback
 
@@ -418,7 +412,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       const image = sortedImages.find(p => p.id === imageId);
       if (image && image.faces) {
         image.faces.forEach(face => {
-          if (face.group_id === group.groupID) {
+          if (face.groupId === group.id) {
             selectedFaceIds.add(face.face_id);
           }
         });
@@ -437,7 +431,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const handleTransferComplete = async (result) => {
     const transferData = { ...(result || {}) };
-    transferData.old_group_id = transferData.old_group_id || group?.groupID || null;
+    transferData.old_group_id = transferData.old_group_id || group?.id || null;
 
     // Clear selection and remove transferred images from the local cache used by selection
     clearSelection();
@@ -447,9 +441,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
     // Rely on API responses to update the normalized store; no manual store edits or navigation here
     if (transferData?.target_group_id) {
-      let targetGroup = currentGroups.find(g => g.groupID === transferData.target_group_id);
+      let targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
       if (!targetGroup && transferData.new_group_name) {
-        targetGroup = { groupID: transferData.target_group_id, label: transferData.new_group_name };
+        targetGroup = { id: transferData.target_group_id, label: transferData.new_group_name };
       }
       if (targetGroup) {
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
@@ -501,7 +495,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       index,
       eventUrl,
       groups: currentGroups,
-      currentGroupId: group.groupID,
+      currentGroupId: group.id,
       showToast,
       onTransferComplete: handleTransferComplete,
       onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
@@ -516,15 +510,15 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
   const handleTitleEdit = () => {
-    setEditingTitle(group.label || `Person ${group.groupID}`);
+    setEditingTitle(group.label || `Person ${group.id}`);
     setIsEditingTitle(true);
     clearConflict(); // Clear any previous conflict
   };
 
   const handleTitleSave = async () => {
     // Check if the current group still exists in the store
-    const currentGroups = useDataStore.getState().groups;
-    const groupExists = currentGroups.some(g => g.groupID === group?.groupID);
+  const currentGroups = storeSelectors.groupsAll(useDataStore.getState());
+    const groupExists = currentGroups.some(g => g.id === group?.id);
     
     if (!groupExists) {
       setIsEditingTitle(false);
@@ -550,7 +544,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     
     try {
       // Check for conflicts first - call the API directly to avoid state timing issues
-      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.groupID, eventUrl);
+      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.id, eventUrl);
       
       if (conflictResult.conflict) {
         // Show merge conflict modal with the conflicting group
@@ -560,7 +554,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       }
       
       // No conflict, proceed with update
-      await optimisticUpdates.updateGroup(group.groupID, { label: trimmedTitle });
+      await optimisticUpdates.updateGroup(group.id, { label: trimmedTitle });
       
       // Update the URL to reflect the new group name
               const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
@@ -622,7 +616,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                   src={group.representative_face && group.representative_face.trim() !== '' && urlHelpers
                     ? urlHelpers.getFaceCropUrl(group.representative_face)
                     : PLACEHOLDER_DATA_URL}
-                  alt={group.label || `Person ${group.groupID}`}
+                  alt={group.label || `Person ${group.id}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
                   onError={(e) => {
@@ -687,7 +681,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       className="text-3xl font-bold text-gray-900 cursor-pointer hover:text-primary-600 transition-colors w-[200px]"
                       onClick={handleTitleEdit}
                     >
-                      {group.label || `Person ${group.groupID}`}
+                      {group.label || `Person ${group.id}`}
                     </h1>
                   </div>
                 )}
@@ -884,7 +878,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               eventUrl={eventUrl}
               imageIds={memoizedImageIds}
               onRelatedGroupsUpdate={setRelatedGroups}
-              currentGroupId={group?.groupID}
+              currentGroupId={group?.id}
               onSelectedGroupsChange={setFilterGroups}
               initialSelectedGroups={filterGroups}
             />
@@ -1058,7 +1052,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           eventUrl={eventUrl}
           onClose={() => setShowEditModal(false)}
           onSave={async (updates) => {
-            const result = await optimisticUpdates.updateGroup(group.groupID, updates, eventUrl);
+            const result = await optimisticUpdates.updateGroup(group.id, updates, eventUrl);
             
             // Update the URL if the group name changed
             if (updates.label && updates.label !== group.label) {
@@ -1094,7 +1088,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
           onTransferComplete={handleTransferComplete}
           onNavigateToGroup={(targetGroupId) => {
             // Find the target group and navigate to it
-            const targetGroup = currentGroups.find(g => g.groupID === targetGroupId);
+            const targetGroup = currentGroups.find(g => g.id === targetGroupId);
             if (targetGroup) {
               navigate(`/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`);
             } else {

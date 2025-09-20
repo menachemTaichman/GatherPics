@@ -2,35 +2,12 @@ import { create } from 'zustand';
 
 // Data change types for tracking what needs to be updated
 export const CHANGE_TYPES = {
-  // Group changes
-  GROUP_UPDATED: 'GROUP_UPDATED',
-  GROUP_DELETED: 'GROUP_DELETED',
-  GROUP_CREATED: 'GROUP_CREATED',
-  GROUP_FACES_TRANSFERRED: 'GROUP_FACES_TRANSFERRED',
-  
-  // Generic normalized changes (new schema)
   UPSERT: 'UPSERT',
   REMOVE: 'REMOVE',
   RELATION_ADD: 'RELATION_ADD',
   RELATION_REMOVE: 'RELATION_REMOVE',
   RELATION_MOVE: 'RELATION_MOVE',
   RELATION_SET: 'RELATION_SET',
-  
-  // Moment changes
-  MOMENT_CREATED: 'MOMENT_CREATED',
-  MOMENT_UPDATED: 'MOMENT_UPDATED',
-  MOMENT_DELETED: 'MOMENT_DELETED',
-  MOMENT_IMAGES_ADDED: 'MOMENT_IMAGES_ADDED',
-  MOMENT_IMAGES_REMOVED: 'MOMENT_IMAGES_REMOVED',
-  
-  // Image changes
-  IMAGE_ALBUMS_UPDATED: 'IMAGE_ALBUMS_UPDATED',
-  IMAGE_SELECTION_CHANGED: 'IMAGE_SELECTION_CHANGED',
-  IMAGE_VIEWER_UPDATED: 'IMAGE_VIEWER_UPDATED',
-  
-  // Global changes
-  GROUPS_REFRESH: 'GROUPS_REFRESH',
-  MOMENTS_REFRESH: 'MOMENTS_REFRESH',
 };
 
 function shallowEqual(a, b) {
@@ -49,8 +26,6 @@ function shallowEqual(a, b) {
 // Data store using Zustand for centralized state management
 export const useDataStore = create((set, get) => ({
   // State
-  groups: [],
-  moments: [],
   selectedImages: new Set(),
   imageViewer: { show: false, image: null, index: 0 },
   loading: false,
@@ -80,8 +55,6 @@ export const useDataStore = create((set, get) => ({
   },
   
   // Actions
-  setGroups: (groups) => set({ groups }),
-  setMoments: (moments) => set({ moments }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   clearLastTransferResult: () => set({ lastTransferResult: null }),
@@ -100,8 +73,7 @@ export const useDataStore = create((set, get) => ({
     let changed = false;
     items.forEach((it) => {
       if (!it) return;
-      // Prefer id, but keep legacy groupID/momentID/albumID
-      const id = it.id || it.imageID || it.groupID || it.momentID || it.albumID;
+      const id = it.id;
       if (id === undefined || id === null) return;
       const prev = nextMap[id];
       if (!prev || !shallowEqual(prev, it)) {
@@ -111,16 +83,6 @@ export const useDataStore = create((set, get) => ({
     });
     if (changed) {
       set({ entities: { ...state.entities, [key]: nextMap } });
-
-      // Back-compat: keep groups/moments arrays in sync for components still reading them
-      if (entity === 'group') {
-        const updated = Object.values(nextMap).map((g) => g);
-        set({ groups: updated });
-      }
-      if (entity === 'moment') {
-        const updated = Object.values(nextMap).map((m) => m);
-        set({ moments: updated });
-      }
     }
   },
   _removeEntities: ({ entity, ids }) => {
@@ -152,14 +114,6 @@ export const useDataStore = create((set, get) => ({
     }
 
     set({ entities: nextEntities, relations: nextRelations });
-
-    // Back-compat arrays
-    if (entity === 'group') {
-      set((prev) => ({ groups: prev.groups.filter((g) => !ids.includes(g.groupID)) }));
-    }
-    if (entity === 'moment') {
-      set((prev) => ({ moments: prev.moments.filter((m) => !ids.includes(m.momentID)) }));
-    }
   },
   _relationAdd: ({ relation, parentId, ids, position }) => {
     const state = get();
@@ -258,11 +212,6 @@ export const useDataStore = create((set, get) => ({
 
   // Group operations
   updateGroup: (groupId, updates) => {
-    set((state) => ({
-      groups: state.groups.map(group => 
-        group.groupID === groupId ? { ...group, ...updates } : group
-      )
-    }));
     // Keep normalized map in sync
     set((state) => {
       const curr = state.entities.groupsById[groupId] || {};
@@ -271,19 +220,10 @@ export const useDataStore = create((set, get) => ({
   },
   
   replaceGroup: (groupId, newGroupData) => {
-    set((state) => ({
-      groups: state.groups.map(group => 
-        group.groupID === groupId ? newGroupData : group
-      )
-    }));
-    // Normalized sync
-    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [newGroupData.groupID || newGroupData.id || groupId]: newGroupData } } }));
+    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [newGroupData.id || groupId]: newGroupData } } }));
   },
   
   deleteGroup: (groupId) => {
-    set((state) => ({
-      groups: state.groups.filter(group => group.groupID !== groupId)
-    }));
     // Normalized sync
     set((state) => {
       const next = { ...state.entities.groupsById };
@@ -295,105 +235,34 @@ export const useDataStore = create((set, get) => ({
   },
   
   addGroup: (group) => {
-    set((state) => ({
-      groups: [...state.groups, group]
-    }));
-    // Normalized sync
-    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [group.groupID || group.id]: group } } }));
+    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [group.id]: group } } }));
   },
   
   // Transfer faces between groups
   transferFaces: (result) => {
-    set((state) => {
-      const newGroups = [...state.groups];
-      
-      // Update source group if it exists and wasn't deleted
-      if (result.updated_source_group) {
-        const sourceGroupIndex = newGroups.findIndex(g => g.groupID === result.updated_source_group.groupID);
-        if (sourceGroupIndex !== -1) {
-          newGroups[sourceGroupIndex] = result.updated_source_group;
-        }
-      }
-      
-      // Remove source group if it was deleted
-      if (result.old_group_deleted && result.old_group_id) {
-        const sourceGroupIndex = newGroups.findIndex(g => g.groupID === result.old_group_id);
-        if (sourceGroupIndex !== -1) {
-          newGroups.splice(sourceGroupIndex, 1);
-        }
-      }
-      
-      // Update or add target group
-      if (result.updated_target_group) {
-        const targetGroupIndex = newGroups.findIndex(g => g.groupID === result.updated_target_group.groupID);
-        if (targetGroupIndex !== -1) {
-          newGroups[targetGroupIndex] = result.updated_target_group;
-        } else {
-          newGroups.push(result.updated_target_group);
-        }
-      }
-      
-      // Ensure no duplicate groups in the final array
-      const uniqueGroups = newGroups.reduce((unique, group) => {
-        if (!unique.some(g => g.groupID === group.groupID)) {
-          unique.push(group);
-        }
-        return unique;
-      }, []);
-      
-      return { 
-        groups: uniqueGroups,
-        lastTransferResult: {
-          ...result,
-          transferred_images_data: result.transferred_images_data || [] // Include full image data
-        }
-      };
-    });
-    // Optional: reflect relation changes if present in result (back-compat path)
-    try {
-      const src = result.old_group_id;
-      const dst = (result.updated_target_group && (result.updated_target_group.groupID || result.updated_target_group.id)) || result.target_group_id;
-      const toRemove = result.images_to_remove_from_source || [];
-      const toAdd = result.images_to_add_to_target || [];
-      if (src && Array.isArray(toRemove) && toRemove.length > 0) {
-        get()._relationRemove({ relation: 'group.images', parentId: src, ids: toRemove });
-      }
-      if (dst && Array.isArray(toAdd) && toAdd.length > 0) {
-        get()._relationAdd({ relation: 'group.images', parentId: dst, ids: toAdd });
-      }
-      if (result.updated_source_group) {
-        get()._upsertEntities({ entity: 'group', items: [result.updated_source_group] });
-      }
-      if (result.updated_target_group) {
-        get()._upsertEntities({ entity: 'group', items: [result.updated_target_group] });
-      }
-      if (result.old_group_deleted && src) {
-        get()._removeEntities({ entity: 'group', ids: [src] });
-      }
-    } catch {}
+    set(() => ({ lastTransferResult: { ...result, transferred_images_data: result.transferred_images_data || [] } }));
   },
 
 
   
   // Moment operations
   updateMoment: (momentId, updates) => {
-    set((state) => ({
-      moments: state.moments.map(moment => 
-        moment.momentID === momentId ? { ...moment, ...updates } : moment
-      )
-    }));
+    set((state) => {
+      const curr = state.entities.momentsById[momentId] || {};
+      return { entities: { ...state.entities, momentsById: { ...state.entities.momentsById, [momentId]: { ...curr, ...updates } } } };
+    });
   },
   
   deleteMoment: (momentId) => {
-    set((state) => ({
-      moments: state.moments.filter(moment => moment.momentID !== momentId)
-    }));
+    set((state) => {
+      const next = { ...state.entities.momentsById };
+      delete next[momentId];
+      return { entities: { ...state.entities, momentsById: next } };
+    });
   },
   
   addMoment: (moment) => {
-    set((state) => ({
-      moments: [...state.moments, moment]
-    }));
+    set((state) => ({ entities: { ...state.entities, momentsById: { ...state.entities.momentsById, [moment.id]: moment } } }));
   },
   
   // Image operations
@@ -402,8 +271,6 @@ export const useDataStore = create((set, get) => ({
   
   // Clear all data
   clearData: () => set({
-    groups: [],
-    moments: [],
     selectedImages: new Set(),
     imageViewer: { show: false, image: null, index: 0 },
     loading: false,
@@ -415,129 +282,33 @@ export const useDataStore = create((set, get) => ({
 }));
 
 // Data change handler - processes API responses and updates state accordingly
-export const handleDataChange = (changeType, data, store = useDataStore.getState()) => {
-  // New generic schema passthrough
-  if (
-    changeType === CHANGE_TYPES.UPSERT ||
-    changeType === CHANGE_TYPES.REMOVE ||
-    changeType === CHANGE_TYPES.RELATION_ADD ||
-    changeType === CHANGE_TYPES.RELATION_REMOVE ||
-    changeType === CHANGE_TYPES.RELATION_MOVE
-  ) {
-    const normalized = [{ type: changeType, ...data }];
-    // If data is already a change object, accept array too
-    const changesArray = Array.isArray(data) ? data : normalized;
-    store.applyChanges(changesArray);
-    return;
-  }
-  switch (changeType) {
-    case CHANGE_TYPES.GROUP_UPDATED:
-      // Merge updates to avoid losing fields when backend sends partial payloads
-      store.updateGroup(data.groupID, data);
-      break;
-      
-    case CHANGE_TYPES.GROUP_DELETED:
-      store.deleteGroup(data.groupID);
-      break;
-      
-    case CHANGE_TYPES.GROUP_CREATED:
-      store.addGroup(data);
-      break;
-      
-    case CHANGE_TYPES.GROUP_FACES_TRANSFERRED:
-      store.transferFaces(data);
-      break;
-      
-
-      
-    case CHANGE_TYPES.IMAGE_ALBUMS_UPDATED:
-      store.setImagesRefresh(data);
-      break;
-      
-    case CHANGE_TYPES.MOMENT_UPDATED:
-      store.updateMoment(data.momentID, data);
-      break;
-      
-    case CHANGE_TYPES.MOMENT_DELETED:
-      store.deleteMoment(data.momentID);
-      break;
-      
-    case CHANGE_TYPES.MOMENT_CREATED:
-      store.addMoment(data);
-      break;
-      
-    case CHANGE_TYPES.GROUPS_REFRESH:
-      // This will trigger a full refresh of groups
-      break;
-      
-    case CHANGE_TYPES.MOMENTS_REFRESH:
-      // This will trigger a full refresh of moments
-      break;
-    
-    default:
-      console.warn(`Unknown change type: ${changeType}`);
-  }
-};
-
-// API wrapper that includes change tracking
-export const apiCall = async (method, url, data = null, expectedChanges = []) => {
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: data ? JSON.stringify(data) : undefined,
-    });
-    
-    const result = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(result.message || 'API call failed');
-    }
-    
-    // Process any expected changes
-    if (expectedChanges && expectedChanges.length > 0) {
-      expectedChanges.forEach(change => {
-        handleDataChange(change.type, change.data || result);
-      });
-    }
-    
-    return result;
-  } catch (error) {
-    console.error('API call failed:', error);
-    throw error;
-  }
-};
-
-// Optimistic update helper
-export const optimisticUpdate = async (updateFn, apiCall, rollbackFn) => {
-  // Apply optimistic update
-  const previousState = updateFn();
-  
-  try {
-    // Make API call
-    const result = await apiCall();
-    
-    // If successful, apply any additional changes from response
-    if (result.changes) {
-      result.changes.forEach(change => {
-        handleDataChange(change.type, change.data);
-      });
-    }
-    
-    return result;
-  } catch (error) {
-    // Rollback on error
-    if (rollbackFn) {
-      rollbackFn(previousState);
-    }
-    throw error;
-  }
-};
+// Legacy change handlers and API wrappers removed. All updates must come via `changes` schema.
 
 // -------- Selectors (helpers for components) --------
 export const selectors = {
+  // Return cached arrays to preserve referential equality across unrelated store updates
+  groupsAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.groupsById || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
+  momentsAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.momentsById || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
   groupImages: (state, groupId) => {
     const ids = (state.relations?.groupImages?.[groupId] || []);
     return ids.map((id) => state.entities?.imagesById?.[id]).filter(Boolean);

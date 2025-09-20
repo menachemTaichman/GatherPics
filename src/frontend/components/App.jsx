@@ -9,7 +9,7 @@ import AlbumsGallery from './AlbumsGallery';
 import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
-import { useDataStore, CHANGE_TYPES, handleDataChange } from '../utils/dataManager';
+import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, authAPI } from '../utils/apiService';
 import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
@@ -179,7 +179,10 @@ function AppContent({ eventUrl }) {
       setLoading(true);
       setLocalLoading(true);
       const response = await groupsAPI.getAll(eventUrl);
-      setGroups(response.groups);
+      const store = useDataStore.getState();
+      if (response.groups && response.groups.length) {
+        store.applyChanges([{ type: 'UPSERT', entity: 'group', items: response.groups }]);
+      }
       setError(null);
     } catch (err) {
       console.error('Error fetching groups:', err);
@@ -194,15 +197,8 @@ function AppContent({ eventUrl }) {
     try {
       const response = await groupsAPI.update(groupId, updates, eventUrl);
       
-      // Handle any change instructions from the backend
-      if (response.changes) {
-        response.changes.forEach(change => {
-          handleDataChange(change.type, change.data);
-        });
-      } else {
-        // Fallback to direct update if no change instructions
-        updateGroup(groupId, response);
-      }
+      // Interceptor applies changes; fall back to direct update if no changes provided
+      if (!response.changes) updateGroup(groupId, response);
       
       return response;
     } catch (err) {
@@ -215,15 +211,8 @@ function AppContent({ eventUrl }) {
     try {
       const response = await groupsAPI.delete(groupId, eventUrl);
       
-      // Handle any change instructions from the backend
-      if (response.changes) {
-        response.changes.forEach(change => {
-          handleDataChange(change.type, change.data);
-        });
-      } else {
-        // Fallback to direct delete if no change instructions
-        deleteGroup(groupId);
-      }
+      // Interceptor applies changes; fall back to direct delete if no changes provided
+      if (!response.changes) deleteGroup(groupId);
     } catch (err) {
       console.error('Error deleting group:', err);
       throw err;

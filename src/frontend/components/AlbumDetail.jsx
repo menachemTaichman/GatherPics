@@ -33,12 +33,12 @@ export default function AlbumDetail({ showToast }) {
         // Seed store with album entity
         store.applyChanges([{ type: 'UPSERT', entity: 'album', items: [found] }]);
         // Fetch album images and seed store relations
-        const res = await albumsAPI.getImages(found.albumID, eventUrl);
+        const res = await albumsAPI.getImages(found.id, eventUrl);
         const imgs = res.images || [];
         const ids = imgs.map(i => i && i.id).filter(Boolean);
         const changes = [];
         if (imgs.length > 0) changes.push({ type: 'UPSERT', entity: 'image', items: imgs });
-        changes.push({ type: 'RELATION_SET', relation: 'album.images', parentId: found.albumID, ids });
+        changes.push({ type: 'RELATION_SET', relation: 'album.images', parentId: found.id, ids });
         store.applyChanges(changes);
       } catch (e) {
         console.error('Failed to load album', e);
@@ -47,7 +47,7 @@ export default function AlbumDetail({ showToast }) {
     if (eventUrl && album_name) fetchAlbum();
   }, [eventUrl, album_name, navigate]);
 
-  const albumImages = useDataStore(state => (album?.albumID ? storeSelectors.albumImages(state, album.albumID) : []));
+  const albumImages = useDataStore(state => (album?.id ? storeSelectors.albumImages(state, album.id) : []));
   const sortedImages = useMemo(() => {
     const arr = [...albumImages];
     arr.sort((a, b) => {
@@ -67,7 +67,7 @@ export default function AlbumDetail({ showToast }) {
   const handleRemoveSelected = async () => {
     if (!album || selection.size === 0) return;
     try {
-      const result = await albumsAPI.removeImages(album.albumID, Array.from(selection), eventUrl);
+      const result = await albumsAPI.removeImages(album.id, Array.from(selection), eventUrl);
       setSelection(new Set());
       showToast('Removed from album', 'success');
     } catch (e) {

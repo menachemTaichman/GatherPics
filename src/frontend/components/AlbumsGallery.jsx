@@ -81,7 +81,7 @@ export default function AlbumsGallery({ eventUrl }) {
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}
           >
             {filtered.map((album, index) => (
-              <motion.div key={album.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }}>
+              <motion.div key={album.id || `${album.label || 'album'}-${index}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }}>
                 <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="block" title={album.label}>
                   <div className="relative rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow h-40 p-4 flex flex-col justify-between">
                     <div className="text-lg font-semibold text-gray-900 truncate">{album.label}</div>

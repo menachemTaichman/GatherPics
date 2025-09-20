@@ -7,7 +7,7 @@ import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { useSetting } from '../utils/useSettings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
@@ -20,26 +20,26 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups
-  const { groups: storeGroups, setGroups } = useDataStore();
+  const storeGroups = useDataStore(state => storeSelectors.groupsAll(state));
 
   useEffect(() => {
     async function loadGroups() {
         try {
             const res = await groupsAPI.getAll(eventUrl);
-            // Populate normalized store
             const store = useDataStore.getState();
             const groups = res.groups || [];
-            store.applyChanges([{ type: 'UPSERT', entity: 'group', items: groups }]);
-            setGroups(groups);
+            if (groups.length) {
+              store.applyChanges([{ type: 'UPSERT', entity: 'group', items: groups }]);
+            }
         } catch (e) {
             console.error('Failed to load groups', e);
         }
     }
     if (eventUrl) loadGroups();
-  }, [eventUrl, setGroups]);
+  }, [eventUrl]);
 
-  // Use groups from store if available, otherwise fall back to props
-  const currentGroups = storeGroups.length > 0 ? storeGroups : groups;
+  // Use groups from store
+  const currentGroups = storeGroups;
 
   // Use the custom hook for conflict handling
   const {
@@ -58,7 +58,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = currentGroups.filter(group => 
       group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              group.groupID.toString().includes(searchTerm)
+              String(group.id || '').includes(searchTerm)
     );
 
     // Sort groups using global utility
@@ -72,7 +72,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
   const handleAddGroupToBucket = async (group) => {
     // TODO: Implement add to bucket functionality
-    alert(`Add ${group.label || `Person_${group.groupID}`} to bucket functionality will be implemented later`);
+    alert(`Add ${group.label || `Person_${group.id}`} to bucket functionality will be implemented later`);
   };
 
   return (
@@ -222,7 +222,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         >
           {filteredAndSortedGroups.map((group, index) => (
             <motion.div
-              key={group.groupID}
+              key={group.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
@@ -249,7 +249,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             setSelectedGroup(null);
           }}
           onSave={async (updates) => {
-            await optimisticUpdates.updateGroup(selectedGroup.groupID, updates, null, eventUrl);
+            await optimisticUpdates.updateGroup(selectedGroup.id, updates, null, eventUrl);
             setShowEditModal(false);
             setSelectedGroup(null);
           }}
@@ -278,8 +278,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             const transferData = { ...(result || {}) };
             
             // For merge operations, ensure we have the old_group_id from the conflict data
-            if (!transferData.old_group_id && conflictData?.currentGroup?.groupID) {
-              transferData.old_group_id = conflictData.currentGroup.groupID;
+            if (!transferData.old_group_id && conflictData?.currentGroup?.id) {
+              transferData.old_group_id = conflictData.currentGroup.id;
             }
             
             // For merge operations, ensure old_group_deleted is set to true
