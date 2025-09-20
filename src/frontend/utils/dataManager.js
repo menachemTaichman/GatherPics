@@ -119,14 +119,16 @@ export const useDataStore = create((set, get) => ({
     const state = get();
     if (!relation || parentId === undefined || !Array.isArray(ids)) return;
     const nextRelations = { ...state.relations };
+    const pid = String(parentId);
+    const normIds = ids.map((v) => String(v));
     const relKey = relation.includes('group') ? 'groupImages'
                   : relation.includes('moment') ? 'momentImages'
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const arr = [...(nextRelations[relKey][parentId] || [])];
+    const arr = [...(nextRelations[relKey][pid] || [])];
     const existing = new Set(arr);
-    const toAdd = ids.filter((id) => !existing.has(id));
+    const toAdd = normIds.filter((id) => !existing.has(id));
     if (toAdd.length === 0) return;
     if (position === 'start') {
       arr.unshift(...toAdd);
@@ -135,23 +137,25 @@ export const useDataStore = create((set, get) => ({
     } else {
       arr.push(...toAdd);
     }
-    nextRelations[relKey] = { ...nextRelations[relKey], [parentId]: arr };
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: arr };
     set({ relations: nextRelations });
   },
   _relationRemove: ({ relation, parentId, ids }) => {
     const state = get();
     if (!relation || parentId === undefined || !Array.isArray(ids)) return;
     const nextRelations = { ...state.relations };
+    const pid = String(parentId);
+    const normIds = ids.map((v) => String(v));
     const relKey = relation.includes('group') ? 'groupImages'
                   : relation.includes('moment') ? 'momentImages'
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const arr = [...(nextRelations[relKey][parentId] || [])];
-    const removeSet = new Set(ids);
+    const arr = [...(nextRelations[relKey][pid] || [])];
+    const removeSet = new Set(normIds);
     const filtered = arr.filter((id) => !removeSet.has(id));
     if (filtered.length === arr.length) return;
-    nextRelations[relKey] = { ...nextRelations[relKey], [parentId]: filtered };
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: filtered };
     set({ relations: nextRelations });
   },
   _relationMove: ({ relation, fromParentId, toParentId, ids, position }) => {
@@ -166,18 +170,20 @@ export const useDataStore = create((set, get) => ({
     const state = get();
     if (!relation || parentId === undefined || !Array.isArray(ids)) return;
     const nextRelations = { ...state.relations };
+    const pid = String(parentId);
+    const normIds = ids.map((v) => String(v));
     const relKey = relation.includes('group') ? 'groupImages'
                   : relation.includes('moment') ? 'momentImages'
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const prev = nextRelations[relKey][parentId] || state.relations[relKey][parentId] || [];
-    if (prev.length === ids.length && prev.every((v, i) => v === ids[i])) return; // no change
+    const prev = nextRelations[relKey][pid] || state.relations[relKey][pid] || [];
+    if (prev.length === normIds.length && prev.every((v, i) => v === normIds[i])) return; // no change
     // Deduplicate and set
     const seen = new Set();
     const deduped = [];
-    ids.forEach((id) => { if (!seen.has(id)) { seen.add(id); deduped.push(id); } });
-    nextRelations[relKey] = { ...nextRelations[relKey], [parentId]: deduped };
+    normIds.forEach((id) => { if (!seen.has(id)) { seen.add(id); deduped.push(id); } });
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: deduped };
     set({ relations: nextRelations });
   },
   applyChanges: (changes) => {

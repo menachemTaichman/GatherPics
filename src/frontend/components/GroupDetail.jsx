@@ -156,11 +156,18 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   useEffect(() => {
     const foundGroup = (currentGroups || []).find(g => g.label === group_name);
     if (foundGroup) {
-      if (!group || group.id !== foundGroup.id) setGroup(foundGroup);
+      if (!group || group.id !== foundGroup.id || group !== foundGroup) setGroup(foundGroup);
     } else if (!group || !group.id) {
       navigate(`/${eventUrl}/persons`);
     }
   }, [group_name, currentGroups, navigate, eventUrl]);
+
+  // Keep local `group` in sync by id when the store object changes (e.g., rename)
+  useEffect(() => {
+    if (!group?.id) return;
+    const byId = (currentGroups || []).find(g => g.id === group.id);
+    if (byId && byId !== group) setGroup(byId);
+  }, [currentGroups, group?.id]);
 
   // Legacy subscription removed; updates flow from normalized selectors
 
@@ -445,26 +452,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const handleTransferComplete = async (result) => {
     const transferData = { ...(result || {}) };
-    transferData.old_group_id = transferData.old_group_id || group?.id || null;
-
-    // Clear selection and remove transferred images from the local cache used by selection
     clearSelection();
-    if (transferData) {
-      clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
-    }
-
-    // Rely on API responses to update the normalized store; no manual store edits or navigation here
-    if (transferData?.target_group_id) {
-      let targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
-      if (!targetGroup && transferData.new_group_name) {
-        targetGroup = { id: transferData.target_group_id, label: transferData.new_group_name };
-      }
+    // Rely entirely on changes array; just show a toast if target group is resolvable
+    const addChange = (transferData.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
+    const targetId = addChange?.parentId;
+    if (targetId) {
+      const targetGroup = currentGroups.find(g => g.id === targetId);
       if (targetGroup) {
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
         showToast(
           <span>
-            Transferred {transferData.images_to_remove_from_source?.length || 0} faces to{' '}
-            <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
+            Transfer complete. View <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
           </span>,
           'success'
         );
@@ -571,8 +569,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       await optimisticUpdates.updateGroup(group.id, { label: trimmedTitle }, null, eventUrl);
       
       // Update the URL to reflect the new group name
-              const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
-      window.history.replaceState(null, '', newUrl);
+      const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
+      navigate(newUrl, { replace: true });
       
       setIsEditingTitle(false);
       clearConflict();
@@ -1069,7 +1067,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
             // Update the URL if the group name changed
             if (updates.label && updates.label !== group.label) {
               const newUrl = `/${eventUrl}/persons/${encodeURIComponent(updates.label)}`;
-              window.history.replaceState(null, '', newUrl);
+              navigate(newUrl, { replace: true });
             }
             
             setShowEditModal(false);

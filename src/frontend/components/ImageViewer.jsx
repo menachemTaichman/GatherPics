@@ -497,16 +497,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     // The API response now triggers a zustand update via an interceptor.
     // The useEffect hook that subscribes to `useDataStore` will handle all UI updates.
     // We only need to show a toast message here and handle parent notifications.
-    const transferData = result.changes && result.changes.length > 0 ? result.changes[0].data : null;
-
-    if (transferData) {
-      clearTransferredImagesFromCache(transferData.old_group_id, transferData.images_to_remove_from_source);
-
-      // Show a generic success toast if the parent isn't GroupDetail handling its own.
-      if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
-        const targetGroup = transferData.updated_target_group || 
-                              (transferData.target_group_id && groups.find(g => (g.id || g.groupID) === transferData.target_group_id));
-        
+    // Show a generic success toast using changes array to detect target group
+    if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
+      const addChange = (result.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
+      const targetId = addChange?.parentId;
+      if (targetId) {
+        const targetGroup = groups.find(g => (g.id || g.groupID) === targetId);
         if (targetGroup) {
           const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
           showToast(
@@ -517,6 +513,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         } else {
           showToast('Transfer complete!', 'success');
         }
+      } else {
+        showToast('Transfer complete!', 'success');
       }
     }
     

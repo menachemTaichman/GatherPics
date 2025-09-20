@@ -78,7 +78,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     const fetchFaces = async () => {
       try {
         setFacesLoading(true);
-        const response = await groupsAPI.getFaces(group.groupID, eventUrl);
+        const response = await groupsAPI.getFaces(group.id, eventUrl);
         setFaces(response.faces || []);
         
         // After loading faces, check if we need to set a default representative
@@ -101,7 +101,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     };
 
     fetchFaces();
-  }, [group.groupID, eventUrl]);
+  }, [group.id, eventUrl]);
 
 
 
@@ -144,7 +144,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     if (editingName.trim()) {
       try {
         // Check for conflicts first - call the API directly to avoid state timing issues
-        const conflictResult = await groupsAPI.checkName(editingName.trim(), group.groupID, eventUrl);
+        const conflictResult = await groupsAPI.checkName(editingName.trim(), group.id, eventUrl);
         
         if (conflictResult.conflict) {
           // Close this modal and pass conflict data to parent (GroupDetail)
@@ -235,7 +235,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                             setEditingName(e.target.value);
                             // Simple inline conflict check
                             if (e.target.value.trim()) {
-                              groupsAPI.checkName(e.target.value.trim(), group.groupID, eventUrl)
+                              groupsAPI.checkName(e.target.value.trim(), group.id, eventUrl)
                                 .then(result => {
                                   setNameConflict(result.conflict ? result.conflicting_group : null);
                                 })
