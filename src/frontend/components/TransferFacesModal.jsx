@@ -165,7 +165,7 @@ export default function TransferFacesModal({
 
     try {
       // Extract face IDs from face objects
-      const faceIds = selectedFaces.map(face => face.faceID);
+      const faceIds = selectedFaces.map(face => face.id || face.faceID || face.face_id);
       
       const result = await groupsAPI.transferFaces(
         currentGroup?.id || sourceGroupId || null,

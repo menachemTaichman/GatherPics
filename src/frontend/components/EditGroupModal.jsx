@@ -312,7 +312,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                   ) : (
                     <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
                       {faces.map((face, index) => {
-                        const faceId = face.faceID;
+                        const faceId = face.id || face.faceID || face.face_id;
                         const imageSrc = faceId && urlHelpers
                           ? urlHelpers.getFaceCropUrl(faceId)
                           : PLACEHOLDER_DATA_URL;

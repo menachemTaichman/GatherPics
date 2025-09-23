@@ -432,10 +432,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       if (image && image.representative_face) {
         // The representative_face is the faceID of the face belonging to the current group
         // We need to find this face in the faces array or create a face object
-        const face = image.faces?.find(f => f.faceID === image.representative_face);
+        const face = image.faces?.find(f => (f.id || f.faceID || f.face_id) === image.representative_face);
         if (face) {
           selectedFaces.push({
-            faceID: face.faceID,
+            faceID: face.id || face.faceID || face.face_id,
             imageID: face.imageID,
             groupID: face.groupID,
             width: face.width,
@@ -576,7 +576,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const openImageViewer = (imageId, index) => {
     openGlobalViewer({
-      images: sortedImages.map(p => p.id),
       index,
       eventUrl,
       groups: currentGroups,
@@ -585,6 +584,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       onTransferComplete: handleTransferComplete,
       onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
       image: imageId,
+      parent: group.id,
+      entity: 'group',
+      sortBy,
+      sortOrder,
     });
   };
 

@@ -554,9 +554,16 @@ class ModelsManager:
             affected_images_ids = result['affected_images_ids']
             result['changes'].append({
                 'type': 'UPSERT',
-                'entity': 'image',
-                'items': [{'id': img_id, flag: add} for img_id in affected_images_ids]
+                'entity': 'images',
+                'items': [{'id': img_id, flag: int(add)} for img_id in affected_images_ids]
             })
+            if album_id == archive_album_id:
+                result['changes'].append({
+                    'type': 'REMOVE' if add else 'UPSERT',
+                    'entity': 'images',
+                    'ids': affected_images_ids,
+                    'archive_operation': True
+                })
         
         return result
 

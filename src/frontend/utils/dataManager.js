@@ -10,6 +10,19 @@ export const CHANGE_TYPES = {
   RELATION_SET: 'RELATION_SET',
 };
 
+//
+
+function normalizeEntityKey(entity) {
+  if (!entity) return entity;
+  switch (String(entity)) {
+    case 'image': return 'images';
+    case 'group': return 'groups';
+    case 'moment': return 'moments';
+    case 'album': return 'albums';
+    default: return entity;
+  }
+}
+
 function shallowEqual(a, b) {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -130,7 +143,7 @@ export const useDataStore = create((set, get) => ({
   _upsertEntities: ({ entity, items }) => {
     const state = get();
     if (!Array.isArray(items) || !entity) return;
-    const key = entity;
+    const key = normalizeEntityKey(entity);
     const prevMap = state.entities[key];
     const nextMap = { ...prevMap };
     let changed = false;
@@ -148,43 +161,94 @@ export const useDataStore = create((set, get) => ({
       set({ entities: { ...state.entities, [key]: nextMap } });
     }
   },
-  _removeEntities: ({ entity, ids }) => {
+  _removeEntities: ({ entity, ids, archiveOperation = false }) => {
     const state = get();
     if (!Array.isArray(ids) || !entity) return;
-    const key = entity;
-    const nextMap = { ...state.entities[key] };
-    let changed = false;
-    ids.forEach((id) => { if (nextMap[id] !== undefined) { delete nextMap[id]; changed = true; } });
-    if (!changed) return;
-    const nextEntities = { ...state.entities, [key]: nextMap };
-
-    // Also remove from all relations
+    const key = normalizeEntityKey(entity);
+    const nextEntities = { ...state.entities };
     const nextRelations = { ...state.relations };
-    const removeFromRelation = (relKey) => {
+
+    // 1) Remove from entities map (skip if images + archive operation)
+    if (!(key === 'images' && archiveOperation)) {
+      const emap = { ...(nextEntities[key] || {}) };
+      let changed = false;
+      ids.forEach((id) => { if (emap[id] !== undefined) { delete emap[id]; changed = true; } });
+      if (changed) nextEntities[key] = emap;
+    }
+
+    // 2) Iterate over all relations generically with archive exceptions
+    const relationTypeMap = {
+      groupImages: { parentType: 'groups', childType: 'images' },
+      momentImages: { parentType: 'moments', childType: 'images' },
+      albumImages: { parentType: 'albums', childType: 'images' },
+    };
+    const idsSet = new Set(ids.map(String));
+    const archiveAlbumId = state.archiveAlbumId && String(state.archiveAlbumId);
+
+    // Helper to decrement parent's count when child images are removed
+    const decrementParentCount = (ptype, pid, delta) => {
+      if (!delta || delta <= 0) return;
+      const pmap = { ...(nextEntities[ptype] || {}) };
+      const parent = pmap[pid];
+      if (!parent) return;
+      const curr = typeof parent.count === 'number' ? parent.count : 0;
+      const updated = { ...parent, count: Math.max(0, curr - delta) };
+      pmap[pid] = updated;
+      nextEntities[ptype] = pmap;
+    };
+
+    Object.keys(nextRelations).forEach((relKey) => {
+      const typeInfo = relationTypeMap[relKey];
+      if (!typeInfo) return;
+      const { parentType, childType } = typeInfo;
       const map = { ...(nextRelations[relKey] || {}) };
-      const setIds = new Set(ids);
+      let mapChanged = false;
+
       Object.keys(map).forEach((parentId) => {
-        const currentSet = map[parentId];
-        if (currentSet instanceof Set) {
-          const newSet = new Set(currentSet);
-          let changed = false;
-          for (const idToRemove of setIds) {
-            if (newSet.delete(idToRemove)) {
-              changed = true;
+        // Archive exceptions
+        if (archiveOperation) {
+          if (parentType === 'images') return; // skip images.* relations entirely (none currently)
+          if (parentType === 'albums' && archiveAlbumId && parentId === archiveAlbumId) return; // keep archive album bucket
+        }
+
+        // If removing a parent entity id, drop this bucket
+        if (parentType === key && idsSet.has(String(parentId))) {
+          delete map[parentId];
+          mapChanged = true;
+          return;
+        }
+
+        // If removing children ids, strip them from the bucket
+        if (childType === key) {
+          const current = map[parentId];
+          if (!current) return;
+          if (current instanceof Set) {
+            const before = current.size;
+            const newSet = new Set(current);
+            idsSet.forEach((rid) => { newSet.delete(rid); });
+            const removedCount = before - newSet.size;
+            if (removedCount > 0) {
+              map[parentId] = newSet;
+              mapChanged = true;
+              decrementParentCount(parentType, parentId, removedCount);
             }
-          }
-          if (changed) {
-            map[parentId] = newSet;
+          } else if (Array.isArray(current)) {
+            const before = current.length;
+            const filtered = current.filter((rid) => !idsSet.has(String(rid)));
+            const removedCount = before - filtered.length;
+            if (removedCount > 0) {
+              map[parentId] = filtered;
+              mapChanged = true;
+              decrementParentCount(parentType, parentId, removedCount);
+            }
           }
         }
       });
-      nextRelations[relKey] = map;
-    };
-    if (entity === 'images') {
-      removeFromRelation('groupImages');
-      removeFromRelation('momentImages');
-      removeFromRelation('albumImages');
-    }
+
+      if (mapChanged) {
+        nextRelations[relKey] = map;
+      }
+    });
 
     set({ entities: nextEntities, relations: nextRelations });
   },
@@ -280,7 +344,7 @@ export const useDataStore = create((set, get) => ({
           get()._upsertEntities({ entity: ch.entity, items: ch.items || [] });
           break;
         case CHANGE_TYPES.REMOVE:
-          get()._removeEntities({ entity: ch.entity, ids: ch.ids || [] });
+          get()._removeEntities({ entity: ch.entity, ids: ch.ids || [], archiveOperation: !!ch.archive_operation });
           break;
         case CHANGE_TYPES.RELATION_ADD:
           get()._relationAdd({ relation: ch.relation, parentId: ch.parentId, ids: ch.ids || [] });

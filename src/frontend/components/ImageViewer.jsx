@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
@@ -6,20 +6,43 @@ import TransferFacesModal from './TransferFacesModal';
 import SingleImageActions from './SingleImageActions';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { shallow } from 'zustand/shallow';
 import { getSetting, setSetting } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
+import { sortImages } from '../utils/sorting';
 
 
-export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast }) {
+export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { urlHelpers } = useEventUrls(eventUrl);
   const lastTransferResult = useDataStore(state => state.lastTransferResult);
   const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
   const groupsMap = useDataStore(state => state.entities?.groups || {});
+  
+  // Subscribe to store relations to get the current list of images for the parent entity
+  const relatedImageIds = useDataStore(
+    state => {
+      if (!parent || !entity) return [];
+      if (entity === 'group') {
+        return state.relations?.groupImages?.[parent] || [];
+      } else if (entity === 'album') {
+        return state.relations?.albumImages?.[parent] || [];
+      } else if (entity === 'moment') {
+        return state.relations?.momentImages?.[parent] || [];
+      }
+      return [];
+    },
+    shallow
+  );
+  const images = useDataStore(state => state.entities.images);
+  const relatedImages = useMemo(() => {
+    const unsortedImages = Array.from(relatedImageIds || []).map(id => images[id]).filter(Boolean);
+    return sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
+  }, [relatedImageIds, images, sortBy, sortOrder]);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -31,13 +54,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       
     switch (e.key) {
       case 'ArrowLeft':
-        if (totalImages > 1) {
+        if (relatedImages.length > 1) {
           handleNavigate('prev');
           return true; // Mark as handled (circular via handleNavigate)
         }
         break;
       case 'ArrowRight':
-        if (totalImages > 1) {
+        if (relatedImages.length > 1) {
           handleNavigate('next');
           return true; // Mark as handled (circular via handleNavigate)
         }
@@ -269,13 +292,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const handleNavigate = (direction, index) => {
     if (!onNavigate) return;
     if (direction === 'prev') {
-      if (currentIndex === 0) {
-        onNavigate('jump', totalImages - 1);
+      if (effectiveIndex === 0) {
+        onNavigate('jump', relatedImages.length - 1);
       } else {
         onNavigate('prev');
       }
     } else if (direction === 'next') {
-      if (currentIndex === totalImages - 1) {
+      if (effectiveIndex === relatedImages.length - 1) {
         onNavigate('jump', 0);
       } else {
         onNavigate('next');
@@ -285,17 +308,34 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  // Handle image as ID string only
-  const imageId = typeof image === 'string' ? image : (image?.id || null);
+  // Determine the current image ID from store data
+  const currentImageId = useMemo(() => {
+    if (relatedImages.length > 0 && currentIndex < relatedImages.length) {
+      return relatedImages[currentIndex]?.id || null;
+    }
+    return typeof image === 'string' ? image : (image?.id || null);
+  }, [relatedImages, currentIndex, image]);
+
+  const imageId = currentImageId;
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
 
+  // Find the current image index in the store data
+  const currentImageIndex = useMemo(() => {
+    if (!imageId || !relatedImages.length) return 0;
+    const foundIndex = relatedImages.findIndex(img => img.id === imageId);
+    return foundIndex >= 0 ? foundIndex : Math.min(currentIndex, relatedImages.length - 1);
+  }, [imageId, relatedImages, currentIndex]);
+
+  // Use the store-based index for navigation
+  const effectiveIndex = currentImageIndex;
+
   // Fetch image info when image changes
   useEffect(() => {
-    if (image) {
+    if (imageId) {
       fetchImageInfo();
     }
-  }, [image]);
+  }, [imageId]);
 
   const fetchImageInfo = async () => {
     try {
@@ -347,7 +387,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   useEffect(() => {
     if (lastTransferResult && lastTransferResult.transferred_images_data && imageId) {
       // Check if the current image was affected by the transfer
-          const updatedImageData = lastTransferResult.transferred_images_data.find(
+      const updatedImageData = lastTransferResult.transferred_images_data.find(
         imageData => imageData.id === imageId
       );
       
@@ -785,7 +825,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   </button>
 
                   {/* Navigation - top-center */}
-                  {totalImages > 1 && (
+                  {relatedImages.length > 1 && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
                       <button
                         onClick={() => handleNavigate('prev')}
@@ -802,12 +842,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                             name="image-viewer-index"
                             inputMode="numeric"
                             pattern="[0-9]*"
-                            value={editIndexValue !== undefined ? editIndexValue : currentIndex + 1}
+                            value={editIndexValue !== undefined ? editIndexValue : effectiveIndex + 1}
                             onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
                             onBlur={e => {
                               let val = parseInt(e.target.value, 10);
-                              if (isNaN(val)) val = currentIndex + 1;
-                              val = Math.max(1, Math.min(totalImages, val));
+                              if (isNaN(val)) val = effectiveIndex + 1;
+                              val = Math.max(1, Math.min(relatedImages.length, val));
                               handleNavigate('jump', val - 1);
                               setIsEditingIndex(false);
                               setEditIndexValue(undefined);
@@ -831,11 +871,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                             title="Click to edit"
                             onClick={() => setIsEditingIndex(true)}
                           >
-                            {currentIndex + 1}
+                            {effectiveIndex + 1}
                           </span>
                         )}
                         <span className="mx-1">/</span>
-                        <span>{totalImages}</span>
+                        <span>{relatedImages.length}</span>
                       </div>
                       <button
                         onClick={() => handleNavigate('next')}
@@ -899,6 +939,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     </button>
                   </div>
 
+
                   {/* Sidebar toggle - top-right */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
@@ -926,6 +967,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   placeholderDataUrl={PLACEHOLDER_DATA_URL}
                   onImageUpdated={handleImageUpdated}
                 />
+
                 {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>

@@ -120,7 +120,7 @@ class Event(JsonModel):
             'DB_PATH': self.DB_PATH
         }
 
-    def delete_image(self, image_id: str) -> None:
+    def delete_image(self, image_id: str) -> dict:
         faces = self.models_manager.get_childs('images', image_id)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
@@ -141,6 +141,15 @@ class Event(JsonModel):
             os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
         except FileNotFoundError:
             pass
+
+        result = {
+            'changes': [{
+                'type': 'REMOVE',
+                'entity': 'images',
+                'ids': [image_id]
+            }]
+        }
+        return result
 
     def process_new_images(self, display_size: int = 2048, thumb_size: int = 512, cluster_threshold: int = 90, max_matches_faces: int = 100, verbose: bool = True) -> dict:
         """

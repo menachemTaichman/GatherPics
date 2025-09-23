@@ -649,14 +649,20 @@ export default function Moments({ eventUrl }) {
 
 
   const openImageViewer = (images, image, index) => {
-    const ids = Array.isArray(images) ? images.map(i => i.id || i.label || i.name) : [];
+    const momentId = Object.keys(momentImagesMap).find(mId => 
+      momentImagesMap[mId]?.some(img => img.id === image?.id)
+    );
+    
     openGlobalViewer({
-      images: ids,
       index,
       eventUrl,
       showToast,
       onJumpToMoment: handleJumpToMoment,
       image: image?.id || image?.label || image?.name,
+      parent: momentId,
+      entity: 'moment',
+      sortBy: 'date',
+      sortOrder: 'asc',
     });
   };
 

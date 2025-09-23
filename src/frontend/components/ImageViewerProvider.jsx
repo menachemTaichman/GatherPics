@@ -15,11 +15,14 @@ export function ImageViewerProvider({ children }) {
     showToast: () => {},
     onTransferComplete: null,
     onJumpToMoment: null,
+    parent: null,
+    entity: null,
+    sortBy: 'date',
+    sortOrder: 'asc',
   });
 
   const open = useCallback((config) => {
     const {
-      images = [],
       index = 0,
       eventUrl = null,
       groups = null,
@@ -28,30 +31,25 @@ export function ImageViewerProvider({ children }) {
       onTransferComplete = null,
       onJumpToMoment = null,
       image = null,
+      parent = null,
+      entity = null,
+      sortBy = 'date',
+      sortOrder = 'asc',
     } = config || {};
 
-    // Normalize images to an array of IDs (strings)
-    const normalized = Array.isArray(images)
-      ? images.map(it => (typeof it === 'string' ? it : it?.id)).filter(Boolean)
-      : [];
-    let nextIndex = index;
-
-    // If explicit image provided, prefer it to calculate index
-    if (image) {
-      const imageId = typeof image === 'string' ? image : image?.id;
-      const found = normalized.findIndex(it => it === imageId);
-      if (found >= 0) nextIndex = found;
-    }
-
     setSession({
-      images: normalized,
-      index: Math.max(0, Math.min(nextIndex, Math.max(0, normalized.length - 1))),
+      images: [],
+      index: Math.max(0, index),
       eventUrl,
       groups,
       currentGroupId,
       showToast,
       onTransferComplete,
       onJumpToMoment,
+      parent,
+      entity,
+      sortBy,
+      sortOrder,
     });
     setIsOpen(true);
   }, []);
@@ -62,15 +60,13 @@ export function ImageViewerProvider({ children }) {
 
   const navigate = useCallback((direction, targetIndex) => {
     setSession((prev) => {
-      const total = prev.images.length;
-      if (total === 0) return prev;
       let idx = prev.index;
       if (direction === 'jump' && typeof targetIndex === 'number') {
-        idx = Math.max(0, Math.min(targetIndex, total - 1));
+        idx = Math.max(0, targetIndex);
       } else if (direction === 'next') {
-        idx = Math.min(prev.index + 1, total - 1);
+        idx = prev.index + 1;
       } else if (direction === 'prev') {
-        idx = Math.max(prev.index - 1, 0);
+        idx = Math.max(0, prev.index - 1);
       }
       return { ...prev, index: idx };
     });
@@ -78,29 +74,30 @@ export function ImageViewerProvider({ children }) {
 
   const updateSession = useCallback((config) => {
     setSession((prev) => {
-      const { images = prev.images, index = prev.index, image = null } = config || {};
-      const normalized = Array.isArray(images)
-        ? images.map(it => (typeof it === 'string' ? it : it?.id)).filter(Boolean)
-        : prev.images;
-      let nextIndex = index;
-      if (image) {
-        const imageId = typeof image === 'string' ? image : image?.id;
-        const found = normalized.findIndex((it) => it === imageId);
-        if (found >= 0) nextIndex = found;
-      }
+      const { 
+        index = prev.index, 
+        image = null, 
+        parent = prev.parent, 
+        entity = prev.entity,
+        sortBy = prev.sortBy,
+        sortOrder = prev.sortOrder
+      } = config || {};
+      
       return {
         ...prev,
-        images: normalized,
-        index: Math.max(0, Math.min(nextIndex, Math.max(0, normalized.length - 1)))
+        images: [],
+        index: Math.max(0, index),
+        parent,
+        entity,
+        sortBy,
+        sortOrder,
       };
     });
   }, []);
 
   const currentImageId = useMemo(() => {
-    const current = session.images[session.index];
-    if (!current) return null;
-    return current;
-  }, [session.images, session.index]);
+    return null;
+  }, [session.index, session.parent, session.entity]);
 
   const value = useMemo(() => ({
     open,
@@ -112,36 +109,9 @@ export function ImageViewerProvider({ children }) {
     currentIndex: session.index,
   }), [open, close, navigate, updateSession, isOpen, currentImageId, session.index]);
 
-  // React to store changes: if current image leaves the group's grid, advance/close
+  // React to store changes
   useEffect(() => {
-    const unsubscribe = useDataStore.subscribe((state) => {
-      try {
-        if (!isOpen) return;
-        const groupId = session.currentGroupId;
-        if (!groupId) return;
-        const grid = (state.relations?.groupImages?.[groupId] || []);
-        if (!Array.isArray(grid)) return;
-        const visibleSet = new Set(grid);
-        const filtered = (session.images || []).filter((id) => visibleSet.has(id));
-        if (filtered.length === 0) {
-          setIsOpen(false);
-          return;
-        }
-        // If list changed or current id removed, update session gracefully
-        const currentId = session.images[session.index];
-        const nextIndex = Math.min(
-          currentId && visibleSet.has(currentId) ? filtered.indexOf(currentId) : Math.max(0, Math.min(session.index, filtered.length - 1)),
-          filtered.length - 1
-        );
-        if (
-          filtered.length !== session.images.length ||
-          filtered.some((id, i) => id !== session.images[i]) ||
-          filtered.indexOf(currentId) !== session.index
-        ) {
-          setSession((prev) => ({ ...prev, images: filtered, index: Math.max(0, nextIndex) }));
-        }
-      } catch {}
-    });
+    const unsubscribe = () => {};
     return unsubscribe;
   }, [isOpen, session.currentGroupId, session.images, session.index]);
 
@@ -161,6 +131,10 @@ export function ImageViewerProvider({ children }) {
           groups={session.groups}
           onTransferComplete={session.onTransferComplete}
           showToast={session.showToast}
+          parent={session.parent}
+          entity={session.entity}
+          sortBy={session.sortBy}
+          sortOrder={session.sortOrder}
         />
       )}
     </ImageViewerContext.Provider>
