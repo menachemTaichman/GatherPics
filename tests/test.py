@@ -355,14 +355,22 @@ def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
 
+result = event.models_manager.get_summary('groups', "5789317c-be50-4fbe-81f9-cd4310017dd2")
+
 moment_id = "70e46c11-f6a6-4b8c-b925-0b0a17411d7f"
 group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
 image_id = "778a6e66-04bd-4a36-b769-527ddb7da4bc"
-face_id = "c61090e9-80bd-428e-8885-0f583a74703d"
+face_id = "d1440187-3f08-4509-ac04-df201f705740"
 
-album_id = event.models_manager.get_archive_album()
-image_ids = [image_id]
-face_ids = [face_id]
-event.db.set_include_archived(False)
-result = event.models_manager.edit_album_images(album_id, image_ids, add=True)
+source_group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
+target_group_id = "5789317c-be50-4fbe-81f9-cd4310017dd2"
+
+if True:
+    source_group_id, target_group_id = target_group_id, source_group_id
+
+result = event.models_manager.add_faces_to_group(
+    [face_id],
+    target_group_id=target_group_id,
+    source_group_id=source_group_id
+)
 print(result)

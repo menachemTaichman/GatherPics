@@ -23,6 +23,69 @@ function shallowEqual(a, b) {
   return true;
 }
 
+// -------- Browser-scoped persistence (no cross-tab sync) --------
+const STORE_PERSIST_KEY = 'frw_data_store_v2';
+
+function serializeForPersist(state) {
+  try {
+    const plain = { ...state };
+    if (plain.selectedImages instanceof Set) {
+      plain.selectedImages = Array.from(plain.selectedImages);
+    }
+    // Also serialize relations from Set to Array
+    if (plain.relations) {
+      const serializedRelations = {};
+      for (const relKey in plain.relations) {
+        serializedRelations[relKey] = {};
+        const parentMap = plain.relations[relKey];
+        for (const parentId in parentMap) {
+          if (parentMap[parentId] instanceof Set) {
+            serializedRelations[relKey][parentId] = Array.from(parentMap[parentId]);
+          } else {
+            // Should be an array already if coming from old state, or just some other value.
+            serializedRelations[relKey][parentId] = parentMap[parentId];
+          }
+        }
+      }
+      plain.relations = serializedRelations;
+    }
+    return plain;
+  } catch {
+    return state;
+  }
+}
+
+function reviveFromPersist(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const next = { ...obj };
+  if (Array.isArray(next.selectedImages)) {
+    next.selectedImages = new Set(next.selectedImages);
+  }
+  next.entities = next.entities || { images: {}, groups: {}, moments: {}, albums: {} };
+  next.relations = next.relations || { groupImages: {}, momentImages: {}, albumImages: {} };
+  
+  // Revive relations from Array to Set
+  if (next.relations) {
+    const revivedRelations = {};
+    for (const relKey in next.relations) {
+      revivedRelations[relKey] = {};
+      const parentMap = next.relations[relKey];
+      for (const parentId in parentMap) {
+        if (Array.isArray(parentMap[parentId])) {
+          revivedRelations[relKey][parentId] = new Set(parentMap[parentId]);
+        } else {
+          // Should not happen with new serialization, but handle for safety.
+          revivedRelations[relKey][parentId] = parentMap[parentId];
+        }
+      }
+    }
+    next.relations = revivedRelations;
+  }
+
+  next.view = next.view || { includeArchived: false, current: null };
+  return next;
+}
+
 // Data store using Zustand for centralized state management
 export const useDataStore = create((set, get) => ({
   // State
@@ -37,10 +100,10 @@ export const useDataStore = create((set, get) => ({
   
   // Normalized entities and relations (v2)
   entities: {
-    imagesById: {},
-    groupsById: {},
-    momentsById: {},
-    albumsById: {},
+    images: {},
+    groups: {},
+    moments: {},
+    albums: {},
   },
   relations: {
     groupImages: {},   // { [groupId]: string[] }
@@ -67,7 +130,7 @@ export const useDataStore = create((set, get) => ({
   _upsertEntities: ({ entity, items }) => {
     const state = get();
     if (!Array.isArray(items) || !entity) return;
-    const key = `${entity}sById`;
+    const key = entity;
     const prevMap = state.entities[key];
     const nextMap = { ...prevMap };
     let changed = false;
@@ -88,7 +151,7 @@ export const useDataStore = create((set, get) => ({
   _removeEntities: ({ entity, ids }) => {
     const state = get();
     if (!Array.isArray(ids) || !entity) return;
-    const key = `${entity}sById`;
+    const key = entity;
     const nextMap = { ...state.entities[key] };
     let changed = false;
     ids.forEach((id) => { if (nextMap[id] !== undefined) { delete nextMap[id]; changed = true; } });
@@ -99,15 +162,25 @@ export const useDataStore = create((set, get) => ({
     const nextRelations = { ...state.relations };
     const removeFromRelation = (relKey) => {
       const map = { ...(nextRelations[relKey] || {}) };
+      const setIds = new Set(ids);
       Object.keys(map).forEach((parentId) => {
-        const arr = map[parentId] || [];
-        const setIds = new Set(ids);
-        const filtered = arr.filter((x) => !setIds.has(x));
-        if (filtered.length !== arr.length) map[parentId] = filtered;
+        const currentSet = map[parentId];
+        if (currentSet instanceof Set) {
+          const newSet = new Set(currentSet);
+          let changed = false;
+          for (const idToRemove of setIds) {
+            if (newSet.delete(idToRemove)) {
+              changed = true;
+            }
+          }
+          if (changed) {
+            map[parentId] = newSet;
+          }
+        }
       });
       nextRelations[relKey] = map;
     };
-    if (entity === 'image') {
+    if (entity === 'images') {
       removeFromRelation('groupImages');
       removeFromRelation('momentImages');
       removeFromRelation('albumImages');
@@ -115,7 +188,7 @@ export const useDataStore = create((set, get) => ({
 
     set({ entities: nextEntities, relations: nextRelations });
   },
-  _relationAdd: ({ relation, parentId, ids, position }) => {
+  _relationAdd: ({ relation, parentId, ids }) => {
     const state = get();
     if (!relation || parentId === undefined || !Array.isArray(ids)) return;
     const nextRelations = { ...state.relations };
@@ -126,18 +199,20 @@ export const useDataStore = create((set, get) => ({
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const arr = [...(nextRelations[relKey][pid] || [])];
-    const existing = new Set(arr);
-    const toAdd = normIds.filter((id) => !existing.has(id));
-    if (toAdd.length === 0) return;
-    if (position === 'start') {
-      arr.unshift(...toAdd);
-    } else if (typeof position === 'number') {
-      arr.splice(Math.max(0, Math.min(position, arr.length)), 0, ...toAdd);
-    } else {
-      arr.push(...toAdd);
-    }
-    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: arr };
+    
+    const currentSet = nextRelations[relKey]?.[pid] || new Set();
+    const newSet = new Set(currentSet);
+    let changed = false;
+    normIds.forEach(id => {
+      if (!newSet.has(id)) {
+        newSet.add(id);
+        changed = true;
+      }
+    });
+
+    if (!changed) return;
+
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: newSet };
     set({ relations: nextRelations });
   },
   _relationRemove: ({ relation, parentId, ids }) => {
@@ -151,20 +226,30 @@ export const useDataStore = create((set, get) => ({
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const arr = [...(nextRelations[relKey][pid] || [])];
-    const removeSet = new Set(normIds);
-    const filtered = arr.filter((id) => !removeSet.has(id));
-    if (filtered.length === arr.length) return;
-    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: filtered };
+
+    const currentSet = nextRelations[relKey]?.[pid];
+    if (!currentSet || currentSet.size === 0) return;
+
+    const newSet = new Set(currentSet);
+    let changed = false;
+    normIds.forEach(id => {
+      if (newSet.delete(id)) {
+        changed = true;
+      }
+    });
+
+    if (!changed) return;
+
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: newSet };
     set({ relations: nextRelations });
   },
-  _relationMove: ({ relation, fromParentId, toParentId, ids, position }) => {
+  _relationMove: ({ relation, fromParentId, toParentId, ids }) => {
     const state = get();
     if (!relation || fromParentId === undefined || toParentId === undefined || !Array.isArray(ids)) return;
     // remove from source
     get()._relationRemove({ relation, parentId: fromParentId, ids });
     // add to target
-    get()._relationAdd({ relation, parentId: toParentId, ids, position });
+    get()._relationAdd({ relation, parentId: toParentId, ids });
   },
   _relationSet: ({ relation, parentId, ids }) => {
     const state = get();
@@ -177,13 +262,13 @@ export const useDataStore = create((set, get) => ({
                   : relation.includes('album') ? 'albumImages'
                   : null;
     if (!relKey) return;
-    const prev = nextRelations[relKey][pid] || state.relations[relKey][pid] || [];
-    if (prev.length === normIds.length && prev.every((v, i) => v === normIds[i])) return; // no change
-    // Deduplicate and set
-    const seen = new Set();
-    const deduped = [];
-    normIds.forEach((id) => { if (!seen.has(id)) { seen.add(id); deduped.push(id); } });
-    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: deduped };
+    
+    const prevSet = state.relations[relKey]?.[pid] || new Set();
+    const newSet = new Set(normIds);
+    
+    if (prevSet.size === newSet.size && [...prevSet].every(id => newSet.has(id))) return;
+
+    nextRelations[relKey] = { ...nextRelations[relKey], [pid]: newSet };
     set({ relations: nextRelations });
   },
   applyChanges: (changes) => {
@@ -198,13 +283,13 @@ export const useDataStore = create((set, get) => ({
           get()._removeEntities({ entity: ch.entity, ids: ch.ids || [] });
           break;
         case CHANGE_TYPES.RELATION_ADD:
-          get()._relationAdd({ relation: ch.relation, parentId: ch.parentId, ids: ch.ids || [], position: ch.position });
+          get()._relationAdd({ relation: ch.relation, parentId: ch.parentId, ids: ch.ids || [] });
           break;
         case CHANGE_TYPES.RELATION_REMOVE:
           get()._relationRemove({ relation: ch.relation, parentId: ch.parentId, ids: ch.ids || [] });
           break;
         case CHANGE_TYPES.RELATION_MOVE:
-          get()._relationMove({ relation: ch.relation, fromParentId: ch.fromParentId, toParentId: ch.toParentId, ids: ch.ids || [], position: ch.position });
+          get()._relationMove({ relation: ch.relation, fromParentId: ch.fromParentId, toParentId: ch.toParentId, ids: ch.ids || [] });
           break;
         case CHANGE_TYPES.RELATION_SET:
           get()._relationSet({ relation: ch.relation, parentId: ch.parentId, ids: ch.ids || [] });
@@ -220,28 +305,28 @@ export const useDataStore = create((set, get) => ({
   updateGroup: (groupId, updates) => {
     // Keep normalized map in sync
     set((state) => {
-      const curr = state.entities.groupsById[groupId] || {};
-      return { entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [groupId]: { ...curr, ...updates } } } };
+      const curr = state.entities.groups[groupId] || {};
+      return { entities: { ...state.entities, groups: { ...state.entities.groups, [groupId]: { ...curr, ...updates } } } };
     });
   },
   
   replaceGroup: (groupId, newGroupData) => {
-    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [newGroupData.id || groupId]: newGroupData } } }));
+    set((state) => ({ entities: { ...state.entities, groups: { ...state.entities.groups, [newGroupData.id || groupId]: newGroupData } } }));
   },
   
   deleteGroup: (groupId) => {
     // Normalized sync
     set((state) => {
-      const next = { ...state.entities.groupsById };
+      const next = { ...state.entities.groups };
       delete next[groupId];
       const rel = { ...state.relations.groupImages };
       delete rel[groupId];
-      return { entities: { ...state.entities, groupsById: next }, relations: { ...state.relations, groupImages: rel } };
+      return { entities: { ...state.entities, groups: next }, relations: { ...state.relations, groupImages: rel } };
     });
   },
   
   addGroup: (group) => {
-    set((state) => ({ entities: { ...state.entities, groupsById: { ...state.entities.groupsById, [group.id]: group } } }));
+    set((state) => ({ entities: { ...state.entities, groups: { ...state.entities.groups, [group.id]: group } } }));
   },
   
   // Transfer faces between groups
@@ -254,21 +339,21 @@ export const useDataStore = create((set, get) => ({
   // Moment operations
   updateMoment: (momentId, updates) => {
     set((state) => {
-      const curr = state.entities.momentsById[momentId] || {};
-      return { entities: { ...state.entities, momentsById: { ...state.entities.momentsById, [momentId]: { ...curr, ...updates } } } };
+      const curr = state.entities.moments[momentId] || {};
+      return { entities: { ...state.entities, moments: { ...state.entities.moments, [momentId]: { ...curr, ...updates } } } };
     });
   },
   
   deleteMoment: (momentId) => {
     set((state) => {
-      const next = { ...state.entities.momentsById };
+      const next = { ...state.entities.moments };
       delete next[momentId];
-      return { entities: { ...state.entities, momentsById: next } };
+      return { entities: { ...state.entities, moments: next } };
     });
   },
   
   addMoment: (moment) => {
-    set((state) => ({ entities: { ...state.entities, momentsById: { ...state.entities.momentsById, [moment.id]: moment } } }));
+    set((state) => ({ entities: { ...state.entities, moments: { ...state.entities.moments, [moment.id]: moment } } }));
   },
   
   // Image operations
@@ -281,11 +366,53 @@ export const useDataStore = create((set, get) => ({
     imageViewer: { show: false, image: null, index: 0 },
     loading: false,
     error: null,
-    entities: { imagesById: {}, groupsById: {}, momentsById: {}, albumsById: {} },
+    entities: { images: {}, groups: {}, moments: {}, albums: {} },
     relations: { groupImages: {}, momentImages: {}, albumImages: {} },
     view: { includeArchived: false, current: null }
   })
 }));
+
+// Hydrate once from localStorage (per browser, per profile). No cross-tab live sync.
+try {
+  const raw = localStorage.getItem(STORE_PERSIST_KEY);
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    const revived = reviveFromPersist(parsed);
+    if (revived) {
+      useDataStore.setState({ ...useDataStore.getState(), ...revived });
+    }
+  }
+} catch {}
+
+// Persist on any change
+try {
+  useDataStore.subscribe((state) => {
+    try {
+      const serialized = serializeForPersist(state);
+      localStorage.setItem(STORE_PERSIST_KEY, JSON.stringify(serialized));
+    } catch {}
+  });
+} catch {}
+
+// On tab activation, refresh from persisted store so other tabs' writes are observed
+function rehydrateFromBrowserStore() {
+  try {
+    const raw = localStorage.getItem(STORE_PERSIST_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const revived = reviveFromPersist(parsed);
+    if (revived) {
+      useDataStore.setState((prev) => ({ ...prev, ...revived }));
+    }
+  } catch {}
+}
+
+try {
+  window.addEventListener('focus', rehydrateFromBrowserStore);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') rehydrateFromBrowserStore();
+  });
+} catch {}
 
 // Data change handler - processes API responses and updates state accordingly
 // Legacy change handlers and API wrappers removed. All updates must come via `changes` schema.
@@ -297,7 +424,7 @@ export const selectors = {
     let lastRef = null;
     let lastArr = [];
     return (state) => {
-      const ref = state.entities?.groupsById || null;
+      const ref = state.entities?.groups || null;
       if (ref === lastRef) return lastArr;
       lastRef = ref;
       lastArr = Object.values(ref || {});
@@ -308,7 +435,7 @@ export const selectors = {
     let lastRef = null;
     let lastArr = [];
     return (state) => {
-      const ref = state.entities?.momentsById || null;
+      const ref = state.entities?.moments || null;
       if (ref === lastRef) return lastArr;
       lastRef = ref;
       lastArr = Object.values(ref || {});
@@ -316,40 +443,40 @@ export const selectors = {
     };
   })(),
   groupImages: (state, groupId) => {
-    const ids = (state.relations?.groupImages?.[groupId] || []);
-    return ids.map((id) => state.entities?.imagesById?.[id]).filter(Boolean);
+    const ids = Array.from(state.relations?.groupImages?.[groupId] || []);
+    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
   },
   albumImages: (state, albumId) => {
-    const ids = (state.relations?.albumImages?.[albumId] || []);
-    return ids.map((id) => state.entities?.imagesById?.[id]).filter(Boolean);
+    const ids = Array.from(state.relations?.albumImages?.[albumId] || []);
+    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
   },
   momentImages: (state, momentId) => {
-    const ids = (state.relations?.momentImages?.[momentId] || []);
-    return ids.map((id) => state.entities?.imagesById?.[id]).filter(Boolean);
+    const ids = Array.from(state.relations?.momentImages?.[momentId] || []);
+    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
   },
-  imageById: (state, id) => state.entities?.imagesById?.[id] || null,
+  imageById: (state, id) => state.entities?.images?.[id] || null,
   // Album membership helpers
   albumMembershipSets: (state) => {
     const favId = state.favoritesAlbumId;
     const arcId = state.archiveAlbumId;
-    const favSet = new Set((favId && state.relations?.albumImages?.[favId]) || []);
-    const arcSet = new Set((arcId && state.relations?.albumImages?.[arcId]) || []);
+    const favSet = (favId && state.relations?.albumImages?.[favId]) || new Set();
+    const arcSet = (arcId && state.relations?.albumImages?.[arcId]) || new Set();
     return { favoritesSet: favSet, archiveSet: arcSet };
   },
   isFavorite: (state, imageId) => {
     const favId = state.favoritesAlbumId;
-    if (favId && state.relations?.albumImages?.[favId]) return state.relations.albumImages[favId].includes(imageId);
-    const img = state.entities?.imagesById?.[imageId];
+    if (favId && state.relations?.albumImages?.[favId]) return state.relations.albumImages[favId].has(imageId);
+    const img = state.entities?.images?.[imageId];
     return !!(img?.is_favorite ?? img?.is_favorites);
   },
   isArchived: (state, imageId) => {
     const arcId = state.archiveAlbumId;
-    if (arcId && state.relations?.albumImages?.[arcId]) return state.relations.albumImages[arcId].includes(imageId);
-    const img = state.entities?.imagesById?.[imageId];
+    if (arcId && state.relations?.albumImages?.[arcId]) return state.relations.albumImages[arcId].has(imageId);
+    const img = state.entities?.images?.[imageId];
     return !!img?.is_archived;
   },
   visibleImages: (state, ids, { includeArchived = true } = {}) => {
-    const list = (ids || []).map((id) => state.entities?.imagesById?.[id]).filter(Boolean);
+    const list = (ids || []).map((id) => state.entities?.images?.[id]).filter(Boolean);
     if (includeArchived) return list;
     return list.filter((img) => !img?.is_archived);
   },

@@ -7,14 +7,14 @@ The frontend maintains a single source of truth via a normalized Zustand store. 
 ```
 useDataStore state
   entities:
-    imagesById: { [imageId]: Image }
-    groupsById: { [groupId]: Group }
-    momentsById: { [momentId]: Moment }
-    albumsById: { [albumId]: Album }
+    images: { [imageId]: Image }
+    groups: { [groupId]: Group }
+    moments: { [momentId]: Moment }
+    albums: { [albumId]: Album }
   relations:
-    groupImages:  { [groupId]: imageId[] }
-    momentImages: { [momentId]: imageId[] }
-    albumImages:  { [albumId]: imageId[] }
+    groupImages:  { [groupId]: Set<imageId> }
+    momentImages: { [momentId]: Set<imageId> }
+    albumImages:  { [albumId]: Set<imageId> }
   view:
     includeArchived: boolean
     current: { type, id?, filter?, sort? }
@@ -27,19 +27,19 @@ Backend endpoints return a `changes` array. An Axios interceptor applies them to
 
 - UPSERT
 ```
-{ type: 'UPSERT', entity: 'image'|'group'|'moment'|'album', items: [ { id: string, ...partialOrFullEntity }, ... ] }
+{ type: 'UPSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id: string, ...partialOrFullEntity }, ... ] }
 ```
 
 - REMOVE
 ```
-{ type: 'REMOVE', entity: 'image'|'group'|'moment'|'album', ids: [string, ...] }
+{ type: 'REMOVE', entity: 'images'|'groups'|'moments'|'albums', ids: [string, ...] }
 ```
 
 - RELATION_ADD / RELATION_REMOVE / RELATION_MOVE / RELATION_SET
 ```
-{ type: 'RELATION_ADD', relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...], position?: 'start'|'end'|number }
+{ type: 'RELATION_ADD', relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
 { type: 'RELATION_REMOVE', relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
-{ type: 'RELATION_MOVE', relation: 'group.images'|'moment.images', fromParentId: string, toParentId: string, ids: [string,...], position?: 'start'|'end'|number }
+{ type: 'RELATION_MOVE', relation: 'group.images'|'moment.images', fromParentId: string, toParentId: string, ids: [string,...] }
 { type: 'RELATION_SET',  relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
 ```
 
@@ -55,7 +55,7 @@ This schema allows precise, minimal UI diffs (insert/remove/move) without reload
 All payloads and components must use the normalized keys above; legacy aliases are not supported.
 
 ### Rendering Pattern
-1) Subscribe to ids arrays (relations) using shallow comparison and map to entities locally with `useMemo`.
+1) Subscribe to id sets (relations) using shallow comparison and map to entities locally with `useMemo`.
 2) Derive visible/sorted lists with `useMemo` (no setState inside effects to avoid loops).
 3) Use store-driven flags (e.g., favorites/archive via `albumImages`) instead of local toggles.
 
@@ -64,7 +64,7 @@ Components may optimistically update (e.g., label change) but must rely on API r
 
 ### Why This Works Smoothly
 - Normalized structure ensures minimal writes on entity updates.
-- Relation edits are stable arrays with shallow equality guards to avoid unnecessary re-renders.
+- Relation edits are stable `Set` objects with shallow equality guards to avoid unnecessary re-renders.
 - Components subscribe to precise slices, reducing update depth and preventing feedback loops.
 
 

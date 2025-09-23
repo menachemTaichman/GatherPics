@@ -275,24 +275,21 @@ def transfer_faces(event_id):
     data = request.json or {}
     source_group_id = data.get('source_group_id')
     target_group_id = data.get('target_group_id')
-    new_group_name = data.get('new_group_name', '')
-    face_ids = data.get('face_ids', [])
+    new_group_name = data.get('new_group_name', None)
+    face_ids = data.get('face_ids', None)
     
     if not target_group_id and not new_group_name:
         return jsonify({"error": "Missing required parameters"}), 400
     
     try:
         result = event.models_manager.add_faces_to_group(
-            face_ids,
+            face_ids=face_ids,
             target_group_id=target_group_id,
             new_group_name=new_group_name,
             source_group_id=source_group_id
         )
-
         response = {"success": True}
-        if result.get('changes'):
-            response['changes'] = result['changes']
-
+        response.update(result)
         return jsonify(response)
     except Exception as e:
         return bad_request(e)

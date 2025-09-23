@@ -181,7 +181,7 @@ function AppContent({ eventUrl }) {
       const response = await groupsAPI.getAll(eventUrl);
       const store = useDataStore.getState();
       if (response.groups && response.groups.length) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'group', items: response.groups }]);
+        store.applyChanges([{ type: 'UPSERT', entity: 'groups', items: response.groups }]);
       }
       setError(null);
     } catch (err) {

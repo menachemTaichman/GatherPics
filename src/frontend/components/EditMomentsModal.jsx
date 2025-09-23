@@ -60,7 +60,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       const response = await momentsAPI.getAll(eventUrl);
       const moments = response.moments || [];
       if (moments.length) {
-        useDataStore.getState().applyChanges([{ type: 'UPSERT', entity: 'moment', items: moments }]);
+        useDataStore.getState().applyChanges([{ type: 'UPSERT', entity: 'moments', items: moments }]);
       }
       const sortedMoments = sortMoments(moments, 'asc');
       setInternalMoments(sortedMoments);

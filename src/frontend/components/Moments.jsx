@@ -260,7 +260,7 @@ export default function Moments({ eventUrl }) {
           const ids = imgs.map(i => i && i.id).filter(Boolean);
           try {
             const store = useDataStore.getState();
-            if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+            if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
             store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: moment.id, ids }]);
           } catch {}
           return { momentId: moment.id, images: imgs };
@@ -302,7 +302,7 @@ export default function Moments({ eventUrl }) {
     const store = useDataStore.getState();
     const moments = response.moments || [];
     if (moments.length) {
-      store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: moments }]);
+      store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: moments }]);
     }
       setStoreError(null);
     } catch (err) {
@@ -319,7 +319,7 @@ export default function Moments({ eventUrl }) {
       setImages(imgs);
       if (imgs.length > 0) {
         const store = useDataStore.getState();
-        store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+        store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
       }
     } catch (err) {
       console.error('Error fetching images:', err);
@@ -352,7 +352,7 @@ export default function Moments({ eventUrl }) {
       const ids = imgs.map(i => i && i.id).filter(Boolean);
       try {
         const store = useDataStore.getState();
-        if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'image', items: imgs }]);
+        if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
         store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: momentId, ids }]);
       } catch {}
       

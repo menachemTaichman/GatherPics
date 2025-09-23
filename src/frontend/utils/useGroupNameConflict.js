@@ -62,8 +62,8 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
     
     // If still no valid conflicting group, try to find it by name in the data store
     if (!validConflictingGroup && newName) {
-      const groupsById = useDataStore.getState().entities?.groupsById || {};
-      validConflictingGroup = Object.values(groupsById).find(g => g.label === newName);
+      const groups = useDataStore.getState().entities?.groups || {};
+      validConflictingGroup = Object.values(groups).find(g => g.label === newName);
     }
     
     if (!validConflictingGroup) {

@@ -821,24 +821,6 @@ class AppDB:
         finally:
             conn.close()
 
-    def is_exists(self, table: str, where: Dict, exclude_id: str = None) -> str | None:
-        """Check if a record exists and return its ID for conflict checking."""
-
-        id_field = STRUCTURE[table]['primary_key']
-
-        where_clause = ' AND '.join([f'{k}=?' for k in where.keys()])
-        where_params = tuple(where.values())
-        
-        with self.get_connection() as conn:
-            cursor = conn.execute(f'SELECT * FROM {table} WHERE {where_clause} AND {id_field} != ?', where_params + (exclude_id,))
-            row = cursor.fetchone()
-            if row:
-                columns = [desc[0] for desc in cursor.description]
-                record = dict(zip(columns, row))
-                # Return the ID field (assuming it's the first field or named 'id')
-                return record[id_field]
-            return None
-
     def execute_query(self, query: str, params: tuple = (), *, force_include_archived: bool = False, include_columns: bool = False) -> List[tuple | dict]:
         """Execute a custom query and return results."""
         with self.get_connection(force_include_archived) as conn:

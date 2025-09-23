@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -94,9 +94,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const prevGroupIdRef = useRef(null);
   const suppressSpinnerRef = useRef(false);
   const restoreScrollYRef = useRef(null);
+  const smoothNextGroupLoad = useRef(false);
+  const skipNextAnimation = useRef(false);
 
   // Memoize props for GroupsFilter to prevent infinite re-renders (defined after sortedImages below)
-  let memoizedImageIds = EMPTY_ARRAY;
   const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.id !== group?.id), [relatedGroups, group?.id]);
   
   // No complex flag checking needed - the data store handles everything
@@ -125,21 +126,16 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     state => (group?.id ? (state.relations?.groupImages?.[group.id] || EMPTY_ARRAY) : EMPTY_ARRAY),
     shallow
   );
-  const imagesById = useDataStore(state => state.entities.imagesById);
-  const relatedImages = useMemo(() => (relatedImageIds || []).map(id => imagesById[id]).filter(Boolean), [relatedImageIds, imagesById]);
-
-  // Note: Favorite and archive states are now determined by image.is_favorite and image.is_archived properties
-  // from the database, not by Set-based tracking from the data store
+  const images = useDataStore(state => state.entities.images);
+  const relatedImages = useMemo(() => Array.from(relatedImageIds || []).map(id => images[id]).filter(Boolean), [relatedImageIds, images]);
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
-    const includeArchived = getSetting('include_archived_images', false);
-    const visible = (relatedImages || []).filter(img => includeArchived || !img?.is_archived);
-    return sortImages(visible, sortBy, sortOrder);
+    return sortImages(relatedImages, sortBy, sortOrder);
   }, [group?.id, relatedImages, sortBy, sortOrder]);
 
   // Now compute memoizedImageIds after sortedImages exists
-  memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
+  const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
 
   const {
     selectedKeys: selectedImages,
@@ -170,6 +166,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   }, [currentGroups, group?.id]);
 
   // Legacy subscription removed; updates flow from normalized selectors
+
+  useLayoutEffect(() => {
+    // This layout effect is for scroll restoration only, running before browser paint
+    if (smoothNextGroupLoad.current) {
+      if (restoreScrollYRef.current !== null) {
+        const y = restoreScrollYRef.current;
+        window.scrollTo({ top: y, behavior: 'instant' });
+        restoreScrollYRef.current = null;
+      }
+    }
+  }, [group?.id]); // Fire when the group has actually changed
 
   const fetchGroupData = useCallback(async (currentOffset, resetImages = false) => {
     if (!group?.id) {
@@ -208,10 +215,10 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         const imageIds = (response.images || []).map(img => img?.id).filter(Boolean);
         const changes = [];
         if (response.group) {
-          changes.push({ type: 'UPSERT', entity: 'group', items: [response.group] });
+          changes.push({ type: 'UPSERT', entity: 'groups', items: [response.group] });
         }
         if (Array.isArray(response.images)) {
-          changes.push({ type: 'UPSERT', entity: 'image', items: response.images });
+          changes.push({ type: 'UPSERT', entity: 'images', items: response.images });
         }
         if (resetImages || currentOffset === 0) {
           changes.push({ type: 'RELATION_SET', relation: 'group.images', parentId: group.id, ids: imageIds });
@@ -244,6 +251,19 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   // Centralized effect for fetching all image and group data
   useEffect(() => {
     if (!group?.id) return;
+
+    if (smoothNextGroupLoad.current) {
+      smoothNextGroupLoad.current = false;
+      // When smoothly navigating between groups, we rely on store data
+      // and skip the API fetch. We just need to update refs.
+      const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
+      lastFetchSignatureRef.current = sig;
+      prevGroupIdRef.current = group.id;
+      
+      // The scroll restoration is now handled in useLayoutEffect
+      return;
+    }
+
     const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
     if (sig === lastFetchSignatureRef.current) return;
     const isGroupChange = prevGroupIdRef.current !== group.id;
@@ -254,7 +274,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       try { restoreScrollYRef.current = window.scrollY; } catch {}
     } else {
       suppressSpinnerRef.current = false;
-      restoreScrollYRef.current = null;
+      // On a normal group change (not a merge), we want to scroll to top.
+      // We don't need to explicitly nullify the ref, as it's only set when needed.
     }
     lastFetchSignatureRef.current = sig;
     setOffset(0);
@@ -443,27 +464,79 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
   const handleTransferFaces = () => {
-          if (selectedImages.size === 0) {
+    if (selectedImages.size === 0) {
       showToast('Please select photos to transfer', 'error');
       return;
     }
+    try {
+      restoreScrollYRef.current = window.scrollY;
+    } catch {}
     setShowTransferModal(true);
   };
 
   const handleTransferComplete = async (result) => {
     const transferData = { ...(result || {}) };
     clearSelection();
-    // Rely entirely on changes array; just show a toast if target group is resolvable
-    const addChange = (transferData.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
-    const targetId = addChange?.parentId;
-    if (targetId) {
-      const targetGroup = currentGroups.find(g => g.id === targetId);
+
+    // Get the number of transferred images
+    const transferredCount = transferData.affected_images_ids?.length || 0;
+    const imageText = transferredCount === 1 ? 'image' : 'images';
+
+    // Handle source_deleted case - navigate to target group and show merge toast
+    if (transferData.source_deleted && transferData.target_group_id) {
+      const targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
       if (targetGroup) {
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
         showToast(
+          `${transferredCount} ${imageText} transferred`,
+          'success'
+        );
+        
+        // Manually update URL without triggering router navigation, then set group
+        window.history.replaceState(null, '', link);
+        smoothNextGroupLoad.current = true;
+        skipNextAnimation.current = true;
+        setGroup(targetGroup);
+
+        return;
+      }
+    }
+    
+    // Handle partial transfers and new group creation
+    const addChange = (transferData.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
+    const targetId = addChange?.parentId || transferData.target_group_id;
+    
+    if (targetId) {
+      const targetGroup = currentGroups.find(g => g.id === targetId);
+      
+      // Check if this was a new group creation
+      const isNewGroup = transferData.new_group_created || false;
+      
+      if (targetGroup) {
+        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+        const message = isNewGroup 
+          ? `${transferredCount} ${imageText} transferred to new person `
+          : `${transferredCount} ${imageText} transferred to `;
+        
+        showToast(
           <span>
-            Transfer complete. View <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
+            {message}<Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
           </span>,
+          'success'
+        );
+      } else if (isNewGroup && transferData.new_group_name) {
+        // For new groups that aren't in the store yet, use the name from the response
+        const link = `/${eventUrl}/persons/${encodeURIComponent(transferData.new_group_name)}`;
+        showToast(
+          <span>
+            {transferredCount} {imageText} transferred to new person <Link to={link} className="underline hover:text-gray-100">{transferData.new_group_name}</Link>
+          </span>,
+          'success'
+        );
+      } else {
+        // Fallback for existing groups not found in currentGroups
+        showToast(
+          `${transferredCount} ${imageText} transferred`,
           'success'
         );
       }
@@ -560,6 +633,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       
       if (conflictResult.conflict) {
         // Show merge conflict modal with the conflicting group
+        try {
+          restoreScrollYRef.current = window.scrollY;
+        } catch {}
         showMergeConflictModal(trimmedTitle, group, conflictResult.conflicting_group);
         setIsEditingTitle(false);
         return;
@@ -928,14 +1004,17 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                 gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
                 gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
               } : {}}
-              initial={{ opacity: 0 }}
+              initial={skipNextAnimation.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
+              onAnimationComplete={() => {
+                skipNextAnimation.current = false;
+              }}
             >
               {sortedImages.map((image, index) => (
                 <motion.div
                   key={image.id || `unknown-${index}`}
-                  initial={{ opacity: 0, scale: 0.95 }}
+                  initial={skipNextAnimation.current ? false : { opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.15 }}

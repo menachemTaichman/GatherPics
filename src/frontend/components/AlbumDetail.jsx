@@ -31,13 +31,13 @@ export default function AlbumDetail({ showToast }) {
         }
         setAlbum(found);
         // Seed store with album entity
-        store.applyChanges([{ type: 'UPSERT', entity: 'album', items: [found] }]);
+        store.applyChanges([{ type: 'UPSERT', entity: 'albums', items: [found] }]);
         // Fetch album images and seed store relations
         const res = await albumsAPI.getImages(found.id, eventUrl);
         const imgs = res.images || [];
         const ids = imgs.map(i => i && i.id).filter(Boolean);
         const changes = [];
-        if (imgs.length > 0) changes.push({ type: 'UPSERT', entity: 'image', items: imgs });
+        if (imgs.length > 0) changes.push({ type: 'UPSERT', entity: 'images', items: imgs });
         changes.push({ type: 'RELATION_SET', relation: 'album.images', parentId: found.id, ids });
         store.applyChanges(changes);
       } catch (e) {

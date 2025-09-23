@@ -19,7 +19,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const { urlHelpers } = useEventUrls(eventUrl);
   const lastTransferResult = useDataStore(state => state.lastTransferResult);
   const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
-  const groupsById = useDataStore(state => state.entities?.groupsById || {});
+  const groupsMap = useDataStore(state => state.entities?.groups || {});
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -317,11 +317,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
               const gid = f && (f.groupId || f.group_id || f.groupID);
               if (!gid || seen.has(gid)) return;
               seen.add(gid);
-              const label = f.group_label || (groupsById[gid] && groupsById[gid].label) || undefined;
+              const label = f.group_label || (groupsMap[gid] && groupsMap[gid].label) || undefined;
               items.push(label ? { id: gid, label } : { id: gid });
             });
             if (items.length > 0) {
-              store.applyChanges([{ type: 'UPSERT', entity: 'group', items }]);
+              store.applyChanges([{ type: 'UPSERT', entity: 'groups', items }]);
             }
           } catch {}
         } else {
@@ -433,7 +433,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const handleFaceNavigation = (face) => {
     const gid = face?.groupId || face?.group_id || face?.groupID;
-    const label = gid ? groupsById[gid]?.label : '';
+    const label = gid ? groupsMap[gid]?.label : '';
     if (label) {
       navigate(`/persons/${encodeURIComponent(label)}`);
       onClose();
@@ -494,15 +494,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleTransferComplete = async (result) => {
-    // The API response now triggers a zustand update via an interceptor.
-    // The useEffect hook that subscribes to `useDataStore` will handle all UI updates.
-    // We only need to show a toast message here and handle parent notifications.
     // Show a generic success toast using changes array to detect target group
     if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
       const addChange = (result.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
       const targetId = addChange?.parentId;
       if (targetId) {
-        const targetGroup = groups.find(g => (g.id || g.groupID) === targetId);
+        const targetGroup = Object.values(groupsMap).find(g => (g.id || g.groupID) === targetId);
         if (targetGroup) {
           const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
           showToast(
@@ -526,6 +523,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
     setShowTransferModal(false);
     setSelectedFaceForTransfer(null);
+
+    // If the transfer resulted in the source group being deleted (a merge), close the viewer.
+    // The underlying GroupDetail component will handle navigating to the new group.
+    if (result?.source_deleted) {
+      onClose();
+    }
   };
 
 
@@ -618,7 +621,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const getGroupLabel = (face) => {
     const gid = face?.groupId || face?.group_id || face?.groupID;
-    const label = gid ? (groupsById[gid]?.label || '') : '';
+    const label = gid ? (groupsMap[gid]?.label || '') : '';
     return label;
   };
 
@@ -1119,11 +1122,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
           }}
-          currentGroup={groups && selectedFaceForTransfer?.group_id ? groups.find(g => (g.id || g.groupID) === selectedFaceForTransfer.group_id) : null}
+          currentGroup={groupsMap && selectedFaceForTransfer ? (() => {
+            const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id || selectedFaceForTransfer.groupID;
+            return gid ? Object.values(groupsMap).find(g => (g.id || g.groupID) === gid) : null;
+          })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
           showToast={showToast}
-          sourceGroupId={selectedFaceForTransfer?.group_id}
+          sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id || selectedFaceForTransfer.groupID) : null}
         />
       )}
     </AnimatePresence>

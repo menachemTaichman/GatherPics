@@ -29,7 +29,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             const store = useDataStore.getState();
             const groups = res.groups || [];
             if (groups.length) {
-              store.applyChanges([{ type: 'UPSERT', entity: 'group', items: groups }]);
+              store.applyChanges([{ type: 'UPSERT', entity: 'groups', items: groups }]);
             }
         } catch (e) {
             console.error('Failed to load groups', e);

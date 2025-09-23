@@ -140,18 +140,30 @@ function normalizeFace(face) {
   if (!face || typeof face !== 'object') return face;
   const normalized = { ...face };
   // id
-  if (!normalized.id) normalized.id = normalized.face_id || normalized.faceID || normalized.id;
+  if (!normalized.id) normalized.id = normalized.face_id || normalized.faceID;
+  if ('face_id' in normalized) delete normalized.face_id;
+  if ('faceID' in normalized) delete normalized.faceID;
+  
   // groupId
-  if (!normalized.groupId) normalized.groupId = normalized.group_id || normalized.groupID || normalized.groupId;
+  if (!normalized.groupId) normalized.groupId = normalized.group_id || normalized.groupID;
+  if ('group_id' in normalized) delete normalized.group_id;
+  if ('groupID' in normalized) delete normalized.groupID;
+
   // imageId (for convenience in some payloads)
-  if (!normalized.imageId) normalized.imageId = normalized.image_id || normalized.imageID || normalized.imageId;
+  if (!normalized.imageId) normalized.imageId = normalized.image_id || normalized.imageID;
+  if ('image_id' in normalized) delete normalized.image_id;
+  if ('imageID' in normalized) delete normalized.imageID;
+  
   return normalized;
 }
 
 function normalizeImage(img) {
   if (!img || typeof img !== 'object') return img;
   const normalized = { ...img };
-  if (!normalized.id) normalized.id = normalized.image_id || normalized.imageID || normalized.id;
+  if (!normalized.id) normalized.id = normalized.image_id || normalized.imageID;
+  if ('image_id' in normalized) delete normalized.image_id;
+  if ('imageID' in normalized) delete normalized.imageID;
+  
   if (Array.isArray(normalized.faces)) normalized.faces = normalized.faces.map(normalizeFace);
   if (Array.isArray(normalized.albums)) normalized.albums = normalized.albums.map(normalizeAlbum);
   if (normalized.moment && typeof normalized.moment === 'object') normalized.moment = normalizeMoment(normalized.moment);
@@ -161,21 +173,27 @@ function normalizeImage(img) {
 function normalizeGroup(group) {
   if (!group || typeof group !== 'object') return group;
   const normalized = { ...group };
-  if (!normalized.id) normalized.id = normalized.group_id || normalized.groupID || normalized.id;
+  if (!normalized.id) normalized.id = normalized.group_id || normalized.groupID;
+  if ('group_id' in normalized) delete normalized.group_id;
+  if ('groupID' in normalized) delete normalized.groupID;
   return normalized;
 }
 
 function normalizeMoment(moment) {
   if (!moment || typeof moment !== 'object') return moment;
   const normalized = { ...moment };
-  if (!normalized.id) normalized.id = normalized.moment_id || normalized.momentID || normalized.id;
+  if (!normalized.id) normalized.id = normalized.moment_id || normalized.momentID;
+  if ('moment_id' in normalized) delete normalized.moment_id;
+  if ('momentID' in normalized) delete normalized.momentID;
   return normalized;
 }
 
 function normalizeAlbum(album) {
   if (!album || typeof album !== 'object') return album;
   const normalized = { ...album };
-  if (!normalized.id) normalized.id = normalized.album_id || normalized.albumID || normalized.id;
+  if (!normalized.id) normalized.id = normalized.album_id || normalized.albumID;
+  if ('album_id' in normalized) delete normalized.album_id;
+  if ('albumID' in normalized) delete normalized.albumID;
   return normalized;
 }
 
@@ -541,7 +559,7 @@ export const optimisticUpdates = {
     try {
       const result = await momentsAPI.create(momentData, eventUrl);
       if (result.moment) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: [result.moment] }]);
+        store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: [result.moment] }]);
       }
       if (Array.isArray(result.changes)) {
         store.applyChanges(result.changes);
@@ -598,7 +616,7 @@ export const optimisticUpdates = {
       if (rollbackFn && previousState) {
         rollbackFn(previousState);
       } else if (previousState) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'moment', items: [previousState] }]);
+        store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: [previousState] }]);
       }
       throw error;
     }

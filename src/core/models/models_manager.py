@@ -14,15 +14,27 @@ class ModelsManager:
         return str(uuid.uuid4())
 
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
-        return self.db.is_exists(table, fields, exclude_id)
+        """Check if a record exists and return its ID for conflict checking."""
+
+        where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
+        where_params = tuple(fields.values())
+
+        query = f"""
+            SELECT {STRUCTURE[table]["primary_key"]}
+            FROM {table}
+            WHERE {where_clause}
+            AND {STRUCTURE[table]["primary_key"]} != ?
+        """
+        results = self.db.execute_query(query, (*where_params, exclude_id))
+        return results[0][0] if results else None
 
     def is_empty(self, table: str, entity_id: str) -> bool:
         childs = AppDB.get_view_child(table, all=True)
         id_field = STRUCTURE[table]['primary_key']
         for child in childs:
-            query = f'SELECT COUNT(*) FROM {child} WHERE {id_field} = ?'
+            query = f'SELECT EXISTS(SELECT 1 FROM {child} WHERE {id_field} = ?)'
             results = self.db.execute_query(query, (entity_id,))
-            if results[0][0] > 0:
+            if results[0][0]:
                 return False
         
         return True
@@ -30,18 +42,15 @@ class ModelsManager:
     def is_accessible(self, table: str, entity_id: str) -> bool:
         accessible_table = STRUCTURE[table]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        query = f'SELECT {id_field} FROM {accessible_table} WHERE {id_field} = ?'
+        query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = ?)'
         results = self.db.execute_query(query, (entity_id,))
-        return results is not None and len(results) > 0
+        return bool(results[0][0])
 
     def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
         return_list = True
         if isinstance(entity_ids, str):
             entity_ids = [entity_ids]
             return_list = False
-
-        if table not in ['groups', 'moments', 'albums']:
-            return []
 
         accessible_table = STRUCTURE[table]['accessible_table']
         child = AppDB.get_view_child(table)
@@ -75,7 +84,9 @@ class ModelsManager:
         results = self.db.execute_query(query, entity_ids, include_columns=True)
         if return_list:
             return results
-        return results[0]
+        if results:
+            return results[0]
+        return None
 
     def get_childs(self, table: str, entity_id: str, *, child: str | None = None, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
 
@@ -140,8 +151,6 @@ class ModelsManager:
         child, other_parent, relation_name, child_id_field = AppDB.get_edit_child(table)
 
         entity = self.get_summary(table, entity_id)
-        if not entity:
-            raise ValueError(f"Entity not found")
 
         if entity.get(representative_field):
             representative_id = entity.get(representative_field)
@@ -167,19 +176,19 @@ class ModelsManager:
         
         return biggest
 
-    ######## TODO: simplify a bit the cases
     def edit_childs(self, table: str, entity_id: str, child_ids: List[str], *, add: bool, child: str | None = None, force_include_archived: bool = False) -> Dict:
         child, other_parent, relation_name, child_id_field = AppDB.get_edit_child(table, child=child)
         exclusive = other_parent == table
         accessible_other_parent = STRUCTURE[other_parent]['accessible_table']
         accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
+        accessible_images = STRUCTURE['images']['accessible_table']
 
         placeholders = ','.join(['?'] * len(child_ids)) if child_ids else ''
 
         # Determine valid childs for this operation
         if exclusive:
-            where_clause = f'(c.{id_field} <> {'?'} OR c.{id_field} IS NULL)' if add else f'c.{id_field} = ?'
+            where_clause = f'(c.{id_field} <> ? OR c.{id_field} IS NULL)' if add else f'c.{id_field} = ?'
             query = f"""SELECT c.{child_id_field}
             FROM {accessible_child} c
             WHERE {where_clause} AND c.{child_id_field} IN ({placeholders})
@@ -203,32 +212,28 @@ class ModelsManager:
 
         placeholders = ','.join(['?'] * len(valid_child_ids))
 
-        old_childs = self.get_childs(table, entity_id, child=child)
-        old_childs = set([row[child_id_field] for row in old_childs])
-
-        old_parent_ids = set()
-        if not add:
-            old_parent_ids.add(entity_id)
-
-        if exclusive:
+        # get old parent to remove relation and ensure representative
+        old_parent_ids = set([entity_id])
+        if add and exclusive:
             query = f"""
                 SELECT DISTINCT c.{id_field}
                 FROM {accessible_child} c
                 WHERE c.{child_id_field} in ({placeholders})
                 AND c.{id_field} IS NOT NULL
             """
-            rows = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
-            old_parent_ids.update([row[0] for row in rows])
+            removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
+            old_parent_ids.update([row[0] for row in removed_images])
 
+        # get affected images to update
         query = f"""
             SELECT DISTINCT c.imageID
             FROM {accessible_child} c
             WHERE c.{child_id_field} in ({placeholders})
         """
-        rows = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
-        affected_images_ids = [row[0] for row in rows]
+        removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
+        affected_images_ids = [row[0] for row in removed_images]
 
-        # Apply change
+        # Apply edit
         if exclusive:
             if add:
                 query = f'UPDATE {accessible_child} SET {id_field} = ? WHERE {child_id_field} IN ({placeholders})'
@@ -247,37 +252,53 @@ class ModelsManager:
                 query = f'DELETE FROM {accessible_child} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
                 self.db.execute_query(query, (entity_id, *valid_child_ids), force_include_archived=force_include_archived)
 
+        # ensure representative
         if STRUCTURE[table].get('representative_field',''):
-            parents = old_parent_ids.union([entity_id])
-            for parent_id in parents:
-                    self.ensure_representative(table, parent_id)
+            for parent_id in old_parent_ids:
+                self.ensure_representative(table, parent_id)
 
+        # get changes
         changes = []
-        for old_parent_id in old_parent_ids:
-            current_childs = self.get_childs(table, old_parent_id, child=child)
-            removed = [row if row not in current_childs else None for row in valid_child_ids]
-            
-            changes.append({
-                'type': 'RELATION_REMOVE',
-                'relation': relation_name,
-                'parentId': old_parent_id,
-                'ids': removed
-            })
+        parents = self.get_summary(table, list(old_parent_ids))
+        # TODO: maybe will be redundant after get_summary will return in the {"id": id, {all fields without id}} format
+        parents = [{'id': parent[id_field], **{k: v for k, v in parent.items() if k != id_field}} for parent in parents]
+        changes.append({
+            'type': 'UPSERT',
+            'entity': table,
+            'items': parents
+        })
 
-        current_childs = set([row[child_id_field] for row in self.get_childs(table, entity_id, child=child)])
-        added_relations = list(current_childs - old_childs)
-
-        if added_relations:
+        if add:
             changes.append({
                 'type': 'RELATION_ADD',
                 'relation': relation_name,
                 'parentId': entity_id,
-                'ids': added_relations
+                'ids': affected_images_ids
             })
+
+        for old_parent_id in old_parent_ids:
+            query = f"""
+                SELECT i.imageID
+                FROM {accessible_images} i
+                LEFT JOIN {accessible_child} c
+                ON i.imageID = c.imageID
+                AND c.{id_field} = ?
+                AND c.{child_id_field} IN ({placeholders})
+                WHERE c.{id_field} IS NULL
+                AND i.imageID IN ({placeholders})
+            """
+            removed_images = self.db.execute_query(query, (old_parent_id, *valid_child_ids, *affected_images_ids), force_include_archived=force_include_archived)
+            if removed_images:
+                changes.append({
+                    'type': 'RELATION_REMOVE',
+                    'relation': relation_name,
+                    'parentId': old_parent_id,
+                    'ids': [row[0] for row in removed_images]
+                })
 
         return {
             'affected_images_ids': affected_images_ids,
-            'old_parent_ids': old_parent_ids,
+            'old_parent_ids': list(old_parent_ids),
             'changes': changes
         }
 
@@ -469,35 +490,46 @@ class ModelsManager:
         return self.db.execute_query(query, params, include_columns=True)
 
     # -------- Faces helpers --------
-    def add_faces_to_group(self, face_ids: List[str], *, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
+    def add_faces_to_group(self, *, face_ids: List[str] | None = None, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
+
+        if face_ids is None:
+            if not source_group_id:
+                raise ValueError("face_ids or source_group_id must be provided")
+            face_ids = [face_id['faceID'] for face_id in self.get_childs('groups', source_group_id, child='faces')]
 
         if new_group_name:
             if self.is_exists('groups', {'label': new_group_name}):
                 raise ValueError(f"Group name '{new_group_name}' already exists")
             target_group_id = self.add('groups', {'label': new_group_name})
+
         if not target_group_id:
             raise ValueError("target_group_id or new_group_name must be provided")
 
-        result = self.edit_childs('groups', target_group_id, face_ids, add=True, child='faces')
-        result['target_group_id'] = target_group_id
-
+        source_deleted = False
         if source_group_id:
-            if len(self.get_childs('groups', source_group_id)) == 0:
-                result['changes'].append({
-                    'type': 'REMOVE',
-                    'entity': 'group',
-                    'ids': [source_group_id]
-                })
+            accessible_faces = STRUCTURE['faces']['accessible_table']
+            face_placeholders = ','.join(['?'] * len(face_ids))
+            query = f"""
+                SELECT NOT EXISTS(SELECT 1 FROM {accessible_faces} WHERE groupID = ? AND faceID NOT IN ({face_placeholders}))
+            """
+            results = self.db.execute_query(query, (source_group_id, *face_ids))
+            if results[0][0]:
+                source_deleted = True
+                        
+        result = self.edit_childs('groups', target_group_id, face_ids, add=True, child='faces')
+        result['source_deleted'] = source_deleted
+        result['target_group_id'] = target_group_id
+        result['new_group_created'] = bool(new_group_name is not None)
+
+        if source_deleted:           
+            result['changes'].append({
+                'type': 'REMOVE',
+                'entity': 'groups',
+                'ids': [source_group_id]
+            })
 
             if self.is_empty('groups', source_group_id):
                 self.delete('groups', source_group_id)
-
-        if new_group_name:
-            result['changes'].append({
-                'type': 'UPSERT',
-                'entity': 'group',
-                'items': [self.get_summary('groups', target_group_id)]
-            })
 
         return result
 

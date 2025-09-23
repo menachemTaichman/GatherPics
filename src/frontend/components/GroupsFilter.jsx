@@ -37,7 +37,7 @@ export default function GroupsFilter({
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
   const { urlHelpers } = useEventUrls(eventUrl);
   const [selectedGroups, setSelectedGroups] = useState(initialSelectedGroups || []); // excludes currentGroupId
-  const { groups: storeGroups } = useDataStore();
+  const groups = useDataStore(state => state.entities?.groups || {});
 
   const fetchRelatedGroups = async () => {
     if (!isVisible) return; // fetch only when panel is open
@@ -131,15 +131,19 @@ export default function GroupsFilter({
 
   // Build display list: selected first (in order), then API related (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
-    const seen = new Set(selectedGroups);
-    const groupMap = new Map((storeGroups || []).map(g => [g.id || g.groupID, g]));
-    const byRelated = new Map((relatedGroups || []).map(g => [g.id || g.groupID, g]));
-    const selectedObjs = selectedGroups
-      .filter(id => id !== currentGroupId)
-      .map(id => byRelated.get(id) || groupMap.get(id) || { id, label: `Person ${id}` });
-    const tail = (relatedGroups || []).filter(g => !seen.has(g.id || g.groupID) && (g.id || g.groupID) !== currentGroupId);
+    const seen = new Set((selectedGroups || []).map(v => String(v)));
+    const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.groupID), g]));
+    const byRelated = new Map((relatedGroups || []).map(g => [String(g.id || g.groupID), g]));
+    const currentIdStr = currentGroupId != null ? String(currentGroupId) : null;
+    const selectedObjs = (selectedGroups || [])
+      .filter(id => String(id) !== currentIdStr)
+      .map(id => byRelated.get(String(id)) || groupMap.get(String(id)) || { id, label: `Person ${id}` });
+    const tail = (relatedGroups || []).filter(g => {
+      const gid = String(g.id || g.groupID);
+      return !seen.has(gid) && gid !== currentIdStr;
+    });
     return [...selectedObjs, ...tail];
-  }, [selectedGroups, relatedGroups, currentGroupId, storeGroups]);
+  }, [selectedGroups, relatedGroups, currentGroupId, groups]);
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';
@@ -167,9 +171,9 @@ export default function GroupsFilter({
             }}
           >
             <div className="font-medium">
-              {hoveredGroup === group.groupID 
+              {hoveredGroup === (group.id || group.groupID)
                 ? getGroupDisplayName(group)
-                : getGroupDisplayName(displayGroups.find(g => g.groupID === hoveredGroup))
+                : getGroupDisplayName(displayGroups.find(g => (g.id || g.groupID) === hoveredGroup))
               }
             </div>
             {/* Removed subtitle text for cleaner tooltip */}
@@ -241,7 +245,7 @@ export default function GroupsFilter({
             <div 
             key={`main-${group.id || group.groupID}`}
             className="flex-shrink-0 relative group"
-            onMouseEnter={(event) => handleMouseEnter(group.groupID, event)}
+            onMouseEnter={(event) => handleMouseEnter(group.id || group.groupID, event)}
             onMouseLeave={handleMouseLeave}
             onMouseMove={handleMouseMove}
           >
@@ -268,7 +272,7 @@ export default function GroupsFilter({
             <div
               key={relatedGroup.id || relatedGroup.groupID}
               className="flex-shrink-0 relative group"
-              onMouseEnter={(event) => handleMouseEnter(relatedGroup.groupID, event)}
+              onMouseEnter={(event) => handleMouseEnter(relatedGroup.id || relatedGroup.groupID, event)}
               onMouseLeave={handleMouseLeave}
               onMouseMove={handleMouseMove}
             >
@@ -300,7 +304,7 @@ export default function GroupsFilter({
                 <div 
                   className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
                 >
-                  {selectedGroups.includes(relatedGroup.groupID) ? (
+                  {selectedGroups.includes(relatedGroup.id || relatedGroup.groupID) ? (
                     <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
                   ) : (
                     <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
