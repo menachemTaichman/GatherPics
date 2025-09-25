@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Union
-from ..db import AppDB, STRUCTURE
+from ..db import AppDB, STRUCTURE, ReturnFormat
 import uuid
 
 class ModelsManager:
@@ -19,18 +19,19 @@ class ModelsManager:
         where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
         where_params = tuple(fields.values())
 
+        id_field = AppDB.get_id_field(table)
         query = f"""
-            SELECT {STRUCTURE[table]["primary_key"]}
+            SELECT {id_field}
             FROM {table}
             WHERE {where_clause}
-            AND {STRUCTURE[table]["primary_key"]} != ?
+            AND {id_field} != ?
         """
         results = self.db.execute_query(query, (*where_params, exclude_id))
         return results[0][0] if results else None
 
     def is_empty(self, table: str, entity_id: str) -> bool:
         childs = AppDB.get_view_child(table, all=True)
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
         for child in childs:
             query = f'SELECT EXISTS(SELECT 1 FROM {child} WHERE {id_field} = ?)'
             results = self.db.execute_query(query, (entity_id,))
@@ -41,7 +42,7 @@ class ModelsManager:
 
     def is_accessible(self, table: str, entity_id: str) -> bool:
         accessible_table = STRUCTURE[table]['accessible_table']
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
         query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = ?)'
         results = self.db.execute_query(query, (entity_id,))
         return bool(results[0][0])
@@ -55,7 +56,7 @@ class ModelsManager:
         accessible_table = STRUCTURE[table]['accessible_table']
         child = AppDB.get_view_child(table)
         accessible_child = STRUCTURE[child]['accessible_table']
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
 
         where_clause = ''
         if entity_ids:
@@ -67,6 +68,7 @@ class ModelsManager:
         if exclude_empty_entities:
             having_clause = f'HAVING COUNT(s.{id_field}) > 0'
 
+        # TODO: remove count
         query = f'''
             SELECT t.*, COUNT(s.{id_field}) AS count
             FROM {accessible_table} t
@@ -75,7 +77,7 @@ class ModelsManager:
             GROUP BY t.{id_field}
             {having_clause}
         '''
-        results = self.db.execute_query(query, entity_ids, include_columns=True)
+        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.LIST_DICTS)
         if return_list:
             return results
         if results:
@@ -89,7 +91,7 @@ class ModelsManager:
             return []
 
         accessible_child = STRUCTURE[child]['accessible_table']
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
         fields_as_child = AppDB.get_fields_as_child(child, 'c')
         
         limit_clause = ''
@@ -104,7 +106,7 @@ class ModelsManager:
             WHERE {id_field} = ?
             {limit_clause}
         '''
-        results = self.db.execute_query(query, (entity_id,), include_columns=True)
+        results = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.LIST_DICTS)
         return results
 
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
@@ -115,8 +117,8 @@ class ModelsManager:
         data_list = [data] if is_single_item else data
         
         for row in data_list:
-            if STRUCTURE[table]['primary_key'] not in row:
-                row[STRUCTURE[table]['primary_key']] = ModelsManager.generate_id()
+            if AppDB.get_id_field(table) not in row:
+                row[AppDB.get_id_field(table)] = ModelsManager.generate_id()
         
         inserted_ids = self.db.insert(table, data_list)
         
@@ -125,17 +127,17 @@ class ModelsManager:
         return inserted_ids
 
     def delete(self, table: str, entity_ids: List[str] | str):
-        return self.db.delete(table, {STRUCTURE[table]['primary_key']: entity_ids})
+        return self.db.delete(table, {AppDB.get_id_field(table): entity_ids})
 
     def edit(self, table: str, entity_ids: List[str] | str, fields: Dict) -> List[str]:
-        return self.db.update(table, {STRUCTURE[table]['primary_key']: entity_ids}, fields)
+        return self.db.update(table, {AppDB.get_id_field(table): entity_ids}, fields)
 
     def ensure_representative(self, table: str, entity_id: str) -> str:
         representative_field = STRUCTURE[table].get('representative_field','')
         if not representative_field:
             raise ValueError(f"Representative field not found")
 
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
         child, other_parent, relation_name, child_id_field = AppDB.get_edit_child(table)
 
         entity = self.get_summary(table, entity_id)
@@ -147,7 +149,7 @@ class ModelsManager:
             WHERE c.{id_field} = ?
             AND c.{child_id_field} = ?
             """
-            if len(self.db.execute_query(query, (entity_id, representative_id))) > 0:
+            if self.db.execute_query(query, (entity_id, representative_id), return_format=ReturnFormat.VALUE):
                 return representative_id
         
         accessible_child = STRUCTURE[child]['accessible_table']
@@ -158,9 +160,9 @@ class ModelsManager:
         ORDER BY width * height DESC
         LIMIT 1
         """
-        biggest = self.db.execute_query(query, (entity_id,), force_include_archived=True)
+        biggest = self.db.execute_query(query, (entity_id,), force_include_archived=True, return_format=ReturnFormat.VALUE)
         if biggest:
-            self.edit(table, entity_id, {representative_field: biggest[0][0]})
+            self.edit(table, entity_id, {representative_field: biggest})
         
         return biggest
 
@@ -169,7 +171,7 @@ class ModelsManager:
         exclusive = other_parent == table
         accessible_other_parent = STRUCTURE[other_parent]['accessible_table']
         accessible_child = STRUCTURE[child]['accessible_table']
-        id_field = STRUCTURE[table]['primary_key']
+        id_field = AppDB.get_id_field(table)
         accessible_images = STRUCTURE['images']['accessible_table']
 
         placeholders = ','.join(['?'] * len(child_ids)) if child_ids else ''
@@ -188,8 +190,7 @@ class ModelsManager:
             LEFT JOIN {accessible_child} c ON o.{child_id_field} = c.{child_id_field} AND c.{id_field} = ?
             WHERE c.{child_id_field} IS {is_null} AND o.{child_id_field} IN ({placeholders})
             """
-        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), force_include_archived=force_include_archived)
-        valid_child_ids = [row[0] for row in valid_child_ids]
+        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_VALUES)
 
         if not valid_child_ids:
             return {
@@ -209,8 +210,8 @@ class ModelsManager:
                 WHERE c.{child_id_field} in ({placeholders})
                 AND c.{id_field} IS NOT NULL
             """
-            removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
-            old_parent_ids.update([row[0] for row in removed_images])
+            removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_VALUES)
+            old_parent_ids.update(removed_images)
 
         # get affected images to update
         query = f"""
@@ -218,8 +219,8 @@ class ModelsManager:
             FROM {accessible_child} c
             WHERE c.{child_id_field} in ({placeholders})
         """
-        removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived)
-        affected_images_ids = [row[0] for row in removed_images]
+        removed_images = self.db.execute_query(query, valid_child_ids, force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_VALUES)
+        affected_images_ids = removed_images
 
         # Apply edit
         if exclusive:
@@ -275,13 +276,13 @@ class ModelsManager:
                 WHERE c.{id_field} IS NULL
                 AND i.image_id IN ({placeholders})
             """
-            removed_images = self.db.execute_query(query, (old_parent_id, *valid_child_ids, *affected_images_ids), force_include_archived=force_include_archived)
+            removed_images = self.db.execute_query(query, (old_parent_id, *valid_child_ids, *affected_images_ids), force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_VALUES)
             if removed_images:
                 changes.append({
                     'type': 'RELATION_REMOVE',
                     'relation': relation_name,
                     'parentId': old_parent_id,
-                    'ids': [row[0] for row in removed_images]
+                    'ids': removed_images
                 })
 
         return {
@@ -358,7 +359,7 @@ class ModelsManager:
             WHERE i.image_id IN ({image_placeholders});
         '''
 
-        rows = self.db.execute_query(query, image_ids * 3, include_columns=True)
+        rows = self.db.execute_query(query, image_ids * 3, return_format=ReturnFormat.LIST_DICTS)
 
         result = []
         for image in rows:
@@ -415,7 +416,7 @@ class ModelsManager:
         
         query_params = base_image_ids + group_ids
 
-        return self.db.execute_query(query, query_params, include_columns=True)
+        return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_DICTS)
 
     def get_filtered_images(self, group_ids: List[str], mode: str = 'and', only: bool = False, limit: int | None = None, offset: int | None = None) -> List[str]:
         
@@ -475,7 +476,7 @@ class ModelsManager:
 
         query += limit_clause
 
-        return self.db.execute_query(query, params, include_columns=True)
+        return self.db.execute_query(query, params, return_format=ReturnFormat.LIST_DICTS)
 
     # -------- Faces helpers --------
     def add_faces_to_group(self, *, face_ids: List[str] | None = None, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
@@ -500,8 +501,8 @@ class ModelsManager:
             query = f"""
                 SELECT NOT EXISTS(SELECT 1 FROM {accessible_faces} WHERE group_id = ? AND face_id NOT IN ({face_placeholders}))
             """
-            results = self.db.execute_query(query, (source_group_id, *face_ids))
-            if results[0][0]:
+            results = self.db.execute_query(query, (source_group_id, *face_ids), return_format=ReturnFormat.VALUE)
+            if results:
                 source_deleted = True
                         
         result = self.edit_childs('groups', target_group_id, face_ids, add=True, child='faces')
@@ -524,11 +525,11 @@ class ModelsManager:
     # -------- Albums helpers --------
     def get_archive_album(self) -> str | None:
         """Get the archive album id."""
-        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "archive"')[0][0]
+        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "archive"', return_format=ReturnFormat.VALUE)
 
     def get_favorites_album(self) -> str | None:
         """Get the favorites album id."""
-        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "favorites"')[0][0]
+        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     def edit_album_images(self, album_id: str, image_ids: List[str], add: bool) -> Dict:
 

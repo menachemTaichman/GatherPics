@@ -365,12 +365,12 @@ face_id = "d1440187-3f08-4509-ac04-df201f705740"
 source_group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
 target_group_id = "5789317c-be50-4fbe-81f9-cd4310017dd2"
 
-if True:
+if False:
     source_group_id, target_group_id = target_group_id, source_group_id
 
-result = event.models_manager.add_faces_to_group(
-    [face_id],
-    target_group_id=target_group_id,
-    source_group_id=source_group_id
-)
-print(result)
+from src.core.db import ReturnFormat
+for format in ReturnFormat:
+    print(format)
+    result = event.db.execute_query('SELECT * FROM images', return_format=format)
+    print(result)
+    print('--------------------------------')

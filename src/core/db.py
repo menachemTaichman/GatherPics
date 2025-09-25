@@ -1,9 +1,18 @@
 import sqlite3
 from typing import List, Dict, Union, Tuple, Any
 from contextlib import contextmanager
+from enum import Enum
+
+class ReturnFormat(Enum):
+    VALUE = 'value'
+    TUPLE = 'tuple'
+    DICT = 'dict'
+    LIST_VALUES = 'list_values'
+    LIST_TUPLES = 'list_tuples'
+    LIST_DICTS = 'list_dicts'
+    DICT_DICTS = 'dict_dicts'
 
 # TODO: remove fields_as_child
-
 STRUCTURE = {
     'images': {
         'primary_key': 'image_id',
@@ -77,20 +86,20 @@ STRUCTURE = {
         },
     },
     'groups_images': {
-        'primary_key': 'group_id, image_id',
+        'primary_key': ['group_id', 'image_id'],
         'fields_as_child': ['image_id', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
         'accessible_table': 'accessible_groups_images',
     },
     'albums_images': {
-        'primary_key': 'album_id, image_id',
+        'primary_key': ['album_id', 'image_id'],
         'accessible_table': 'accessible_albums_images',
     },
     'profile_images': {
-        'primary_key': 'profile_id, image_id',
+        'primary_key': ['profile_id', 'image_id'],
         'accessible_table': 'editable_profile_images',
     },
     'profile_albums': {
-        'primary_key': 'profile_id, album_id',
+        'primary_key': ['profile_id', 'album_id'],
         'accessible_table': 'editable_profile_albums',
     },
 }
@@ -728,6 +737,19 @@ class AppDB:
         return db_path 
 
     @staticmethod
+    def get_id_field(table: str, remove_parent: str | None = None) -> str:
+        id_field = STRUCTURE[table].get('primary_key', '')
+        if remove_parent:
+            other_parent_id_field = STRUCTURE[remove_parent].get('primary_key', '')
+            if isinstance(other_parent_id_field, str):
+                other_parent_id_field = [other_parent_id_field]
+            id_field = [id for id in id_field if id not in other_parent_id_field]
+
+        if isinstance(id_field, list):
+            return ', '.join(id_field)
+        return id_field
+
+    @staticmethod
     def get_view_child(table: str, child: str | None = None, *, all: bool = False) -> str:
         if child:
             return child
@@ -782,7 +804,7 @@ class AppDB:
         }
         profile = {}
         if profile_id:
-            profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), include_columns=True)[0]
+            profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.DICT)
 
         if not profile:
             profile = {}
@@ -820,28 +842,47 @@ class AppDB:
         finally:
             conn.close()
 
-    def execute_query(self, query: str, params: tuple = (), *, force_include_archived: bool = False, include_columns: bool = False) -> List[tuple | dict]:
+    def execute_query(
+        self,
+        query: str,
+        params: tuple = (),
+        *,
+        force_include_archived: bool = False,
+        return_format: ReturnFormat = ReturnFormat.LIST_TUPLES
+    ) -> List[tuple] | List[dict] | dict[str, dict] | dict | tuple | str | None:
         """Execute a custom query and return results."""
         with self.get_connection(force_include_archived) as conn:
             cursor = conn.execute(query, params)
             upper_query = query.strip().upper()
+            results = []
 
-            if upper_query.startswith('SELECT') or 'RETURNING' in upper_query or upper_query.startswith('WITH'):
-                if include_columns:
-                    columns = [desc[0] for desc in cursor.description]
-                    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-                else:
-                    results = cursor.fetchall()
+            if return_format or upper_query.startswith('SELECT'):
+                rows = cursor.fetchall()
 
-                if 'RETURNING' in upper_query:
-                    conn.commit()
-
-                return results
+                columns = [desc[0] for desc in cursor.description]
+                if return_format == ReturnFormat.VALUE:
+                    results = rows[0][0] if rows else None
+                elif return_format == ReturnFormat.TUPLE:
+                    results = rows[0] if rows else None
+                elif return_format == ReturnFormat.DICT:
+                    results = dict(zip(columns, rows[0])) if rows else None
+                elif return_format == ReturnFormat.LIST_VALUES:
+                    results = [row[0] for row in rows]
+                elif return_format == ReturnFormat.LIST_TUPLES:
+                    results = rows
+                elif return_format == ReturnFormat.LIST_DICTS:
+                    results = [dict(zip(columns, row)) for row in rows]
+                elif return_format == ReturnFormat.DICT_DICTS:
+                    key_col, value_cols = columns[0], columns[1:]
+                    results = {
+                        row[0]: dict(zip(value_cols, row[1:]))
+                        for row in rows
+                    }
 
             conn.commit()
-            return []
+            return results
 
-    ########## TODO: use execute_query instead
+    # TODO: use execute_query instead
     def insert(self, table: str, data_list: List[Dict]) -> List[Union[Any, Tuple[Any, ...]]]:
         """Insert multiple records into a table/view and return their ids."""
         if not data_list:
@@ -874,7 +915,7 @@ class AppDB:
             conn.commit()
         return inserted_ids
 
-    ########## TODO: use execute_query instead
+    # TODO: use execute_query instead
     def update(self, table: str, where: Dict, fields: Dict) -> List[Union[Any, Tuple[Any, ...]]]:
         """Update records in a table/view and return their ids."""
         if not fields:
@@ -920,7 +961,7 @@ class AppDB:
             conn.commit()
         return updated_ids
 
-    ########## TODO: use execute_query instead
+    # TODO: use execute_query instead
     def delete(self, table: str, where: Dict) -> List[Union[Any, Tuple[Any, ...]]]:
         """Delete records from a table/view and return their ids."""
         target_table = STRUCTURE[table]['accessible_table']
