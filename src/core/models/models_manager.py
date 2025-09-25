@@ -46,7 +46,7 @@ class ModelsManager:
         results = self.db.execute_query(query, (entity_id,))
         return bool(results[0][0])
 
-    def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False, sort: bool = False) -> List[Dict] | Dict:
+    def get_summary(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False) -> List[Dict] | Dict:
         return_list = True
         if isinstance(entity_ids, str):
             entity_ids = [entity_ids]
@@ -56,7 +56,6 @@ class ModelsManager:
         child = AppDB.get_view_child(table)
         accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        sort_field = STRUCTURE[table]['sort_by']
 
         where_clause = ''
         if entity_ids:
@@ -68,10 +67,6 @@ class ModelsManager:
         if exclude_empty_entities:
             having_clause = f'HAVING COUNT(s.{id_field}) > 0'
 
-        order_by = ''
-        if sort_field and sort:
-            order_by = f'ORDER BY t.{sort_field}'
-
         query = f'''
             SELECT t.*, COUNT(s.{id_field}) AS count
             FROM {accessible_table} t
@@ -79,7 +74,6 @@ class ModelsManager:
             {where_clause}
             GROUP BY t.{id_field}
             {having_clause}
-            {order_by}
         '''
         results = self.db.execute_query(query, entity_ids, include_columns=True)
         if return_list:
@@ -88,7 +82,7 @@ class ModelsManager:
             return results[0]
         return None
 
-    def get_childs(self, table: str, entity_id: str, *, child: str | None = None, sort: bool = False, limit: int | None = None, offset: int | None = None) -> List[Dict]:
+    def get_childs(self, table: str, entity_id: str, *, child: str | None = None, limit: int | None = None, offset: int | None = None) -> List[Dict]:
 
         child = AppDB.get_view_child(table, child=child)
         if not child:
@@ -96,13 +90,8 @@ class ModelsManager:
 
         accessible_child = STRUCTURE[child]['accessible_table']
         id_field = STRUCTURE[table]['primary_key']
-        sort_field = STRUCTURE[child].get('sort_by','')
         fields_as_child = AppDB.get_fields_as_child(child, 'c')
         
-        order_by = ''
-        if sort_field and sort:
-            order_by = f'ORDER BY c.{sort_field}'
-
         limit_clause = ''
         if limit is not None:
             limit_clause = f'LIMIT {int(limit)}'
@@ -113,7 +102,6 @@ class ModelsManager:
             SELECT {fields_as_child}
             FROM {accessible_child} c
             WHERE {id_field} = ?
-            {order_by}
             {limit_clause}
         '''
         results = self.db.execute_query(query, (entity_id,), include_columns=True)

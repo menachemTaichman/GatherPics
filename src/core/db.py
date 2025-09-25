@@ -7,7 +7,6 @@ from contextlib import contextmanager
 STRUCTURE = {
     'images': {
         'primary_key': 'image_id',
-        'sort_by': 'date_taken',
         'accessible_table': 'accessible_images',
         'childs': {
             'view': ['faces', 'albums_images']
@@ -20,7 +19,6 @@ STRUCTURE = {
     },
     'groups': {
         'primary_key': 'group_id',
-        'sort_by': 'label',
         'accessible_table': 'accessible_groups',
         'representative_field': 'representative_face',
         'childs': {
@@ -35,7 +33,6 @@ STRUCTURE = {
     },
     'moments': {
         'primary_key': 'moment_id',
-        'sort_by': 'start, label',
         'accessible_table': 'accessible_moments',
         'representative_field': 'representative_image',
         'childs': {
@@ -50,7 +47,6 @@ STRUCTURE = {
     },
     'albums': {
         'primary_key': 'album_id',
-        'sort_by': 'label',
         'accessible_table': 'accessible_albums',
         'representative_field': 'representative_image',
         'childs': {
@@ -65,7 +61,6 @@ STRUCTURE = {
     },
     'profiles': {
         'primary_key': 'profile_id',
-        'sort_by': 'label',
         'accessible_table': '',
         'childs': {
             'view': ['profile_images', 'profile_albums'],
@@ -83,7 +78,6 @@ STRUCTURE = {
     },
     'groups_images': {
         'primary_key': 'group_id, image_id',
-        'sort_by': 'label',
         'fields_as_child': ['image_id', 'label', 'date_taken', 'is_archived', 'is_favorite', 'representative_face'],
         'accessible_table': 'accessible_groups_images',
     },

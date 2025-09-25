@@ -33,12 +33,6 @@ jwt = JWTManager(app)
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
-def _parse_sort(default: bool = False) -> bool:
-    val = request.args.get('sort')
-    if val is None:
-        return default
-    return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
-
 def _parse_pagination() -> tuple[int | None, int | None]:
     """Parse limit and offset from request arguments for pagination."""
     limit = request.args.get('limit', type=int)
@@ -148,8 +142,7 @@ def logout():
 def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
     event = get_event(event_id)
-    sort = _parse_sort(True)
-    groups = event.models_manager.get_summary('groups', sort=sort)
+    groups = event.models_manager.get_summary('groups')
     return jsonify({"groups": groups})
 
 ########## TODO: simplify
@@ -303,9 +296,8 @@ def transfer_faces(event_id):
 def get_moments(event_id):
     """List all accessible moment summaries for the specific event."""
     event = get_event(event_id)
-    sort = _parse_sort(True)
     exclude_empty = _parse_bool(request.args.get('exclude_empty_entities'), False)
-    moments = event.models_manager.get_summary('moments', sort=sort, exclude_empty_entities=exclude_empty)
+    moments = event.models_manager.get_summary('moments', exclude_empty_entities=exclude_empty)
     return jsonify({"moments": moments})
 
 @app.route("/api/events/<event_id>/moments/<moment_id>", methods=["GET"])
@@ -317,11 +309,10 @@ def get_moment(event_id, moment_id):
     if not moment_summary:
         return not_found(f"Moment {moment_id} not found or not accessible")
 
-    sort = _parse_sort(True)
     limit, offset = _parse_pagination()
     
     images = event.models_manager.get_childs(
-        'moments', moment_id, sort=sort, limit=limit, offset=offset
+        'moments', moment_id, limit=limit, offset=offset
     )
     
     response = {
@@ -448,8 +439,7 @@ def delete_moment(event_id, moment_id):
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
     event = get_event(event_id)
-    sort = _parse_sort(True)
-    albums = event.models_manager.get_summary('albums', sort=sort)
+    albums = event.models_manager.get_summary('albums')
     return jsonify({"albums": albums})
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["GET"])
@@ -461,11 +451,10 @@ def get_album(event_id, album_id):
     if not album_summary:
         return not_found(f"Album {album_id} not found or not accessible")
 
-    sort = _parse_sort(True)
     limit, offset = _parse_pagination()
     
     images = event.models_manager.get_childs(
-        'albums', album_id, sort=sort, limit=limit, offset=offset
+        'albums', album_id, limit=limit, offset=offset
     )
     
     response = {
