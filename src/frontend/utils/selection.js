@@ -6,7 +6,7 @@ export const clearTransferredImagesFromCache = (sourceGroupId, transferredImageI
   }
 
   const cacheKey = getSelectionCacheKey(sourceGroupId);
-  const settingsKey = `face_gallery_settings_${cacheKey}`;
+  const settingsKey = cacheKey;
 
   try {
     const cachedSelectionJSON = localStorage.getItem(settingsKey);

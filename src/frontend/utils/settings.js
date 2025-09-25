@@ -2,111 +2,175 @@
  * Settings cache utility for user preferences
  */
 
-const SETTINGS_PREFIX = 'face_gallery_settings_';
+const PREFERENCES = 'preferences';
 
 // Default values for all settings
-const DEFAULT_SETTINGS = {
-  // Gallery settings
-  gallery_sortBy: 'name',
-  gallery_sortOrder: 'desc',
-  gallery_cardSize: 1.0,
-  
-  // GroupDetail settings
-  groupDetail_viewMode: 'grid',
-  groupDetail_imageSize: 1.0,
-  groupDetail_sortBy: 'date',
-  groupDetail_sortOrder: 'asc',
-  
-  // Shared selection settings
-  selectionMode: false,
-  
-  // Moments settings
-  moments_viewMode: 'grid',
-  moments_imageSize: 1.0,
-  moments_carouselVisible: true,
-  
-  // EditMomentImagesModal settings
-  editMomentImages_sortOrder: 'asc',
-  editMomentImages_filterType: 'all',
-  
-  // TransferFacesModal settings
-  transferModal_sortBy: 'name',
-  transferModal_sortOrder: 'asc',
-
-  // Albums/Images settings
-  include_archived_images: false
+const DEFAULT_PREFERENCES = {
+  general: {
+    select: false,
+    size: 1.0,
+    includeArchived: false
+  },
+  ImageViewer: {
+    albumsHeight: 200,
+    albumsOpen: false,
+    facesOpen: false,
+    sidebarOpen: false
+  },
+  GroupDetail: {
+    sortDir: 'asc'
+  },
+  Moments: {
+    sortDir: 'asc',
+    carouselExpanded: true
+  },
+  EditMomentImagesModal: {
+    filter: 'all',
+    sortDir: 'asc'
+  },
+  GroupsGallery: {
+    sortDir: 'desc',
+    sortBy: 'name'
+  },
+  AlbumsGallery: {
+    sortBy: 'name',
+    sortDir: 'asc'
+  },
+  AlbumsDetail: {
+    sortDir: 'asc'
+  },
+  BucketDrawer: {
+    mode: 'download',
+    quality: 'high',
+    excludeAlready: true,
+    alreadyDownloaded: [],
+    alreadyUploaded: [],
+    queue: []
+  }
 };
 
 /**
- * Get a setting value from cache or return default
- * @param {string} key - Setting key
- * @returns {any} Setting value
+ * Get preferences from cache or return defaults
+ * @returns {object} Preferences object
  */
-export const getSetting = (key) => {
+export const getPreferences = () => {
   try {
-    const cached = localStorage.getItem(SETTINGS_PREFIX + key);
+    const cached = localStorage.getItem(PREFERENCES);
     if (cached !== null && cached !== 'undefined') {
-      // Parse the cached value, handling different data types
       const parsed = JSON.parse(cached);
-      return parsed;
+      // Merge with defaults to ensure all keys exist
+      return mergePreferences(DEFAULT_PREFERENCES, parsed);
     }
   } catch (error) {
-    console.warn(`Failed to get setting ${key}:`, error);
+    console.warn('Failed to get preferences:', error);
   }
   
-  // Return default value
-  return DEFAULT_SETTINGS[key];
+  return DEFAULT_PREFERENCES;
 };
 
 /**
- * Save a setting value to cache
- * @param {string} key - Setting key
- * @param {any} value - Setting value
+ * Get a specific preference value using dot notation (e.g., 'general.size')
+ * @param {string} path - Dot notation path to the preference
+ * @returns {any} Preference value
  */
-export const setSetting = (key, value) => {
+export const getPreference = (path) => {
+  const preferences = getPreferences();
+  return getNestedValue(preferences, path);
+};
+
+/**
+ * Save preferences to cache
+ * @param {object} preferences - Preferences object
+ */
+export const setPreferences = (preferences) => {
   try {
-    localStorage.setItem(SETTINGS_PREFIX + key, JSON.stringify(value));
+    localStorage.setItem(PREFERENCES, JSON.stringify(preferences));
   } catch (error) {
-    console.warn(`Failed to save setting ${key}:`, error);
+    console.warn('Failed to save preferences:', error);
   }
 };
 
 /**
- * Get all settings with current values
- * @returns {Object} All settings
+ * Set a specific preference value using dot notation (e.g., 'general.size')
+ * @param {string} path - Dot notation path to the preference
+ * @param {any} value - Value to set
  */
-export const getAllSettings = () => {
-  const settings = {};
-  Object.keys(DEFAULT_SETTINGS).forEach(key => {
-    settings[key] = getSetting(key);
-  });
-  return settings;
+export const setPreference = (path, value) => {
+  const preferences = getPreferences();
+  setNestedValue(preferences, path, value);
+  setPreferences(preferences);
 };
 
 /**
- * Reset all settings to defaults
+ * Initialize preferences at startup - ensures preferences exist in localStorage
  */
-export const resetAllSettings = () => {
-  Object.keys(DEFAULT_SETTINGS).forEach(key => {
-    try {
-      localStorage.removeItem(SETTINGS_PREFIX + key);
-    } catch (error) {
-      console.warn(`Failed to reset setting ${key}:`, error);
+export const initializePreferences = () => {
+  try {
+    const existingPreferences = localStorage.getItem(PREFERENCES);
+    if (!existingPreferences) {
+      // No preferences exist, create them with defaults
+      setPreferences(DEFAULT_PREFERENCES);
+      console.log('Initialized preferences with defaults');
     }
-  });
+  } catch (error) {
+    console.warn('Failed to initialize preferences:', error);
+  }
 };
+
+/**
+ * Reset all preferences to defaults
+ */
+export const resetAllPreferences = () => {
+  try {
+    localStorage.removeItem(PREFERENCES);
+  } catch (error) {
+    console.warn('Failed to reset preferences:', error);
+  }
+};
+
+
+// Helper functions for nested object manipulation
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((current, key) => {
+    return current && current[key] !== undefined ? current[key] : undefined;
+  }, obj);
+}
+
+function setNestedValue(obj, path, value) {
+  const keys = path.split('.');
+  const lastKey = keys.pop();
+  const target = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    return current[key];
+  }, obj);
+  target[lastKey] = value;
+}
+
+function mergePreferences(defaults, userPrefs) {
+  const result = { ...defaults };
+  
+  for (const key in userPrefs) {
+    if (userPrefs.hasOwnProperty(key)) {
+      if (typeof userPrefs[key] === 'object' && userPrefs[key] !== null && !Array.isArray(userPrefs[key])) {
+        result[key] = mergePreferences(defaults[key] || {}, userPrefs[key]);
+      } else {
+        result[key] = userPrefs[key];
+      }
+    }
+  }
+  
+  return result;
+}
 
 /**
  * Clear all cached settings
  */
 export const clearAllSettings = () => {
   try {
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith(SETTINGS_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    });
+    localStorage.removeItem(PREFERENCES);
   } catch (error) {
-    console.warn('Failed to clear settings:', error);
+    console.warn('Failed to clear preferences:', error);
   }
 }; 

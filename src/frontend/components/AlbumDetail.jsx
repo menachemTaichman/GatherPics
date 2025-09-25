@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowUp, ArrowDown, Minus, Plus, Image as ImageIcon, Trash2 } from 'lucide-react';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import { albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
@@ -14,8 +14,8 @@ export default function AlbumDetail({ showToast }) {
   const [album, setAlbum] = useState(null);
   const store = useDataStore.getState();
   const [imageClasses, setImageClasses] = useState({});
-  const [sortOrder, setSortOrder] = useSetting('albumDetail_sortOrder', 'asc');
-  const [imageSize, setImageSize] = useSetting('albumDetail_imageSize', 1.0);
+  const [sortOrder, setSortOrder] = usePreference('AlbumsDetail.sortDir', 'asc');
+  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [selection, setSelection] = useState(new Set());
 

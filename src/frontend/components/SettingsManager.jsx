@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, RotateCcw, Trash2 } from 'lucide-react';
-import { getAllSettings, resetAllSettings, clearAllSettings, setSetting, getSetting } from '../utils/settings';
+import { getPreference, setPreference, resetAllPreferences } from '../utils/settings';
 import { authAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 
 export default function SettingsManager() {
   const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState(getAllSettings());
+  const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
   const settingsRef = useRef(null);
   const openStoreSnapshot = () => {
     const store = useDataStore.getState();
@@ -121,11 +121,11 @@ export default function SettingsManager() {
             <label className="flex items-center space-x-2 text-sm text-gray-700">
               <input
                 type="checkbox"
-                checked={!!getSetting('include_archived_images')}
+                checked={includeArchived}
                 onChange={async (e) => {
                   const newValue = e.target.checked;
-                  setSetting('include_archived_images', newValue);
-                  setSettings(getAllSettings());
+                  setPreference('general.includeArchived', newValue);
+                  setIncludeArchived(newValue);
                   
                   // Update JWT token with new include_archived setting
                   try {

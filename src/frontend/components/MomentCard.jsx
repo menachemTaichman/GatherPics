@@ -38,7 +38,6 @@ function formatDate(dateString) {
 const MomentCard = forwardRef(({
   moment,
   images,
-  viewMode,
   imageSize,
   globalSelection,
   onImageSelect,
@@ -150,11 +149,11 @@ const MomentCard = forwardRef(({
           </div>
           <div className="p-6">
             <motion.div
-              className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
-              style={viewMode === 'grid' ? {
+              className="w-full photo-gallery-grid"
+              style={{
                 gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
                 gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
-              } : {}}
+              }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
@@ -179,31 +178,21 @@ const MomentCard = forwardRef(({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className={`${viewMode === 'grid' ? `photo-card ${aspectRatioClass}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
+                    className={`photo-card ${aspectRatioClass}`}
                   >
-                    {viewMode === 'grid' ? (
-                      <SingleImageTile
-                        image={image}
-                        aspectClass={aspectRatioClass}
-                        thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
-                        selectionMode={selectionMode || viewMode === 'list'}
-                        isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
-                        onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
-                        onOpen={() => onOpenImageViewer(images, image, index)}
-                        onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
-                        onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}
-                        dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
-                        showDate={!!image.date_taken}
-                      />
-                    ) : (
-                      <SingleImageRow
-                        image={image}
-                        thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
-                        isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
-                        onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
-                        onOpen={() => onOpenImageViewer(images, image, index)}
-                      />
-                    )}
+                    <SingleImageTile
+                      image={image}
+                      aspectClass={aspectRatioClass}
+                      thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
+                      selectionMode={selectionMode}
+                      isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
+                      onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
+                      onOpen={() => onOpenImageViewer(images, image, index)}
+                      onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
+                      onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}
+                      dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
+                      showDate={!!image.date_taken}
+                    />
                   </motion.div>
                 );
               })}

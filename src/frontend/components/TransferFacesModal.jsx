@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -27,8 +27,8 @@ export default function TransferFacesModal({
   const [error, setError] = useState('');
   const [nameConflict, setNameConflict] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useSetting('transferModal_sortBy', 'name');
-  const [sortOrder, setSortOrder] = useSetting('transferModal_sortOrder', 'asc');
+  const [sortBy, setSortBy] = usePreference('GroupsGallery.sortBy', 'name');
+  const [sortOrder, setSortOrder] = usePreference('GroupsGallery.sortDir', 'asc');
 
 
 

@@ -5,7 +5,7 @@ import FaceCard from './FaceCard';
 import EditGroupModal from './EditGroupModal';
 import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
@@ -14,9 +14,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [sortBy, setSortBy] = useSetting('gallery_sortBy', 'name');
-  const [sortOrder, setSortOrder] = useSetting('gallery_sortOrder', 'desc');
-  const [cardSize, setCardSize] = useSetting('gallery_cardSize', 1.0);
+  const [sortBy, setSortBy] = usePreference('GroupsGallery.sortBy', 'name');
+  const [sortOrder, setSortOrder] = usePreference('GroupsGallery.sortDir', 'desc');
+  const [cardSize, setCardSize] = usePreference('general.size', 1.0);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups

@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { albumsAPI } from '../utils/apiService';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import { Link } from 'react-router-dom';
 
 export default function AlbumsGallery({ eventUrl }) {
   const [albums, setAlbums] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = useSetting('albumsGallery_sortOrder', 'asc');
+  const [sortOrder, setSortOrder] = usePreference('AlbumsGallery.sortDir', 'asc');
 
   useEffect(() => {
     async function loadAlbums() {

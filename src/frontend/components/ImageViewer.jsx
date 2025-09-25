@@ -8,7 +8,7 @@ import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiServ
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { shallow } from 'zustand/shallow';
-import { getSetting, setSetting } from '../utils/settings';
+import { getPreference, setPreference } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
@@ -109,23 +109,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [imageAlbums, setImageAlbums] = useState([]);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
-  const [albumsOpen, setAlbumsOpen] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('iv_albumsOpen') || 'false'); } catch { return false; }
-  });
-  const [facesOpen, setFacesOpen] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('iv_facesOpen') || 'true'); } catch { return true; }
-  });
-  const [albumsHeight, setAlbumsHeight] = useState(() => {
-    try { return parseInt(localStorage.getItem('iv_albumsHeight') || '160', 10); } catch { return 160; }
-  });
+  const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
+  const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
+  const [albumsHeight, setAlbumsHeight] = useState(() => getPreference('ImageViewer.albumsHeight', 200));
   const [isResizing, setIsResizing] = useState(false);
   const sectionsRef = useRef(null);
   const startResizeYRef = useRef(0);
   const startAlbumsHeightRef = useRef(0);
   
-  const [sidebarVisible, setSidebarVisible] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('iv_sidebarVisible') || 'true'); } catch { return true; }
-  });
+  const [sidebarVisible, setSidebarVisible] = useState(() => getPreference('ImageViewer.sidebarOpen', false));
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
   const [dynamicHeight, setDynamicHeight] = useState(null);
@@ -178,16 +170,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   // Persist UI state
   useEffect(() => {
-    try { localStorage.setItem('iv_albumsOpen', JSON.stringify(albumsOpen)); } catch {}
+    setPreference('ImageViewer.albumsOpen', albumsOpen);
   }, [albumsOpen]);
   useEffect(() => {
-    try { localStorage.setItem('iv_facesOpen', JSON.stringify(facesOpen)); } catch {}
+    setPreference('ImageViewer.facesOpen', facesOpen);
   }, [facesOpen]);
   useEffect(() => {
-    try { localStorage.setItem('iv_albumsHeight', String(albumsHeight)); } catch {}
+    setPreference('ImageViewer.albumsHeight', albumsHeight);
   }, [albumsHeight]);
   useEffect(() => {
-    try { localStorage.setItem('iv_sidebarVisible', JSON.stringify(sidebarVisible)); } catch {}
+    setPreference('ImageViewer.sidebarOpen', sidebarVisible);
   }, [sidebarVisible]);
 
   // Global mouse handlers for resizer

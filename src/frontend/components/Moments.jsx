@@ -7,14 +7,14 @@ import EditMomentImagesModal from './EditMomentImagesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { shallow } from 'zustand/shallow';
 import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
-import { getSetting, setSetting } from '../utils/settings';
+import { getPreference, setPreference } from '../utils/settings';
 import useBucketStore from '../utils/bucketStore';
 
 
@@ -61,21 +61,20 @@ export default function Moments({ eventUrl }) {
   const setStoreError = useDataStore(state => state.setError);
   
   const [images, setImages] = useState([]);
-  const [viewMode, setViewMode] = useSetting('moments_viewMode', 'grid');
-  const [imageSize, setImageSize] = useSetting('moments_imageSize', 1.0);
+  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [momentImagesMap, setMomentImagesMap] = useState({});
   const [imagesLoading, setImagesLoading] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
-  const [carouselVisible, setCarouselVisible] = useSetting('moments_carouselVisible', true);
+  const [carouselVisible, setCarouselVisible] = usePreference('Moments.carouselExpanded', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const { open: openGlobalViewer } = useImageViewer();
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const { addImages, open } = useBucketStore();
   
   // New state for checkbox visibility and selection mode
-  const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
+  const [selectionMode, setSelectionMode] = usePreference('general.select', false);
 
   const flatSelectionItems = useMemo(() => {
     const items = [];
@@ -172,11 +171,11 @@ export default function Moments({ eventUrl }) {
     fetchMoments();
     // Force refetch all images to respect new include_archived setting
     fetchAllMomentImages(null, null, true);
-  }, [getSetting('include_archived_images', false)]);
+  }, [getPreference('general.includeArchived', false)]);
 
   // Remove archived images from grid when include_archived is false
   useEffect(() => {
-    if (!getSetting('include_archived_images', false)) {
+    if (!getPreference('general.includeArchived', false)) {
       setMomentImagesMap(prev => {
         const newMap = { ...prev };
         Object.keys(newMap).forEach(momentId => {
@@ -745,19 +744,9 @@ export default function Moments({ eventUrl }) {
               )}
               
               <button
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-              >
-                {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-              </button>
-
-              {viewMode === 'grid' && (
-                <>
-                  <button
-                    onClick={() => {
-                      const currentPercent = Math.round(imageSize * 100);
-                      const subtractValue = currentPercent > 100 ? 25 : 10;
+                onClick={() => {
+                  const currentPercent = Math.round(imageSize * 100);
+                  const subtractValue = currentPercent > 100 ? 25 : 10;
                       const newPercent = Math.max(50, currentPercent - subtractValue);
                       setImageSize(newPercent / 100);
                     }}
@@ -800,8 +789,6 @@ export default function Moments({ eventUrl }) {
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                </>
-              )}
             </div>
 
             {/* Group 2: Selection Controls */}
@@ -994,7 +981,6 @@ export default function Moments({ eventUrl }) {
                   key={moment.id}
                   moment={moment}
                   images={momentImagesMap[moment.id] || []}
-                  viewMode={viewMode}
                   imageSize={imageSize}
                   globalSelection={selectedKeys}
                   onImageSelect={handleImageSelect}
@@ -1007,7 +993,7 @@ export default function Moments({ eventUrl }) {
                   showToast={showToast}
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
-                  includeArchived={getSetting('include_archived_images', false)}
+                  includeArchived={getPreference('general.includeArchived', false)}
                   ref={setMomentRef(moment.label)}
                 />
               ))}

@@ -15,6 +15,7 @@ import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
 import { ImageViewerProvider } from './ImageViewerProvider';
 import jwtService from '../utils/jwtService';
+import { initializePreferences } from '../utils/settings';
 
 // Component to handle root redirect dynamically
 function RootRedirect() {
@@ -397,6 +398,11 @@ function AppContent({ eventUrl }) {
 }
 
 export default function App() {
+  // Initialize preferences at startup
+  useEffect(() => {
+    initializePreferences();
+  }, []);
+
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ImageViewerProvider>

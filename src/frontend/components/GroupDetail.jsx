@@ -24,9 +24,8 @@ import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
-import { useSetting } from '../utils/useSettings';
+import { usePreference } from '../utils/useSettings';
 import useImageSelection from '../utils/useImageSelection';
-import { getSetting, setSetting } from '../utils/settings';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { selectors as storeSelectors } from '../utils/dataManager';
@@ -49,7 +48,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const location = useLocation();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const [group, setGroup] = useState(null);
-  const [viewMode, setViewMode] = useSetting('groupDetail_viewMode', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   // Derived list; avoid state to prevent effect loops
@@ -67,15 +65,14 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     currentImageId,
     currentIndex: viewerIndex
   } = useImageViewer();
-  const [sortBy, setSortBy] = useSetting('groupDetail_sortBy', 'date');
-  const [sortOrder, setSortOrder] = useSetting('groupDetail_sortOrder', 'asc');
+  const [sortOrder, setSortOrder] = usePreference('GroupDetail.sortDir', 'asc');
   const [loading, setLoading] = useState(false);
-  const [imageSize, setImageSize] = useSetting('groupDetail_imageSize', 1.0);
+  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
   const [showCrops, setShowCrops] = useState(false);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
-  const [selectionMode, setSelectionMode] = useSetting('selectionMode', false);
+  const [selectionMode, setSelectionMode] = usePreference('general.select', false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
   const [imageClasses, setImageClasses] = useState({});
@@ -87,9 +84,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [filterVisible, setFilterVisible] = useState(false);
   const [relatedGroups, setRelatedGroups] = useState([]);
   // Selection now lives in GroupsFilter; keep a derived copy here for fetching images
-  const [filterGroups, setFilterGroups] = useSetting('groupDetail_filterGroups', []);
-  const [filterMode, setFilterMode] = useSetting('groupDetail_filterMode', 'and');
-  const [onlySelected, setOnlySelected] = useSetting('groupDetail_onlySelected', false);
+  const [filterGroups, setFilterGroups] = usePreference('groupDetail_filterGroups', []);
+  const [filterMode, setFilterMode] = usePreference('groupDetail_filterMode', 'and');
+  const [onlySelected, setOnlySelected] = usePreference('groupDetail_onlySelected', false);
   const lastFetchSignatureRef = useRef('');
   const prevGroupIdRef = useRef(null);
   const suppressSpinnerRef = useRef(false);
@@ -131,8 +128,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
-    return sortImages(relatedImages, sortBy, sortOrder);
-  }, [group?.id, relatedImages, sortBy, sortOrder]);
+    return sortImages(relatedImages, 'date', sortOrder);
+  }, [group?.id, relatedImages, sortOrder]);
 
   // Now compute memoizedImageIds after sortedImages exists
   const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
@@ -586,7 +583,7 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
       image: imageId,
       parent: group.id,
       entity: 'group',
-      sortBy,
+      sortBy: 'date',
       sortOrder,
     });
   };
@@ -853,73 +850,61 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
               </button>
             </div>
             
-            {/* Group 2: Zoom, List/Grid, Crops */}
+            {/* Group 2: Zoom, Crops */}
             <div className="flex items-center space-x-3 px-4">
-              {viewMode === 'grid' && (
-                <>
-                  <button
-                    onClick={() => {
-                      const currentPercent = Math.round(imageSize * 100);
-                      const next25 = Math.ceil(currentPercent / 25) * 25;
-                      const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
-                      const subtract25 = currentPercent - 25;
-                      const newPercent = Math.max(50, Math.max(subtract25, prev25));
-                      setImageSize(newPercent / 100);
-                    }}
-                    disabled={imageSize <= 0.5}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Decrease size"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <input
-                    type="text"
-                    id="face-detail-image-size"
-                    name="face-detail-image-size"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
-                    onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                    onBlur={e => {
-                      let val = parseInt(e.target.value, 10);
-                      if (isNaN(val)) val = Math.round(imageSize * 100);
-                      val = Math.max(50, Math.min(300, val));
-                      setImageSize(val / 100);
-                      setImageSizeInputValue(undefined);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.target.blur();
-                      } else if (e.key === 'Escape') {
-                        setImageSizeInputValue(undefined);
-                      }
-                    }}
-                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
-                    style={{width: '3rem'}}
-                  />
-                  <button
-                    onClick={() => {
-                      const currentPercent = Math.round(imageSize * 100);
-                      const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
-                      const add25 = currentPercent + 25;
-                      const newPercent = Math.min(300, Math.min(add25, next25));
-                      setImageSize(newPercent / 100);
-                    }}
-                    disabled={imageSize >= 3}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Increase size"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-
               <button
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+                onClick={() => {
+                  const currentPercent = Math.round(imageSize * 100);
+                  const next25 = Math.ceil(currentPercent / 25) * 25;
+                  const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                  const subtract25 = currentPercent - 25;
+                  const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                  setImageSize(newPercent / 100);
+                }}
+                disabled={imageSize <= 0.5}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Decrease size"
               >
-                {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                <Minus className="w-4 h-4" />
+              </button>
+              <input
+                type="text"
+                id="face-detail-image-size"
+                name="face-detail-image-size"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
+                onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={e => {
+                  let val = parseInt(e.target.value, 10);
+                  if (isNaN(val)) val = Math.round(imageSize * 100);
+                  val = Math.max(50, Math.min(300, val));
+                  setImageSize(val / 100);
+                  setImageSizeInputValue(undefined);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.target.blur();
+                  } else if (e.key === 'Escape') {
+                    setImageSizeInputValue(undefined);
+                  }
+                }}
+                className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                style={{width: '3rem'}}
+              />
+              <button
+                onClick={() => {
+                  const currentPercent = Math.round(imageSize * 100);
+                  const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                  const add25 = currentPercent + 25;
+                  const newPercent = Math.min(300, Math.min(add25, next25));
+                  setImageSize(newPercent / 100);
+                }}
+                disabled={imageSize >= 3}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Increase size"
+              >
+                <Plus className="w-4 h-4" />
               </button>
 
                               <button
@@ -1002,11 +987,11 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         ) : (
           <>
             <motion.div
-              className={`w-full ${viewMode === 'grid' ? 'photo-gallery-grid' : 'space-y-4 max-w-3xl mx-auto block'}`}
-              style={viewMode === 'grid' ? {
+              className="w-full photo-gallery-grid"
+              style={{
                 gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
                 gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
-              } : {}}
+              }}
               initial={skipNextAnimation.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
@@ -1021,17 +1006,16 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className={`${viewMode === 'grid' ? `photo-card ${imageClasses[image.id] || 'square'}` : 'flex items-center justify-between space-x-4 p-4 bg-white rounded-lg border border-gray-200 w-full'}`}
+                  className={`photo-card ${imageClasses[image.id] || 'square'}`}
                 >
-                  {viewMode === 'grid' ? (
-                    <SingleImageTile
-                      image={image}
-                      aspectClass={imageClasses[image.id] || 'square'}
-                      imageFit={'cover'}
-                      thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
-                      selectionMode={selectionMode}
-                      isSelected={selectedImages.has(image.id)}
-                      onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                  <SingleImageTile
+                    image={image}
+                    aspectClass={imageClasses[image.id] || 'square'}
+                    imageFit={'cover'}
+                    thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
+                    selectionMode={selectionMode}
+                    isSelected={selectedImages.has(image.id)}
+                    onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
                       onToggleFavorite={async () => { const id = image.id; await toggleFavoritesForIds([id]); }}
                       onToggleArchive={async (isRemove) => {
@@ -1062,18 +1046,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                       showDate={!!image.date_taken}
                       showCropBadge={showCrops && !!image.representative_face}
                     />
-                  ) : (
-                    <SingleImageRow
-                      image={image}
-                      thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
-                      isSelected={selectedImages.has(image.id)}
-                      onToggleSelect={(e) => toggleImageSelection(image.id, e)}
-                      onOpen={() => openImageViewer(image.id, index)}
-                      rightContent={showCrops && image.representative_face ? (
-                        <div className="bg-primary-600 text-white text-xs px-1 py-0.5 rounded-full">C</div>
-                      ) : null}
-                    />
-                  )}
                 </motion.div>
               ))}
             </motion.div>

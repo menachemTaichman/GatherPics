@@ -1,19 +1,19 @@
 import { create } from 'zustand';
-import { getSetting, setSetting } from './settings';
+import { getPreference, setPreference } from './settings';
 
 // mode: 'download' | 'upload'
 // quality: 'high' | 'original'
 export const useBucketStore = create((set, get) => ({
   isOpen: false,
-  mode: getSetting('bucket_mode') ?? 'download',
-  quality: getSetting('bucket_quality') ?? 'high',
-  excludeAlready: getSetting('bucket_excludeAlready') ?? true,
+  mode: getPreference('BucketDrawer.mode') ?? 'download',
+  quality: getPreference('BucketDrawer.quality') ?? 'high',
+  excludeAlready: getPreference('BucketDrawer.excludeAlready') ?? true,
   lastPulseTs: 0,
   // downloaded/uploaded history lists (ordered by last action, newest first)
-  downloaded: getSetting('bucket_downloaded') ?? [], // array of image IDs
-  uploaded: getSetting('bucket_uploaded') ?? [],
+  downloaded: getPreference('BucketDrawer.alreadyDownloaded') ?? [], // array of image IDs
+  uploaded: getPreference('BucketDrawer.alreadyUploaded') ?? [],
   // current bucket queue (image IDs to act on)
-  queue: getSetting('bucket_queue') ?? [],
+  queue: getPreference('BucketDrawer.queue') ?? [],
 
   // UI helpers
   open: () => set({ isOpen: true }),
@@ -21,15 +21,15 @@ export const useBucketStore = create((set, get) => ({
   toggle: () => set({ isOpen: !get().isOpen }),
 
   setMode: (mode) => {
-    setSetting('bucket_mode', mode);
+    setPreference('BucketDrawer.mode', mode);
     set({ mode });
   },
   setQuality: (quality) => {
-    setSetting('bucket_quality', quality);
+    setPreference('BucketDrawer.quality', quality);
     set({ quality });
   },
   setExcludeAlready: (value) => {
-    setSetting('bucket_excludeAlready', value);
+    setPreference('BucketDrawer.excludeAlready', value);
     set({ excludeAlready: value });
   },
 
@@ -37,7 +37,7 @@ export const useBucketStore = create((set, get) => ({
     const existing = new Set(get().queue);
     let list = [...get().queue];
     imageIds.forEach(id => { if (!existing.has(id)) list.push(id); });
-    setSetting('bucket_queue', list);
+    setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
   addImages: (imageIds) => {
@@ -48,23 +48,23 @@ export const useBucketStore = create((set, get) => ({
       return 0;
     }
     const list = [...get().queue, ...filtered];
-    setSetting('bucket_queue', list);
+    setPreference('BucketDrawer.queue', list);
     set({ queue: list, lastPulseTs: Date.now() });
     return filtered.length;
   },
   removeFromQueue: (imageId) => {
     const list = get().queue.filter(id => id !== imageId);
-    setSetting('bucket_queue', list);
+    setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
   removeManyFromQueue: (imageIds) => {
     const removeSet = new Set(imageIds);
     const list = get().queue.filter(id => !removeSet.has(id));
-    setSetting('bucket_queue', list);
+    setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
   clearQueue: () => {
-    setSetting('bucket_queue', []);
+    setPreference('BucketDrawer.queue', []);
     set({ queue: [] });
   },
 
@@ -76,12 +76,12 @@ export const useBucketStore = create((set, get) => ({
       ...imageIds,
       ...prev.filter(id => !setIds.has(id))
     ];
-    setSetting('bucket_downloaded', newList);
+    setPreference('BucketDrawer.alreadyDownloaded', newList);
     set({ downloaded: newList });
   },
   removeDownloaded: (imageId) => {
     const list = (get().downloaded || []).filter(id => id !== imageId);
-    setSetting('bucket_downloaded', list);
+    setPreference('BucketDrawer.alreadyDownloaded', list);
     set({ downloaded: list });
   },
   markUploaded: (imageIds) => {
@@ -91,20 +91,20 @@ export const useBucketStore = create((set, get) => ({
       ...imageIds,
       ...prev.filter(id => !setIds.has(id))
     ];
-    setSetting('bucket_uploaded', newList);
+    setPreference('BucketDrawer.alreadyUploaded', newList);
     set({ uploaded: newList });
   },
   removeUploaded: (imageId) => {
     const list = (get().uploaded || []).filter(id => id !== imageId);
-    setSetting('bucket_uploaded', list);
+    setPreference('BucketDrawer.alreadyUploaded', list);
     set({ uploaded: list });
   },
   clearDownloaded: () => {
-    setSetting('bucket_downloaded', []);
+    setPreference('BucketDrawer.alreadyDownloaded', []);
     set({ downloaded: [] });
   },
   clearUploaded: () => {
-    setSetting('bucket_uploaded', []);
+    setPreference('BucketDrawer.alreadyUploaded', []);
     set({ uploaded: [] });
   }
 }));

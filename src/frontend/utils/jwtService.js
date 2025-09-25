@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getSetting, setSetting } from './settings';
+import { getPreference, setPreference } from './settings';
 
 // API base URL - centralized configuration
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
@@ -15,7 +15,7 @@ class JWTService {
   loadFromStorage() {
     try {
       this.token = localStorage.getItem('jwt_token');
-      this.includeArchived = getSetting('include_archived_images', false);
+      this.includeArchived = getPreference('general.includeArchived', false);
     } catch (error) {
       console.warn('Failed to load JWT from storage:', error);
     }
@@ -63,7 +63,7 @@ class JWTService {
   async updateIncludeArchived(includeArchived) {
     try {
       // Update the setting
-      setSetting('include_archived_images', includeArchived);
+      setPreference('general.includeArchived', includeArchived);
       
       // Get new token with updated setting
       await this.getToken(includeArchived);
