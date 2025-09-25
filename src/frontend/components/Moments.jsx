@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Image, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil, Square, CheckSquare } from 'lucide-react';
-import { useImageViewer } from './ImageViewerProvider';
+import ImageViewer from './ImageViewer';
+import useImageViewerController from '../utils/useImageViewerController.js';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentImagesModal from './EditMomentImagesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
@@ -11,6 +12,7 @@ import { usePreference } from '../utils/useSettings';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { shallow } from 'zustand/shallow';
 import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
+import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
@@ -69,8 +71,22 @@ export default function Moments({ eventUrl }) {
   const [targetMoment, setTargetMoment] = useState(null);
   const [carouselVisible, setCarouselVisible] = usePreference('Moments.carouselExpanded', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
-  const { open: openGlobalViewer } = useImageViewer();
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  // Toast notification function - lifted above controller usage
+  const doShowToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
+  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
+    eventUrl,
+    showToast: doShowToast,
+    onTransferComplete: null,
+    onJumpToMoment: (momentInfo) => handleJumpToMoment(momentInfo),
+    defaultSortBy: 'date',
+    defaultSortOrder: 'asc',
+  });
   const { addImages, open } = useBucketStore();
   
   // New state for checkbox visibility and selection mode
@@ -106,13 +122,8 @@ export default function Moments({ eventUrl }) {
 
   // Selection persistence handled by useImageSelection
 
-  // Toast notification function
-  const showToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
-  };
+  // Toast notification function (legacy calls below use this name)
+  const showToast = doShowToast;
 
   const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
@@ -493,83 +504,36 @@ export default function Moments({ eventUrl }) {
     open();
   };
 
-  // Determine if an image is in Favorites
-  const isImageFavorite = (img) => {
-    if (!img) return false;
-    if (img.is_favorite !== undefined && img.is_favorite !== null) {
-      return !!img.is_favorite;
-    }
-    if (img.is_favorites !== undefined && img.is_favorites !== null) {
-      return !!img.is_favorites;
-    }
-    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
-  };
+  // Create ImageActions instance for selected images
+  const selectedImageActions = useImageActions({
+    imageIds: getSelectedImageIds(),
+    eventUrl,
+    showToast,
+    urlHelpers,
+    placeholderDataUrl: "data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>",
+    onImageUpdated: () => {}, // No need to update local state, store handles it
+    onAlbumAdded: () => {} // No special handling needed
+  });
 
-  // Unified favorites toggle for selected images
-  const handleToggleFavorites = async () => {
-    if (selectedKeys.size === 0) return;
-    
-    // Get all selected image objects
-    const selectedImageObjects = [];
-    Array.from(selectedKeys).forEach(key => {
-      const [mId, imageId] = key.split(':');
-      const list = momentImagesMap[mId] || [];
-      const found = list.find(img => img && img.id === imageId);
-      if (found) selectedImageObjects.push(found);
-    });
-
-    if (selectedImageObjects.length === 0) return;
-
-    const allAreFavorites = selectedImageObjects.every(isImageFavorite);
-    const imageIds = getSelectedImageIds();
-
-    try {
-      if (allAreFavorites) {
-        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
-        showToast(`${removed} removed from Favorites`, 'success');
-      } else {
-        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-        showToast(`${added} added to Favorites`, 'success');
-      }
-    } catch (e) {
-      showToast('Failed to update favorites', 'error');
-    }
-  };
-
-  // Single image favorites toggle
+  // Single image favorites toggle - use direct API calls without hooks
   const handleSingleToggleFavorites = async (imageIds) => {
-    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
-    
-    // Find the image objects
-    const imageObjects = [];
-    Object.values(momentImagesMap).forEach(images => {
-      images.forEach(img => {
-        if (img && imageIds.includes(img.id)) {
-          imageObjects.push(img);
-        }
-      });
-    });
-
-    const allAreFavorites = imageObjects.length > 0 && imageObjects.every(isImageFavorite);
-
     try {
-      if (allAreFavorites) {
-        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
+      const imageIdsArray = Array.isArray(imageIds) ? imageIds : [imageIds];
+      const store = useDataStore.getState();
+      
+      // Check if all images are favorites
+      const allAreFavorites = imageIdsArray.every(id => store.entities?.images?.[id]?.is_favorite || false);
+      
+      const result = await albumsAPI.toggleFavorite(imageIdsArray, allAreFavorites, eventUrl);
+      
+      if (result) {
+        const action = allAreFavorites ? 'Removed from' : 'Added to';
+        const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (allAreFavorites ? result.removed : result.added);
+        
         showToast(
           <span>
-            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-          </span>,
-          'success'
-        );
-      } else {
-        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-        showToast(
-          <span>
-            {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+            {count} {action}{' '}
+            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
           </span>,
           'success'
         );
@@ -579,51 +543,47 @@ export default function Moments({ eventUrl }) {
     }
   };
 
-  // Single image archive toggle
+  // Single image archive toggle - use direct API calls without hooks
   const handleSingleToggleArchive = async (imageIds, isRemove = false) => {
-    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
-
     try {
-      if (isRemove) {
-        const res = await albumsAPI.toggleArchive(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
-
-        showToast(
-          <span>
-            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-          </span>,
-          'success'
-        );
+      const imageIdsArray = Array.isArray(imageIds) ? imageIds : [imageIds];
+      const store = useDataStore.getState();
+      
+      // Check if all images are archived
+      const allAreArchived = imageIdsArray.every(id => store.entities?.images?.[id]?.is_archived || false);
+      
+      if (allAreArchived) {
+        const result = await albumsAPI.toggleArchive(imageIdsArray, true, eventUrl);
+        if (result) {
+          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed;
+          showToast(
+            <span>
+              {count} removed from{' '}
+              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+            </span>,
+            'success'
+          );
+        }
       } else {
-        const res = await albumsAPI.addToArchive(imageIds, eventUrl);
-        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-
-        showToast(
-          <span>
-            {added} moved to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-          </span>,
-          'success'
-        );
+        const result = await albumsAPI.addToArchive(imageIdsArray, eventUrl);
+        if (result) {
+          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added;
+          showToast(
+            <span>
+              {count} moved to{' '}
+              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+            </span>,
+            'success'
+          );
+        }
       }
     } catch (e) {
       showToast('Failed to update archive', 'error');
     }
   };
 
-  const handleMoveToArchive = async () => {
-    if (selectedKeys.size === 0) return;
-    
-    const imageIds = getSelectedImageIds();
-    if (imageIds.length === 0) return;
-
-    try {
-      const res = await albumsAPI.addToArchive(imageIds, eventUrl);
-      const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-      showToast(`${added} moved to Archive`, 'success');
-      clearGlobalSelection();
-    } catch (e) {
-      showToast('Failed to move to archive', 'error');
-    }
+  const handleMoveToArchive = () => {
+    selectedImageActions.toggleArchive();
   };
 
   const handleRemoveFromMoment = async () => {
@@ -651,22 +611,11 @@ export default function Moments({ eventUrl }) {
     const momentId = Object.keys(momentImagesMap).find(mId => 
       momentImagesMap[mId]?.some(img => img.id === image?.id)
     );
-    
-    openGlobalViewer({
-      index,
-      eventUrl,
-      showToast,
-      onJumpToMoment: handleJumpToMoment,
-      image: image?.id || image?.label || image?.name,
-      parent: momentId,
-      entity: 'moment',
-      sortBy: 'date',
-      sortOrder: 'asc',
-    });
+    openViewer({ index, parent: momentId, entity: 'moment', sortBy: 'date', sortOrder: 'asc' });
   };
 
   const closeImageViewer = () => {};
-  const navigateImage = () => {};
+  const navigateImage = (direction, index) => navigateViewer(direction, index);
 
   const handleJumpToMoment = (momentInfo) => {
     // Find the moment in our moments list and scroll to it
@@ -1051,7 +1000,9 @@ export default function Moments({ eventUrl }) {
         </motion.div>
       )}
 
-      {/* Image Viewer handled globally by provider */}
+      {viewerOpen && (
+        <ImageViewer {...viewerProps} />
+      )}
 
       {/* Floating Selection Controls */}
       <FloatingSelectionControls
@@ -1061,8 +1012,8 @@ export default function Moments({ eventUrl }) {
         onSelectAll={selectAllImages}
         onClearSelection={clearGlobalSelection}
         onAddToBucket={handleGlobalAddToBucket}
-        onToggleFavorites={handleToggleFavorites}
-        onMoveToArchive={handleMoveToArchive}
+        onToggleFavorites={selectedImageActions.toggleFavorite}
+        onMoveToArchive={selectedImageActions.toggleArchive}
         onRemoveFromMoment={handleRemoveFromMoment}
         onMoveToMoment={() => setShowMoveModal(true)}
         eventUrl={eventUrl}

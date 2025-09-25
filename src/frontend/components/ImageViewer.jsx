@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
-import SingleImageActions from './SingleImageActions';
+import useImageActions from './ImageActions';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
@@ -14,6 +14,70 @@ import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import { sortImages } from '../utils/sorting';
 
+// ImageViewerActions component - inline component for ImageViewer sidebar
+function ImageViewerActions({
+  imageId,
+  imageInfo,
+  eventUrl,
+  showToast,
+  urlHelpers,
+  placeholderDataUrl,
+  onImageUpdated
+}) {
+  const imageActions = useImageActions({
+    imageIds: imageId,
+    eventUrl,
+    showToast,
+    urlHelpers,
+    placeholderDataUrl,
+    onImageUpdated,
+    onAlbumAdded: (album) => {
+      if (onImageUpdated) {
+        onImageUpdated({ album_added: album });
+      }
+    }
+  });
+
+  return (
+    <div className="flex items-center space-x-2">
+      {/* Favorites */}
+      <button
+        onClick={imageActions.toggleFavorite}
+        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
+        title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        aria-pressed={imageActions.isFavorite}
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+      </button>
+
+      {/* Add to album */}
+      <imageActions.AlbumQuickAddButton dropdownDirection="down" />
+
+      {/* Add to bucket / Remove from bucket */}
+      <button
+        onClick={imageActions.toggleBucket}
+        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${imageActions.allInBucket ? 'text-gray-700' : 'text-gray-700'}`}
+        title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
+      >
+        <ShoppingBag className="w-4 h-4" fill={imageActions.allInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
+      </button>
+
+      {/* Archive toggle */}
+      <button
+        onClick={imageActions.toggleArchive}
+        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+        title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
+        aria-pressed={imageActions.isArchived}
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
+          <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder }) {
   const navigate = useNavigate();
@@ -296,14 +360,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         onNavigate('next');
       }
     } else if (direction === 'jump' && typeof index === 'number') {
-      onNavigate('jump', index);
+      const clamped = Math.min(Math.max(0, index), Math.max(0, relatedImages.length - 1));
+      onNavigate('jump', clamped);
     }
   };
 
-  // Determine the current image ID from store data
+  // Determine the current image ID from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
-    if (relatedImages.length > 0 && currentIndex < relatedImages.length) {
-      return relatedImages[currentIndex]?.id || null;
+    if (relatedImages.length > 0) {
+      const idx = Math.min(Math.max(0, currentIndex), relatedImages.length - 1);
+      return relatedImages[idx]?.id || null;
     }
     return typeof image === 'string' ? image : (image?.id || null);
   }, [relatedImages, currentIndex, image]);
@@ -322,11 +388,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
 
+  // Prevent duplicate fetches for the same image id
+  const lastFetchedIdRef = useRef(null);
+
   // Fetch image info when image changes
   useEffect(() => {
-    if (imageId) {
-      fetchImageInfo();
-    }
+    if (!imageId) return;
+    if (lastFetchedIdRef.current === imageId) return;
+    lastFetchedIdRef.current = imageId;
+    fetchImageInfo();
   }, [imageId]);
 
   const fetchImageInfo = async () => {
@@ -950,7 +1020,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0 image-viewer-sidebar">
           {/* Controls */}
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
-                <SingleImageActions
+                <ImageViewerActions
                   imageId={imageId}
                   imageInfo={imageInfo}
                   eventUrl={eventUrl}

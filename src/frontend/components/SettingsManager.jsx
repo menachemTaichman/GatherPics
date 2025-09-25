@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, RotateCcw, Trash2 } from 'lucide-react';
-import { getPreference, setPreference, resetAllPreferences } from '../utils/settings';
+import { getPreference, setPreference, resetAllPreferences, getPreferences, clearAllSettings } from '../utils/settings';
 import { authAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 
 export default function SettingsManager() {
   const [showSettings, setShowSettings] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
+  const [settings, setSettings] = useState(getPreferences());
   const settingsRef = useRef(null);
   const openStoreSnapshot = () => {
     const store = useDataStore.getState();
@@ -40,17 +41,17 @@ export default function SettingsManager() {
   }, [showSettings]);
 
   const handleResetSettings = () => {
-    resetAllSettings();
-    setSettings(getAllSettings());
+    resetAllPreferences();
+    setSettings(getPreferences());
   };
 
   const handleClearSettings = () => {
     clearAllSettings();
-    setSettings(getAllSettings());
+    setSettings(getPreferences());
   };
 
   const refreshSettings = () => {
-    setSettings(getAllSettings());
+    setSettings(getPreferences());
   };
 
   return (

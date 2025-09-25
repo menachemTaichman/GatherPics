@@ -13,7 +13,6 @@ import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, authAPI } from '../utils/apiService';
 import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
-import { ImageViewerProvider } from './ImageViewerProvider';
 import jwtService from '../utils/jwtService';
 import { initializePreferences } from '../utils/settings';
 
@@ -405,14 +404,12 @@ export default function App() {
 
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <ImageViewerProvider>
-        <div className="min-h-screen bg-gray-50">
-          <Routes>
-            <Route path="/" element={<RootRedirect />} />
-            <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
-          </Routes>
-        </div>
-      </ImageViewerProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
+        </Routes>
+      </div>
     </Router>
   );
 }

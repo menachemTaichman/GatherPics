@@ -17,7 +17,8 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
-import { useImageViewer } from './ImageViewerProvider';
+import ImageViewer from './ImageViewer';
+import useImageViewerController from '../utils/useImageViewerController.js';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
@@ -28,6 +29,7 @@ import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { selectors as storeSelectors } from '../utils/dataManager';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
+import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
@@ -53,16 +55,15 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   // (moved below after sortedImages is defined)
   
-  const { 
-    open: openGlobalViewer, 
-    navigate: navigateGlobalViewer,
-    close: closeGlobalViewer,
-    updateSession: updateViewerSession,
-    isOpen: isViewerOpen,
-    currentImageId,
-    currentIndex: viewerIndex
-  } = useImageViewer();
   const [sortOrder, setSortOrder] = usePreference('GroupDetail.sortDir', 'asc');
+  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
+    eventUrl,
+    showToast,
+    onTransferComplete: (result) => handleTransferComplete(result),
+    onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
+    defaultSortBy: 'date',
+    defaultSortOrder: sortOrder,
+  });
   const [loading, setLoading] = useState(false);
   const [imageSize, setImageSize] = usePreference('general.size', 1.0);
   const [showCrops, setShowCrops] = useState(false);
@@ -341,37 +342,16 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   };
 
 
-  // Determine if an image is in Favorites using the image property
-  const isImageFavorite = (img) => !!img?.is_favorite;
-
-  // Unified favorites toggle for single or multiple images
-  const toggleFavoritesForIds = async (imageIds) => {
-    if (!Array.isArray(imageIds) || imageIds.length === 0) return;
-    const selectedImageObjects = sortedImages.filter(img => imageIds.includes(img.id));
-    const allAreFavorites = selectedImageObjects.length > 0 && selectedImageObjects.every(isImageFavorite);
-
-    try {
-      if (allAreFavorites) {
-        const res = await albumsAPI.toggleFavorite(imageIds, true, eventUrl);
-        const removed = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0);
-        showToast(
-          <span>
-            {removed} removed from <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-          </span>,
-          'success'
-        );
-      } else {
-        const res = await albumsAPI.toggleFavorite(imageIds, false, eventUrl);
-        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-        showToast(
-          <span>
-            {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-          </span>,
-          'success'
-        );
-      }
-    } catch (e) { showToast('Failed to update favorites', 'error'); }
-  };
+  // Create ImageActions instance for selected images
+  const selectedImageActions = useImageActions({
+    imageIds: Array.from(selectedImages),
+    eventUrl,
+    showToast,
+    urlHelpers,
+    placeholderDataUrl: PLACEHOLDER_DATA_URL,
+    onImageUpdated: () => {}, // No need to update local state, store handles it
+    onAlbumAdded: () => {} // No special handling needed
+  });
 
   const handleImageLoad = (imageId, e) => {
     const img = e.target;
@@ -390,32 +370,64 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
     }));
   };
 
-  const handleAddSelectedToBucket = async () => {
-    if (selectedImages.size === 0) return;
-    const added = addImages(Array.from(selectedImages));
-    if (added > 0) {
-      showToast(<span>{added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent('bucket')}`} className="underline hover:text-gray-100">bucket</Link></span>, 'success');
-    } else {
-      showToast('No new items added', 'success');
-    }
-    open();
+  const handleAddSelectedToBucket = () => {
+    selectedImageActions.toggleBucket();
   };
 
-  // Add to album quick action
-  const handleAddSelectedToAlbum = async (album) => {
-    if (selectedImages.size === 0) return;
+  // Individual image action functions - use the same logic as useImageActions but without hooks
+  const handleSingleImageFavorite = async (imageId) => {
     try {
-      const res = await albumsAPI.addImages(album.albumID, Array.from(selectedImages), eventUrl);
-      const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-      showToast(
-        <span>
-          {added} added to{' '}
-          <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link>
-        </span>,
-        'success'
-      );
+      const isFavorite = useDataStore.getState().entities?.images?.[imageId]?.is_favorite || false;
+      const result = await albumsAPI.toggleFavorite([imageId], isFavorite, eventUrl);
+      
+      if (result) {
+        const action = isFavorite ? 'Removed from' : 'Added to';
+        const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (isFavorite ? result.removed : result.added);
+        
+        showToast(
+          <span>
+            {count} {action}{' '}
+            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+          </span>,
+          'success'
+        );
+      }
     } catch (e) {
-      showToast('Failed to add to album', 'error');
+      showToast('Failed to update favorites', 'error');
+    }
+  };
+
+  const handleSingleImageArchive = async (imageId) => {
+    try {
+      const isArchived = useDataStore.getState().entities?.images?.[imageId]?.is_archived || false;
+      
+      if (isArchived) {
+        const result = await albumsAPI.toggleArchive([imageId], true, eventUrl);
+        if (result) {
+          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed;
+          showToast(
+            <span>
+              {count} removed from{' '}
+              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+            </span>,
+            'success'
+          );
+        }
+      } else {
+        const result = await albumsAPI.addToArchive([imageId], eventUrl);
+        if (result) {
+          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added;
+          showToast(
+            <span>
+              {count} moved to{' '}
+              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+            </span>,
+            'success'
+          );
+        }
+      }
+    } catch (e) {
+      showToast('Failed to update archive', 'error');
     }
   };
 
@@ -569,27 +581,12 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   }, [sortedImages]);
 
   const openImageViewer = (imageId, index) => {
-    openGlobalViewer({
-      index,
-      eventUrl,
-      groups: currentGroups,
-      currentGroupId: group.id,
-      showToast,
-      onTransferComplete: handleTransferComplete,
-      onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
-      image: imageId,
-      parent: group.id,
-      entity: 'group',
-      sortBy: 'date',
-      sortOrder,
-    });
+    openViewer({ index, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder });
   };
 
   
 
-  const navigateImage = (direction, index) => {
-    navigateGlobalViewer(direction, index);
-  };
+  const navigateImage = (direction, index) => navigateViewer(direction, index);
 
   const handleTitleEdit = () => {
     setEditingTitle(group.label || `Person ${group.id}`);
@@ -1014,29 +1011,11 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
                     isSelected={selectedImages.has(image.id)}
                     onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
-                      onToggleFavorite={async () => { const id = image.id; await toggleFavoritesForIds([id]); }}
+                      onToggleFavorite={async () => { 
+                        await handleSingleImageFavorite(image.id);
+                      }}
                       onToggleArchive={async (isRemove) => {
-                        try {
-                          if (isRemove) {
-                            const res = await albumsAPI.toggleArchive([image.id], true, eventUrl);
-                            showToast(
-                              <span>
-                                {(Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.removed || 0))} removed from{' '}
-                                <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-                              </span>,
-                              'success'
-                            );
-                          } else {
-                            const res = await albumsAPI.addToArchive([image.id], eventUrl);
-                            showToast(
-                              <span>
-                                {(Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0))} moved to{' '}
-                                <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-                              </span>,
-                              'success'
-                            );
-                          }
-                        } catch (err) { showToast('Failed to update archive', 'error'); }
+                        await handleSingleImageArchive(image.id);
                       }}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={formatDate(image.date_taken)}
@@ -1069,28 +1048,8 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         onSelectAll={selectAllImages}
         onClearSelection={clearSelection}
         onAddToBucket={handleAddSelectedToBucket}
-        onToggleFavorites={async () => {
-          if (selectedImages.size === 0) return;
-          await toggleFavoritesForIds(Array.from(selectedImages));
-        }}
-        onMoveToArchive={async () => {
-          if (selectedImages.size === 0) return;
-          try {
-            const res = await albumsAPI.addToArchive(Array.from(selectedImages), eventUrl);
-            const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.added || 0);
-            // Remove archived from selection immediately
-            deselectMany(Array.from(selectedImages));
-            showToast(
-              <span>
-                {added} moved to{' '}
-                <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-              </span>,
-              'success'
-            );
-          } catch (e) {
-            showToast('Failed to move to archive', 'error');
-          }
-        }}
+        onToggleFavorites={selectedImageActions.toggleFavorite}
+        onMoveToArchive={selectedImageActions.toggleArchive}
         onTransferFaces={handleTransferFaces}
         eventUrl={eventUrl}
         showToast={showToast}
@@ -1133,7 +1092,9 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         />
       )}
 
-             {/* Image Viewer handled globally via ImageViewerProvider */}
+      {viewerOpen && (
+        <ImageViewer {...viewerProps} />
+      )}
 
       {/* Merge Conflict Modal */}
       {showMergeModal && conflictData && (
