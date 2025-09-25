@@ -1,10 +1,9 @@
 import { motion } from 'framer-motion';
 import { forwardRef } from 'react';
-import { Image, Clock, Calendar, Grid, List, CheckCheck, X, Archive } from 'lucide-react';
+import { Image, Clock, Calendar, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { albumsAPI } from '../utils/apiService';
 import SingleImageTile from './SingleImageTile';
-import SingleImageRow from './SingleImageRow';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';

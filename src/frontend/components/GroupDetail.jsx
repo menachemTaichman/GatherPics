@@ -11,8 +11,6 @@ import {
   AlertTriangle,
   User,
   Image as ImageIcon,
-  Grid,
-  List,
   Plus,
   Minus,
   Square,
@@ -36,7 +34,6 @@ import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
 import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
 import SingleImageTile from './SingleImageTile';
-import SingleImageRow from './SingleImageRow';
 import GroupsFilter from './GroupsFilter';
 import { shallow } from 'zustand/shallow';
 
