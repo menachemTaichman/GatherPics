@@ -27,7 +27,6 @@ function ImageViewerActions({
   const imageActions = useImageActions({
     imageIds: imageId,
     eventUrl,
-    showToast,
     urlHelpers,
     placeholderDataUrl,
     onImageUpdated,
@@ -1232,7 +1231,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
-          showToast={showToast}
           sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id || selectedFaceForTransfer.groupID) : null}
         />
       )}

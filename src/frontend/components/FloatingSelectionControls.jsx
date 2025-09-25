@@ -25,7 +25,6 @@ export default function FloatingSelectionControls({
   onRemoveFromMoment,
   onMoveToMoment,
   eventUrl,
-  showToast,
   urlHelpers,
   placeholderDataUrl,
   showTransferFaces = false,
@@ -36,7 +35,7 @@ export default function FloatingSelectionControls({
   showBucket = true,
   showAlbum = true,
   selectionMode = false
-}) {
+}) {  
   if (!selectionMode && selectedCount === 0) return null;
 
   return (
@@ -110,7 +109,6 @@ export default function FloatingSelectionControls({
             <AlbumQuickAddButton 
               selectedImages={Array.from(selectedImages)} 
               eventUrl={eventUrl}
-              showToast={showToast}
               urlHelpers={urlHelpers}
               placeholderDataUrl={placeholderDataUrl}
               dropdownDirection="up"

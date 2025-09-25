@@ -6,6 +6,7 @@ import useImageViewerController from '../utils/useImageViewerController.js';
 import EditMomentsModal from './EditMomentsModal';
 import EditMomentImagesModal from './EditMomentImagesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
+import Toast from './Toast';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
 import { usePreference } from '../utils/useSettings';
@@ -18,6 +19,7 @@ import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import { getPreference, setPreference } from '../utils/settings';
 import useBucketStore from '../utils/bucketStore';
+import { useToast } from '../utils/ToastContext';
 
 
 function formatTimeOnly(dateString) {
@@ -71,17 +73,10 @@ export default function Moments({ eventUrl }) {
   const [targetMoment, setTargetMoment] = useState(null);
   const [carouselVisible, setCarouselVisible] = usePreference('Moments.carouselExpanded', true);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-  // Toast notification function - lifted above controller usage
-  const doShowToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
-  };
+  const { toast, showToast } = useToast();
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
-    showToast: doShowToast,
+    showToast: showToast,
     onTransferComplete: null,
     onJumpToMoment: (momentInfo) => handleJumpToMoment(momentInfo),
     defaultSortBy: 'date',
@@ -122,8 +117,6 @@ export default function Moments({ eventUrl }) {
 
   // Selection persistence handled by useImageSelection
 
-  // Toast notification function (legacy calls below use this name)
-  const showToast = doShowToast;
 
   const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
@@ -508,7 +501,6 @@ export default function Moments({ eventUrl }) {
   const selectedImageActions = useImageActions({
     imageIds: getSelectedImageIds(),
     eventUrl,
-    showToast,
     urlHelpers,
     placeholderDataUrl: "data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>",
     onImageUpdated: () => {}, // No need to update local state, store handles it
@@ -639,24 +631,7 @@ export default function Moments({ eventUrl }) {
   return (
     <div className="w-full bg-gray-50 min-h-screen">
       {/* Toast Notifications */}
-      <AnimatePresence>
-        {toast.show && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -50, scale: 0.9 }}
-            className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] px-6 py-3 rounded-lg shadow-lg text-white font-medium ${
-              toast.type === 'success' 
-                ? 'bg-green-500' 
-                : toast.type === 'error' 
-                ? 'bg-red-500' 
-                : 'bg-blue-500'
-            }`}
-          >
-            {toast.message}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Toast toast={toast} />
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-16 z-30 px-8 py-4 shadow-sm">
@@ -939,7 +914,6 @@ export default function Moments({ eventUrl }) {
                   onClearMomentSelection={clearMomentSelection}
                   onToggleFavorites={handleSingleToggleFavorites}
                   onToggleArchive={handleSingleToggleArchive}
-                  showToast={showToast}
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
                   includeArchived={getPreference('general.includeArchived', false)}
@@ -1017,7 +991,6 @@ export default function Moments({ eventUrl }) {
         onRemoveFromMoment={handleRemoveFromMoment}
         onMoveToMoment={() => setShowMoveModal(true)}
         eventUrl={eventUrl}
-        showToast={showToast}
         urlHelpers={urlHelpers}
         placeholderDataUrl="data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\"><rect width=\"100%\" height=\"100%\" fill=\"%23e5e7eb\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".35em\" font-size=\"80\" fill=\"%239ca3af\">?</text></svg>"
         showTransferFaces={false}

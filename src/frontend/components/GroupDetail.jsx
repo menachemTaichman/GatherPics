@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import EditGroupModal from './EditGroupModal';
 import ImageViewer from './ImageViewer';
+import { useToast } from '../utils/ToastContext';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
@@ -41,11 +42,12 @@ import { shallow } from 'zustand/shallow';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
-export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefreshGroups }) {
+export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) {
   const { group_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  const { showToast } = useToast();
   const [group, setGroup] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -346,7 +348,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
   const selectedImageActions = useImageActions({
     imageIds: Array.from(selectedImages),
     eventUrl,
-    showToast,
     urlHelpers,
     placeholderDataUrl: PLACEHOLDER_DATA_URL,
     onImageUpdated: () => {}, // No need to update local state, store handles it
@@ -1052,7 +1053,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
         onMoveToArchive={selectedImageActions.toggleArchive}
         onTransferFaces={handleTransferFaces}
         eventUrl={eventUrl}
-        showToast={showToast}
         urlHelpers={urlHelpers}
         placeholderDataUrl={PLACEHOLDER_DATA_URL}
         showTransferFaces={true}
@@ -1130,7 +1130,6 @@ export default function GroupDetail({ groups, onDeleteGroup, showToast, onRefres
            currentGroup={group}
            selectedFaces={getSelectedFaces()}
            onTransferComplete={handleTransferComplete}
-           showToast={showToast}
          />
        )}
     </div>

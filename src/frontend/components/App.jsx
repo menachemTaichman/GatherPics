@@ -9,12 +9,14 @@ import AlbumsGallery from './AlbumsGallery';
 import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
+import Toast from './Toast';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, authAPI } from '../utils/apiService';
 import { getEventData } from '../utils/eventResolver';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { initializePreferences } from '../utils/settings';
+import { ToastProvider, useToast } from '../utils/ToastContext';
 
 // Component to handle root redirect dynamically
 function RootRedirect() {
@@ -85,7 +87,7 @@ function AppContent({ eventUrl }) {
     transferFaces 
   } = useDataStore();
   
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
   const [eventName, setEventName] = useState('');
   const [authInitialized, setAuthInitialized] = useState(false);
@@ -219,12 +221,6 @@ function AppContent({ eventUrl }) {
     }
   };
 
-  const showToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
-  };
 
   const refreshGroups = async () => {
     await fetchGroups();
@@ -285,7 +281,6 @@ function AppContent({ eventUrl }) {
                   groups={groups}
                   onUpdateGroup={updateGroupHandler}
                   onDeleteGroup={deleteGroupHandler}
-                  showToast={showToast}
                   onRefreshGroups={refreshGroups}
                 />
               </motion.div>
@@ -319,7 +314,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <AlbumDetail showToast={showToast} />
+                <AlbumDetail />
               </motion.div>
             }
           />
@@ -378,20 +373,7 @@ function AppContent({ eventUrl }) {
       </AnimatePresence>
 
       {/* Toast Notification */}
-      <AnimatePresence>
-        {toast.show && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -50, scale: 0.9 }}
-            className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium ${
-              toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            }`}
-          >
-            {toast.message}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Toast toast={toast} />
     </>
   );
 }
@@ -403,13 +385,15 @@ export default function App() {
   }, []);
 
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
-        </Routes>
-      </div>
-    </Router>
+    <ToastProvider>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
+          </Routes>
+        </div>
+      </Router>
+    </ToastProvider>
   );
 }

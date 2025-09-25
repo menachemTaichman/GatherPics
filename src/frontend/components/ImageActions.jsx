@@ -11,6 +11,7 @@ import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { albumsAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
+import { useToast } from '../utils/ToastContext';
 
 /**
  * Shared ImageActions hook that handles all image-related actions
@@ -21,12 +22,12 @@ import { useDataStore, selectors } from '../utils/dataManager';
 export default function useImageActions({
   imageIds, // Array of image IDs or single image ID
   eventUrl,
-  showToast,
   urlHelpers,
   placeholderDataUrl,
   onImageUpdated, // Callback when image state changes
   onAlbumAdded, // Callback when image is added to album
 }) {
+  const { showToast } = useToast();
   const { addImages, removeFromQueue, queue, open } = useBucketStore();
   
   // Normalize imageIds to array
@@ -174,7 +175,6 @@ export default function useImageActions({
         imageId={primaryImageId}
         selectedImages={imageIdsArray}
         eventUrl={eventUrl}
-        showToast={showToast}
         urlHelpers={urlHelpers}
         placeholderDataUrl={placeholderDataUrl}
         onAlbumAdded={handleAlbumAdded}

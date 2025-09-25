@@ -6,11 +6,13 @@ import { usePreference } from '../utils/useSettings';
 import { albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { useToast } from '../utils/ToastContext';
 
-export default function AlbumDetail({ showToast }) {
+export default function AlbumDetail() {
   const { album_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const { urlHelpers } = useEventUrls(eventUrl);
+  const { showToast } = useToast();
   const [album, setAlbum] = useState(null);
   const store = useDataStore.getState();
   const [imageClasses, setImageClasses] = useState({});

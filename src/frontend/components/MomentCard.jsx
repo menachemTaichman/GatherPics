@@ -4,6 +4,7 @@ import { Image, Clock, Calendar, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { albumsAPI } from '../utils/apiService';
 import SingleImageTile from './SingleImageTile';
+import { useToast } from '../utils/ToastContext';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -46,10 +47,10 @@ const MomentCard = forwardRef(({
   onClearMomentSelection,
   onToggleFavorites,
   onToggleArchive,
-  showToast,
   eventUrl,
   urlHelpers
 }, ref) => {
+  const { showToast } = useToast();
   // Calculate selection stats for this moment
   const momentimageKeys = images.map(image => `${moment.momentID}:${image.id}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));

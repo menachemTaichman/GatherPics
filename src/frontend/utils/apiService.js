@@ -638,15 +638,6 @@ export const handleAPIError = (error, defaultMessage = 'An error occurred') => {
   }
 };
 
-// Toast notification helper
-export const showToast = (message, type = 'success', toastSetter) => {
-  if (toastSetter) {
-    toastSetter({ show: true, message, type });
-    setTimeout(() => {
-      toastSetter({ show: false, message: '', type: 'success' });
-    }, 3000);
-  }
-};
 
 // JWT Authentication helpers
 export const authAPI = {

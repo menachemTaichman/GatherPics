@@ -3,17 +3,18 @@ import { Link } from 'react-router-dom';
 import { Plus as PlusIcon, Image as ImageIcon } from 'lucide-react';
 import { albumsAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
+import { useToast } from '../utils/ToastContext';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
   imageId, // For single image usage
   eventUrl, 
-  showToast, 
   urlHelpers, 
   placeholderDataUrl,
   dropdownDirection = 'down', // 'up' or 'down'
   onAlbumAdded // Callback when album is added
 }) {
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [albums, setAlbums] = useState([]);

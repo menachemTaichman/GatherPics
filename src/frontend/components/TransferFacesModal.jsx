@@ -7,6 +7,7 @@ import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../utils/ToastContext';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -15,9 +16,9 @@ export default function TransferFacesModal({
   currentGroup,
   selectedFaces,
   onTransferComplete,
-  showToast,
   sourceGroupId
 }) {
+  const { showToast } = useToast();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const navigate = useNavigate();
   const groups = useDataStore(state => storeSelectors.groupsAll(state));
