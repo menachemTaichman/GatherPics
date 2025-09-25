@@ -52,7 +52,7 @@ const MomentCard = forwardRef(({
 }, ref) => {
   const { showToast } = useToast();
   // Calculate selection stats for this moment
-  const momentimageKeys = images.map(image => `${moment.momentID}:${image.id}`);
+  const momentimageKeys = images.map(image => `${moment.moment_id}:${image.id}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
@@ -110,7 +110,7 @@ const MomentCard = forwardRef(({
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                        {selectionMode && !allSelectedInMoment && (
                          <button
-                           onClick={() => onSelectAllInMoment(moment.momentID)}
+                           onClick={() => onSelectAllInMoment(moment.moment_id)}
                            className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
                              selectedInMoment.length > 0 
                                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
@@ -125,7 +125,7 @@ const MomentCard = forwardRef(({
                        {/* Clear button - always visible when any images are selected */}
                        {selectedInMoment.length > 0 && (
                          <button
-                           onClick={() => onClearMomentSelection(moment.momentID)}
+                           onClick={() => onClearMomentSelection(moment.moment_id)}
                            className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
                            title="Clear selection"
                          >
@@ -185,8 +185,8 @@ const MomentCard = forwardRef(({
                       aspectClass={aspectRatioClass}
                       thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
                       selectionMode={selectionMode}
-                      isSelected={globalSelection.has(`${moment.momentID}:${image.id}`)}
-                      onToggleSelect={(e) => onImageSelect(image.id, moment.momentID, e)}
+                      isSelected={globalSelection.has(`${moment.moment_id}:${image.id}`)}
+                      onToggleSelect={(e) => onImageSelect(image.id, moment.moment_id, e)}
                       onOpen={() => onOpenImageViewer(images, image, index)}
                       onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
                       onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}

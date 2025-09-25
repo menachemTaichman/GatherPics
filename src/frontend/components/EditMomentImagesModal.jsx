@@ -115,20 +115,20 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       const actualRemovals = Array.from(imagesToRemove).filter(id => isImageInMoment(id));
       
       // Call the API directly
-      await momentsAPI.update(moment.id || moment.momentID, {
+      await momentsAPI.update(moment.id || moment.moment_id, {
         images_to_add: actualAdditions,
         images_to_remove: actualRemovals
       }, eventUrl);
       
       // Get the updated images for this moment to update the local state
-      const updatedImagesResult = await momentsAPI.getImages(moment.id || moment.momentID, eventUrl);
+      const updatedImagesResult = await momentsAPI.getImages(moment.id || moment.moment_id, eventUrl);
       const updatedImages = updatedImagesResult.images || [];
       
       // Update the momentImagesMap directly in the parent component
       // This ensures the UI reflects the changes immediately
       if (onRefreshImages) {
         // Pass the updated images data to the parent
-        onRefreshImages(moment.id || moment.momentID, updatedImages);
+        onRefreshImages(moment.id || moment.moment_id, updatedImages);
       }
       
       // Handle images that were moved from other moments
@@ -165,23 +165,23 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       // Also trigger a moment update to refresh the moment data
       // This ensures the representative image and other moment data is updated
       // We update the moment directly to avoid triggering change handlers that might conflict
-      let updatedMoment = await momentsAPI.getById(moment.id || moment.momentID, eventUrl);
+      let updatedMoment = await momentsAPI.getById(moment.id || moment.moment_id, eventUrl);
       if (updatedMoment) {
         
         // If the representative image hasn't changed, wait a bit more and try again
         // This handles cases where the backend needs more time to calculate
         if (updatedMoment.representative_image === moment.representative_image) {
           await new Promise(resolve => setTimeout(resolve, 200));
-          updatedMoment = await momentsAPI.getById(moment.id || moment.momentID, eventUrl);
+          updatedMoment = await momentsAPI.getById(moment.id || moment.moment_id, eventUrl);
           if (updatedMoment) {
           }
         }
         
         // Update the moment data directly without triggering change handlers
         // This ensures the representative image and other moment data is updated
-        updateMoment(moment.id || moment.momentID, updatedMoment);
+        updateMoment(moment.id || moment.moment_id, updatedMoment);
       } else {
-        console.warn('Could not get updated moment data for:', moment.id || moment.momentID);
+        console.warn('Could not get updated moment data for:', moment.id || moment.moment_id);
       }
       
       // Also update the moment data for moments that lost images
@@ -224,7 +224,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           if (allMoments && allMoments.moments) {
             // Update the data store with all moments to ensure consistency
             allMoments.moments.forEach(momentData => {
-              updateMoment(momentData.momentID, momentData);
+              updateMoment(momentData.moment_id, momentData);
             });
           }
         } catch (refreshError) {
@@ -238,7 +238,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           if (currentMoments.length > 0) {
             // Update the first moment with a timestamp to force re-renders
             const firstMoment = currentMoments[0];
-            updateMoment(firstMoment.momentID, { 
+            updateMoment(firstMoment.moment_id, { 
               ...firstMoment, 
               _last_updated: new Date().toISOString() 
             });
@@ -305,7 +305,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   // Check if an image is currently in the moment
   const isImageInMoment = (imageId) => {
-    return (momentImagesMap[moment?.id || moment?.momentID] || []).some(p => p.id === imageId);
+    return (momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === imageId);
   };
 
   // Get the effective selection state for an image (considering pending changes)
@@ -327,17 +327,17 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     }
   };
 
-  // Use moments array to get the title for a moment ID
+  // Use moments array to get the title for a moment id
   const getImageMomentInfo = (imageId) => {
     for (const momentId in momentImagesMap) {
       const momentImages = momentImagesMap[momentId] || [];
       const foundImage = momentImages.find(p => p.id === imageId);
       if (foundImage) {
-        const momentObj = moments.find(m => (m.id || m.momentID) === momentId);
+        const momentObj = moments.find(m => (m.id || m.moment_id) === momentId);
         return {
           momentId: momentId,
           title: momentObj ? momentObj.label : momentId,
-          isCurrentMoment: moment && momentId === (moment.id || moment.momentID)
+          isCurrentMoment: moment && momentId === (moment.id || moment.moment_id)
         };
       }
     }
@@ -362,11 +362,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && (momentImagesMap[moment?.id || moment?.momentID] || []).some(p => p.id === img.id)
+        img && img.id && (momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === img.id)
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && !(momentImagesMap[moment?.id || moment?.momentID] || []).some(p => p.id === img.id)
+        img && img.id && !(momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === img.id)
       );
     } else if (filterType === 'in-period') {
       // Filter images locally based on date_taken and moment date range
@@ -607,7 +607,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     
     const addCount = actualAdditions.length;
     const removeCount = actualRemovals.length;
-    const currentCount = (momentImagesMap[moment?.id || moment?.momentID] || []).length;
+    const currentCount = (momentImagesMap[moment?.id || moment?.moment_id] || []).length;
     const finalCount = currentCount - removeCount + addCount;
     
     if (removeCount === 0 && addCount === 0) {

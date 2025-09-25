@@ -14,7 +14,7 @@ class ModelsManager:
         return str(uuid.uuid4())
 
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
-        """Check if a record exists and return its ID for conflict checking."""
+        """Check if a record exists and return its id for conflict checking."""
 
         where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
         where_params = tuple(fields.values())
@@ -120,7 +120,7 @@ class ModelsManager:
         return results
 
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
-        """Insert one or many records. If a single dict is provided, return the new ID.
+        """Insert one or many records. If a single dict is provided, return the new id.
         If a list is provided, return the inserted records list.
         """
         is_single_item = isinstance(data, dict)
@@ -226,7 +226,7 @@ class ModelsManager:
 
         # get affected images to update
         query = f"""
-            SELECT DISTINCT c.imageID
+            SELECT DISTINCT c.image_id
             FROM {accessible_child} c
             WHERE c.{child_id_field} in ({placeholders})
         """
@@ -278,14 +278,14 @@ class ModelsManager:
 
         for old_parent_id in old_parent_ids:
             query = f"""
-                SELECT i.imageID
+                SELECT i.image_id
                 FROM {accessible_images} i
                 LEFT JOIN {accessible_child} c
-                ON i.imageID = c.imageID
+                ON i.image_id = c.image_id
                 AND c.{id_field} = ?
                 AND c.{child_id_field} IN ({placeholders})
                 WHERE c.{id_field} IS NULL
-                AND i.imageID IN ({placeholders})
+                AND i.image_id IN ({placeholders})
             """
             removed_images = self.db.execute_query(query, (old_parent_id, *valid_child_ids, *affected_images_ids), force_include_archived=force_include_archived)
             if removed_images:
@@ -315,59 +315,59 @@ class ModelsManager:
         query = f'''
             WITH albums_grouped AS (
                 SELECT 
-                    ai.imageID,
+                    ai.image_id,
                     json_group_array(
                         json_object(
-                            'albumID', a.albumID,
+                            'album_id', a.album_id,
                             'label', a.label,
                             'representative_image', a.representative_image
                         )
                     ) AS albums_json
                 FROM accessible_albums_images ai
                 INNER JOIN accessible_albums a
-                    ON a.albumID = ai.albumID
+                    ON a.album_id = ai.album_id
                     AND LOWER(a.label) NOT IN ('archive','favorites')
-                WHERE ai.imageID IN ({image_placeholders})
-                GROUP BY ai.imageID
+                WHERE ai.image_id IN ({image_placeholders})
+                GROUP BY ai.image_id
             ),
             faces_grouped AS (
                 SELECT 
-                    f.imageID,
+                    f.image_id,
                     json_group_array(
                         json_object(
-                            'faceID', f.faceID,
+                            'face_id', f.face_id,
                             'group_label', g.label,
-                            'imageID', f.imageID,
+                            'image_id', f.image_id,
                             'width', f.width,
                             'height', f.height,
                             'left', f.left,
                             'top', f.top,
-                            'groupID', f.groupID
+                            'group_id', f.group_id
                         )
                     ) AS faces_json
                 FROM accessible_faces f
-                INNER JOIN accessible_groups g ON f.groupID = g.groupID
-                WHERE f.imageID IN ({image_placeholders})
-                GROUP BY f.imageID
+                INNER JOIN accessible_groups g ON f.group_id = g.group_id
+                WHERE f.image_id IN ({image_placeholders})
+                GROUP BY f.image_id
             )
             SELECT 
-                i.imageID,
+                i.image_id,
                 i.label,
                 i.date_taken,
                 i.file_size,
                 i.width,
                 i.height,
-                i.momentID,
+                i.moment_id,
                 m.label AS moment_label,
                 i.is_archived,
                 i.is_favorite,
                 COALESCE(a.albums_json, '[]') AS albums,
                 COALESCE(f.faces_json, '[]') AS faces
             FROM accessible_images i
-            LEFT JOIN accessible_moments m ON m.momentID = i.momentID
-            LEFT JOIN albums_grouped a ON a.imageID = i.imageID
-            LEFT JOIN faces_grouped f ON f.imageID = i.imageID
-            WHERE i.imageID IN ({image_placeholders});
+            LEFT JOIN accessible_moments m ON m.moment_id = i.moment_id
+            LEFT JOIN albums_grouped a ON a.image_id = i.image_id
+            LEFT JOIN faces_grouped f ON f.image_id = i.image_id
+            WHERE i.image_id IN ({image_placeholders});
         '''
 
         rows = self.db.execute_query(query, image_ids * 3, include_columns=True)
@@ -377,12 +377,12 @@ class ModelsManager:
             albums = json.loads(image["albums"]) if image["albums"] else []
             faces_data = json.loads(image["faces"]) if image["faces"] else []
             moment_info = {
-                "momentID": image.get("momentID"),
+                "moment_id": image.get("moment_id"),
                 "label": image.get("moment_label")
-            } if image.get("momentID") else None
+            } if image.get("moment_id") else None
 
             image_data = {
-                "id": image["imageID"],
+                "id": image["image_id"],
                 "label": image["label"],
                 "date_taken": image.get("date_taken"),
                 "file_size": image.get("file_size"),
@@ -406,7 +406,7 @@ class ModelsManager:
       
     # -------- Groups helpers --------
     def get_related_groups(self, group_ids: List[str], base_image_ids: List[str]) -> List[str]:
-        """Return related group IDs ordered by relevance using co-occurrence in images."""
+        """Return related group ids ordered by relevance using co-occurrence in images."""
         if not base_image_ids or not group_ids:
             return []
 
@@ -418,11 +418,11 @@ class ModelsManager:
         query = f'''
             SELECT g.*
             FROM {accessible_groups} g
-            JOIN {accessible_faces} f ON g.groupID = f.groupID
-            WHERE f.imageID IN ({image_placeholders})
-            AND g.groupID NOT IN ({group_id_placeholders})
-            GROUP BY g.groupID, g.label
-            ORDER BY COUNT(DISTINCT f.imageID) DESC, g.label ASC
+            JOIN {accessible_faces} f ON g.group_id = f.group_id
+            WHERE f.image_id IN ({image_placeholders})
+            AND g.group_id NOT IN ({group_id_placeholders})
+            GROUP BY g.group_id, g.label
+            ORDER BY COUNT(DISTINCT f.image_id) DESC, g.label ASC
         '''
         
         query_params = base_image_ids + group_ids
@@ -444,39 +444,39 @@ class ModelsManager:
         having_clause = []
         params = []
 
-        priority_case = "CASE sf.groupID " + " ".join(f"WHEN ? THEN {idx+1}" for idx in range(M)) + " ELSE 9999 END"
+        priority_case = "CASE sf.group_id " + " ".join(f"WHEN ? THEN {idx+1}" for idx in range(M)) + " ELSE 9999 END"
 
         query = f"""
             SELECT
                 {fields_as_child},
                 (
-                    SELECT sf.faceID
+                    SELECT sf.face_id
                     FROM {accessible_faces} sf
-                    WHERE sf.imageID = i.imageID AND sf.groupID IN ({group_placeholders})
-                    GROUP BY sf.imageID, sf.groupID
+                    WHERE sf.image_id = i.image_id AND sf.group_id IN ({group_placeholders})
+                    GROUP BY sf.image_id, sf.group_id
                     ORDER BY
                         {priority_case},
                         (sf.width * sf.height) DESC
                     LIMIT 1
                 ) as representative_face
             FROM {accessible_faces} f
-            INNER JOIN {accessible_images} i ON f.imageID = i.imageID
+            INNER JOIN {accessible_images} i ON f.image_id = i.image_id
         """
         params.extend(group_ids)
         params.extend(group_ids[:M])
 
         if mode == 'and':
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.groupID IN ({group_placeholders}) THEN f.groupID END) = {N}")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id IN ({group_placeholders}) THEN f.group_id END) = {N}")
         else:
-            query += f"WHERE f.groupID IN ({group_placeholders})"
+            query += f"WHERE f.group_id IN ({group_placeholders})"
 
         params.extend(group_ids)
         if only:
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.groupID NOT IN ({group_placeholders}) THEN f.groupID END) = 0")
+            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id NOT IN ({group_placeholders}) THEN f.group_id END) = 0")
             params.extend(group_ids)
 
         if having_clause:
-            query += f" GROUP BY f.imageID"
+            query += f" GROUP BY f.image_id"
             query += f" HAVING {' AND '.join(having_clause)}"
 
         limit_clause = ''
@@ -495,7 +495,7 @@ class ModelsManager:
         if face_ids is None:
             if not source_group_id:
                 raise ValueError("face_ids or source_group_id must be provided")
-            face_ids = [face_id['faceID'] for face_id in self.get_childs('groups', source_group_id, child='faces')]
+            face_ids = [face_id['face_id'] for face_id in self.get_childs('groups', source_group_id, child='faces')]
 
         if new_group_name:
             if self.is_exists('groups', {'label': new_group_name}):
@@ -510,7 +510,7 @@ class ModelsManager:
             accessible_faces = STRUCTURE['faces']['accessible_table']
             face_placeholders = ','.join(['?'] * len(face_ids))
             query = f"""
-                SELECT NOT EXISTS(SELECT 1 FROM {accessible_faces} WHERE groupID = ? AND faceID NOT IN ({face_placeholders}))
+                SELECT NOT EXISTS(SELECT 1 FROM {accessible_faces} WHERE group_id = ? AND face_id NOT IN ({face_placeholders}))
             """
             results = self.db.execute_query(query, (source_group_id, *face_ids))
             if results[0][0]:
@@ -535,12 +535,12 @@ class ModelsManager:
 
     # -------- Albums helpers --------
     def get_archive_album(self) -> str | None:
-        """Get the archive album ID."""
-        return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "archive"')[0][0]
+        """Get the archive album id."""
+        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "archive"')[0][0]
 
     def get_favorites_album(self) -> str | None:
-        """Get the favorites album ID."""
-        return self.db.execute_query('SELECT albumID FROM albums WHERE LOWER(label) = "favorites"')[0][0]
+        """Get the favorites album id."""
+        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "favorites"')[0][0]
 
     def edit_album_images(self, album_id: str, image_ids: List[str], add: bool) -> Dict:
 
@@ -573,7 +573,7 @@ class ModelsManager:
         if not image_ids:
             return []
         to_insert = [
-            {'profileID': profile_id, 'imageID': image_id, 'accessible': 1}
+            {'profile_id': profile_id, 'image_id': image_id, 'accessible': 1}
             for image_id in image_ids
         ]
         inserted_pairs = self.db.insert('editable_profile_images', to_insert)
@@ -585,7 +585,7 @@ class ModelsManager:
         
         deleted_pairs = self.db.delete(
             'editable_profile_images',
-            {'profileID': profile_id, 'imageID': image_ids}
+            {'profile_id': profile_id, 'image_id': image_ids}
         )
         return [pair[1] for pair in deleted_pairs]
 
@@ -593,7 +593,7 @@ class ModelsManager:
         if not album_ids:
             return []
         to_insert = [
-            {'profileID': profile_id, 'albumID': album_id, 'accessible': 1}
+            {'profile_id': profile_id, 'album_id': album_id, 'accessible': 1}
             for album_id in album_ids
         ]
         inserted_pairs = self.db.insert('editable_profile_albums', to_insert)
@@ -605,6 +605,6 @@ class ModelsManager:
         
         deleted_pairs = self.db.delete(
             'editable_profile_albums',
-            {'profileID': profile_id, 'albumID': album_ids}
+            {'profile_id': profile_id, 'album_id': album_ids}
         )
         return [pair[1] for pair in deleted_pairs]

@@ -15,8 +15,8 @@ export const useModalManager = () => {
   const { stack, register, unregister } = useModalStore();
   
   /**
-   * Checks if a given modal ID is at the top of the stack.
-   * @param {string} id The ID of the modal to check.
+   * Checks if a given modal id is at the top of the stack.
+   * @param {string} id The id of the modal to check.
    * @returns {boolean} True if the modal is the topmost, false otherwise.
    */
   const isTopModal = (id) => {

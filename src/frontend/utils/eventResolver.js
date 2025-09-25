@@ -1,5 +1,5 @@
 // Event resolver utility
-// This file handles resolving event IDs from event URLs
+// This file handles resolving event ids from event URLs
 
 // Cache for event data to avoid repeated API calls
 let eventCache = null;
@@ -23,9 +23,9 @@ async function fetchEvents() {
 }
 
 /**
- * Resolve event ID from event URL
+ * Resolve event id from event URL
  * @param {string} eventUrl - The event URL (e.g., 'noga-and-menachem-wedding')
- * @returns {string|null} - The event ID or null if not found
+ * @returns {string|null} - The event id or null if not found
  */
 export async function resolveEventId(eventUrl) {
   // Check cache first
@@ -44,7 +44,7 @@ export async function resolveEventId(eventUrl) {
     const event = events.find(e => e.url === eventUrl);
     return event ? event.id : null;
   } catch (error) {
-    console.error('Error resolving event ID:', error);
+    console.error('Error resolving event id:', error);
     return null;
   }
 }

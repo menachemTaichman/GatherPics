@@ -20,7 +20,7 @@ import { useToast } from '../utils/ToastContext';
  * should use this for performing actions while handling their own presentation
  */
 export default function useImageActions({
-  imageIds, // Array of image IDs or single image ID
+  imageIds, // Array of image ids or single image id
   eventUrl,
   urlHelpers,
   placeholderDataUrl,

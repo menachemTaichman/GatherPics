@@ -86,9 +86,9 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
         if (!currentSelection && response.faces && response.faces.length > 0) {
           // Use the first face as default representative
           const firstFace = response.faces[0];
-          if (firstFace && firstFace.faceID) {
-            setCurrentSelection(firstFace.faceID);
-            setFormData(prev => ({ ...prev, representative_face: firstFace.faceID }));
+          if (firstFace && firstFace.face_id) {
+            setCurrentSelection(firstFace.face_id);
+            setFormData(prev => ({ ...prev, representative_face: firstFace.face_id }));
           }
         }
       } catch (error) {
@@ -312,7 +312,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                   ) : (
                     <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
                       {faces.map((face, index) => {
-                        const faceId = face.id || face.faceID || face.face_id;
+                        const faceId = face.id || face.face_id;
                         const imageSrc = faceId && urlHelpers
                           ? urlHelpers.getFaceCropUrl(faceId)
                           : PLACEHOLDER_DATA_URL;

@@ -140,19 +140,16 @@ function normalizeFace(face) {
   if (!face || typeof face !== 'object') return face;
   const normalized = { ...face };
   // id
-  if (!normalized.id) normalized.id = normalized.face_id || normalized.faceID;
+  if (!normalized.id) normalized.id = normalized.face_id;
   if ('face_id' in normalized) delete normalized.face_id;
-  if ('faceID' in normalized) delete normalized.faceID;
   
   // groupId
-  if (!normalized.groupId) normalized.groupId = normalized.group_id || normalized.groupID;
+  if (!normalized.groupId) normalized.groupId = normalized.group_id;
   if ('group_id' in normalized) delete normalized.group_id;
-  if ('groupID' in normalized) delete normalized.groupID;
 
   // imageId (for convenience in some payloads)
-  if (!normalized.imageId) normalized.imageId = normalized.image_id || normalized.imageID;
+  if (!normalized.imageId) normalized.imageId = normalized.image_id;
   if ('image_id' in normalized) delete normalized.image_id;
-  if ('imageID' in normalized) delete normalized.imageID;
   
   return normalized;
 }
@@ -160,9 +157,8 @@ function normalizeFace(face) {
 function normalizeImage(img) {
   if (!img || typeof img !== 'object') return img;
   const normalized = { ...img };
-  if (!normalized.id) normalized.id = normalized.image_id || normalized.imageID;
+  if (!normalized.id) normalized.id = normalized.image_id;
   if ('image_id' in normalized) delete normalized.image_id;
-  if ('imageID' in normalized) delete normalized.imageID;
   
   if (Array.isArray(normalized.faces)) normalized.faces = normalized.faces.map(normalizeFace);
   if (Array.isArray(normalized.albums)) normalized.albums = normalized.albums.map(normalizeAlbum);
@@ -173,27 +169,24 @@ function normalizeImage(img) {
 function normalizeGroup(group) {
   if (!group || typeof group !== 'object') return group;
   const normalized = { ...group };
-  if (!normalized.id) normalized.id = normalized.group_id || normalized.groupID;
+  if (!normalized.id) normalized.id = normalized.group_id;
   if ('group_id' in normalized) delete normalized.group_id;
-  if ('groupID' in normalized) delete normalized.groupID;
   return normalized;
 }
 
 function normalizeMoment(moment) {
   if (!moment || typeof moment !== 'object') return moment;
   const normalized = { ...moment };
-  if (!normalized.id) normalized.id = normalized.moment_id || normalized.momentID;
+  if (!normalized.id) normalized.id = normalized.moment_id;
   if ('moment_id' in normalized) delete normalized.moment_id;
-  if ('momentID' in normalized) delete normalized.momentID;
   return normalized;
 }
 
 function normalizeAlbum(album) {
   if (!album || typeof album !== 'object') return album;
   const normalized = { ...album };
-  if (!normalized.id) normalized.id = normalized.album_id || normalized.albumID;
+  if (!normalized.id) normalized.id = normalized.album_id;
   if ('album_id' in normalized) delete normalized.album_id;
-  if ('albumID' in normalized) delete normalized.albumID;
   return normalized;
 }
 
@@ -410,7 +403,7 @@ export const albumsAPI = {
       const response = await api.get(`/api/events/${eventId}/albums/defaults/favorites`);
       const data = response.data || {};
       if (data.album) {
-        const albumId = data.album.id || data.album.albumID;
+        const albumId = data.album.id || data.album.album_id;
         store.setFavoritesAlbumId(albumId);
         favoritesAlbumId = albumId;
       }
@@ -436,7 +429,7 @@ export const albumsAPI = {
         const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
         const data = response.data || {};
         if (data.album) {
-            const albumId = data.album.id || data.album.albumID;
+            const albumId = data.album.id || data.album.album_id;
             store.setArchiveAlbumId(albumId);
             archiveAlbumId = albumId;
         }
@@ -458,7 +451,7 @@ export const albumsAPI = {
       const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
       const data = response.data || {};
       if (data.album) {
-        const albumId = data.album.id || data.album.albumID;
+        const albumId = data.album.id || data.album.album_id;
         store.setArchiveAlbumId(albumId);
         archiveAlbumId = albumId;
       }
@@ -551,7 +544,7 @@ export const optimisticUpdates = {
   createMoment: async (momentData, rollbackFn, eventUrl) => {
     const store = useDataStore.getState();
     const tempId = `temp-${Date.now()}`;
-    const newMoment = { ...momentData, momentID: tempId };
+    const newMoment = { ...momentData, moment_id: tempId };
 
     // Apply optimistic update
     store.addMoment(newMoment);

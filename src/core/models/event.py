@@ -17,7 +17,7 @@ class Event(JsonModel):
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
         self.db = AppDB(self.DB_PATH, self.id)
         
-        # Set profile ID for access control
+        # Set profile id for access control
         if profile_id:
             self.db.set_profile_id(profile_id)
         
@@ -65,7 +65,7 @@ class Event(JsonModel):
         """Initialize default profiles for the event: Main Manager and Event Manager"""
         for default_profile, hierarchy_rank in {'developer': 3, 'event_manager': 2, 'main_manager': 1}:
             profile = default_profiles.get(default_profile, {})
-            profile['profileID'] = profile.get('profileID', self.models_manager.generate_id())
+            profile['profile_id'] = profile.get('profile_id', self.models_manager.generate_id())
             profile['label'] = profile.get('label', default_profile)
             profile['password'] = profile.get('password', '')
             profile['hierarchy_rank'] = profile.get('hierarchy_rank', hierarchy_rank)
@@ -73,7 +73,7 @@ class Event(JsonModel):
         values = tuple(profile.values() for profile in default_profiles.values())
 
         self.db.execute_query(f'''
-            INSERT INTO profiles (profileID, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
+            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
             VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1),
                    (?, ?, ?, ?, 1, 1, 1, 1, 1),
                    (?, ?, ?, ?, 1, 1, 1, 1, 1)
@@ -91,7 +91,7 @@ class Event(JsonModel):
         favorites_album_label = 'Favorites'
 
         self.db.execute_query(f'''
-            INSERT INTO albums (albumID, label)
+            INSERT INTO albums (album_id, label)
             VALUES (?, ?),
                    (?, ?)
         ''', (archive_album_id, archive_album_label, favorites_album_id, favorites_album_label))
@@ -102,11 +102,11 @@ class Event(JsonModel):
         return self
 
     def set_profile_id(self, profile_id: str | None = None):
-        """Set the profile ID for access control across all models."""
+        """Set the profile id for access control across all models."""
         self.db.set_profile_id(profile_id)
 
     def get_profile_id(self) -> str | None:
-        """Get the current profile ID."""
+        """Get the current profile id."""
         return self.db.get_profile_id()
 
     def get_info(self) -> dict:
@@ -127,7 +127,7 @@ class Event(JsonModel):
         
         self.face_utils.rek_helper.delete_faces(faces)
         for face in faces:
-            face_id = face['faceID']
+            face_id = face['face_id']
             try:
                 os.remove(os.path.join(self.faces_dir, f"{face_id}.jpg"))
             except FileNotFoundError:
@@ -178,15 +178,15 @@ class Event(JsonModel):
             save_image(
                 crop_img, crop_path, format='WEBP', quality=90, optimize=True
             )
-            return self.models_manager.faces_model.get_add_data(
-                image_ID=image_id,
-                width=bbox['width'],
-                height=bbox['height'],
-                left=bbox['left'],
-                top=bbox['top'],
-                face_ID=face_id,
-                group_ID=''
-            )
+            return {
+                "image_id": image_id,
+                "width": bbox['width'],
+                "height": bbox['height'],
+                "left": bbox['left'],
+                "top": bbox['top'],
+                "face_id": face_id,
+                "group_id": ''
+            }
 
         def _cluster_and_group_faces(face_ids):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
@@ -195,7 +195,7 @@ class Event(JsonModel):
                 group_data = self.models_manager.add('groups', [{
                     'label': f"Person {group_num}",
                 }])[0]
-                group_id = group_data['groupID']
+                group_id = group_data['group_id']
                 self.models_manager.edit_childs('faces', group_id, cluster, add=True)
                 self.last_group_id = group_num
             return len(clusters)
@@ -217,7 +217,7 @@ class Event(JsonModel):
                     file_size=file_size,
                     width=width,
                     height=height
-                )["imageID"]
+                )["image_id"]
                 # Save high quality (4096px, jpg, quality=95, with EXIF)
                 high_quality_img = resize_image(original_img, 4096)
                 high_quality_path = os.path.join(self.high_quality_dir, f"{image_id}.jpg")
@@ -276,7 +276,7 @@ class Event(JsonModel):
             display_img, image_id, image_faces, error = _process_image(image_file)
             if error is not None or display_img is None or image_id is None:
                 if verbose:
-                    print(f"  Error processing {image_file}: {str(error) if error else 'Invalid image or ID'}")
+                    print(f"  Error processing {image_file}: {str(error) if error else 'Invalid image or id'}")
                 continue
             if verbose:
                 print(f"  Detected {len(image_faces)} faces")
@@ -291,7 +291,7 @@ class Event(JsonModel):
             self.models_manager.add('faces', all_faces)
             if verbose:
                 print("Clustering faces...")
-            groups_created = _cluster_and_group_faces([face['faceID'] for face in all_faces])
+            groups_created = _cluster_and_group_faces([face['face_id'] for face in all_faces])
         else:
             groups_created = 0
         summary = {

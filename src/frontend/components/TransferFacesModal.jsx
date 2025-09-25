@@ -78,7 +78,7 @@ export default function TransferFacesModal({
         return aValue < bValue ? 1 : -1;
       }
     })
-    // Remove duplicate groups by groupID to prevent React key conflicts
+    // Remove duplicate groups by group_id to prevent React key conflicts
     .reduce((unique, group) => {
       if (!unique.some(g => g.id === group.id)) {
         unique.push(group);
@@ -165,8 +165,8 @@ export default function TransferFacesModal({
     setError('');
 
     try {
-      // Extract face IDs from face objects
-      const faceIds = selectedFaces.map(face => face.id || face.faceID || face.face_id);
+      // Extract face ids from face objects
+      const faceIds = selectedFaces.map(face => face.id || face.face_id);
       
       const result = await groupsAPI.transferFaces(
         currentGroup?.id || sourceGroupId || null,

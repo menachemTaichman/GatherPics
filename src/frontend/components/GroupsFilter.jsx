@@ -132,14 +132,14 @@ export default function GroupsFilter({
   // Build display list: selected first (in order), then API related (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
     const seen = new Set((selectedGroups || []).map(v => String(v)));
-    const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.groupID), g]));
-    const byRelated = new Map((relatedGroups || []).map(g => [String(g.id || g.groupID), g]));
+    const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.group_id), g]));
+    const byRelated = new Map((relatedGroups || []).map(g => [String(g.id || g.group_id), g]));
     const currentIdStr = currentGroupId != null ? String(currentGroupId) : null;
     const selectedObjs = (selectedGroups || [])
       .filter(id => String(id) !== currentIdStr)
       .map(id => byRelated.get(String(id)) || groupMap.get(String(id)) || { id, label: `Person ${id}` });
     const tail = (relatedGroups || []).filter(g => {
-      const gid = String(g.id || g.groupID);
+      const gid = String(g.id || g.group_id);
       return !seen.has(gid) && gid !== currentIdStr;
     });
     return [...selectedObjs, ...tail];
@@ -147,7 +147,7 @@ export default function GroupsFilter({
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';
-    const id = group.id || group.groupID || '';
+    const id = group.id || group.group_id || '';
     return group.label || `Person ${id}`;
   };
 
@@ -171,9 +171,9 @@ export default function GroupsFilter({
             }}
           >
             <div className="font-medium">
-              {hoveredGroup === (group.id || group.groupID)
+              {hoveredGroup === (group.id || group.group_id)
                 ? getGroupDisplayName(group)
-                : getGroupDisplayName(displayGroups.find(g => (g.id || g.groupID) === hoveredGroup))
+                : getGroupDisplayName(displayGroups.find(g => (g.id || g.group_id) === hoveredGroup))
               }
             </div>
             {/* Removed subtitle text for cleaner tooltip */}
@@ -243,9 +243,9 @@ export default function GroupsFilter({
         <div className="flex items-center space-x-3 overflow-x-auto pb-2">
           {/* Main Group (always selected) */}
             <div 
-            key={`main-${group.id || group.groupID}`}
+            key={`main-${group.id || group.group_id}`}
             className="flex-shrink-0 relative group"
-            onMouseEnter={(event) => handleMouseEnter(group.id || group.groupID, event)}
+            onMouseEnter={(event) => handleMouseEnter(group.id || group.group_id, event)}
             onMouseLeave={handleMouseLeave}
             onMouseMove={handleMouseMove}
           >
@@ -270,18 +270,18 @@ export default function GroupsFilter({
           {/* Related Groups */}
           {displayGroups.map((relatedGroup) => (
             <div
-              key={relatedGroup.id || relatedGroup.groupID}
+              key={relatedGroup.id || relatedGroup.group_id}
               className="flex-shrink-0 relative group"
-              onMouseEnter={(event) => handleMouseEnter(relatedGroup.id || relatedGroup.groupID, event)}
+              onMouseEnter={(event) => handleMouseEnter(relatedGroup.id || relatedGroup.group_id, event)}
               onMouseLeave={handleMouseLeave}
               onMouseMove={handleMouseMove}
             >
               <div 
                 className="cursor-pointer"
-                onClick={() => handleGroupClick(relatedGroup.id || relatedGroup.groupID)}
+                onClick={() => handleGroupClick(relatedGroup.id || relatedGroup.group_id)}
               >
                 <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
-                  selectedGroups.includes(relatedGroup.id || relatedGroup.groupID)
+                  selectedGroups.includes(relatedGroup.id || relatedGroup.group_id)
                     ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                     : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                 }`}>
@@ -304,7 +304,7 @@ export default function GroupsFilter({
                 <div 
                   className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
                 >
-                  {selectedGroups.includes(relatedGroup.id || relatedGroup.groupID) ? (
+                  {selectedGroups.includes(relatedGroup.id || relatedGroup.group_id) ? (
                     <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
                   ) : (
                     <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />

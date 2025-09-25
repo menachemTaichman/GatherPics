@@ -50,16 +50,16 @@ export default function MergeConflictModal({
         return;
       }
       
-      // Check if conflictingGroup exists before accessing its id (could be groupID from backend)
-      if (!conflictingGroup || (!conflictingGroup.id && !conflictingGroup.groupID)) {
-        console.error('Conflicting person is null or missing id/groupID');
+      // Check if conflictingGroup exists before accessing its id (could be group_id from backend)
+      if (!conflictingGroup || (!conflictingGroup.id && !conflictingGroup.group_id)) {
+        console.error('Conflicting person is null or missing id/group_id');
         return;
       }
       
       // Call transfer faces API without face_ids for merge conflict case
       const result = await groupsAPI.transferFaces(
         currentGroup.id,
-        conflictingGroup.id || conflictingGroup.groupID,
+        conflictingGroup.id || conflictingGroup.group_id,
         null, // No face_ids for merge conflict - transfer all faces
         eventUrl
       );
@@ -76,7 +76,7 @@ export default function MergeConflictModal({
       if (onTransferComplete) {
         await onTransferComplete(result);
       } else if (onNavigateToGroup) {
-        onNavigateToGroup(conflictingGroup.id || conflictingGroup.groupID);
+        onNavigateToGroup(conflictingGroup.id || conflictingGroup.group_id);
       }
       
       onClose();

@@ -54,13 +54,13 @@ export default function AlbumQuickAddButton({
           ) : (
             <ul className="divide-y divide-gray-100">
               {albums.map(album => (
-                <li key={album.albumID}>
+                <li key={album.album_id}>
                   <button
                     className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
                     onClick={async () => {
                       try {
                         const imagesToAdd = selectedImages || (imageId ? [imageId] : []);
-                        const res = await albumsAPI.addImages(album.albumID, imagesToAdd, eventUrl);
+                        const res = await albumsAPI.addImages(album.album_id, imagesToAdd, eventUrl);
                         useDataStore.getState().addImagesToAlbum(res);
                         const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.affected_images_ids || 0);
                         showToast(

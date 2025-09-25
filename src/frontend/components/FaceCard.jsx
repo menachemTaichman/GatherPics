@@ -50,7 +50,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
           >
             <img
               src={imageSrc}
-              alt={group.label || `Person ${group.groupID}`}
+              alt={group.label || `Person ${group.group_id}`}
               className="w-full h-full object-cover"
               style={{
                 objectPosition: 'center center'
@@ -72,7 +72,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
           <div className="flex items-center justify-center space-x-2">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-gray-900 truncate text-sm">
-                {group.label || `Person ${group.groupID}`}
+                {group.label || `Person ${group.group_id}`}
               </h3>
               <p className="text-xs text-gray-500">
                 {group.count || 0} photos

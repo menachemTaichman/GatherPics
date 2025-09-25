@@ -437,14 +437,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     for (const imageId of selectedImages) {
       const image = sortedImages.find(p => p.id === imageId);
       if (image && image.representative_face) {
-        // The representative_face is the faceID of the face belonging to the current group
+        // The representative_face is the face_ids of the face belonging to the current group
         // We need to find this face in the faces array or create a face object
-        const face = image.faces?.find(f => (f.id || f.faceID || f.face_id) === image.representative_face);
+        const face = image.faces?.find(f => (f.id || f.face_id) === image.representative_face);
         if (face) {
           selectedFaces.push({
-            faceID: face.id || face.faceID || face.face_id,
-            imageID: face.imageID,
-            groupID: face.groupID,
+            face_id: face.id || face.face_id,
+            image_id: face.image_id,
+            group_id: face.group_id,
             width: face.width,
             height: face.height,
             left: face.left,
@@ -455,9 +455,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
           // If we can't find the face in the faces array, create a minimal face object
           // This shouldn't happen in normal operation, but provides a fallback
           selectedFaces.push({
-            faceID: image.representative_face,
-            imageID: image.id,
-            groupID: group.id,
+            face_id: image.representative_face,
+            image_id: image.id,
+            group_id: group.id,
             width: 0,
             height: 0,
             left: 0,

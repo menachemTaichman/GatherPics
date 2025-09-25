@@ -364,7 +364,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  // Determine the current image ID from store data (clamped index to avoid oscillation)
+  // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
     if (relatedImages.length > 0) {
       const idx = Math.min(Math.max(0, currentIndex), relatedImages.length - 1);
@@ -415,7 +415,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             const seen = new Set();
             const items = [];
             (info.faces || []).forEach((f) => {
-              const gid = f && (f.groupId || f.group_id || f.groupID);
+              const gid = f && (f.groupId || f.group_id);
               if (!gid || seen.has(gid)) return;
               seen.add(gid);
               const label = f.group_label || (groupsMap[gid] && groupsMap[gid].label) || undefined;
@@ -533,7 +533,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleFaceNavigation = (face) => {
-    const gid = face?.groupId || face?.group_id || face?.groupID;
+    const gid = face?.groupId || face?.group_id;
     const label = gid ? groupsMap[gid]?.label : '';
     if (label) {
       navigate(`/persons/${encodeURIComponent(label)}`);
@@ -600,7 +600,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       const addChange = (result.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
       const targetId = addChange?.parentId;
       if (targetId) {
-        const targetGroup = Object.values(groupsMap).find(g => (g.id || g.groupID) === targetId);
+        const targetGroup = Object.values(groupsMap).find(g => (g.id || g.group_id) === targetId);
         if (targetGroup) {
           const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
           showToast(
@@ -715,13 +715,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getFaceImageSrc = (face) => {
-    const fid = face?.id || face?.faceID;
+    const fid = face?.id || face?.face_id;
     if (!fid || !urlHelpers) return PLACEHOLDER_DATA_URL;
     return urlHelpers.getFaceCropUrl(fid);
   };
 
   const getGroupLabel = (face) => {
-    const gid = face?.groupId || face?.group_id || face?.groupID;
+    const gid = face?.groupId || face?.group_id;
     const label = gid ? (groupsMap[gid]?.label || '') : '';
     return label;
   };
@@ -815,7 +815,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         borderColor = 'border-red-500';
                         bgColor = 'bg-red-500';
                         labelBgColor = 'bg-red-500';
-                      } else if ((face.groupId || face.group_id || face.groupID) === currentGroupId) {
+                      } else if ((face.groupId || face.group_id) === currentGroupId) {
                         borderColor = 'border-green-500';
                         bgColor = 'bg-green-500';
                         labelBgColor = 'bg-green-500';
@@ -826,7 +826,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                       }
                       return (
                         <div
-                          key={`face-rect-${(face.id || face.faceID || `index-${index}`)}-${rectangleKey}-${index}-${imageId}`}
+                          key={`face-rect-${(face.id || face.face_id || `index-${index}`)}-${rectangleKey}-${index}-${imageId}`}
                           data-face-rectangle="true" // Marker to prevent dragging conflicts
                           className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
@@ -1173,7 +1173,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                           <div className="space-y-2">
                             {faces.map((face, index) => (
                               <div
-                                key={`face-list-${(face.id || face.faceID || `index-${index}`)}-${(face.groupId || face.group_id || face.groupID || 'unknown')}-${index}-${imageId}`}
+                                key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                 onClick={() => handleFaceClick(index)}
                               >
@@ -1226,12 +1226,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setSelectedFaceForTransfer(null);
           }}
           currentGroup={groupsMap && selectedFaceForTransfer ? (() => {
-            const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id || selectedFaceForTransfer.groupID;
-            return gid ? Object.values(groupsMap).find(g => (g.id || g.groupID) === gid) : null;
+            const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
+            return gid ? Object.values(groupsMap).find(g => (g.id || g.group_id) === gid) : null;
           })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
-          sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id || selectedFaceForTransfer.groupID) : null}
+          sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
         />
       )}
     </AnimatePresence>

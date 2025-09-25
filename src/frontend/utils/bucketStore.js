@@ -10,9 +10,9 @@ export const useBucketStore = create((set, get) => ({
   excludeAlready: getPreference('BucketDrawer.excludeAlready') ?? true,
   lastPulseTs: 0,
   // downloaded/uploaded history lists (ordered by last action, newest first)
-  downloaded: getPreference('BucketDrawer.alreadyDownloaded') ?? [], // array of image IDs
+  downloaded: getPreference('BucketDrawer.alreadyDownloaded') ?? [], // array of image ids
   uploaded: getPreference('BucketDrawer.alreadyUploaded') ?? [],
-  // current bucket queue (image IDs to act on)
+  // current bucket queue (image ids to act on)
   queue: getPreference('BucketDrawer.queue') ?? [],
 
   // UI helpers

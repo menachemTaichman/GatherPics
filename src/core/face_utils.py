@@ -34,12 +34,12 @@ class AWSRekognitionHelper:
             print(f"Error ensuring collection exists: {e}")
 
     def get_face_ids(self) -> list[str]:
-        """Get the list of face IDs in the collection"""
+        """Get the list of face ids in the collection"""
         try:
             response = self.client.list_faces(CollectionId=self.collection_id)
             return [face['FaceId'] for face in response['Faces']]
         except Exception as e:
-            print(f"Error getting face IDs: {e}")
+            print(f"Error getting face ids: {e}")
             return []
 
     def index_faces(self, image_bytes, external_image_id = '') -> list[dict]:

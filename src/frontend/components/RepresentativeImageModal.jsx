@@ -34,7 +34,7 @@ export default function RepresentativeImageModal({
 
   if (!isOpen || !moment) return null;
 
-  const images = momentImagesMap[moment.momentID] || [];
+  const images = momentImagesMap[moment.moment_id] || [];
 
   return (
     <AnimatePresence>

@@ -650,7 +650,7 @@ def download_images(event_id):
     quality = (data.get('quality') or 'high').lower()
     
     if not image_ids:
-        return jsonify({"error": "No image IDs provided"}), 400
+        return jsonify({"error": "No image ids provided"}), 400
     
     try:
         memory_file = io.BytesIO()

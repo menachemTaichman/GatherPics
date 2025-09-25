@@ -477,7 +477,7 @@ export default function Moments({ eventUrl }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [momentImagesMap, selectedKeys]);
 
-  // Helper function to convert selectedKeys to actual image IDs
+  // Helper function to convert selectedKeys to actual image ids
   const getSelectedImageIds = () => {
     return Array.from(selectedKeys).map(key => {
       const [, imageId] = key.split(':');
