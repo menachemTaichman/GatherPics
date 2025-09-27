@@ -1,5 +1,7 @@
+from botocore.endpoint_provider import TreeRule
 from src.core.models.event import Event
 from src.core.models.events_manager import EventsManager
+from src.core.db import ReturnFormat
 from src.core.image_utils import resize_image, crop_image, extract_all_metadata
 import os
 from PIL import Image as PILImage
@@ -355,22 +357,74 @@ def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
 
-result = event.models_manager.get_summary('groups', "5789317c-be50-4fbe-81f9-cd4310017dd2")
+def test_gets_methods(entities_tables: list, ids: dict, relations: list):
+    for table in entities_tables:
+        result = event.models_manager.get_entities(table)
+        print('get_entities, all, from ', table)
+        print(result)
+        print('--------------------------------')
+        id = ids[table][0]
+        result = event.models_manager.get_entities(table, id)
+        print('get_entities, one, from ', table, id)
+        print(result)
+        print('--------------------------------')
+        result = event.models_manager.get_entities(table, ids[table])
+        print('get_entities, many, from ', table, ids[table])
+        print(result)
+        print('--------------------------------')
 
-moment_id = "70e46c11-f6a6-4b8c-b925-0b0a17411d7f"
-group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
-image_id = "778a6e66-04bd-4a36-b769-527ddb7da4bc"
-face_id = "d1440187-3f08-4509-ac04-df201f705740"
+    for parent, child in relations:
+        id = ids[parent][0]
+        result = event.models_manager.get_childs(parent, id, child)
+        print(f'get_childs, {parent}.{child} of {id}')
+        print(result)
+        print('--------------------------------')
 
-source_group_id = "f915d398-33b9-4511-bd28-d9b201bc2de6"
-target_group_id = "5789317c-be50-4fbe-81f9-cd4310017dd2"
-
-if False:
-    source_group_id, target_group_id = target_group_id, source_group_id
-
-from src.core.db import ReturnFormat
-for format in ReturnFormat:
-    print(format)
-    result = event.db.execute_query('SELECT * FROM images', return_format=format)
+def test_edit_methods():
+    # # groups.faces
+    # source_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
+    # target_group_id = '7a81acd3-98ee-40c8-aa66-71b60b34bda8'
+    # if True:
+    #     source_group_id, target_group_id = target_group_id, source_group_id
+    # face_ids = ['c61090e9-80bd-428e-8885-0f583a74703d']
+    # result = event.models_manager.add_faces_to_group(face_ids=face_ids, target_group_id=target_group_id, source_group_id=source_group_id)
+    # print(result)
+    # print('--------------------------------')
+    # # moments.images
+    # moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c'
+    # image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
+    # result = event.models_manager.edit_moment_images(moment_id, image_ids, add=True)
+    # print(result)
+    # print('--------------------------------')
+    # albums.images
+    album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
+    image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
+    result = event.models_manager.edit_album_images(album_id, image_ids, add=False)
     print(result)
     print('--------------------------------')
+
+# recreate_views_triggers_and_indexes()
+
+entities_tables = ['images', 'groups', 'moments', 'albums']
+relations = [
+    ('images', 'albums'),
+    ('images', 'faces'),
+    ('groups', 'faces'),
+    ('groups', 'images'),
+    ('moments', 'images'),
+    ('albums', 'images'),
+]
+
+ids = {
+    'images': ['778a6e66-04bd-4a36-b769-527ddb7da4bc'], # noga dances
+    'faces': ['c61090e9-80bd-428e-8885-0f583a74703d'], # noga face from the above image
+    'groups': ['275d589e-9673-49d1-bc93-aa427dcada15','7a81acd3-98ee-40c8-aa66-71b60b34bda8'], # noga, menachem
+    'moments': ['98ff7b08-bdbe-4b15-9637-290e24a58a7c'], # סיור כלה
+    'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
+    'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
+}
+
+image_ids = ids['images']
+images_data = event.models_manager.get_images(image_ids)
+
+print(images_data)

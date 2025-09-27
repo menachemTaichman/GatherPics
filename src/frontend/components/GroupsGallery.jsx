@@ -24,16 +24,11 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
   useEffect(() => {
     async function loadGroups() {
-        try {
-            const res = await groupsAPI.getAll(eventUrl);
-            const store = useDataStore.getState();
-            const groups = res.groups || [];
-            if (groups.length) {
-              store.applyChanges([{ type: 'UPSERT', entity: 'groups', items: groups }]);
-            }
-        } catch (e) {
-            console.error('Failed to load groups', e);
-        }
+      try {
+        await groupsAPI.getAll(eventUrl);
+      } catch (e) {
+        console.error('Failed to load groups', e);
+      }
     }
     if (eventUrl) loadGroups();
   }, [eventUrl]);

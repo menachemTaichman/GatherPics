@@ -7,7 +7,6 @@ import useImageActions from './ImageActions';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
-import { shallow } from 'zustand/shallow';
 import { getPreference, setPreference } from '../utils/settings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
@@ -86,26 +85,19 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
   const groupsMap = useDataStore(state => state.entities?.groups || {});
   
-  // Subscribe to store relations to get the current list of images for the parent entity
-  const relatedImageIds = useDataStore(
-    state => {
-      if (!parent || !entity) return [];
-      if (entity === 'group') {
-        return state.relations?.groupImages?.[parent] || [];
-      } else if (entity === 'album') {
-        return state.relations?.albumImages?.[parent] || [];
-      } else if (entity === 'moment') {
-        return state.relations?.momentImages?.[parent] || [];
-      }
-      return [];
-    },
-    shallow
-  );
+  // Subscribe to embedded relation Set only (stable reference) and derive ids locally
+  const imagesSet = useDataStore(state => {
+    if (!parent || !entity) return null;
+    const key = entity === 'group' ? 'groups' : (entity === 'album' ? 'albums' : (entity === 'moment' ? 'moments' : null));
+    if (!key) return null;
+    return state.entities?.[key]?.[parent]?.images || null;
+  });
   const images = useDataStore(state => state.entities.images);
   const relatedImages = useMemo(() => {
-    const unsortedImages = Array.from(relatedImageIds || []).map(id => images[id]).filter(Boolean);
+    const ids = imagesSet instanceof Set ? Array.from(imagesSet) : [];
+    const unsortedImages = ids.map(id => images[id]).filter(Boolean);
     return sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
-  }, [relatedImageIds, images, sortBy, sortOrder]);
+  }, [imagesSet, images, sortBy, sortOrder]);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -149,9 +141,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
-  const [faces, setFaces] = useState([]);
   const [imageInfo, setImageInfo] = useState(null);
-  const [momentInfo, setMomentInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -170,7 +160,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
-  const [imageAlbums, setImageAlbums] = useState([]);
+  const momentInfo = useMemo(() => {
+    const mid = imageInfo?.moment_id;
+    if (!mid) return null;
+    const entities = useDataStore.getState().entities || {};
+    const m = (entities.moments || {})[mid];
+    if (m) return m;
+    return { id: mid, label: imageInfo?.moment_label };
+  }, [imageInfo?.moment_id, imageInfo?.moment_label]);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
@@ -186,39 +183,34 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [dynamicHeight, setDynamicHeight] = useState(null);
 
   useEffect(() => {
+    let rafId = 0;
     const calculateAndSetHeight = () => {
-      if (modalRef.current) {
+      if (!modalRef.current) return;
+      rafId = requestAnimationFrame(() => {
+        if (!modalRef.current) return;
         const modalElement = modalRef.current;
         const modalWidth = modalElement.offsetWidth;
-        
         const sidebarElement = modalElement.querySelector('.image-viewer-sidebar');
         const sidebarWidth = sidebarVisible && sidebarElement ? sidebarElement.offsetWidth : 0;
-        
         const imageContainerWidth = modalWidth - sidebarWidth;
         let newHeight = Math.round((2 / 3) * imageContainerWidth);
-
-        const verticalMarginRem = 3; 
+        const verticalMarginRem = 3;
         const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
         const verticalMarginPx = verticalMarginRem * rootFontSize;
         const maxHeight = window.innerHeight - verticalMarginPx;
-        
         newHeight = Math.min(newHeight, maxHeight);
-        
-        setDynamicHeight(newHeight);
-      }
+        setDynamicHeight(prev => (prev !== newHeight ? newHeight : prev));
+      });
     };
 
-    // Recalculate when sidebar visibility changes or window is resized
-    calculateAndSetHeight(); // Initial calculation
-    
-    // Delay to allow DOM to update after sidebar visibility changes
+    calculateAndSetHeight();
+    const resizeHandler = () => calculateAndSetHeight();
+    window.addEventListener('resize', resizeHandler);
     const timerId = setTimeout(calculateAndSetHeight, 50);
-
-    window.addEventListener('resize', calculateAndSetHeight);
-
     return () => {
+      try { cancelAnimationFrame(rafId); } catch {}
       clearTimeout(timerId);
-      window.removeEventListener('resize', calculateAndSetHeight);
+      window.removeEventListener('resize', resizeHandler);
     };
   }, [sidebarVisible]);
 
@@ -286,18 +278,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const handleRemoveFromAlbum = async (album) => {
     if (!imageInfo) return;
     try {
-      await albumsAPI.removeImages(album.id, [imageInfo.id], eventUrl);
-      setImageAlbums(prev => prev.filter(a => a.id !== album.id));
+      const result = await albumsAPI.removeImages(album.id, [imageInfo.id], eventUrl);
       const lbl = (album.label || '').toLowerCase();
-      if (lbl === 'favorites') {
-        setImageInfo(prev => ({ ...prev, is_favorite: false }));
-      }
-      if (lbl === 'archive') {
-        setImageInfo(prev => ({ ...prev, is_archived: false }));
-      }
+      if (lbl === 'favorites') setImageInfo(prev => ({ ...prev, is_favorite: false }));
+      if (lbl === 'archive') setImageInfo(prev => ({ ...prev, is_archived: false }));
+      const count = result?.len_edited ?? 1;
       showToast(
         <span>
-          Removed from{' '}
+          Removed {count} {count === 1 ? 'photo' : 'photos'} from{' '}
           <a href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</a>
         </span>,
         'success'
@@ -317,30 +305,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleAlbumAdded = (album) => {
-    // Add the album to the local imageAlbums state immediately
-    setImageAlbums(prev => {
-      // Check if album is already in the list to avoid duplicates
-      if (prev.some(a => a.id === album.id)) {
-        return prev;
-      }
-      
-      // Insert album in alphabetical order by label
-      const newAlbums = [...prev, album];
-      return newAlbums.sort((a, b) => {
-        const na = (a.label || '').toLowerCase();
-        const nb = (b.label || '').toLowerCase();
-        return na.localeCompare(nb);
-      });
-    });
-    
-    // Update imageInfo if it's a special album
     const lbl = (album.label || '').toLowerCase();
-    if (lbl === 'favorites') {
-      setImageInfo(prev => ({ ...prev, is_favorite: true }));
-    }
-    if (lbl === 'archive') {
-      setImageInfo(prev => ({ ...prev, is_archived: true }));
-    }
+    if (lbl === 'favorites') setImageInfo(prev => ({ ...prev, is_favorite: true }));
+    if (lbl === 'archive') setImageInfo(prev => ({ ...prev, is_archived: true }));
   };
 
   // Circular navigation
@@ -377,6 +344,33 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
 
+  // Subscribe to embedded relation Sets for the current image (like groups.images)
+  const imageFacesSet = useDataStore(state => {
+    if (!imageId) return null;
+    return state.entities?.images?.[imageId]?.faces || null;
+  });
+  const imageAlbumsSet = useDataStore(state => {
+    if (!imageId) return null;
+    return state.entities?.images?.[imageId]?.albums || null;
+  });
+
+  // Derived lists from embedded Sets
+  const facesList = useMemo(() => {
+    if (!imageFacesSet) return [];
+    const ids = Array.from(imageFacesSet);
+    const entities = useDataStore.getState().entities || {};
+    const map = entities.faces || {};
+    return ids.map(fid => map[fid]).filter(Boolean);
+  }, [imageFacesSet]);
+  
+  const albumsList = useMemo(() => {
+    if (!imageAlbumsSet) return [];
+    const ids = Array.from(imageAlbumsSet);
+    const entities = useDataStore.getState().entities || {};
+    const map = entities.albums || {};
+    return ids.map(aid => map[aid]).filter(Boolean);
+  }, [imageAlbumsSet]);
+
   // Find the current image index in the store data
   const currentImageIndex = useMemo(() => {
     if (!imageId || !relatedImages.length) return 0;
@@ -401,15 +395,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const fetchImageInfo = async () => {
     try {
       setLoading(true);
-      // Fetch real image info
       if (imageId && eventUrl) {
-        const response = await imagesAPI.getDetails([imageId], eventUrl);
-        if (response.images && response.images.length > 0) {
-          const info = response.images[0];
+        // Request details; interceptor will apply changes to the store
+        await imagesAPI.getDetails([imageId], eventUrl);
+        const entities = useDataStore.getState().entities || {};
+        const info = entities.images?.[imageId] || null;
+        if (info) {
           setImageInfo(info);
-          setFaces(info.faces || []);
-          setMomentInfo(info.moment || null);
-          setImageAlbums(info.albums || []);
+          // faces, albums, moment are derived from entities
           try {
             const store = useDataStore.getState();
             const seen = new Set();
@@ -427,15 +420,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           } catch {}
         } else {
           setImageInfo(null);
-          setFaces([]);
-          setMomentInfo(null);
-          setImageAlbums([]);
+          // derived lists will be empty
         }
       } else {
         setImageInfo(null);
         setFaces([]);
-        setMomentInfo(null);
-        setImageAlbums([]);
+        // derived lists will be empty
       }
     } catch (error) {
       console.error('Error fetching image info:', error);
@@ -454,10 +444,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       
       if (updatedImageData) {
         // Update face data without reloading
-        setFaces(updatedImageData.faces || []);
         setImageInfo(updatedImageData);
-        setMomentInfo(updatedImageData.moment || null);
-        setImageAlbums(updatedImageData.albums || []);
         
         // Important: Clear the result after processing to prevent re-triggering
         setTimeout(() => clearLastTransferResult(), 0);
@@ -722,7 +709,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const getGroupLabel = (face) => {
     const gid = face?.groupId || face?.group_id;
-    const label = gid ? (groupsMap[gid]?.label || '') : '';
+    if (!gid) return '';
+    const entities = useDataStore.getState().entities || {};
+    const label = (entities.groups?.[gid]?.label || groupsMap[gid]?.label || '');
     return label;
   };
 
@@ -1067,10 +1056,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
               {/* Albums and Faces Info with resizable split */}
               <div ref={sectionsRef} className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
                 {/* Albums Panel */}
-                {imageAlbums && imageAlbums.length > 0 && (
+                {albumsList && albumsList.length > 0 && (
                   <div className="flex flex-col min-h-0">
                     <div className="flex items-center justify-between px-4 pt-4">
-                      <h3 className="font-semibold text-gray-900">Albums ({imageAlbums.length})</h3>
+                      <h3 className="font-semibold text-gray-900">Albums ({albumsList.length})</h3>
                       <button
                         onClick={() => setAlbumsOpen(v => !v)}
                         className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
@@ -1085,7 +1074,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                         style={facesOpen ? { height: albumsHeight } : {}}
                       >
                         <div className="px-4">
-                          {imageAlbums.map((album, index) => (
+                          {albumsList.map((album, index) => (
                             <div
                               key={album.id || `${album.label || 'album'}-${index}`}
                               className="flex items-center p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-1 last:mb-0"
@@ -1130,7 +1119,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 )}
 
                 {/* Resizer */}
-                {imageAlbums && imageAlbums.length > 0 && albumsOpen && facesOpen && (
+                {albumsList && albumsList.length > 0 && albumsOpen && facesOpen && (
                   <div
                     className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mx-4 flex-shrink-0"
                     onMouseDown={startResize}
@@ -1142,7 +1131,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
                   <div className="flex items-center justify-between px-4 pt-4 pb-2">
                     <div className="flex items-center space-x-2">
-                      <h3 className="font-semibold text-gray-900">Faces ({faces.length})</h3>
+                      <h3 className="font-semibold text-gray-900">Faces ({facesList.length})</h3>
                       <button
                         onClick={() => {
                           if (showRectangles) {
@@ -1167,11 +1156,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   {facesOpen && (
                     <div className="faces-list-container overflow-y-auto overscroll-contain">
                       <div className="px-4">
-                        {faces.length === 0 ? (
+                        {facesList.length === 0 ? (
                           <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
                         ) : (
                           <div className="space-y-2">
-                            {faces.map((face, index) => (
+                            {facesList.map((face, index) => (
                               <div
                                 key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}

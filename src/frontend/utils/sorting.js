@@ -76,7 +76,7 @@ export const sortGroups = (groups, sortBy = 'name', sortOrder = 'asc') => {
         comparison = (a.label || '').localeCompare(b.label || '');
         break;
       case 'count':
-        comparison = (a.count || 0) - (b.count || 0);
+        comparison = (a.images_count || 0) - (b.images_count || 0);
         break;
       case 'date':
         comparison = new Date(a.updated_at || 0) - new Date(b.updated_at || 0);

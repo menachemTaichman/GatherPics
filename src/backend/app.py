@@ -142,44 +142,37 @@ def logout():
 def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
     event = get_event(event_id)
-    groups = event.models_manager.get_summary('groups')
-    return jsonify({"groups": groups})
+    changes = event.models_manager.get_enteties_changes('groups')
+    return jsonify({ 'changes': changes })
 
 ########## TODO: simplify
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
 def get_group(event_id, group_id):
-    """Get a specific group's details, including its paginated images and crop data."""
+    """Get a specific group's details as changes, including its paginated images and faces mapping."""
     event = get_event(event_id)
-    
-    group_summary = event.models_manager.get_summary('groups', group_id)
-    if not group_summary:
+
+    group_changes = event.models_manager.get_enteties_changes('groups', group_id)
+    if not group_changes:
         return not_found(f"Group {group_id} not found or not accessible")
 
     limit, offset = _parse_pagination()
-    
-    # Unified filtering path
+
     filter_groups_str = request.args.get('filter_groups')
     filter_group_ids = filter_groups_str.split(',') if filter_groups_str else []
     filter_mode = request.args.get('filter_mode', 'and')
     only_selected = _parse_bool(request.args.get('only_selected'), False)
 
-    # Always include the main group id
     group_ids = [group_id] + filter_group_ids
 
-    images = event.models_manager.get_filtered_images(
+    filtered_changes = event.models_manager.get_filtered_images(
         group_ids,
         mode=filter_mode,
         only=only_selected,
         limit=limit,
         offset=offset
     )
-    
-    response = {
-        "group": group_summary,
-        'images': images
-    }
-    return jsonify(response)
+    return jsonify({ 'changes': filtered_changes })
 
 @app.route("/api/events/<event_id>/groups/related", methods=["GET"])
 @require_auth
@@ -214,7 +207,7 @@ def get_group_faces(event_id, group_id):
 def update_group(event_id, group_id):
     """Update a group."""
     event = get_event(event_id)
-    if not event.models_manager.get_summary('groups', group_id):
+    if not event.models_manager.get_enteties_changes('groups', group_id):
         return not_found(f"Group {group_id} not found or not accessible")
         
     data = request.json or {}
@@ -224,7 +217,7 @@ def update_group(event_id, group_id):
         if sanitized:
             event.models_manager.edit('groups', group_id, sanitized)
         
-        updated_group = event.models_manager.get_summary('groups', group_id)
+        updated_group = event.models_manager.get_enteties_changes('groups', group_id)
         
         response_data = {"success": True, "group": updated_group}
         response_data.setdefault('changes', []).append({
@@ -252,7 +245,7 @@ def check_group_name(event_id):
     try:
         conflict_group_id = event.models_manager.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
         if conflict_group_id:
-            conflicting_group = event.models_manager.get_summary('groups', conflict_group_id)
+            conflicting_group = event.models_manager.get_enteties_changes('groups', conflict_group_id)
             return jsonify({"conflict": True, "conflicting_group": conflicting_group})
         else:
             return jsonify({"conflict": False})
@@ -297,29 +290,23 @@ def get_moments(event_id):
     """List all accessible moment summaries for the specific event."""
     event = get_event(event_id)
     exclude_empty = _parse_bool(request.args.get('exclude_empty_entities'), False)
-    moments = event.models_manager.get_summary('moments', exclude_empty_entities=exclude_empty)
-    return jsonify({"moments": moments})
+    moments = event.models_manager.get_enteties_changes('moments', exclude_empty_entities=exclude_empty)
+    return jsonify({'changes': moments})
 
 @app.route("/api/events/<event_id>/moments/<moment_id>", methods=["GET"])
 @require_auth
 def get_moment(event_id, moment_id):
-    """Get a specific moment's details, including its paginated images."""
+    """Get a specific moment's details as changes."""
     event = get_event(event_id)
-    moment_summary = event.models_manager.get_summary('moments', moment_id)
-    if not moment_summary:
+    moment_changes = event.models_manager.get_enteties_changes('moments', moment_id)
+    if not moment_changes:
         return not_found(f"Moment {moment_id} not found or not accessible")
 
-    limit, offset = _parse_pagination()
-    
-    images = event.models_manager.get_childs(
-        'moments', moment_id, limit=limit, offset=offset
-    )
-    
-    response = {
-        "moment": moment_summary,
-        'images': images
-    }
-    return jsonify(response)
+    images_changes = event.models_manager.get_childs_changes('moments', moment_id, 'images')
+    all_changes = []
+    all_changes.extend(moment_changes)
+    all_changes.extend(images_changes)
+    return jsonify({ 'changes': all_changes })
 
 @app.route("/api/events/<event_id>/moments", methods=["POST"])
 @require_auth
@@ -330,7 +317,7 @@ def create_moment(event_id):
     
     try:
         moment_id = event.models_manager.add('moments', data)
-        created_moment = event.models_manager.get_summary('moments', moment_id)
+        created_moment = event.models_manager.get_enteties_changes('moments', moment_id)
         
         response_data = {"success": True, "moment_id": moment_id, "moment": created_moment}
         response_data.setdefault('changes', []).append({
@@ -347,7 +334,7 @@ def create_moment(event_id):
 def update_moment(event_id, moment_id):
     """Update a moment's metadata."""
     event = get_event(event_id)
-    if not event.models_manager.get_summary('moments', moment_id):
+    if not event.models_manager.get_enteties_changes('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
         
     data = request.json or {}
@@ -357,7 +344,7 @@ def update_moment(event_id, moment_id):
         if sanitized:
             event.models_manager.edit('moments', moment_id, sanitized)
         
-        updated_moment = event.models_manager.get_summary('moments', moment_id)
+        updated_moment = event.models_manager.get_enteties_changes('moments', moment_id)
         
         response_data = {"success": True, "moment": updated_moment}
         response_data.setdefault('changes', []).append({
@@ -383,8 +370,7 @@ def add_images_to_moment(event_id, moment_id):
         response = {"success": True}
         if result.get('changes'):
             response['changes'] = result['changes']
-        # Include affected_images_ids for frontend toast notifications
-        response['affected_images_ids'] = result.get('affected_images_ids', [])
+        response['len_edited'] = result.get('len_edited', 0)
 
         return jsonify(response)
     except Exception as e:
@@ -402,8 +388,7 @@ def remove_images_from_moment(event_id, moment_id):
         response = {"success": True}
         if result.get('changes'):
             response['changes'] = result['changes']
-        # Include affected_images_ids for frontend toast notifications
-        response['affected_images_ids'] = result.get('affected_images_ids', [])
+        response['len_edited'] = result.get('len_edited', 0)
 
         return jsonify(response)
     except Exception as e:
@@ -414,7 +399,7 @@ def remove_images_from_moment(event_id, moment_id):
 def delete_moment(event_id, moment_id):
     """Delete a moment."""
     event = get_event(event_id)
-    if not event.models_manager.get_summary('moments', moment_id):
+    if not event.models_manager.get_enteties_changes('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
     
     try:
@@ -439,29 +424,23 @@ def delete_moment(event_id, moment_id):
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
     event = get_event(event_id)
-    albums = event.models_manager.get_summary('albums')
+    albums = event.models_manager.get_enteties_changes('albums')
     return jsonify({"albums": albums})
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["GET"])
 @require_auth
 def get_album(event_id, album_id):
-    """Get a specific album's details, including its paginated images."""
+    """Get a specific album's details as changes."""
     event = get_event(event_id)
-    album_summary = event.models_manager.get_summary('albums', album_id)
-    if not album_summary:
+    album_changes = event.models_manager.get_enteties_changes('albums', album_id)
+    if not album_changes:
         return not_found(f"Album {album_id} not found or not accessible")
 
-    limit, offset = _parse_pagination()
-    
-    images = event.models_manager.get_childs(
-        'albums', album_id, limit=limit, offset=offset
-    )
-    
-    response = {
-        "album": album_summary,
-        'images': images
-    }
-    return jsonify(response)
+    images_changes = event.models_manager.get_childs_changes('albums', album_id, 'images')
+    all_changes = []
+    all_changes.extend(album_changes)
+    all_changes.extend(images_changes)
+    return jsonify({ 'changes': all_changes })
 
 @app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
 @require_auth
@@ -484,7 +463,7 @@ def get_archive_album(event_id):
 def update_album(event_id, album_id):
     """Update an album's details."""
     event = get_event(event_id)
-    album = event.models_manager.get_summary('albums', album_id)
+    album = event.models_manager.get_enteties_changes('albums', album_id)
     if not album:
         return not_found(f"Album {album_id} not found or not accessible")
 
@@ -498,7 +477,7 @@ def update_album(event_id, album_id):
         if sanitized:
             event.models_manager.edit('albums', album_id, sanitized)
 
-        updated = event.models_manager.get_summary('albums', album_id)
+        updated = event.models_manager.get_enteties_changes('albums', album_id)
         response_data = {"success": True, "album": updated}
         return jsonify(response_data)
     except Exception as e:
@@ -518,8 +497,7 @@ def add_images_to_album(event_id, album_id):
         response = {"success": True}
         if result.get('changes'):
             response['changes'] = result['changes']
-        # Include affected_images_ids for frontend toast notifications
-        response['affected_images_ids'] = result.get('affected_images_ids', [])
+        response['len_edited'] = result.get('len_edited', 0)
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -537,8 +515,7 @@ def remove_images_from_album(event_id, album_id):
         response = {"success": True}
         if result.get('changes'):
             response['changes'] = result['changes']
-        # Include affected_images_ids for frontend toast notifications
-        response['affected_images_ids'] = result.get('affected_images_ids', [])
+        response['len_edited'] = result.get('len_edited', 0)
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -555,11 +532,11 @@ def get_images_details(event_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     if not image_ids:
-        return jsonify({"images": []})
+        return jsonify({"changes": []})
 
     try:
         images_data = event.models_manager.get_images(image_ids)
-        return jsonify({"images": images_data})
+        return jsonify({"changes": images_data})
     except Exception as e:
         return bad_request(e)
 

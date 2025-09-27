@@ -81,7 +81,7 @@ class Event(JsonModel):
 
     def _initialize_default_albums(self):
         """Initialize default albums for the event: Main Album and Event Album"""
-        existing_albums = self.models_manager.get_summary('albums')
+        existing_albums = self.models_manager.get_enteties_changes('albums')
         if existing_albums:
             return  # Albums already exist, don't create duplicates
         

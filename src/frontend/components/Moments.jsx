@@ -259,13 +259,10 @@ export default function Moments({ eventUrl }) {
       const imagePromises = momentsToFetch.map(async (moment) => {
         try {
           const result = await momentsAPI.getById(moment.id, eventUrl);
-          const imgs = result.images || [];
-          const ids = imgs.map(i => i && i.id).filter(Boolean);
-          try {
-            const store = useDataStore.getState();
-            if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
-            store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: moment.id, ids }]);
-          } catch {}
+          // After interceptor applies changes, read images from store
+          const entities = useDataStore.getState().entities;
+          const idsSet = entities?.moments?.[moment.id]?.images || new Set();
+          const imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
           return { momentId: moment.id, images: imgs };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.id}:`, error);
@@ -301,12 +298,7 @@ export default function Moments({ eventUrl }) {
   const fetchMoments = async () => {
     try {
       setStoreLoading(true);
-      const response = await momentsAPI.getAll(eventUrl, { exclude_empty_entities: true });
-    const store = useDataStore.getState();
-    const moments = response.moments || [];
-    if (moments.length) {
-      store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: moments }]);
-    }
+      await momentsAPI.getAll(eventUrl, { exclude_empty_entities: true });
       setStoreError(null);
     } catch (err) {
       setStoreError('Failed to load moments.');
@@ -350,15 +342,11 @@ export default function Moments({ eventUrl }) {
   // Function to update the momentImagesMap for a specific moment
   const updateMomentImagesMap = async (momentId) => {
     try {
-      const result = await momentsAPI.getById(momentId, eventUrl);
-      const imgs = result.images || [];
-      const ids = imgs.map(i => i && i.id).filter(Boolean);
-      try {
-        const store = useDataStore.getState();
-        if (imgs.length > 0) store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
-        store.applyChanges([{ type: 'RELATION_SET', relation: 'moment.images', parentId: momentId, ids }]);
-      } catch {}
-      
+      await momentsAPI.getById(momentId, eventUrl);
+      const entities = useDataStore.getState().entities;
+      const idsSet = entities?.moments?.[momentId]?.images || new Set();
+      const imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
+
       setMomentImagesMap(prev => ({
         ...prev,
         [momentId]: imgs
@@ -520,7 +508,7 @@ export default function Moments({ eventUrl }) {
       
       if (result) {
         const action = allAreFavorites ? 'Removed from' : 'Added to';
-        const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (allAreFavorites ? result.removed : result.added);
+        const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (allAreFavorites ? result.removed : result.added));
         
         showToast(
           <span>
@@ -547,7 +535,7 @@ export default function Moments({ eventUrl }) {
       if (allAreArchived) {
         const result = await albumsAPI.toggleArchive(imageIdsArray, true, eventUrl);
         if (result) {
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
           showToast(
             <span>
               {count} removed from{' '}
@@ -559,7 +547,7 @@ export default function Moments({ eventUrl }) {
       } else {
         const result = await albumsAPI.addToArchive(imageIdsArray, eventUrl);
         if (result) {
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
           showToast(
             <span>
               {count} moved to{' '}

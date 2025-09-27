@@ -68,8 +68,8 @@ export default function TransferFacesModal({
         aValue = a.label || `Person ${a.id}`;
         bValue = b.label || `Person ${b.id}`;
       } else {
-        aValue = a.count || 0;
-        bValue = b.count || 0;
+        aValue = a.images_count || 0;
+        bValue = b.images_count || 0;
       }
       
       if (sortOrder === 'asc') {
@@ -361,7 +361,7 @@ export default function TransferFacesModal({
                         {group.label || `Person ${group.id}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {group.count || 0} images
+                        {group.images_count || 0} images
                       </p>
                     </div>
                   </div>

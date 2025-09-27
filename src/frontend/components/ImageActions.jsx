@@ -63,7 +63,9 @@ export default function useImageActions({
         }
         
         const action = currentFavorite ? 'Removed from' : 'Added to';
-        const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (currentFavorite ? result.removed : result.added);
+        const count = (typeof result.len_edited === 'number')
+          ? result.len_edited
+          : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (currentFavorite ? result.removed : result.added));
         
         showToast(
           <span>
@@ -91,7 +93,7 @@ export default function useImageActions({
             });
           }
           
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
           showToast(
             <span>
               {count} removed from{' '}
@@ -109,7 +111,7 @@ export default function useImageActions({
             });
           }
           
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
           showToast(
             <span>
               {count} moved to{' '}

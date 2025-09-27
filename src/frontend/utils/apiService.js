@@ -206,20 +206,13 @@ export const groupsAPI = {
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups`);
-    const data = response.data || {};
-    if (Array.isArray(data.groups)) {
-      data.groups = data.groups.map(normalizeGroup);
-    }
-    return data;
+    return response.data || {};
   },
 
   getById: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
-    const data = response.data || {};
-    if (data.group) data.group = normalizeGroup(data.group);
-    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
-    return data;
+    return response.data || {};
   },
 
   update: async (groupId, updates, eventUrl) => {
@@ -287,20 +280,13 @@ export const momentsAPI = {
   getAll: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments`, { params });
-    const data = response.data || {};
-    if (Array.isArray(data.moments)) {
-      data.moments = data.moments.map(normalizeMoment);
-    }
-    return data;
+    return response.data || {};
   },
 
   getById: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
-    const data = response.data || {};
-    if (data.moment) data.moment = normalizeMoment(data.moment);
-    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
-    return data;
+    return response.data || {};
   },
 
   create: async (momentData, eventUrl) => {
@@ -362,10 +348,7 @@ export const albumsAPI = {
   getById: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
-    const data = response.data || {};
-    if (data.album) data.album = normalizeAlbum(data.album);
-    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
-    return data;
+    return response.data || {};
   },
 
   update: async (albumId, updates, eventUrl) => {
@@ -400,13 +383,11 @@ export const albumsAPI = {
 
     if (!favoritesAlbumId) {
       const eventId = await getEventIdForApi(eventUrl);
-      const response = await api.get(`/api/events/${eventId}/albums/defaults/favorites`);
-      const data = response.data || {};
-      if (data.album) {
-        const albumId = data.album.id || data.album.album_id;
-        store.setFavoritesAlbumId(albumId);
-        favoritesAlbumId = albumId;
-      }
+      await api.get(`/api/events/${eventId}/albums/defaults/favorites`);
+      // After changes applied, locate favorites album in store
+      const albumsMap = useDataStore.getState().entities?.albums || {};
+      const fav = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'favorites');
+      if (fav && fav.id) { store.setFavoritesAlbumId(fav.id); favoritesAlbumId = fav.id; }
     }
 
     if (!favoritesAlbumId) {
@@ -426,13 +407,10 @@ export const albumsAPI = {
     
     if (!archiveAlbumId) {
         const eventId = await getEventIdForApi(eventUrl);
-        const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
-        const data = response.data || {};
-        if (data.album) {
-            const albumId = data.album.id || data.album.album_id;
-            store.setArchiveAlbumId(albumId);
-            archiveAlbumId = albumId;
-        }
+        await api.get(`/api/events/${eventId}/albums/defaults/archive`);
+        const albumsMap = useDataStore.getState().entities?.albums || {};
+        const arc = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'archive');
+        if (arc && arc.id) { store.setArchiveAlbumId(arc.id); archiveAlbumId = arc.id; }
     }
 
     if (!archiveAlbumId) {
@@ -448,13 +426,10 @@ export const albumsAPI = {
 
     if (!archiveAlbumId) {
       const eventId = await getEventIdForApi(eventUrl);
-      const response = await api.get(`/api/events/${eventId}/albums/defaults/archive`);
-      const data = response.data || {};
-      if (data.album) {
-        const albumId = data.album.id || data.album.album_id;
-        store.setArchiveAlbumId(albumId);
-        archiveAlbumId = albumId;
-      }
+      await api.get(`/api/events/${eventId}/albums/defaults/archive`);
+      const albumsMap = useDataStore.getState().entities?.albums || {};
+      const arc = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'archive');
+      if (arc && arc.id) { store.setArchiveAlbumId(arc.id); archiveAlbumId = arc.id; }
     }
 
     if (!archiveAlbumId) {

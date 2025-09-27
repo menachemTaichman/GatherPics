@@ -118,13 +118,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
-  // Derive images from normalized store relations (ids with shallow equality) for smooth updates
-  const relatedImageIds = useDataStore(
-    state => (group?.id ? (state.relations?.groupImages?.[group.id] || EMPTY_ARRAY) : EMPTY_ARRAY),
-    shallow
-  );
-  const images = useDataStore(state => state.entities.images);
-  const relatedImages = useMemo(() => Array.from(relatedImageIds || []).map(id => images[id]).filter(Boolean), [relatedImageIds, images]);
+  // Derive images from embedded relation Set in group entity
+  const groupFromStore = useDataStore(state => (group?.id ? state.entities?.groups?.[group.id] : null));
+  const imagesMap = useDataStore(state => state.entities.images);
+  const relatedImages = useMemo(() => {
+    const ids = groupFromStore?.images instanceof Set ? Array.from(groupFromStore.images) : [];
+    return ids.map(id => imagesMap[id]).filter(Boolean);
+  }, [groupFromStore?.images, imagesMap]);
+
+  const facesMapping = groupFromStore?.faces_mapping || {};
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
@@ -197,38 +199,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     }
 
     try {
-      const response = await groupsAPI.getById(group.id, eventUrl, params);
-      
-      setGroup(prev => {
-        const next = { ...(prev || {}), ...(response.group || {}) };
-        if (prev && prev.id === next.id && prev.label === next.label && prev.representative_face === next.representative_face && prev.count === next.count) {
-          return prev;
-        }
-        return next;
-      });
-      // Populate normalized store entities and relations for smooth updates
-      try {
-        const store = useDataStore.getState();
-        const imageIds = (response.images || []).map(img => img?.id).filter(Boolean);
-        const changes = [];
-        if (response.group) {
-          changes.push({ type: 'UPSERT', entity: 'groups', items: [response.group] });
-        }
-        if (Array.isArray(response.images)) {
-          changes.push({ type: 'UPSERT', entity: 'images', items: response.images });
-        }
-        if (resetImages || currentOffset === 0) {
-          changes.push({ type: 'RELATION_SET', relation: 'group.images', parentId: group.id, ids: imageIds });
-        } else if (imageIds.length > 0) {
-          changes.push({ type: 'RELATION_ADD', relation: 'group.images', parentId: group.id, ids: imageIds });
-        }
-        if (changes.length > 0) {
-          store.applyChanges(changes);
-        }
-      } catch (e) {
-        // no-op if store unavailable
-      }
-      setHasMore((response.images || []).length === 50);
+      const payload = await groupsAPI.getById(group.id, eventUrl, params);
+      const changes = Array.isArray(payload?.changes) ? payload.changes : [];
+      const rel = changes.find(ch => (ch.type === 'RELATION_SET' || ch.type === 'RELATION_ADD') && (ch.relation || '') === 'groups.images' && String(ch.parentId) === String(group.id));
+      const pageCount = Array.isArray(rel?.ids) ? rel.ids.length : 0;
+      setHasMore(pageCount === 50);
       
     } catch (error) {
       console.error('Error fetching group details:', error);
@@ -383,7 +358,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       
       if (result) {
         const action = isFavorite ? 'Removed from' : 'Added to';
-        const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (isFavorite ? result.removed : result.added);
+        const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (isFavorite ? result.removed : result.added));
         
         showToast(
           <span>
@@ -405,7 +380,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       if (isArchived) {
         const result = await albumsAPI.toggleArchive([imageId], true, eventUrl);
         if (result) {
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
           showToast(
             <span>
               {count} removed from{' '}
@@ -417,7 +392,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       } else {
         const result = await albumsAPI.addToArchive([imageId], eventUrl);
         if (result) {
-          const count = Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added;
+          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
           showToast(
             <span>
               {count} moved to{' '}
@@ -435,37 +410,18 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const getSelectedFaces = () => {
     const selectedFaces = [];
     for (const imageId of selectedImages) {
-      const image = sortedImages.find(p => p.id === imageId);
-      if (image && image.representative_face) {
-        // The representative_face is the face_ids of the face belonging to the current group
-        // We need to find this face in the faces array or create a face object
-        const face = image.faces?.find(f => (f.id || f.face_id) === image.representative_face);
-        if (face) {
-          selectedFaces.push({
-            face_id: face.id || face.face_id,
-            image_id: face.image_id,
-            group_id: face.group_id,
-            width: face.width,
-            height: face.height,
-            left: face.left,
-            top: face.top,
-            group_label: face.group_label
-          });
-        } else {
-          // If we can't find the face in the faces array, create a minimal face object
-          // This shouldn't happen in normal operation, but provides a fallback
-          selectedFaces.push({
-            face_id: image.representative_face,
-            image_id: image.id,
-            group_id: group.id,
-            width: 0,
-            height: 0,
-            left: 0,
-            top: 0,
-            group_label: group.label
-          });
-        }
-      }
+      const faceId = facesMapping?.[imageId];
+      if (!faceId) continue;
+      selectedFaces.push({
+        face_id: faceId,
+        image_id: imageId,
+        group_id: group.id,
+        width: 0,
+        height: 0,
+        left: 0,
+        top: 0,
+        group_label: group.label
+      });
     }
     return selectedFaces;
   };
@@ -771,7 +727,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedImages.length} of {group.count || 0} images
+                  {sortedImages.length} of {Number.isFinite(group.images_count) ? group.images_count : (group.count || 0)} images
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops
@@ -1007,7 +963,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                     image={image}
                     aspectClass={imageClasses[image.id] || 'square'}
                     imageFit={'cover'}
-                    thumbSrc={showCrops && image.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(image.representative_face) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
+                    thumbSrc={showCrops && facesMapping?.[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(facesMapping[image.id]) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                     selectionMode={selectionMode}
                     isSelected={selectedImages.has(image.id)}
                     onToggleSelect={(e) => toggleImageSelection(image.id, e)}
@@ -1021,7 +977,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={formatDate(image.date_taken)}
                       showDate={!!image.date_taken}
-                      showCropBadge={showCrops && !!image.representative_face}
+                      showCropBadge={showCrops && !!facesMapping?.[image.id]}
                     />
                 </motion.div>
               ))}

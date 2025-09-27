@@ -29,7 +29,7 @@ function formatDateTime(dateString) {
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
   const { urlHelpers } = useEventUrls(eventUrl);
-  const { moments: storeMoments } = useDataStore();
+  const storeMoments = useDataStore(state => Object.values(state.entities?.moments || {}));
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
@@ -57,12 +57,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setIsLoading(true);
     try {
       // Always fetch all moments for editing, including empty and archived
-      const response = await momentsAPI.getAll(eventUrl);
-      const moments = response.moments || [];
-      if (moments.length) {
-        useDataStore.getState().applyChanges([{ type: 'UPSERT', entity: 'moments', items: moments }]);
-      }
-      const sortedMoments = sortMoments(moments, 'asc');
+      await momentsAPI.getAll(eventUrl);
+      const allFromStore = Object.values(useDataStore.getState().entities?.moments || {});
+      const sortedMoments = sortMoments(allFromStore, 'asc');
       setInternalMoments(sortedMoments);
       setEditingMoments(sortedMoments);
       setChangedMoments(new Set());
