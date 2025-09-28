@@ -199,7 +199,7 @@ def get_related_groups(event_id):
 def get_group_faces(event_id, group_id):
     """Get the faces of a group."""
     event = get_event(event_id)
-    faces = event.models_manager.get_childs('groups', group_id, child='faces')
+    faces = event.models_manager.get_childs_entities('groups', group_id, child='faces')
     return jsonify({"faces": faces})
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])

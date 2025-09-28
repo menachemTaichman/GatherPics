@@ -89,14 +89,13 @@ class ReturnFormat(Enum):
     DICT_VALUES = 'dict_values'
     LIST_AND_DICT_DICTS = 'list_and_dict_dicts'
 
-# TODO: remove fields_as_child
 STRUCTURE = {
     'images': {
         'primary_key': 'image_id',
         'accessible_table': 'accessible_images',
         'fields': ['date_taken', 'is_archived', 'is_favorite', 'label', 'file_size', 'width', 'height', 'moment_id', 'moment_label'],
         'relations': {
-            'albums': {'relation_table': 'albums_images', 'fields_needed': ['label']},
+            'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},
             'faces': {'relation_table': 'faces', 'fields_needed': ['group_id', 'group_label', 'width', 'height', 'left', 'top']},
         }
     },
@@ -131,6 +130,10 @@ STRUCTURE = {
         'relations': {
             'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
         },
+    'albums_images_actual': {
+        'primary_key': ['album_id', 'image_id'],
+        'accessible_table': 'accessible_albums_images_actual',
+    },
     },
     'profiles': {
         'primary_key': 'profile_id',
@@ -343,11 +346,23 @@ VIEWS = {
     'accessible_moments': '''
         SELECT m.* FROM moments_details m
     ''',
+    'albums_images_actual': '''
+        SELECT albums_images.*
+        FROM albums_images
+        INNER JOIN albums ON albums_images.album_id = albums.album_id
+        WHERE LOWER(albums.label) != 'archive' and LOWER(albums.label) != 'favorites'
+    ''',
     'accessible_albums_images': '''
         SELECT albums_images.*
         FROM albums_images
         INNER JOIN accessible_images ON albums_images.image_id = accessible_images.image_id
         INNER JOIN accessible_albums ON albums_images.album_id = accessible_albums.album_id
+    ''',
+    'accessible_albums_images_actual': '''
+        SELECT albums_images_actual.*
+        FROM albums_images_actual
+        INNER JOIN accessible_images ON albums_images_actual.image_id = accessible_images.image_id
+        INNER JOIN accessible_albums ON albums_images_actual.album_id = accessible_albums.album_id
     ''',
     'editable_profiles_details': '''
         SELECT profile_id, label, password FROM profiles
@@ -836,14 +851,33 @@ class AppDB:
         return fields
 
     @staticmethod
-    def get_relation(parent: str, child: str) -> tuple[str, str, str, list[str]]:
-        """Get the realtion table, child table, child id field, and view fields for a relation."""
-        relation_meta = STRUCTURE[parent]['relations'][child]
-        relation_table = relation_meta['relation_table']
-        child_id_field = AppDB.get_id_field(relation_table, remove_parent=parent)
-        fields = AppDB._get_fields([child_id_field] + relation_meta['fields_needed'], 'c')
+    def get_relation(parent: str, child: str | None = None) -> tuple[str, str, str, list[str]] | list[tuple[str, str, str, list[str]]]:
+        """Get the relation info for a parent and child.
+        Args:
+            parent: parent table
+            child: child table or None to get all childs
+        Returns:
+            relation table, child table, child id field, and view fields for a relation.
+            if child is None, return a list of all relations info.
+        """
+        return_single = False
+        if child:
+            childs = [child]
+            return_single = True
+        else:
+            childs = STRUCTURE[parent]['relations'].keys()
 
-        return relation_table, child, child_id_field, fields
+        relations = []
+        for child in childs:
+            relation_meta = STRUCTURE[parent]['relations'][child]
+            relation_table = relation_meta['relation_table']
+            child_id_field = AppDB.get_id_field(relation_table, remove_parent=parent)
+            fields = AppDB._get_fields([child_id_field] + relation_meta['fields_needed'], 'c')
+            relations.append((relation_table, child, child_id_field, fields))
+
+        if return_single:
+            return relations[0]
+        return relations
 
     @staticmethod
     def get_view_fields(table: str, as_table: str | None = None) -> str:

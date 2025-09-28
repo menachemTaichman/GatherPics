@@ -81,20 +81,13 @@ class Event(JsonModel):
 
     def _initialize_default_albums(self):
         """Initialize default albums for the event: Main Album and Event Album"""
-        existing_albums = self.models_manager.get_enteties_changes('albums')
-        if existing_albums:
-            return  # Albums already exist, don't create duplicates
+        archive_album_id = self.models_manager.get_archive_album()
+        favorites_album_id = self.models_manager.get_favorites_album()
+        if not archive_album_id:
+            self.models_manager.add('albums', {'label': 'Archive'})
         
-        archive_album_id = self.models_manager.generate_id()
-        favorites_album_id = self.models_manager.generate_id()
-        archive_album_label = 'Archive'
-        favorites_album_label = 'Favorites'
-
-        self.db.execute_query(f'''
-            INSERT INTO albums (album_id, label)
-            VALUES (?, ?),
-                   (?, ?)
-        ''', (archive_album_id, archive_album_label, favorites_album_id, favorites_album_label))
+        if not favorites_album_id:
+            self.models_manager.add('albums', {'label': 'Favorites'})
 
     def add(self, **fields) -> 'Event':
         super().add(**fields)
@@ -121,7 +114,7 @@ class Event(JsonModel):
         }
 
     def delete_image(self, image_id: str) -> dict:
-        faces = self.models_manager.get_childs('images', image_id)
+        faces = self.models_manager.get_childs_entities('images', image_id)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
         

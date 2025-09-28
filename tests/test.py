@@ -375,7 +375,7 @@ def test_gets_methods(entities_tables: list, ids: dict, relations: list):
 
     for parent, child in relations:
         id = ids[parent][0]
-        result = event.models_manager.get_childs(parent, id, child)
+        result = event.models_manager.get_childs_entities(parent, id, child)
         print(f'get_childs, {parent}.{child} of {id}')
         print(result)
         print('--------------------------------')
