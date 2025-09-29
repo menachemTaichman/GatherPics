@@ -609,16 +609,6 @@ export const handleAPIError = (error, defaultMessage = 'An error occurred') => {
 
 // JWT Authentication helpers
 export const authAPI = {
-  updateIncludeArchived: async (includeArchived) => {
-    try {
-      const token = await jwtService.updateIncludeArchived(includeArchived);
-      return { success: true, token, include_archived: includeArchived };
-    } catch (error) {
-      console.error('Failed to update include_archived setting:', error);
-      throw error;
-    }
-  },
-
   // Get current JWT token
   getCurrentToken: async () => {
     try {

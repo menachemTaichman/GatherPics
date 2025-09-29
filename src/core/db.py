@@ -3,85 +3,10 @@ from typing import List, Dict, Union, Tuple, Any
 from contextlib import contextmanager
 from enum import Enum
 
-"""
-relations:
-    images.faces:
-        relation_table: faces
-        view_fields: group_id, group_label, width, height, left, top
-        edit:
-            None
-    images.albums:
-        relation_table: albums_images
-        view_fields: album_id, label
-        edit:
-            None
-    albums.images:
-        relation_table: albums_images
-        view_fields: date_taken, is_archived, is_favorite
-        edit:
-            changes:
-                albums.images relations
-                images.albums relations
-                albums images_count upsert
-                if default albums: images default albums upsert
-    moments.images:
-        relation_table: images
-        view_fields: date_taken, is_archived, is_favorite
-        edit:
-            changes:
-                moments.images relations (old_parents and new_parents)
-                images moment_id, moment_label upsert
-    groups.faces:
-        relation_table: faces
-        view_fields: date_taken
-        edit:
-            changes:
-                groups.faces relations (old_parents and new_parents)
-                groups.images relations (old_parents and new_parents)
-                groups mapping upsert (old_parents and new_parents)
-                groups images_count upsert
-                faces group_id, group_label upsert
-    groups.images:
-        relation_table: groups_images
-        view_fields: date_taken, is_archived, is_favorite
-        edit:
-            None
-    profiles.images:
-        relation_table: profile_images
-        view_fields: date_taken
-        edit:
-            changes:
-                profiles.images relations
-    profiles.albums:
-        relation_table: profile_albums
-        view_fields: label
-        edit:
-            changes: profiles.albums relations
-
-view flow:
-
-
-edit flow:
-    edit(parent, child):
-        edit parent.child relations
-        changes.append(parent.child relation edited)
-        changes.append(parent edited) # TODO: remove if count is removed
-        get other_parent(child) # get child id field without parent id field
-        if other_parent is parent:
-            changes.append(child edited)
-        elif other_parent have child as view child:
-            changes.append(other_parent.child relation edited)
-            changes.append(other_parent edited) # TODO: remove if count is removed
-
-        return changes
-
-"""
-
 class ReturnFormat(Enum):
     VALUE = 'value'
     TUPLE = 'tuple'
     DICT = 'dict'
-    SET_VALUES = 'set_values'
     LIST_VALUES = 'list_values'
     LIST_TUPLES = 'list_tuples'
     LIST_DICTS = 'list_dicts'
@@ -93,10 +18,10 @@ STRUCTURE = {
     'images': {
         'primary_key': 'image_id',
         'accessible_table': 'accessible_images',
-        'fields': ['date_taken', 'is_archived', 'is_favorite', 'label', 'file_size', 'width', 'height', 'moment_id', 'moment_label'],
+        'fields': ['date_taken', 'is_archived', 'is_favorite', 'label', 'file_size', 'width', 'height', 'moment_id'],
         'relations': {
             'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},
-            'faces': {'relation_table': 'faces', 'fields_needed': ['group_id', 'group_label', 'width', 'height', 'left', 'top']},
+            'faces': {'relation_table': 'faces', 'fields_needed': ['group_id', 'width', 'height', 'left', 'top']},
         }
     },
     'faces': {
@@ -106,11 +31,11 @@ STRUCTURE = {
     'groups': {
         'primary_key': 'group_id',
         'accessible_table': 'accessible_groups',
-        'fields': ['label', 'representative_face', 'images_count'],
+        'fields': ['label', 'images_count'],
         'representative': {'field': 'representative_face', 'table': 'faces'},
         'relations': {
             'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
-            'faces': {'relation_table': 'faces', 'fields_needed': ['date_taken']}
+            'faces': {'relation_table': 'faces', 'fields_needed': []}
         },
     },
     'moments': {
@@ -130,10 +55,10 @@ STRUCTURE = {
         'relations': {
             'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
         },
+    },
     'albums_images_actual': {
         'primary_key': ['album_id', 'image_id'],
         'accessible_table': 'accessible_albums_images_actual',
-    },
     },
     'profiles': {
         'primary_key': 'profile_id',
@@ -265,14 +190,8 @@ VIEWS = {
         LEFT JOIN (albums_images a2 INNER JOIN albums b2 ON a2.album_id = b2.album_id)
         ON a2.image_id = images.image_id AND LOWER(b2.label) = 'favorites';
     ''',
-    'albums_details': '''
-        SELECT albums.*, COUNT(ai.image_id) as images_count
-        FROM albums
-        LEFT JOIN albums_images ai ON albums.album_id = ai.album_id
-        GROUP BY albums.album_id;
-    ''',
-    'accessible_albums': '''
-        SELECT a.* FROM albums_details a
+    'accessible_albums_helper': '''
+        SELECT a.* FROM albums a
         WHERE EXISTS (
             SELECT 1
             FROM profiles p
@@ -288,12 +207,10 @@ VIEWS = {
     ''',
     'accessible_images': '''
         SELECT i.*,
-        (a2.album_id IS NOT NULL AND i.is_favorite_helper = 1) AS is_favorite,
-        m.label as moment_label
+        (a2.album_id IS NOT NULL AND i.is_favorite_helper = 1) AS is_favorite
         FROM images_details as i
-        LEFT JOIN accessible_albums as a1 on LOWER(a1.label) = 'archive'
-        LEFT JOIN accessible_albums as a2 on LOWER(a2.label) = 'favorites'
-        LEFT JOIN moments as m on m.moment_id = i.moment_id
+        LEFT JOIN accessible_albums_helper as a1 on LOWER(a1.label) = 'archive'
+        LEFT JOIN accessible_albums_helper as a2 on LOWER(a2.label) = 'favorites'
         WHERE EXISTS (
             SELECT 1
             FROM profiles LEFT JOIN profile_images
@@ -304,25 +221,10 @@ VIEWS = {
             )
         )
         AND (a1.album_id IS NOT NULL OR i.is_archived = 0)
-        AND (include_archived() = 1 OR i.is_archived = 0)
-    ''',
-    'accessible_groups': '''
-        SELECT g.*, COUNT(agi.image_id) as images_count
-        FROM groups g
-        LEFT JOIN accessible_groups_images agi ON g.group_id = agi.group_id
-        WHERE NOT EXISTS (SELECT 1 FROM faces f WHERE f.group_id = g.group_id)
-        OR EXISTS (SELECT 1 FROM accessible_images ai WHERE ai.image_id = agi.image_id)
-        GROUP BY g.group_id;
-    ''',
-    'faces_details': '''
-        SELECT f.*, g.label as group_label, i.date_taken as date_taken
-        FROM faces f
-        INNER JOIN groups g ON f.group_id = g.group_id
-        INNER JOIN images i ON f.image_id = i.image_id
     ''',
     'accessible_faces': '''
         SELECT f.*
-        FROM faces_details f 
+        FROM faces f 
         INNER JOIN accessible_images i ON f.image_id = i.image_id
     ''',
     'groups_images': '''
@@ -337,14 +239,19 @@ VIEWS = {
         FROM groups_images
         INNER JOIN accessible_images ON groups_images.image_id = accessible_images.image_id
     ''',
-    'moments_details': '''
+    'accessible_groups': '''
+        SELECT g.*, COUNT(agi.image_id) as images_count
+        FROM groups g
+        LEFT JOIN accessible_groups_images agi ON g.group_id = agi.group_id
+        LEFT JOIN faces f ON g.group_id = f.group_id
+        GROUP BY g.group_id
+        HAVING images_count > 0 OR COUNT(f.face_id) > 0;
+    ''',
+    'accessible_moments': '''
         SELECT m.*, COUNT(i.image_id) as images_count
         FROM moments m
         LEFT JOIN images i ON m.moment_id = i.moment_id
-        GROUP BY m.moment_id;
-    ''',
-    'accessible_moments': '''
-        SELECT m.* FROM moments_details m
+        GROUP BY m.moment_id
     ''',
     'albums_images_actual': '''
         SELECT albums_images.*
@@ -356,13 +263,19 @@ VIEWS = {
         SELECT albums_images.*
         FROM albums_images
         INNER JOIN accessible_images ON albums_images.image_id = accessible_images.image_id
-        INNER JOIN accessible_albums ON albums_images.album_id = accessible_albums.album_id
+        INNER JOIN accessible_albums_helper aa ON albums_images.album_id = aa.album_id
     ''',
     'accessible_albums_images_actual': '''
         SELECT albums_images_actual.*
         FROM albums_images_actual
         INNER JOIN accessible_images ON albums_images_actual.image_id = accessible_images.image_id
-        INNER JOIN accessible_albums ON albums_images_actual.album_id = accessible_albums.album_id
+        INNER JOIN accessible_albums_helper aa ON albums_images_actual.album_id = aa.album_id
+    ''',
+    'accessible_albums': '''
+        SELECT aa.*, COUNT(aia.image_id) as images_count
+        FROM accessible_albums_helper aa
+        LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
+        GROUP BY aa.album_id
     ''',
     'editable_profiles_details': '''
         SELECT profile_id, label, password FROM profiles
@@ -885,47 +798,11 @@ class AppDB:
         fields = [id_field] + STRUCTURE[table].get('fields', [])
         return AppDB._get_fields(fields, as_table)
 
-    @staticmethod
-    def get_view_child(table: str, child: str | None = None, *, all: bool = False) -> str:
-        if child:
-            return child
-        
-        childs = STRUCTURE[table]['childs'].get('view', None)
-        if all:
-            return childs
-
-        return childs[0]
-
-    @staticmethod
-    def get_edit_child(table: str, child: str | None = None) -> str | tuple[str, str, str, str]:
-        childs = STRUCTURE[table]['childs'].get('edit', None)
-        if not child:
-            child = list(childs.keys())[0]
-        child_meta = childs[child]
-
-        other_parent = child_meta['other_parent']
-        exclusive = other_parent == table
-        child_id_field = STRUCTURE[child]['primary_key'] if exclusive else STRUCTURE[other_parent]['primary_key']
-
-        return child, other_parent, child_meta['relation'], child_id_field
-
-    @staticmethod
-    def get_fields_as_child(table: str, as_table: str | None = None) -> str:
-        if table not in STRUCTURE:
-            return table
-        
-        if as_table:
-            as_table += '.'
-
-        fields_as_child = STRUCTURE[table].get('fields_as_child', None)
-        return ', '.join([f"{as_table}{field}" for field in fields_as_child]) if fields_as_child else f'{as_table}*'
-
-    def __init__(self, db_path: str, event_id: str, profile_id: str | None = None, include_archived: bool = False):
+    def __init__(self, db_path: str, event_id: str, profile_id: str | None = None):
         self.db_path = db_path
         self.event_id = event_id
         self._profile_context = {}
         self.set_profile_id(profile_id)
-        self.set_include_archived(include_archived)
 
     def set_profile_id(self, profile_id: str | None = None):
         """Set the current profile id for access control."""
@@ -953,16 +830,8 @@ class AppDB:
         """Get the current profile id."""
         return self._profile_context.get('profile_id')
 
-    def set_include_archived(self, include_archived: bool) -> bool:
-        """Set the include archived flag."""
-        self._include_archived = include_archived
-
-    def get_include_archived(self) -> bool:
-        """Get the include archived flag."""
-        return self._include_archived
-
     @contextmanager
-    def get_connection(self, force_include_archived: bool = False):
+    def get_connection(self):
         """Context manager for database connections."""
 
         conn = sqlite3.connect(self.db_path)
@@ -970,24 +839,15 @@ class AppDB:
         conn.execute("PRAGMA foreign_keys = ON")
         # Register the current profile context on every connection
         conn.create_function("cur_profile", 1, lambda key: self._profile_context.get(key))
-        include_archived = force_include_archived or self.get_include_archived()
-        conn.create_function("include_archived", 0, lambda: include_archived)
 
         try:
             yield conn
         finally:
             conn.close()
 
-    def execute_query(
-        self,
-        query: str,
-        params: tuple = (),
-        *,
-        force_include_archived: bool = False,
-        return_format: ReturnFormat = None
-    ) -> List[tuple] | List[dict] | dict[str, dict] | dict | tuple | str | None:
+    def execute_query(self, query: str, params: tuple = (), return_format: ReturnFormat = None):
         """Execute a custom query and return results."""
-        with self.get_connection(force_include_archived) as conn:
+        with self.get_connection() as conn:
             cursor = conn.execute(query, params)
             upper_query = query.strip().upper()
             results = []
@@ -1005,8 +865,6 @@ class AppDB:
                     results = rows[0] if rows else None
                 elif return_format == ReturnFormat.DICT:
                     results = dict(zip(columns, rows[0])) if rows else None
-                elif return_format == ReturnFormat.SET_VALUES:
-                    results = set([row[0] for row in rows]) if rows else set()
                 elif return_format == ReturnFormat.LIST_VALUES:
                     results = [row[0] for row in rows] if rows else []
                 elif return_format == ReturnFormat.LIST_TUPLES:
@@ -1055,7 +913,7 @@ class AppDB:
             sql += f' RETURNING {returning_str}'
         
         inserted_ids = []
-        with self.get_connection(True) as conn:
+        with self.get_connection() as conn:
             for row_data in data_list:
                 values = tuple(row_data[k] for k in keys)
                 try:
@@ -1103,7 +961,7 @@ class AppDB:
             sql += f' RETURNING {returning_str}'
         
         updated_ids = []
-        with self.get_connection(True) as conn:
+        with self.get_connection() as conn:
             try:
                 cursor = conn.execute(sql, values)
                 if p_keys:
@@ -1143,7 +1001,7 @@ class AppDB:
             sql += f' RETURNING {returning_str}'
 
         deleted_ids = []
-        with self.get_connection(True) as conn:
+        with self.get_connection() as conn:
             try:
                 cursor = conn.execute(sql, values)
                 if p_keys:

@@ -39,8 +39,9 @@ class ModelsManager:
         Returns:
             True if the entity has no childs, False otherwise
         """
-        childs = [child] if child else None
-        childs = AppDB.get_relation(table, childs)
+        childs = AppDB.get_relation(table, child)
+        if child:
+            childs = [childs]
         id_field = AppDB.get_id_field(table)
         for child in childs:
             relation_table = child[0]
@@ -60,12 +61,11 @@ class ModelsManager:
         results = self.db.execute_query(query, (entity_id,))
         return bool(results[0][0])
 
-    def get_entities(self, table: str, entity_ids: List[str] | str | None = None, *, force_include_archived: bool = False) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
+    def get_entities(self, table: str, entity_ids: List[str] | str | None = None) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
         """Get entities from a table.
         Args:
             table: table name
             entity_ids: list of entity ids or single entity id or None to get all entities
-            force_include_archived: if True, include archived entities
         Returns:
             dict of entities with entity ids as keys and entity data as values
         """
@@ -88,21 +88,12 @@ class ModelsManager:
             FROM {accessible_table}
             {where_clause}
         """
-        results = self.db.execute_query(query, entity_ids, force_include_archived=force_include_archived, return_format=ReturnFormat.DICT_DICTS)
+        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.DICT_DICTS)
         if results and single_item:
             return results[entity_ids[0]]
         return results
 
-    def get_child_ids(
-        self,
-        parent: str,
-        entity_id: str,
-        child: str,
-        child_ids: list[str] | None = None,
-        within: bool = True,
-        *,
-        force_include_archived: bool = False,
-        ) -> list[str]:
+    def get_child_ids(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, within: bool = True) -> list[str]:
         """Get child ids of a parent.
         Args:
             parent: parent entity
@@ -110,7 +101,6 @@ class ModelsManager:
             child: child entity
             child_ids: list of child ids or None to get all childs
             within: if True, get childs within the parent, if False, get childs outside the parent
-            force_include_archived: if True, include archived entities and childs
         Returns:
             list of child ids
 
@@ -134,14 +124,16 @@ class ModelsManager:
             else:
                 where_clause = f'(c.{id_field} <> ? OR c.{id_field} IS NULL)'
         else:
-            join_clause = f'LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = ?'
+            join_clause = f' LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = ?'
             if within:
                 where_clause = f'r.{child_id_field} IS NOT NULL'
             else:
                 where_clause = f'r.{child_id_field} IS NULL'
 
         if child_ids:
-            where_clause += f'AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
+            where_clause += f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
+        else:
+            child_ids = []
 
         query = f"""SELECT c.{child_id_field}
         FROM {accessible_child} c
@@ -149,7 +141,7 @@ class ModelsManager:
         WHERE {where_clause}
         """
         
-        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_VALUES)
+        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), return_format=ReturnFormat.LIST_VALUES)
 
         return valid_child_ids
 
@@ -180,10 +172,7 @@ class ModelsManager:
             {join_clause}
             WHERE {parent}.{id_field} = ?
         """
-        force_include_archived = False
-        if parent == 'albums' and entity_id == self.get_archive_album():
-            force_include_archived = True
-        results = self.db.execute_query(query, (entity_id,), force_include_archived=force_include_archived, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
+        results = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.LIST_AND_DICT_DICTS)
         return results
 
     def get_parents(self, child: str, entity_id: str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
@@ -223,40 +212,9 @@ class ModelsManager:
             parents[parent] = parent_ids
         
         if single_item:
-            return parents[parents.keys()[0]]
+            return parents[list(parents.keys())[0]]
         
         return parents
-
-    # TODO: TO BE REMOVED
-    def get_enteties_changes(self, table: str, entity_ids: List[str] | str | None = None, *, exclude_empty_entities: bool = False) -> list[dict]:
-        entities = self.get_entities(table, entity_ids, exclude_empty_entities=exclude_empty_entities)
-        if isinstance(entity_ids, str):
-            entities = {entity_ids: entities}
-
-        changes = [{
-            'type': 'UPSERT',
-            'entity': table,
-            'items': entities
-        }]
-
-        return changes
-    
-    # TODO: TO BE REMOVED
-    def get_childs_changes(self, parent: str, entity_id: str, child: str) -> list[dict]:
-        relation, entities = self.get_childs_entities(parent, entity_id, child)
-        changes = []
-        changes.append({
-            'type': 'UPSERT',
-            'entity': child,
-            'items': entities
-        })
-        changes.append({
-            'type': 'RELATION_SET',
-            'relation': f'{parent}.{child}',
-            'parentId': entity_id,
-            'ids': relation
-        })
-        return changes
 
     def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
         """Insert one or many records. If a single dict is provided, return the new id.
@@ -302,11 +260,11 @@ class ModelsManager:
         query = f"""SELECT r.{child_id_field}
         FROM {relation} r
         INNER JOIN {table} t
-        ON t.{child_id_field} = r.{child_id_field}
+        ON t.{id_field} = r.{id_field}
         WHERE r.{id_field} = ?
         AND t.{representative_field} = r.{child_id_field}
         """
-        representative_id = self.db.execute_query(query, (entity_id, ), force_include_archived=True, return_format=ReturnFormat.VALUE)
+        representative_id = self.db.execute_query(query, (entity_id, ), return_format=ReturnFormat.VALUE)
         if representative_id:
             return representative_id
         
@@ -325,7 +283,7 @@ class ModelsManager:
         ORDER BY c.width * c.height DESC
         LIMIT 1
         """
-        biggest = self.db.execute_query(query, (entity_id,), force_include_archived=True, return_format=ReturnFormat.VALUE)
+        biggest = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.VALUE)
         if biggest:
             self.edit(table, entity_id, {representative_field: biggest})
         
@@ -348,15 +306,16 @@ class ModelsManager:
         accessible_relation = STRUCTURE[relation]['accessible_table']
         id_field = AppDB.get_id_field(parent)
 
-        valid_child_ids = self.get_child_ids(parent, entity_id, child, child_ids, within=not add, force_include_archived=True)
+        valid_child_ids = self.get_child_ids(parent, entity_id, child, child_ids, within=not add)
         if not valid_child_ids:
             return [], {}
 
         detached_parents = {}
         if add and exclusive:
             for child_id in valid_child_ids:
-                parent_ids = self.get_parents(parent, child_id)
-                detached_parents.setdefault(parent_ids, []).append(child_id)
+                parent_ids = self.get_parents(child, child_id, parent)
+                for parent_id in parent_ids:
+                    detached_parents.setdefault(parent_id, []).append(child_id)
 
         placeholders = ','.join(['?'] * len(valid_child_ids))
         if exclusive:
@@ -364,7 +323,7 @@ class ModelsManager:
                 query = f'UPDATE {accessible_relation} SET {id_field} = ? WHERE {child_id_field} IN ({placeholders})'
             else:
                 query = f'UPDATE {accessible_relation} SET {id_field} = NULL WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
-            self.db.execute_query(query, (entity_id, *valid_child_ids), force_include_archived=True)
+            self.db.execute_query(query, (entity_id, *valid_child_ids))
         else:
             if add:
                 values_clause = ','.join(['(?, ?)'] * len(valid_child_ids))
@@ -372,10 +331,10 @@ class ModelsManager:
                 for cid in valid_child_ids:
                     params.extend([entity_id, cid])
                 query = f'INSERT OR IGNORE INTO {accessible_relation} ({id_field}, {child_id_field}) VALUES {values_clause}'
-                self.db.execute_query(query, tuple(params), force_include_archived=True)
+                self.db.execute_query(query, tuple(params))
             else:
                 query = f'DELETE FROM {accessible_relation} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
-                self.db.execute_query(query, (entity_id, *valid_child_ids), force_include_archived=True)
+                self.db.execute_query(query, (entity_id, *valid_child_ids))
 
         if STRUCTURE[parent].get('representative',''):
             for parent_id in set(detached_parents.keys()).union([entity_id]):
@@ -390,8 +349,8 @@ class ModelsManager:
             group_ids: list of group ids
             base_image_ids: list of image ids
         Returns:
-            list of dicts with group id, label, representative_face as values
-            the list is ordered by relevance
+            list of group ids and dicts with group id, label, representative_face as values
+            ordered by relevance and then by label
         """
 
         if not base_image_ids or not group_ids:
@@ -413,7 +372,7 @@ class ModelsManager:
         '''
         query_params = base_image_ids + group_ids
 
-        return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_DICTS)
+        return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
 
     def get_filtered_images(self, group_ids: list[str], mode: str = 'and', only: bool = False) -> tuple[list[str], dict[str, str], dict[str, dict]]:
         """Return filtered images.
@@ -475,17 +434,13 @@ class ModelsManager:
             query += f" GROUP BY f.image_id"
             query += f" HAVING {' AND '.join(having_clause)}"
 
-        results = self.db.execute_query(query, params, return_format=ReturnFormat.DICT_DICTS)
-        faces_mapping = {id: row['representative_face'] for id, row in results.items()}
-        image_ids = list(results.keys())
-        images = {}
-        for id, row in results.items():
+        image_ids, images = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
+        faces_mapping = {id: row['representative_face'] for id, row in images.items()}
+        for row in images.values():
             row.pop('representative_face')
-            images[id] = row
 
         return image_ids, faces_mapping, images
 
-    # -------- Faces helpers --------
     def add_faces_to_group(self, *, face_ids: List[str] | None = None, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
         """Add faces to a group.
         Args:
@@ -496,7 +451,8 @@ class ModelsManager:
         Returns:
             dict:
                 detached_groups: dict of detached groups with group ids as keys and list of detached images ids as values
-                len_added: number of faces added
+                faces_added: list of faces ids added
+                images_added: list of images ids added
                 source_deleted: if source group is deleted
                 new_group_created: if new group is created
                 target_group_id: target group id
@@ -515,7 +471,9 @@ class ModelsManager:
         if not target_group_id:
             raise ValueError("target_group_id or new_group_name must be provided")
 
-        affected_faces, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, add=True)
+        old_images = self.get_child_ids('groups', target_group_id, 'images')
+        
+        faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, add=True)
 
         source_deleted = self.is_empty('groups', source_group_id, child='faces', only_accessible=True)
         if self.is_empty('groups', source_group_id, child='faces'):
@@ -523,12 +481,23 @@ class ModelsManager:
 
         detached_groups_images = {}
         for group_id, detached_faces in detached_groups_faces.items():
-            affected_images = self.get_parents('faces', detached_faces, 'images')
-            detached_groups_images[group_id] = self.get_child_ids('groups', group_id, 'images', affected_images, within=False)
+            detached_images = []
+            for detached_face in detached_faces:
+                images = self.get_parents('faces', detached_face, 'images')
+                detached_images.extend(self.get_child_ids('groups', group_id, 'images', images, within=False))
+            
+            detached_groups_images[group_id] = list(set(detached_images))
                  
+        images_added = []
+        for face_id in faces_added:
+            images_added.extend(self.get_parents('faces', face_id, 'images'))
+        
+        images_added = list(set(images_added) - set(old_images))
+        
         result = {
             'detached_groups': detached_groups_images,
-            'len_added': len(affected_faces),
+            'faces_added': faces_added,
+            'images_added': images_added,
             'source_deleted': source_deleted,
             'new_group_created': bool(new_group_name),
             'target_group_id': target_group_id,
@@ -539,75 +508,11 @@ class ModelsManager:
     # -------- Albums helpers --------
     def get_archive_album(self) -> str | None:
         """Get the archive album id."""
-        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "archive"', return_format=ReturnFormat.VALUE)
+        return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "archive"', return_format=ReturnFormat.VALUE)
 
     def get_favorites_album(self) -> str | None:
         """Get the favorites album id."""
-        return self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
-
-    def edit_album_images(self, album_id: str, image_ids: List[str], add: bool) -> Dict:
-        """Edit album images.
-        Args:
-            album_id: album id
-            image_ids: list of image ids
-            add: if True, add images, if False, remove images
-        Returns:
-            # TODO: add description
-            dict with len_edited, changes
-        """
-        archive_album_id = self.get_archive_album()
-        favorites_album_id = self.get_favorites_album()
-        affected_images, detached_albums = self.edit_childs('albums', album_id, 'images', image_ids, add=add)
-        
-        if album_id == archive_album_id:
-            relation_type = 'RELATION_REMOVE' if add else 'RELATION_ADD'
-
-            placeholders = ','.join(['?'] * len(valid_image_ids))
-            query = f"""
-                SELECT r.face_id
-                FROM accessible_faces r
-                WHERE r.image_id IN ({placeholders})
-            """
-            faces_ids = self.db.execute_query(query, valid_image_ids, return_format=ReturnFormat.LIST_VALUES)
-            relations = [
-                ('albums', 'images', valid_image_ids),
-                ('groups', 'images', valid_image_ids),
-                ('groups', 'faces', faces_ids),
-                ('moments', 'images', valid_image_ids),
-            ]
-            for parent, child, ids in relations:
-                placeholders = ','.join(['?'] * len(ids))
-                parent_id_field = AppDB.get_id_field(parent)
-                relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
-                accessible_relation = STRUCTURE[relation]['accessible_table']
-                where_clause = ''
-                params = ids
-                if parent == 'albums':
-                    where_clause = f"AND r.{parent_id_field} <> ?"
-                    params.append(archive_album_id)
-                
-                query = f"""
-                    SELECT DISTINCT r.{parent_id_field}, r.{child_id_field}
-                    FROM {accessible_relation} r
-                    WHERE r.{child_id_field} IN ({placeholders})
-                    {where_clause}
-                """
-                parent_ids = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_TUPLES)
-                change = {}
-                for parent_id, child_id in parent_ids:
-                    change.setdefault(parent_id, []).append(child_id)
-
-            for parent_id, child_ids in change.items():
-                    result['changes'].append({
-                        'type': relation_type,
-                        'relation': f'{parent}.{child}',
-                        'parentId': parent_id,
-                    'ids': child_ids
-                    })
-                    
-                    result['changes'].extend(self.get_enteties_changes(parent, parent_id))
-                
-        return result
+        return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     # -------- Profiles helpers --------
     ######## TODO: check if edit_childs replaces these

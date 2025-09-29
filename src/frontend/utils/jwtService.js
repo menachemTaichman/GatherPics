@@ -7,7 +7,6 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 class JWTService {
   constructor() {
     this.token = null;
-    this.includeArchived = false;
     this.loadFromStorage();
   }
 
@@ -15,7 +14,6 @@ class JWTService {
   loadFromStorage() {
     try {
       this.token = localStorage.getItem('jwt_token');
-      this.includeArchived = getPreference('general.includeArchived', false);
     } catch (error) {
       console.warn('Failed to load JWT from storage:', error);
     }
@@ -34,20 +32,12 @@ class JWTService {
     }
   }
 
-  // Get a new JWT token with the specified include_archived setting
-  async getToken(includeArchived = null) {
+  // Get a new JWT token
+  async getToken() {
     try {
-      // Use provided value or current setting
-      const newIncludeArchived = includeArchived !== null ? includeArchived : this.includeArchived;
-      
-      const response = await axios.post(
-        `${API_BASE}/set-include-archived`,
-        { include_archived: newIncludeArchived },
-        { withCredentials: true }
-      );
+      // Use provided value or current setting      
 
       this.token = response.data.access_token;
-      this.includeArchived = response.data.include_archived;
       
       // Save to storage
       this.saveToStorage();
@@ -55,22 +45,6 @@ class JWTService {
       return this.token;
     } catch (error) {
       console.error('Failed to get JWT token:', error);
-      throw error;
-    }
-  }
-
-  // Update the include_archived setting and get a new token
-  async updateIncludeArchived(includeArchived) {
-    try {
-      // Update the setting
-      setPreference('general.includeArchived', includeArchived);
-      
-      // Get new token with updated setting
-      await this.getToken(includeArchived);
-      
-      return this.token;
-    } catch (error) {
-      console.error('Failed to update include_archived setting:', error);
       throw error;
     }
   }
@@ -123,10 +97,6 @@ class JWTService {
     this.clearToken();
   }
 
-  // Get current include_archived setting
-  getIncludeArchived() {
-    return this.includeArchived;
-  }
 }
 
 // Create singleton instance

@@ -21,8 +21,6 @@ class Event(JsonModel):
         if profile_id:
             self.db.set_profile_id(profile_id)
         
-        self.db.set_include_archived(include_archived)
-
         self.models_manager = ModelsManager(self.db)
         self.face_utils = None
         self.display_dir = os.path.join(self.event_dir, 'display')

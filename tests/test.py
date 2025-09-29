@@ -381,35 +381,34 @@ def test_gets_methods(entities_tables: list, ids: dict, relations: list):
         print('--------------------------------')
 
 def test_edit_methods():
-    # # groups.faces
-    # source_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
-    # target_group_id = '7a81acd3-98ee-40c8-aa66-71b60b34bda8'
-    # if True:
-    #     source_group_id, target_group_id = target_group_id, source_group_id
-    # face_ids = ['c61090e9-80bd-428e-8885-0f583a74703d']
-    # result = event.models_manager.add_faces_to_group(face_ids=face_ids, target_group_id=target_group_id, source_group_id=source_group_id)
-    # print(result)
-    # print('--------------------------------')
+    # groups.faces
+    source_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
+    target_group_id = '7a81acd3-98ee-40c8-aa66-71b60b34bda8'
+    if False:
+        source_group_id, target_group_id = target_group_id, source_group_id
+    face_ids = ['c61090e9-80bd-428e-8885-0f583a74703d']
+    result = event.models_manager.add_faces_to_group(face_ids=face_ids, target_group_id=target_group_id, source_group_id=source_group_id)
+    print(result)
+    print('--------------------------------')
     # # moments.images
     # moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c'
     # image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
-    # result = event.models_manager.edit_moment_images(moment_id, image_ids, add=True)
+    # result = event.models_manager.edit_childs('moments', moment_id, 'images', image_ids, add=True)
     # print(result)
     # print('--------------------------------')
-    # albums.images
-    album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
-    image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
-    result = event.models_manager.edit_album_images(album_id, image_ids, add=False)
-    print(result)
-    print('--------------------------------')
+    # # albums.images
+    # album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
+    # image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
+    # result = event.models_manager.edit_childs('albums', album_id, 'images', image_ids, add=True)
+    # print(result)
+    # print('--------------------------------')
 
-# recreate_views_triggers_and_indexes()
+#recreate_views_triggers_and_indexes()
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
     ('images', 'albums'),
     ('images', 'faces'),
-    ('groups', 'faces'),
     ('groups', 'images'),
     ('moments', 'images'),
     ('albums', 'images'),
@@ -424,7 +423,3 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-image_ids = ids['images']
-images_data = event.models_manager.get_images(image_ids)
-
-print(images_data)

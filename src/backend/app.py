@@ -33,41 +33,18 @@ jwt = JWTManager(app)
 FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
-def _parse_pagination() -> tuple[int | None, int | None]:
-    """Parse limit and offset from request arguments for pagination."""
-    limit = request.args.get('limit', type=int)
-    offset = request.args.get('offset', type=int)
-    return limit, offset
-
 def _parse_bool(val: str | None, default: bool) -> bool:
     """Parse a boolean value from a string, with a default."""
     if val is None:
         return default
     return str(val).lower() in ('1', 'true', 'yes', 'y', 'on')
 
-# TODO: Remove this
-def add_change_instruction():
-    """Deprecated: Old change format no longer used. Keep for reference.
-    Use the generic schema below across all endpoints:
-    - UPSERT: { type: 'UPSERT', entity: 'image'|'group'|'moment'|'album', items: [ ... ] }
-    - REMOVE: { type: 'REMOVE', entity: 'image'|'group'|'moment'|'album', ids: [ ... ] }
-    - RELATION_ADD: { type: 'RELATION_ADD', relation: 'group.images'|'moment.images'|'album.images', parentId, ids, position? }
-    - RELATION_REMOVE: { type: 'RELATION_REMOVE', relation: 'group.images'|'moment.images'|'album.images', parentId, ids }
-    - RELATION_MOVE: { type: 'RELATION_MOVE', relation: 'group.images'|'moment.images', fromParentId, toParentId, ids, position? }
-    - RELATION_SET: { type: 'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images', parentId, ids }
-    """
-
-def get_event(event_id, profile_id=None, include_archived=None):
+def get_event(event_id, profile_id=None):
     """Get event instance with profile context."""
     if profile_id is None:
         profile_id = getattr(g, 'profile_id', FIXED_PROFILE_ID)
     
-    if include_archived is None:
-        claims = get_jwt()
-        if 'include_archived' in claims:
-            include_archived = claims['include_archived']
-    
-    return Event(event_id, profile_id=profile_id, include_archived=include_archived)
+    return Event(event_id, profile_id=profile_id)
 
 # --- Auth Decorator ---
 def require_auth(f):
@@ -111,22 +88,6 @@ def get_events():
     except Exception as e:
         return bad_request(e)
 
-@app.route("/set-include-archived", methods=["POST"])
-def set_include_archived():
-    """Set the include_archived flag in a JWT token."""
-    data = request.json or {}
-    include_archived = data.get('include_archived', False)
-    
-    additional_claims = {"include_archived": include_archived}
-    access_token = create_access_token(identity=FIXED_PROFILE_ID, additional_claims=additional_claims)
-    
-    resp = jsonify({
-        "access_token": access_token,
-        "include_archived": include_archived
-    })
-    set_access_cookies(resp, access_token)
-    return resp
-
 @app.route("/logout", methods=["POST"])
 def logout():
     resp = jsonify({"msg": "logout successful"})
@@ -142,37 +103,64 @@ def logout():
 def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
     event = get_event(event_id)
-    changes = event.models_manager.get_enteties_changes('groups')
+    groups = event.models_manager.get_entities('groups')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'group',
+        'items': groups
+    }]
     return jsonify({ 'changes': changes })
 
-########## TODO: simplify
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["GET"])
 @require_auth
 def get_group(event_id, group_id):
     """Get a specific group's details as changes, including its paginated images and faces mapping."""
     event = get_event(event_id)
 
-    group_changes = event.models_manager.get_enteties_changes('groups', group_id)
-    if not group_changes:
+    if not event.models_manager.is_accessible('groups', group_id):
         return not_found(f"Group {group_id} not found or not accessible")
-
-    limit, offset = _parse_pagination()
 
     filter_groups_str = request.args.get('filter_groups')
     filter_group_ids = filter_groups_str.split(',') if filter_groups_str else []
     filter_mode = request.args.get('filter_mode', 'and')
-    only_selected = _parse_bool(request.args.get('only_selected'), False)
+    only_mode = _parse_bool(request.args.get('only_selected'), False)
 
-    group_ids = [group_id] + filter_group_ids
+    filter = filter_group_ids or only_mode
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'group',
+        'items': [event.models_manager.get_entities('groups', group_id)]
+    }]
+    if filter:
+        group_ids = [group_id] + filter_group_ids
+        image_ids, images = event.models_manager.get_filtered_images(
+            group_ids,
+            mode=filter_mode,
+            only=only_mode,
+        )
+    else:
+        image_ids, images = event.models_manager.get_childs_entities('groups', group_id, 'images')
+        changes.append({
+            'type': 'RELATION_SET',
+            'relation': 'group.images',
+            'parentId': group_id,
+            'ids': image_ids
+        })
 
-    filtered_changes = event.models_manager.get_filtered_images(
-        group_ids,
-        mode=filter_mode,
-        only=only_selected,
-        limit=limit,
-        offset=offset
-    )
-    return jsonify({ 'changes': filtered_changes })
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    })
+
+    result = {
+        'changes': changes,
+        'filter': filter
+    }
+    if filter:
+        result['filtered_ids'] = image_ids
+
+    return jsonify(result)
 
 @app.route("/api/events/<event_id>/groups/related", methods=["GET"])
 @require_auth
@@ -188,26 +176,23 @@ def get_related_groups(event_id):
 
     group_ids = selected_groups
 
-    related_groups = event.models_manager.get_related_groups(
+    group_ids, groups = event.models_manager.get_related_groups(
         group_ids=group_ids,
         base_image_ids=image_ids
     )
-    return jsonify({"related_groups": related_groups})
-
-@app.route("/api/events/<event_id>/groups/<group_id>/faces", methods=["GET"])
-@require_auth
-def get_group_faces(event_id, group_id):
-    """Get the faces of a group."""
-    event = get_event(event_id)
-    faces = event.models_manager.get_childs_entities('groups', group_id, child='faces')
-    return jsonify({"faces": faces})
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'group',
+        'items': groups
+    }]
+    return jsonify({"related_groups": group_ids, 'changes': changes})
 
 @app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
 @require_auth
 def update_group(event_id, group_id):
     """Update a group."""
     event = get_event(event_id)
-    if not event.models_manager.get_enteties_changes('groups', group_id):
+    if not event.models_manager.is_accessible('groups', group_id):
         return not_found(f"Group {group_id} not found or not accessible")
         
     data = request.json or {}
@@ -217,18 +202,16 @@ def update_group(event_id, group_id):
         if sanitized:
             event.models_manager.edit('groups', group_id, sanitized)
         
-        updated_group = event.models_manager.get_enteties_changes('groups', group_id)
-        
-        response_data = {"success": True, "group": updated_group}
-        response_data.setdefault('changes', []).append({
+        updated_group = event.models_manager.get_entities('groups', group_id)
+        changes = [{
             'type': 'UPSERT',
             'entity': 'group',
             'items': [updated_group]
-        })
-        return jsonify(response_data)
+        }]
+
+        return jsonify({"success": True, "changes": changes})
     except Exception as e:
         return bad_request(e)
-
 
 @app.route("/api/events/<event_id>/groups/check-name", methods=["POST"])
 @require_auth
@@ -242,17 +225,23 @@ def check_group_name(event_id):
     if not label:
         return jsonify({"error": "Label is required"}), 400
 
-    try:
-        conflict_group_id = event.models_manager.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
-        if conflict_group_id:
-            conflicting_group = event.models_manager.get_enteties_changes('groups', conflict_group_id)
-            return jsonify({"conflict": True, "conflicting_group": conflicting_group})
-        else:
-            return jsonify({"conflict": False})
-    except Exception as e:
-        return bad_request(e)
+    conflict_group_id = event.models_manager.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
+    if conflict_group_id:
+        conflicting_group = event.models_manager.get_entities('groups', conflict_group_id)
+        response = {"conflict": True, "conflicting_group": conflict_group_id}
+        if conflicting_group:
+            changes = [{
+                'type': 'UPSERT',
+                'entity': 'group',
+                'items': [conflicting_group]
+            }]
+            response['changes'] = changes
+        
+        return jsonify(response)
 
-# TODO: update models_manager
+    else:
+        return jsonify({"conflict": False})
+
 @app.route("/api/events/<event_id>/groups/transfer-faces", methods=["POST"])
 @require_auth
 def transfer_faces(event_id):
@@ -274,8 +263,48 @@ def transfer_faces(event_id):
             new_group_name=new_group_name,
             source_group_id=source_group_id
         )
-        response = {"success": True}
-        response.update(result)
+
+        detached_groups = result['detached_groups']
+        faces_added = result['faces_added']
+        images_added = result['images_added']
+        source_deleted = result['source_deleted']
+        new_group_created = result['new_group_created']
+        target_group_id = result['target_group_id']
+
+        changes = []
+        for group_id, images_ids in detached_groups.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'group.images',
+                'parentId': group_id,
+                'ids': images_ids
+            })
+
+        changes.append({
+            'type': 'RELATION_SET',
+            'relation': 'group.images',
+            'parentId': target_group_id,
+            'ids': images_added
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'group',
+            'items': event.models_manager.get_entities('groups', detached_groups.keys() + [target_group_id])
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'face',
+            'items': event.models_manager.get_entities('faces', faces_added)
+        })
+
+        response = {
+            "success": True,
+            'source_deleted': source_deleted,
+            'new_group_created': new_group_created,
+            'target_group_id': target_group_id,
+            'len_added': len(faces_added),
+            'changes': changes
+        }
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -289,24 +318,42 @@ def transfer_faces(event_id):
 def get_moments(event_id):
     """List all accessible moment summaries for the specific event."""
     event = get_event(event_id)
-    exclude_empty = _parse_bool(request.args.get('exclude_empty_entities'), False)
-    moments = event.models_manager.get_enteties_changes('moments', exclude_empty_entities=exclude_empty)
-    return jsonify({'changes': moments})
+    moments = event.models_manager.get_entities('moments')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'moment',
+        'items': moments
+    }]
+    return jsonify({'changes': changes})
 
 @app.route("/api/events/<event_id>/moments/<moment_id>", methods=["GET"])
 @require_auth
 def get_moment(event_id, moment_id):
     """Get a specific moment's details as changes."""
     event = get_event(event_id)
-    moment_changes = event.models_manager.get_enteties_changes('moments', moment_id)
-    if not moment_changes:
+    if not event.models_manager.is_accessible('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
 
-    images_changes = event.models_manager.get_childs_changes('moments', moment_id, 'images')
-    all_changes = []
-    all_changes.extend(moment_changes)
-    all_changes.extend(images_changes)
-    return jsonify({ 'changes': all_changes })
+    moment = event.models_manager.get_entities('moments', moment_id)
+    image_ids, images = event.models_manager.get_childs_entities('moments', moment_id, 'images')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'moment',
+        'items': [moment]
+    }]
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'moment.images',
+        'parentId': moment_id,
+        'ids': image_ids
+    })
+    
+    return jsonify({ 'changes': changes })
 
 @app.route("/api/events/<event_id>/moments", methods=["POST"])
 @require_auth
@@ -316,16 +363,19 @@ def create_moment(event_id):
     data = request.json or {}
     
     try:
-        moment_id = event.models_manager.add('moments', data)
-        created_moment = event.models_manager.get_enteties_changes('moments', moment_id)
+        allowed_fields = {'label', 'description', 'start', 'end', 'representative_image'}
+        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+        if sanitized:
+            moment_id = event.models_manager.add('moments', sanitized)
+        created_moment = event.models_manager.get_entities('moments', moment_id)
         
-        response_data = {"success": True, "moment_id": moment_id, "moment": created_moment}
-        response_data.setdefault('changes', []).append({
+        response = {"success": True, "moment_id": moment_id}
+        response['changes'] = [{
             'type': 'UPSERT',
             'entity': 'moment',
             'items': [created_moment]
-        })
-        return jsonify(response_data)
+        }]
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
@@ -334,7 +384,7 @@ def create_moment(event_id):
 def update_moment(event_id, moment_id):
     """Update a moment's metadata."""
     event = get_event(event_id)
-    if not event.models_manager.get_enteties_changes('moments', moment_id):
+    if not event.models_manager.is_accessible('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
         
     data = request.json or {}
@@ -344,19 +394,18 @@ def update_moment(event_id, moment_id):
         if sanitized:
             event.models_manager.edit('moments', moment_id, sanitized)
         
-        updated_moment = event.models_manager.get_enteties_changes('moments', moment_id)
+        updated_moment = event.models_manager.get_entities('moments', moment_id)
         
-        response_data = {"success": True, "moment": updated_moment}
-        response_data.setdefault('changes', []).append({
+        response = {"success": True}
+        response['changes'] = [{
             'type': 'UPSERT',
             'entity': 'moment',
             'items': [updated_moment]
-        })
-        return jsonify(response_data)
+        }]
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
-# TODO: refactor to new store
 @app.route("/api/events/<event_id>/moments/<moment_id>/images", methods=["POST"])
 @require_auth
 def add_images_to_moment(event_id, moment_id):
@@ -366,11 +415,35 @@ def add_images_to_moment(event_id, moment_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        result = event.models_manager.edit_childs('moments', moment_id, image_ids, add=True)
-        response = {"success": True}
-        if result.get('changes'):
-            response['changes'] = result['changes']
-        response['len_edited'] = result.get('len_edited', 0)
+        added_images_ids, detached_moments = event.models_manager.edit_childs('moments', moment_id, child='images', child_ids=image_ids, add=True)
+        
+        changes = []
+        for moment_id, images_ids in detached_moments.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'moment.images',
+                'parentId': moment_id,
+                'ids': images_ids
+            })
+
+        changes.append({
+            'type': 'RELATION_ADD',
+            'relation': 'moment.images',
+            'parentId': moment_id,
+            'ids': added_images_ids
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'moment',
+            'items': event.models_manager.get_entities('moments', detached_moments.keys() + [moment_id])
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'image',
+            'items': event.models_manager.get_entities('images', added_images_ids)
+        })
+
+        response = {"success": True, 'len_added': len(added_images_ids), 'changes': changes}
 
         return jsonify(response)
     except Exception as e:
@@ -384,11 +457,26 @@ def remove_images_from_moment(event_id, moment_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        result = event.models_manager.edit_childs('moments', moment_id, image_ids, add=False)
-        response = {"success": True}
-        if result.get('changes'):
-            response['changes'] = result['changes']
-        response['len_edited'] = result.get('len_edited', 0)
+        removed_images_ids, detached_moments = event.models_manager.edit_childs('moments', moment_id, child='images', child_ids=image_ids, add=False)
+        changes = []
+        for moment_id, images_ids in detached_moments.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'moment.images',
+                'parentId': moment_id,
+                'ids': images_ids
+            })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'moment',
+            'items': event.models_manager.get_entities('moments', detached_moments.keys() + [moment_id])
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'image',
+            'items': event.models_manager.get_entities('images', removed_images_ids)
+        })
+        response = {"success": True, 'len_removed': len(removed_images_ids), 'changes': changes}
 
         return jsonify(response)
     except Exception as e:
@@ -399,19 +487,19 @@ def remove_images_from_moment(event_id, moment_id):
 def delete_moment(event_id, moment_id):
     """Delete a moment."""
     event = get_event(event_id)
-    if not event.models_manager.get_enteties_changes('moments', moment_id):
+    if not event.models_manager.is_accessible('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
     
     try:
-        deleted_ids = event.models_manager.delete('moments', moment_id)
+        event.models_manager.delete('moments', moment_id)
         
-        response_data = {"success": True, "deleted_ids": deleted_ids}
-        response_data.setdefault('changes', []).append({
+        response = {"success": True, "deleted_ids": [moment_id]}
+        response['changes'] = [{
             'type': 'REMOVE',
             'entity': 'moment',
             'ids': [moment_id]
-        })
-        return jsonify(response_data)
+        }]
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
@@ -424,23 +512,41 @@ def delete_moment(event_id, moment_id):
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
     event = get_event(event_id)
-    albums = event.models_manager.get_enteties_changes('albums')
-    return jsonify({"albums": albums})
+    albums = event.models_manager.get_entities('albums')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'album',
+        'items': albums
+    }]
+    return jsonify({'changes': changes})
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["GET"])
 @require_auth
 def get_album(event_id, album_id):
     """Get a specific album's details as changes."""
     event = get_event(event_id)
-    album_changes = event.models_manager.get_enteties_changes('albums', album_id)
-    if not album_changes:
+    if not event.models_manager.is_accessible('albums', album_id):
         return not_found(f"Album {album_id} not found or not accessible")
 
-    images_changes = event.models_manager.get_childs_changes('albums', album_id, 'images')
-    all_changes = []
-    all_changes.extend(album_changes)
-    all_changes.extend(images_changes)
-    return jsonify({ 'changes': all_changes })
+    album = event.models_manager.get_entities('albums', album_id)
+    image_ids, images = event.models_manager.get_childs_entities('albums', album_id, 'images')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'album',
+        'items': [album]
+    }]
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'album.images',
+        'parentId': album_id,
+        'ids': image_ids
+    })
+    return jsonify({ 'changes': changes })
 
 @app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
 @require_auth
@@ -463,12 +569,12 @@ def get_archive_album(event_id):
 def update_album(event_id, album_id):
     """Update an album's details."""
     event = get_event(event_id)
-    album = event.models_manager.get_enteties_changes('albums', album_id)
+    album = event.models_manager.get_entities('albums', album_id)
     if not album:
         return not_found(f"Album {album_id} not found or not accessible")
 
     data = request.json or {}
-    if (album.get('label') in ('archive', 'favorites')) and 'label' in data:
+    if (album.get('label').lower() in ('archive', 'favorites')) and 'label' in data:
         data.pop('label', None)
 
     try:
@@ -477,13 +583,17 @@ def update_album(event_id, album_id):
         if sanitized:
             event.models_manager.edit('albums', album_id, sanitized)
 
-        updated = event.models_manager.get_enteties_changes('albums', album_id)
-        response_data = {"success": True, "album": updated}
-        return jsonify(response_data)
+        updated = event.models_manager.get_entities('albums', album_id)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'album',
+            'items': [updated]
+        }]
+        response = {"success": True, 'changes': changes}
+        return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
-# TODO: refactor to new store
 @app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["POST"])
 @require_auth
 def add_images_to_album(event_id, album_id):
@@ -493,16 +603,40 @@ def add_images_to_album(event_id, album_id):
     image_ids = data.get('image_ids', [])
     
     try:
-        result = event.models_manager.edit_album_images(album_id, image_ids, add=True)
-        response = {"success": True}
-        if result.get('changes'):
-            response['changes'] = result['changes']
-        response['len_edited'] = result.get('len_edited', 0)
+        added_images_ids, _ = event.models_manager.edit_childs('albums', album_id, child='images', child_ids=image_ids, add=True)
+        changes = []
+        changes.append({
+            'type': 'RELATION_ADD',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': added_images_ids
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'album',
+            'items': event.models_manager.get_entities('albums', [album_id])
+        })
+        is_default_album = album_id in [event.models_manager.get_favorites_album(), event.models_manager.get_archive_album()]
+        if is_default_album:
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': event.models_manager.get_entities('images', added_images_ids)
+            })
+        else:
+            for image_id in added_images_ids:
+                changes.append({
+                    'type': 'RELATION_ADD',
+                    'entity': 'image.albums',
+                    'parentId': image_id,
+                    'ids': [album_id]
+                })
+
+        response = {"success": True, 'len_added': len(added_images_ids), 'changes': changes}
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
 
-# TODO: refactor to new store
 @app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["DELETE"])
 @require_auth
 def remove_images_from_album(event_id, album_id):
@@ -511,11 +645,36 @@ def remove_images_from_album(event_id, album_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        result = event.models_manager.edit_album_images(album_id, image_ids, add=False)
-        response = {"success": True}
-        if result.get('changes'):
-            response['changes'] = result['changes']
-        response['len_edited'] = result.get('len_edited', 0)
+        removed_images_ids, _ = event.models_manager.edit_childs('albums', album_id, child='images', child_ids=image_ids, add=False)
+        changes = []
+        changes.append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': removed_images_ids
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'album',
+            'items': event.models_manager.get_entities('albums', [album_id])
+        })
+        is_default_album = album_id in [event.models_manager.get_favorites_album(), event.models_manager.get_archive_album()]
+        if is_default_album:
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': event.models_manager.get_entities('images', removed_images_ids)
+            })
+        else:
+            for image_id in removed_images_ids:
+                changes.append({
+                    'type': 'RELATION_REMOVE',
+                    'entity': 'image.albums',
+                    'parentId': image_id,
+                    'ids': [album_id]
+                })
+
+        response = {"success": True, 'len_removed': len(removed_images_ids), 'changes': changes}
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -524,21 +683,58 @@ def remove_images_from_album(event_id, album_id):
 # V. IMAGES & FACES ENDPOINTS
 # ==============================================================================
 
-@app.route("/api/events/<event_id>/images", methods=["POST"])
+@app.route("/api/events/<event_id>/images", methods=["GET"])
 @require_auth
-def get_images_details(event_id):
-    """Get complete details for a list of images."""
+def get_images(event_id):
+    """List all accessible images summaries for the specific event."""
     event = get_event(event_id)
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    if not image_ids:
-        return jsonify({"changes": []})
+    images = event.models_manager.get_entities('images')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    }]
+    return jsonify({'changes': changes})
 
-    try:
-        images_data = event.models_manager.get_images(image_ids)
-        return jsonify({"changes": images_data})
-    except Exception as e:
-        return bad_request(e)
+@app.route("/api/events/<event_id>/images/<image_id>", methods=["GET"])
+@require_auth
+def get_image(event_id, image_id):
+    """Get a specific image's details as changes."""
+    event = get_event(event_id)
+    if not event.models_manager.is_accessible('images', image_id):
+        return not_found(f"Image {image_id} not found or not accessible")
+
+    image = event.models_manager.get_entities('images', image_id)
+    album_ids, albums = event.models_manager.get_childs_entities('images', image_id, 'albums')
+    face_ids, faces = event.models_manager.get_childs_entities('images', image_id, 'faces')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': [image]
+    }]
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'album',
+        'items': albums
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.albums',
+        'parentId': image_id,
+        'ids': album_ids
+    })
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'face',
+        'items': faces
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.faces',
+        'parentId': image_id,
+        'ids': face_ids
+    })
+    return jsonify({ 'changes': changes })
 
 # ==============================================================================
 # VI. FILE SERVING & DOWNLOADS
@@ -620,15 +816,19 @@ def download_images(event_id):
     
     try:
         memory_file = io.BytesIO()
+        failed_images = []
         with zipfile.ZipFile(memory_file, 'w') as zf:
             for image_id in image_ids:
                 if not event.models_manager.is_accessible('images', image_id):
+                    failed_images.append(image_id)
                     continue
                 
                 src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
                 file_path = os.path.join(src_dir, f"{image_id}.jpg")
                 if os.path.exists(file_path):
                     zf.write(file_path, f"{image_id}.jpg")
+                else:
+                    failed_images.append(image_id)
         
         memory_file.seek(0)
         return send_file(
@@ -643,9 +843,6 @@ def download_images(event_id):
 # ==============================================================================
 # VII. DEPRECATED & MISC ENDPOINTS
 # ==============================================================================
-
-# Note: All old GET endpoints that returned bulky data have been removed or refactored.
-# The new pattern is to fetch summaries, then paginated details.
 
 if __name__ == "__main__":
     app.run(debug=True)
