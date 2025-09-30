@@ -6,6 +6,7 @@ import EditGroupModal from './EditGroupModal';
 import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
@@ -14,9 +15,12 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [sortBy, setSortBy] = usePreference('GroupsGallery.sortBy', 'name');
-  const [sortOrder, setSortOrder] = usePreference('GroupsGallery.sortDir', 'desc');
-  const [cardSize, setCardSize] = usePreference('general.size', 1.0);
+  const sortBy = usePreference('GroupsGallery.sortBy', 'name');
+  const setSortBy = (value) => setPreference('GroupsGallery.sortBy', value);
+  const sortOrder = usePreference('GroupsGallery.sortDir', 'desc');
+  const setSortOrder = (value) => setPreference('GroupsGallery.sortDir', value);
+  const cardSize = usePreference('general.size', 1.0);
+  const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups

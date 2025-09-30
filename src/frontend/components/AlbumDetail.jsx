@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowUp, ArrowDown, Minus, Plus, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
 import { albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
@@ -16,8 +17,10 @@ export default function AlbumDetail() {
   const [album, setAlbum] = useState(null);
   const store = useDataStore.getState();
   const [imageClasses, setImageClasses] = useState({});
-  const [sortOrder, setSortOrder] = usePreference('AlbumsDetail.sortDir', 'asc');
-  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
+  const sortOrder = usePreference('AlbumsDetail.sortDir', 'asc');
+  const setSortOrder = (value) => setPreference('AlbumsDetail.sortDir', value);
+  const imageSize = usePreference('general.size', 1.0);
+  const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [selection, setSelection] = useState(new Set());
 
@@ -26,22 +29,22 @@ export default function AlbumDetail() {
       try {
         // We have label in the URL: fetch all albums and find by label
         const all = await albumsAPI.getAll(eventUrl);
-        const found = (all.albums || []).find(a => a.label === album_name);
+        
+        // Changes are automatically applied by apiService interceptor
+        
+        // Get albums from store
+        const storeAlbums = Object.values(store.entities?.albums || {});
+        const found = storeAlbums.find(a => a.label === album_name);
         if (!found) {
           navigate(`/${eventUrl}/albums`);
           return;
         }
         setAlbum(found);
-        // Seed store with album entity
-        store.applyChanges([{ type: 'UPSERT', entity: 'albums', items: [found] }]);
+        
         // Fetch album images and seed store relations
         const res = await albumsAPI.getImages(found.id, eventUrl);
-        const imgs = res.images || [];
-        const ids = imgs.map(i => i && i.id).filter(Boolean);
-        const changes = [];
-        if (imgs.length > 0) changes.push({ type: 'UPSERT', entity: 'images', items: imgs });
-        changes.push({ type: 'RELATION_SET', relation: 'album.images', parentId: found.id, ids });
-        store.applyChanges(changes);
+        
+        // Changes are automatically applied by apiService interceptor
       } catch (e) {
         console.error('Failed to load album', e);
       }
@@ -70,8 +73,12 @@ export default function AlbumDetail() {
     if (!album || selection.size === 0) return;
     try {
       const result = await albumsAPI.removeImages(album.id, Array.from(selection), eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
+      const removedCount = result.len_added || selection.size;
       setSelection(new Set());
-      showToast('Removed from album', 'success');
+      showToast(`${removedCount} removed from album`, 'success');
     } catch (e) {
       showToast('Failed to remove from album', 'error');
     }
@@ -97,6 +104,17 @@ export default function AlbumDetail() {
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
             <div className="flex items-center space-x-3">
+              <div 
+                className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
+                title="Album representative image"
+              >
+                <img
+                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : ''}
+                  alt={album.label}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
               <h1 className="text-3xl font-bold text-gray-900">{album.label}</h1>
               <p className="text-gray-600">{albumImages.length} images</p>
             </div>

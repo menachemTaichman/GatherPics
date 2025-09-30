@@ -61,8 +61,10 @@ export default function AlbumQuickAddButton({
                       try {
                         const imagesToAdd = selectedImages || (imageId ? [imageId] : []);
                         const res = await albumsAPI.addImages(album.album_id, imagesToAdd, eventUrl);
-                        useDataStore.getState().addImagesToAlbum(res);
-                        const added = Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.affected_images_ids || 0);
+                        
+                        // Changes are automatically applied by apiService interceptor
+                        
+                        const added = res.len_added || (Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.affected_images_ids || 0));
                         showToast(
                           <span>
                             {added} added to{' '}

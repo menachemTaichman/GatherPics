@@ -88,6 +88,23 @@ def get_events():
     except Exception as e:
         return bad_request(e)
 
+@app.route("/login", methods=["POST"])
+def login():
+    """Placeholder login endpoint that returns a JWT token."""
+    # For now, always authenticate with the fixed profile ID
+    # In production, this would validate credentials
+    access_token = create_access_token(identity=FIXED_PROFILE_ID)
+    
+    response = make_response(jsonify({
+        "access_token": access_token,
+        "profile_id": FIXED_PROFILE_ID
+    }))
+    
+    # Set the JWT cookie
+    set_access_cookies(response, access_token)
+    
+    return response
+
 @app.route("/logout", methods=["POST"])
 def logout():
     resp = jsonify({"msg": "logout successful"})
@@ -131,34 +148,30 @@ def get_group(event_id, group_id):
         'entity': 'group',
         'items': [event.models_manager.get_entities('groups', group_id)]
     }]
+    result = {'changes': changes, 'filter': filter}    
     if filter:
         group_ids = [group_id] + filter_group_ids
-        image_ids, images = event.models_manager.get_filtered_images(
+        image_ids, faces_mapping, images = event.models_manager.get_filtered_images(
             group_ids,
             mode=filter_mode,
             only=only_mode,
         )
+        result['filtered_ids'] = image_ids
+        result['faces_mapping'] = faces_mapping
     else:
         image_ids, images = event.models_manager.get_childs_entities('groups', group_id, 'images')
-        changes.append({
+        result['changes'].append({
             'type': 'RELATION_SET',
             'relation': 'group.images',
             'parentId': group_id,
             'ids': image_ids
         })
 
-    changes.append({
+    result['changes'].append({
         'type': 'UPSERT',
         'entity': 'image',
         'items': images
     })
-
-    result = {
-        'changes': changes,
-        'filter': filter
-    }
-    if filter:
-        result['filtered_ids'] = image_ids
 
     return jsonify(result)
 
@@ -511,8 +524,10 @@ def delete_moment(event_id, moment_id):
 @require_auth
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
+    exclude_defaults = _parse_bool(request.args.get('exclude_defaults'), False)
     event = get_event(event_id)
-    albums = event.models_manager.get_entities('albums')
+    table = 'albums_actual' if exclude_defaults else 'albums'
+    albums = event.models_manager.get_entities(table)
     changes = [{
         'type': 'UPSERT',
         'entity': 'album',
@@ -594,6 +609,53 @@ def update_album(event_id, album_id):
     except Exception as e:
         return bad_request(e)
 
+def _edit_album_images(event, album_id, image_ids, add: bool):
+    """Helper: Add or remove images from an album, return response with changes."""
+    action = 'ADD' if add else 'REMOVE'
+    relation_type = f'RELATION_{action}'
+
+    updated_image_ids, _ = event.models_manager.edit_childs(
+        'albums', album_id, child='images', child_ids=image_ids, add=add
+    )
+    changes = []
+    if updated_image_ids:
+        changes.append({
+            'type': relation_type,
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': updated_image_ids
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'album',
+            'items': event.models_manager.get_entities('albums', [album_id])
+        })
+
+        is_default_album = album_id in [
+            event.models_manager.get_favorites_album(),
+            event.models_manager.get_archive_album()
+        ]
+        if is_default_album:
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': event.models_manager.get_entities('images', updated_image_ids)
+            })
+        else:
+            for image_id in updated_image_ids:
+                changes.append({
+                    'type': relation_type,
+                    'entity': 'image.albums',
+                    'parentId': image_id,
+                    'ids': [album_id]
+                })
+
+    return {
+        "success": True,
+        f'len_{"added" if add else "removed"}': len(updated_image_ids),
+        "changes": changes
+    }
+
 @app.route("/api/events/<event_id>/albums/<album_id>/images", methods=["POST"])
 @require_auth
 def add_images_to_album(event_id, album_id):
@@ -601,38 +663,8 @@ def add_images_to_album(event_id, album_id):
     event = get_event(event_id)
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    
     try:
-        added_images_ids, _ = event.models_manager.edit_childs('albums', album_id, child='images', child_ids=image_ids, add=True)
-        changes = []
-        changes.append({
-            'type': 'RELATION_ADD',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'ids': added_images_ids
-        })
-        changes.append({
-            'type': 'UPSERT',
-            'entity': 'album',
-            'items': event.models_manager.get_entities('albums', [album_id])
-        })
-        is_default_album = album_id in [event.models_manager.get_favorites_album(), event.models_manager.get_archive_album()]
-        if is_default_album:
-            changes.append({
-                'type': 'UPSERT',
-                'entity': 'image',
-                'items': event.models_manager.get_entities('images', added_images_ids)
-            })
-        else:
-            for image_id in added_images_ids:
-                changes.append({
-                    'type': 'RELATION_ADD',
-                    'entity': 'image.albums',
-                    'parentId': image_id,
-                    'ids': [album_id]
-                })
-
-        response = {"success": True, 'len_added': len(added_images_ids), 'changes': changes}
+        response = _edit_album_images(event, album_id, image_ids, add=True)
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -645,36 +677,7 @@ def remove_images_from_album(event_id, album_id):
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        removed_images_ids, _ = event.models_manager.edit_childs('albums', album_id, child='images', child_ids=image_ids, add=False)
-        changes = []
-        changes.append({
-            'type': 'RELATION_REMOVE',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'ids': removed_images_ids
-        })
-        changes.append({
-            'type': 'UPSERT',
-            'entity': 'album',
-            'items': event.models_manager.get_entities('albums', [album_id])
-        })
-        is_default_album = album_id in [event.models_manager.get_favorites_album(), event.models_manager.get_archive_album()]
-        if is_default_album:
-            changes.append({
-                'type': 'UPSERT',
-                'entity': 'image',
-                'items': event.models_manager.get_entities('images', removed_images_ids)
-            })
-        else:
-            for image_id in removed_images_ids:
-                changes.append({
-                    'type': 'RELATION_REMOVE',
-                    'entity': 'image.albums',
-                    'parentId': image_id,
-                    'ids': [album_id]
-                })
-
-        response = {"success": True, 'len_removed': len(removed_images_ids), 'changes': changes}
+        response = _edit_album_images(event, album_id, image_ids, add=False)
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
@@ -735,6 +738,46 @@ def get_image(event_id, image_id):
         'ids': face_ids
     })
     return jsonify({ 'changes': changes })
+
+@app.route("/api/events/<event_id>/albums/favorites/images", methods=["PUT"])
+@require_auth
+def toggle_favorites_images(event_id):
+    """Add or remove multiple images from favorites album."""
+    event = get_event(event_id)
+    
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    is_favorite = data.get('is_favorite', False)
+    
+    if not image_ids:
+        return bad_request("No image IDs provided")
+    
+    try:
+        favorites_album_id = event.models_manager.get_favorites_album()
+        response = _edit_album_images(event, favorites_album_id, image_ids, add=is_favorite)
+        return jsonify(response)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/albums/archive/images", methods=["PUT"])
+@require_auth
+def toggle_archive_images(event_id):
+    """Add or remove multiple images from archive album."""
+    event = get_event(event_id)
+    
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    is_archived = data.get('is_archived', False)
+    
+    if not image_ids:
+        return bad_request("No image IDs provided")
+    
+    try:
+        archive_album_id = event.models_manager.get_archive_album()
+        response = _edit_album_images(event, archive_album_id, image_ids, add=is_archived)
+        return jsonify(response)
+    except Exception as e:
+        return bad_request(e)
 
 # ==============================================================================
 # VI. FILE SERVING & DOWNLOADS
@@ -801,6 +844,33 @@ def get_high_quality_image_webp(event_id, image_id):
 @require_auth
 def get_original_image_webp(event_id, image_id):
     return get_file_webp(event_id, 'original', image_id)
+
+@app.route('/api/events/<event_id>/<entity>/<parent_id>/representative')
+@require_auth
+def get_representative_webp(event_id, entity, parent_id):
+    
+    event = get_event(event_id)
+
+    dir_map = {
+        'faces': event.faces_dir,
+        'groups': event.faces_dir,
+        'images': event.display_dir,
+        'albums': event.display_dir,
+        'moments': event.display_dir,
+    }
+
+    if not event.models_manager.is_accessible(entity, parent_id):
+        abort(403)
+    _, file_id = event.models_manager.get_representative(entity, parent_id)
+    
+    file_path = os.path.join(dir_map[entity], f'{file_id}.webp')
+    print(file_path)
+    if not os.path.exists(file_path):
+        abort(404)
+    
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
 @app.route("/api/events/<event_id>/download", methods=["POST"])
 @require_auth

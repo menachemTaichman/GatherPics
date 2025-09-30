@@ -35,8 +35,8 @@ class JWTService {
   // Get a new JWT token
   async getToken() {
     try {
-      // Use provided value or current setting      
-
+      const response = await axios.post(`${API_BASE}/login`, {}, { withCredentials: true });
+      
       this.token = response.data.access_token;
       
       // Save to storage

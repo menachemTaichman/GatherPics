@@ -1,14 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Heart as HeartIcon, 
-  Archive, 
-  ShoppingBag,
-  Plus as PlusIcon,
-  Image as ImageIcon
-} from 'lucide-react';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
-import { albumsAPI } from '../utils/apiService';
+import { imagesAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
@@ -42,6 +34,14 @@ export default function useImageActions({
     imageIdsArray.length === 1 ? selectors.isArchived(state, primaryImageId) : false
   );
   
+  // For multiple images, check if all are in the same state
+  const allAreFavorited = useDataStore(state => 
+    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isFavorite(state, imageId)) : false
+  );
+  const allAreArchived = useDataStore(state => 
+    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isArchived(state, imageId)) : false
+  );
+  
   // Check if images are in bucket
   const imagesInBucket = imageIdsArray.filter(id => queue.includes(id));
   const allInBucket = imagesInBucket.length === imageIdsArray.length;
@@ -51,25 +51,28 @@ export default function useImageActions({
     if (imageIdsArray.length === 0) return;
     
     try {
-      const currentFavorite = isFavorite;
-      const result = await albumsAPI.toggleFavorite(imageIdsArray, currentFavorite, eventUrl);
+      // For single image, use the single image state; for multiple, check if all are favorited
+      const shouldRemove = imageIdsArray.length === 1 ? isFavorite : allAreFavorited;
+      const newFavoriteStatus = !shouldRemove;
       
-      if (result) {
+      // Use the new album-based API that handles multiple images in one call
+      const result = await imagesAPI.toggleFavorite(imageIdsArray, newFavoriteStatus, eventUrl);
+      
+      if (result && result.success) {
         // The API response interceptor will automatically update the data store
         if (onImageUpdated) {
-          imageIdsArray.forEach(id => {
-            onImageUpdated({ id, is_favorite: !currentFavorite });
+          imageIdsArray.forEach(imageId => {
+            onImageUpdated({ id: imageId, is_favorite: newFavoriteStatus });
           });
         }
         
-        const action = currentFavorite ? 'Removed from' : 'Added to';
-        const count = (typeof result.len_edited === 'number')
-          ? result.len_edited
-          : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (currentFavorite ? result.removed : result.added));
+        const action = newFavoriteStatus ? 'Added to' : 'Removed from';
+        const actualCount = newFavoriteStatus ? result.len_added : result.len_removed;
+        const countText = actualCount === 1 ? '' : `${actualCount} `;
         
         showToast(
           <span>
-            {count} {action}{' '}
+            {countText}{action}{' '}
             <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
           </span>,
           'success'
@@ -84,42 +87,32 @@ export default function useImageActions({
     if (imageIdsArray.length === 0) return;
     
     try {
-      if (isArchived) {
-        const result = await albumsAPI.toggleArchive(imageIdsArray, true, eventUrl);
-        if (result) {
-          if (onImageUpdated) {
-            imageIdsArray.forEach(id => {
-              onImageUpdated({ id, is_archived: false });
-            });
-          }
-          
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
-          showToast(
-            <span>
-              {count} removed from{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
+      // For single image, use the single image state; for multiple, check if all are archived
+      const shouldRemove = imageIdsArray.length === 1 ? isArchived : allAreArchived;
+      const newArchivedStatus = !shouldRemove;
+      
+      // Use the new album-based API that handles multiple images in one call
+      const result = await imagesAPI.toggleArchive(imageIdsArray, newArchivedStatus, eventUrl);
+      
+      if (result && result.success) {
+        // The API response interceptor will automatically update the data store
+        if (onImageUpdated) {
+          imageIdsArray.forEach(imageId => {
+            onImageUpdated({ id: imageId, is_archived: newArchivedStatus });
+          });
         }
-      } else {
-        const result = await albumsAPI.addToArchive(imageIdsArray, eventUrl);
-        if (result) {
-          if (onImageUpdated) {
-            imageIdsArray.forEach(id => {
-              onImageUpdated({ id, is_archived: true });
-            });
-          }
-          
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
-          showToast(
-            <span>
-              {count} moved to{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
-        }
+        
+        const action = newArchivedStatus ? 'moved to' : 'removed from';
+        const actualCount = newArchivedStatus ? result.len_added : result.len_removed;
+        const countText = actualCount === 1 ? '' : `${actualCount} `;
+        
+        showToast(
+          <span>
+            {countText}{action}{' '}
+            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+          </span>,
+          'success'
+        );
       }
     } catch (e) {
       showToast('Failed to update archive', 'error');
@@ -167,6 +160,8 @@ export default function useImageActions({
     // State for UX components
     isFavorite,
     isArchived,
+    allAreFavorited,
+    allAreArchived,
     allInBucket,
     someInBucket,
     imagesInBucket,

@@ -4,6 +4,7 @@ import { X, Save, User, Image, Edit, Check, AlertTriangle } from 'lucide-react';
 import { groupsAPI, handleAPIError, API_BASE } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useDataStore } from '../utils/dataManager';
 
 export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRefreshGroups, onNameConflict }) {
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -147,9 +148,18 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
         const conflictResult = await groupsAPI.checkName(editingName.trim(), group.id, eventUrl);
         
         if (conflictResult.conflict) {
+          // Changes are automatically applied by apiService interceptor
+          
+          // Get conflicting group from store or use the id from response
+          let conflictingGroup = conflictResult.conflicting_group;
+          if (conflictResult.id && !conflictingGroup) {
+            const store = useDataStore.getState();
+            conflictingGroup = store.entities?.groups?.[conflictResult.id];
+          }
+          
           // Close this modal and pass conflict data to parent (GroupDetail)
           if (onNameConflict) {
-            onNameConflict(editingName.trim(), conflictResult.conflicting_group);
+            onNameConflict(editingName.trim(), conflictingGroup);
           }
           onClose();
           return;

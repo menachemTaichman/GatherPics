@@ -32,6 +32,10 @@ api.interceptors.response.use(
       const store = useDataStore.getState();
       const changes = response.data.changes;
       store.applyChanges(Array.isArray(changes) ? changes : []);
+      
+      // Remove changes from response to prevent double application
+      const { changes: _, ...responseDataWithoutChanges } = response.data;
+      response.data = responseDataWithoutChanges;
     }
     return response;
   },
@@ -86,6 +90,14 @@ export const urlHelpers = {
     return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
   },
   
+  getRepresentativeUrl: async (eventUrl, entity, parentId) => {
+    const eventId = await resolveEventId(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
+  },
+  
   getRelativeDisplayUrl: async (eventUrl, imageId) => {
     const eventId = await resolveEventId(eventUrl);
     if (!eventId) {
@@ -122,6 +134,9 @@ export const urlHelpers = {
   },
   getFaceCropUrlSync: (eventId, faceId) => {
     return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
+  },
+  getRepresentativeUrlSync: (eventId, entity, parentId) => {
+    return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
   },
   
   getRelativeDisplayUrlSync: (eventId, imageId) => {
@@ -324,13 +339,44 @@ export const momentsAPI = {
 
 // Images API
 export const imagesAPI = {
-  getDetails: async (imageIds, eventUrl) => {
+  getImages: async (imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/images`, { image_ids: imageIds });
+    const params = imageIds && imageIds.length > 0 ? { image_ids: imageIds.join(',') } : {};
+    const response = await api.get(`/api/events/${eventId}/images`, { params });
     const data = response.data || {};
     if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
     return data;
   },
+  
+  getImage: async (imageId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/images/${imageId}`);
+    const data = response.data || {};
+    if (data.image) data.image = normalizeImage(data.image);
+    return data;
+  },
+
+  toggleFavorite: async (imageIds, isFavorite, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const url = `/api/events/${eventId}/albums/favorites/images`;
+    const payload = { 
+      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
+      is_favorite: isFavorite 
+    };
+    const response = await api.put(url, payload);
+    return response.data;
+  },
+
+  toggleArchive: async (imageIds, isArchived, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const url = `/api/events/${eventId}/albums/archive/images`;
+    const payload = { 
+      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
+      is_archived: isArchived 
+    };
+    const response = await api.put(url, payload);
+    return response.data;
+  }
 };
 
 // Albums API
@@ -394,11 +440,15 @@ export const albumsAPI = {
       throw new Error("Favorites album not found.");
     }
     
+    let result;
     if (isFavorite) {
-      return albumsAPI.removeImages(favoritesAlbumId, imageIds, eventUrl);
+      result = await albumsAPI.removeImages(favoritesAlbumId, imageIds, eventUrl);
     } else {
-      return albumsAPI.addImages(favoritesAlbumId, imageIds, eventUrl);
+      result = await albumsAPI.addImages(favoritesAlbumId, imageIds, eventUrl);
     }
+    
+    // Changes are automatically applied by response interceptor
+    return result;
   },
 
   addToArchive: async (imageIds, eventUrl) => {
@@ -417,7 +467,10 @@ export const albumsAPI = {
         throw new Error("Archive album not found.");
     }
     
-    return albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
+    const result = await albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
+    
+    // Changes are automatically applied by response interceptor
+    return result;
   },
 
   toggleArchive: async (imageIds, isArchived, eventUrl) => {
@@ -436,10 +489,15 @@ export const albumsAPI = {
       throw new Error('Archive album not found.');
     }
 
+    let result;
     if (isArchived) {
-      return albumsAPI.removeImages(archiveAlbumId, imageIds, eventUrl);
+      result = await albumsAPI.removeImages(archiveAlbumId, imageIds, eventUrl);
+    } else {
+      result = await albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
     }
-    return albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
+    
+    // Changes are automatically applied by response interceptor
+    return result;
   }
 };
 
@@ -483,9 +541,7 @@ export const optimisticUpdates = {
     
     try {
       const result = await groupsAPI.update(groupId, updates, eventUrl);
-      if (Array.isArray(result.changes)) {
-        store.applyChanges(result.changes);
-      }
+      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
       // Rollback on error
@@ -526,12 +582,7 @@ export const optimisticUpdates = {
 
     try {
       const result = await momentsAPI.create(momentData, eventUrl);
-      if (result.moment) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: [result.moment] }]);
-      }
-      if (Array.isArray(result.changes)) {
-        store.applyChanges(result.changes);
-      }
+      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
       // Rollback on error
@@ -553,9 +604,7 @@ export const optimisticUpdates = {
     
     try {
       const result = await momentsAPI.update(momentId, updates, eventUrl);
-      if (Array.isArray(result.changes)) {
-        store.applyChanges(result.changes);
-      }
+      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
       // Rollback on error

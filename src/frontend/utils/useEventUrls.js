@@ -56,6 +56,10 @@ export function useEventUrls(eventUrl) {
       if (!eventId) return null;
       return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
     },
+    getRepresentativeUrl: (entity, parentId) => {
+      if (!eventId) return null;
+      return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
+    },
     
     // Relative URLs
     getRelativeDisplayUrl: (imageId) => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDataStore, selectors } from '../utils/dataManager';
+import useImageActions from './ImageActions';
 
 export default function SingleImageTile({
   image,
@@ -9,25 +9,28 @@ export default function SingleImageTile({
   isSelected = false,
   onToggleSelect,
   onOpen,
-  isFavorite: propIsFavorite,
-  onToggleFavorite,
-  isArchived: propIsArchived,
-  onToggleArchive,
   onImageLoad,
   onImageError,
   dateLabel,
   showDate = false,
   showCropBadge = false,
   imageFit = 'cover',
-  placeholderDataUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>'
+  placeholderDataUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>',
+  eventUrl, // Required for useImageActions
+  urlHelpers // Required for useImageActions
 }) {
-  // Use data store for state, fallback to props for backward compatibility
-  const storeIsFavorite = useDataStore(state => selectors.isFavorite(state, image?.id));
-  const storeIsArchived = useDataStore(state => selectors.isArchived(state, image?.id));
-  
-  // Use store values if available, otherwise fallback to props
-  const isFavorite = storeIsFavorite !== undefined ? storeIsFavorite : (propIsFavorite || false);
-  const isArchived = storeIsArchived !== undefined ? storeIsArchived : (propIsArchived || false);
+  // Use the centralized ImageActions hook
+  const imageActions = useImageActions({
+    imageIds: image?.id,
+    eventUrl,
+    urlHelpers,
+    placeholderDataUrl,
+    onImageUpdated: () => {}, // Store handles updates automatically
+    onAlbumAdded: () => {}
+  });
+
+  // Use the state from the hook
+  const { isFavorite, isArchived, toggleFavorite, toggleArchive } = imageActions;
   return (
     <div className={`relative group cursor-pointer h-full photo-card ${aspectClass}`} onClick={(e) => {
       if (!e.target.closest('input[type="checkbox"]')) {
@@ -72,7 +75,7 @@ export default function SingleImageTile({
             title="Remove from Archive"
             onClick={(e) => {
               e.stopPropagation();
-              onToggleArchive && onToggleArchive(true);
+              toggleArchive();
             }}
           >
             <svg
@@ -99,7 +102,7 @@ export default function SingleImageTile({
             title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleFavorite && onToggleFavorite();
+              toggleFavorite();
             }}
           >
             <svg
@@ -130,7 +133,7 @@ export default function SingleImageTile({
             title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleFavorite && onToggleFavorite();
+              toggleFavorite();
             }}
           >
             <svg

@@ -11,7 +11,6 @@ useDataStore state
     groups:  { [groupId]: Group & { images?: Set<imageId>, faces_mapping?: { [imageId]: faceId }, images_count?: number } }
     moments: { [momentId]: Moment & { images?: Set<imageId>, images_count?: number } }
     albums:  { [albumId]: Album  & { images?: Set<imageId>, images_count?: number } }
-  // no global relations map in v3
   view:
     includeArchived: boolean
     current: { type, id?, filter?, sort? }

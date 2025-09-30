@@ -1,4 +1,3 @@
-import json
 from typing import List, Dict, Union, Any
 from ..db import AppDB, STRUCTURE, ReturnFormat
 import uuid
@@ -92,6 +91,22 @@ class ModelsManager:
         if results and single_item:
             return results[entity_ids[0]]
         return results
+
+    def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
+        """Get representative of an entity.
+        Args:
+            entity: entity name
+            entity_id: entity id
+        Returns:
+            representative table, representative id
+        """
+        representative_metadata = STRUCTURE[entity].get('representative', {})
+        if not representative_metadata:
+            raise ValueError(f"Representative not found for {entity}")
+        representative_table = representative_metadata['table']
+        representative_field = representative_metadata['field']
+        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {AppDB.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
+        return representative_table, representative_id
 
     def get_child_ids(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, within: bool = True) -> list[str]:
         """Get child ids of a parent.
@@ -343,7 +358,7 @@ class ModelsManager:
         return valid_child_ids, detached_parents
 
     # -------- Groups helpers --------
-    def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> list[dict[str, Any]]:
+    def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
         Args:
             group_ids: list of group ids
@@ -362,7 +377,7 @@ class ModelsManager:
         accessible_faces = STRUCTURE['faces']['accessible_table']
 
         query = f'''
-            SELECT g.*
+            SELECT g.group_id, g.label, g.images_count
             FROM {accessible_groups} g
             JOIN {accessible_faces} f ON g.group_id = f.group_id
             WHERE f.image_id IN ({image_placeholders})

@@ -10,16 +10,18 @@ import Toast from './Toast';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { shallow } from 'zustand/shallow';
-import { momentsAPI, imagesAPI, API_BASE, albumsAPI } from '../utils/apiService';
+import { momentsAPI, imagesAPI, API_BASE } from '../utils/apiService';
 import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
-import { getPreference, setPreference } from '../utils/settings';
+import { getPreference } from '../utils/settings';
 import useBucketStore from '../utils/bucketStore';
 import { useToast } from '../utils/ToastContext';
+import { sortMoments } from '../utils/sorting';
 
 
 function formatTimeOnly(dateString) {
@@ -55,7 +57,18 @@ export default function Moments({ eventUrl }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
-  const moments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  const allMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  const includeArchived = usePreference('general.includeArchived', false);
+  const moments = useMemo(() => {
+    let filteredMoments = allMoments.filter(moment => moment.images_count > 0);
+    
+    // Filter out archived moments if includeArchived is false
+    if (!includeArchived) {
+      filteredMoments = filteredMoments.filter(moment => !moment.is_archived);
+    }
+    
+    return sortMoments(filteredMoments, 'asc');
+  }, [allMoments, includeArchived]);
   const updateMoment = useDataStore(state => state.updateMoment);
   const deleteMoment = useDataStore(state => state.deleteMoment);
   const addMoment = useDataStore(state => state.addMoment);
@@ -65,13 +78,15 @@ export default function Moments({ eventUrl }) {
   const setStoreError = useDataStore(state => state.setError);
   
   const [images, setImages] = useState([]);
-  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
+  const imageSize = usePreference('general.size', 1.0);
+  const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [momentImagesMap, setMomentImagesMap] = useState({});
   const [imagesLoading, setImagesLoading] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
-  const [carouselVisible, setCarouselVisible] = usePreference('Moments.carouselExpanded', true);
+  const carouselVisible = usePreference('Moments.carouselExpanded', true);
+  const setCarouselVisible = (value) => setPreference('Moments.carouselExpanded', value);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
   const { toast, showToast } = useToast();
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
@@ -85,7 +100,8 @@ export default function Moments({ eventUrl }) {
   const { addImages, open } = useBucketStore();
   
   // New state for checkbox visibility and selection mode
-  const [selectionMode, setSelectionMode] = usePreference('general.select', false);
+  const selectionMode = usePreference('general.select', false);
+  const setSelectionMode = (value) => setPreference('general.select', value);
 
   const flatSelectionItems = useMemo(() => {
     const items = [];
@@ -121,6 +137,7 @@ export default function Moments({ eventUrl }) {
   const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
   const navigateRef = useRef(navigate);
+  const lastFetchSignatureRef = useRef('');
 
 
   // Update the ref when navigate changes
@@ -163,32 +180,13 @@ export default function Moments({ eventUrl }) {
   }, []);
 
   useEffect(() => {
+    // Clear signature when component mounts or event changes
+    lastFetchSignatureRef.current = '';
     fetchMoments();
     fetchImages();
-  }, []);
+  }, [eventUrl]);
 
-  // Refetch moments and images when include_archived setting changes
-  useEffect(() => {
-    // This hook now handles refetching both moments and images
-    // to correctly handle moments that might appear/disappear
-    // based on whether they contain only archived images.
-    fetchMoments();
-    // Force refetch all images to respect new include_archived setting
-    fetchAllMomentImages(null, null, true);
-  }, [getPreference('general.includeArchived', false)]);
 
-  // Remove archived images from grid when include_archived is false
-  useEffect(() => {
-    if (!getPreference('general.includeArchived', false)) {
-      setMomentImagesMap(prev => {
-        const newMap = { ...prev };
-        Object.keys(newMap).forEach(momentId => {
-          newMap[momentId] = newMap[momentId].filter(img => !img.is_archived);
-        });
-        return newMap;
-      });
-    }
-  }, []);
 
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
@@ -229,7 +227,7 @@ export default function Moments({ eventUrl }) {
 
   // The timeline manager now handles all scroll detection and URL updates automatically
 
-  const fetchAllMomentImages = async (specificMomentId = null, updatedImages = null, forceRefetch = false) => {
+  const fetchAllMomentImages = useCallback(async (specificMomentId = null, updatedImages = null, forceRefetch = false) => {
     try {
       setImagesLoading(true);
       
@@ -262,7 +260,13 @@ export default function Moments({ eventUrl }) {
           // After interceptor applies changes, read images from store
           const entities = useDataStore.getState().entities;
           const idsSet = entities?.moments?.[moment.id]?.images || new Set();
-          const imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
+          let imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
+          
+          // Filter out archived images if includeArchived is false
+          if (!includeArchived) {
+            imgs = imgs.filter(img => !img.is_archived);
+          }
+          
           return { momentId: moment.id, images: imgs };
         } catch (error) {
           console.error(`Error fetching images for moment ${moment.id}:`, error);
@@ -287,18 +291,37 @@ export default function Moments({ eventUrl }) {
     } finally {
       setImagesLoading(false);
     }
-  };
+  }, [includeArchived, eventUrl]);
 
   useEffect(() => {
     if (moments.length > 0) {
+      // Create signature from moments and includeArchived to detect changes
+      const momentIds = moments.map(m => m.id).sort().join(',');
+      const sig = `${momentIds}|${includeArchived ? '1' : '0'}`;
+      
+      // Only fetch if signature has changed
+      if (sig === lastFetchSignatureRef.current) return;
+      
+      lastFetchSignatureRef.current = sig;
       fetchAllMomentImages();
     }
-  }, [moments]);
+  }, [moments, includeArchived, fetchAllMomentImages]);
+
+  // Separate effect for includeArchived changes to force immediate refetch
+  const prevIncludeArchivedRef = useRef(includeArchived);
+  useEffect(() => {
+    if (prevIncludeArchivedRef.current !== includeArchived && moments.length > 0) {
+      // Force refetch when includeArchived changes
+      fetchAllMomentImages(null, null, true);
+      prevIncludeArchivedRef.current = includeArchived;
+    }
+  }, [includeArchived, moments.length, fetchAllMomentImages]);
 
   const fetchMoments = async () => {
     try {
       setStoreLoading(true);
-      await momentsAPI.getAll(eventUrl, { exclude_empty_entities: true });
+      const response = await momentsAPI.getAll(eventUrl);
+      // Changes are automatically applied by apiService interceptor
       setStoreError(null);
     } catch (err) {
       setStoreError('Failed to load moments.');
@@ -309,13 +332,12 @@ export default function Moments({ eventUrl }) {
 
   const fetchImages = async () => {
     try {
-      const response = await imagesAPI.getDetails([], eventUrl);
+      const response = await imagesAPI.getImages([], eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
       const imgs = response.images || [];
       setImages(imgs);
-      if (imgs.length > 0) {
-        const store = useDataStore.getState();
-        store.applyChanges([{ type: 'UPSERT', entity: 'images', items: imgs }]);
-      }
     } catch (err) {
       console.error('Error fetching images:', err);
     }
@@ -324,8 +346,7 @@ export default function Moments({ eventUrl }) {
   const handleSaveMoments = async (updatedMoment) => {
     try {
       const response = await momentsAPI.update(updatedMoment.id, updatedMoment, eventUrl);
-      const store = useDataStore.getState();
-      if (Array.isArray(response.changes)) store.applyChanges(response.changes);
+      // Changes are automatically applied by apiService interceptor
       updateMoment(updatedMoment.id, response.moment || updatedMoment);
       updateMomentImagesMap(updatedMoment.id);
       
@@ -340,12 +361,17 @@ export default function Moments({ eventUrl }) {
   };
 
   // Function to update the momentImagesMap for a specific moment
-  const updateMomentImagesMap = async (momentId) => {
+  const updateMomentImagesMap = useCallback(async (momentId) => {
     try {
       await momentsAPI.getById(momentId, eventUrl);
       const entities = useDataStore.getState().entities;
       const idsSet = entities?.moments?.[momentId]?.images || new Set();
-      const imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
+      let imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
+      
+      // Filter out archived images if includeArchived is false
+      if (!includeArchived) {
+        imgs = imgs.filter(img => !img.is_archived);
+      }
 
       setMomentImagesMap(prev => ({
         ...prev,
@@ -355,13 +381,12 @@ export default function Moments({ eventUrl }) {
     } catch (error) {
       console.error('Error updating moment images map:', error);
     }
-  };
+  }, [includeArchived, eventUrl]);
 
   const handleDeleteMoment = async (id) => {
     try {
       const response = await momentsAPI.delete(id, eventUrl);
-      const store = useDataStore.getState();
-      if (Array.isArray(response.changes)) store.applyChanges(response.changes);
+      // Changes are automatically applied by apiService interceptor
       deleteMoment(id);
     } catch (error) {
       console.error('Error deleting moment:', error);
@@ -473,17 +498,6 @@ export default function Moments({ eventUrl }) {
     }).filter(Boolean);
   };
 
-  const handleGlobalAddToBucket = async () => {
-    if (selectedKeys.size === 0) return;
-    const ids = getSelectedImageIds();
-    const added = addImages(ids);
-    if (added > 0) {
-      showToast(`${added} added to bucket`, 'success');
-    } else {
-      showToast('No new items added', 'success');
-    }
-    open();
-  };
 
   // Create ImageActions instance for selected images
   const selectedImageActions = useImageActions({
@@ -495,75 +509,8 @@ export default function Moments({ eventUrl }) {
     onAlbumAdded: () => {} // No special handling needed
   });
 
-  // Single image favorites toggle - use direct API calls without hooks
-  const handleSingleToggleFavorites = async (imageIds) => {
-    try {
-      const imageIdsArray = Array.isArray(imageIds) ? imageIds : [imageIds];
-      const store = useDataStore.getState();
-      
-      // Check if all images are favorites
-      const allAreFavorites = imageIdsArray.every(id => store.entities?.images?.[id]?.is_favorite || false);
-      
-      const result = await albumsAPI.toggleFavorite(imageIdsArray, allAreFavorites, eventUrl);
-      
-      if (result) {
-        const action = allAreFavorites ? 'Removed from' : 'Added to';
-        const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (allAreFavorites ? result.removed : result.added));
-        
-        showToast(
-          <span>
-            {count} {action}{' '}
-            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-          </span>,
-          'success'
-        );
-      }
-    } catch (e) {
-      showToast('Failed to update favorites', 'error');
-    }
-  };
-
-  // Single image archive toggle - use direct API calls without hooks
-  const handleSingleToggleArchive = async (imageIds, isRemove = false) => {
-    try {
-      const imageIdsArray = Array.isArray(imageIds) ? imageIds : [imageIds];
-      const store = useDataStore.getState();
-      
-      // Check if all images are archived
-      const allAreArchived = imageIdsArray.every(id => store.entities?.images?.[id]?.is_archived || false);
-      
-      if (allAreArchived) {
-        const result = await albumsAPI.toggleArchive(imageIdsArray, true, eventUrl);
-        if (result) {
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
-          showToast(
-            <span>
-              {count} removed from{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
-        }
-      } else {
-        const result = await albumsAPI.addToArchive(imageIdsArray, eventUrl);
-        if (result) {
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
-          showToast(
-            <span>
-              {count} moved to{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
-        }
-      }
-    } catch (e) {
-      showToast('Failed to update archive', 'error');
-    }
-  };
-
-  const handleMoveToArchive = () => {
-    selectedImageActions.toggleArchive();
+  const handleSingleToggleArchive = (isArchived) => {
+    selectedImageActions.toggleArchive(isArchived);
   };
 
   const handleRemoveFromMoment = async () => {
@@ -784,23 +731,13 @@ export default function Moments({ eventUrl }) {
                     }}
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                      {moment.representative_image && moment.representative_image.trim() !== '' ? (
-                        <img 
-                          src={moment.representative_image.startsWith('/api/') 
-                            ? `${API_BASE}${moment.representative_image}` 
-                            : moment.representative_image.startsWith('http') 
-                              ? moment.representative_image 
-                              : (urlHelpers ? urlHelpers.getThumbnailUrl(moment.representative_image) : '')
-                          } 
-                          alt="" 
-                          className="object-cover w-full h-full" 
-                          loading="lazy" 
-                        />
-                      ) : imagesLoading ? (
-                        <div className="animate-pulse bg-gray-300 w-full h-full rounded"></div>
-                      ) : (
-                        <Image className="w-8 h-8 text-white" />
-                      )}
+                      <img 
+                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.id) : ''} 
+                        alt="" 
+                        className="object-cover w-full h-full" 
+                        loading="lazy" 
+                      />
+                      <Image className="w-8 h-8 text-white" style={{ display: 'none' }} />
                     </div>
                       <div className="text-center">
                       <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
@@ -900,11 +837,9 @@ export default function Moments({ eventUrl }) {
                   selectionMode={selectionMode}
                   onSelectAllInMoment={selectAllInMoment}
                   onClearMomentSelection={clearMomentSelection}
-                  onToggleFavorites={handleSingleToggleFavorites}
-                  onToggleArchive={handleSingleToggleArchive}
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
-                  includeArchived={getPreference('general.includeArchived', false)}
+                  includeArchived={includeArchived}
                   ref={setMomentRef(moment.label)}
                 />
               ))}
@@ -973,9 +908,6 @@ export default function Moments({ eventUrl }) {
         selectedImages={new Set(getSelectedImageIds())}
         onSelectAll={selectAllImages}
         onClearSelection={clearGlobalSelection}
-        onAddToBucket={handleGlobalAddToBucket}
-        onToggleFavorites={selectedImageActions.toggleFavorite}
-        onMoveToArchive={selectedImageActions.toggleArchive}
         onRemoveFromMoment={handleRemoveFromMoment}
         onMoveToMoment={() => setShowMoveModal(true)}
         eventUrl={eventUrl}

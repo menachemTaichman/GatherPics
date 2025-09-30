@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown, Image as ImageIcon } from 'lucide-react';
 import { albumsAPI } from '../utils/apiService';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
 import { Link } from 'react-router-dom';
+import { useEventUrls } from '../utils/useEventUrls';
 
 export default function AlbumsGallery({ eventUrl }) {
   const [albums, setAlbums] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = usePreference('AlbumsGallery.sortDir', 'asc');
+  const sortOrder = usePreference('AlbumsGallery.sortDir', 'asc');
+  const setSortOrder = (value) => setPreference('AlbumsGallery.sortDir', value);
+  const { urlHelpers } = useEventUrls(eventUrl);
+
+  const PLACEHOLDER_DATA_URL =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
     async function loadAlbums() {
@@ -83,7 +90,15 @@ export default function AlbumsGallery({ eventUrl }) {
             {filtered.map((album, index) => (
               <motion.div key={album.id || `${album.label || 'album'}-${index}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }}>
                 <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="block" title={album.label}>
-                  <div className="relative rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow h-40 p-4 flex flex-col justify-between">
+                  <div className="relative rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow h-40 p-4 flex flex-col">
+                    <div className="flex-1 flex items-center justify-center mb-3">
+                      <img
+                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : PLACEHOLDER_DATA_URL}
+                        alt=""
+                        className="w-16 h-16 object-cover rounded-lg"
+                        loading="lazy"
+                      />
+                    </div>
                     <div className="text-lg font-semibold text-gray-900 truncate">{album.label}</div>
                     <div className="text-sm text-gray-500">{(album.image_ids || []).length} images</div>
                   </div>

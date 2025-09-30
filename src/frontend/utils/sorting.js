@@ -99,12 +99,12 @@ export const sortMoments = (moments, sortOrder = 'asc') => {
   if (!moments || !moments.length) return [];
   
   return [...moments].sort((a, b) => {
-    // Handle moments without start_datetime
-    if (!a.start_datetime && !b.start_datetime) return 0;
-    if (!a.start_datetime) return 1;
-    if (!b.start_datetime) return -1;
+    // Handle moments without start field
+    if (!a.start && !b.start) return 0;
+    if (!a.start) return 1;
+    if (!b.start) return -1;
     
-    const comparison = new Date(a.start_datetime) - new Date(b.start_datetime);
+    const comparison = new Date(a.start) - new Date(b.start);
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 };

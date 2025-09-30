@@ -7,23 +7,14 @@ import { useEventUrls } from '../utils/useEventUrls';
 export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) {
   const params = useParams();
   const eventUrl = params.eventUrl;
-  const { urlHelpers, loading, error } = useEventUrls(eventUrl);
-
+  const { urlHelpers } = useEventUrls(eventUrl);
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
-  const handleImageError = (e) => {
-    e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
-  };
-
-
-  
-  // Use representative_face for the group representative image
-  const imageSrc = group.representative_face && urlHelpers
-    ? urlHelpers.getFaceCropUrl(group.representative_face)
-    : PLACEHOLDER_DATA_URL;
+  // Use representative API for the group representative image
+  const imageSrc = urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL;
 
   return (
     <>
@@ -56,10 +47,6 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
                 objectPosition: 'center center'
               }}
               loading="lazy"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = PLACEHOLDER_DATA_URL;
-              }}
             />
             
             {/* Shadow overlay on hover */}

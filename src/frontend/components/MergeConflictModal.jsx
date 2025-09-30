@@ -101,6 +101,10 @@ export default function MergeConflictModal({
     return urlHelpers.getFaceCropUrl(faceId);
   };
 
+  const isGroupAccessible = (group) => {
+    return group && group.id && group.representative_face;
+  };
+
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   // Early return if modal is not open or required props are missing
@@ -148,7 +152,9 @@ export default function MergeConflictModal({
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
-                    src={getRepresentativeImageSrc(conflictingGroup?.representative_face) || PLACEHOLDER_DATA_URL}
+                    src={isGroupAccessible(conflictingGroup) 
+                      ? (getRepresentativeImageSrc(conflictingGroup?.representative_face) || PLACEHOLDER_DATA_URL)
+                      : PLACEHOLDER_DATA_URL}
                     alt="Target person"
                     className="w-full h-full object-cover"
                     onError={(e) => {

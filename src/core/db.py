@@ -56,6 +56,10 @@ STRUCTURE = {
             'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
         },
     },
+    'albums_actual': {
+        'primary_key': 'album_id',
+        'accessible_table': 'accessible_albums_actual',
+    },
     'albums_images_actual': {
         'primary_key': ['album_id', 'image_id'],
         'accessible_table': 'accessible_albums_images_actual',
@@ -243,9 +247,9 @@ VIEWS = {
         SELECT g.*, COUNT(agi.image_id) as images_count
         FROM groups g
         LEFT JOIN accessible_groups_images agi ON g.group_id = agi.group_id
-        LEFT JOIN faces f ON g.group_id = f.group_id
         GROUP BY g.group_id
-        HAVING images_count > 0 OR COUNT(f.face_id) > 0;
+        HAVING images_count > 0
+        OR (SELECT COUNT(*) FROM faces WHERE group_id = g.group_id) = 0;
     ''',
     'accessible_moments': '''
         SELECT m.*, COUNT(i.image_id) as images_count
@@ -271,11 +275,19 @@ VIEWS = {
         INNER JOIN accessible_images ON albums_images_actual.image_id = accessible_images.image_id
         INNER JOIN accessible_albums_helper aa ON albums_images_actual.album_id = aa.album_id
     ''',
+    'albums_actual': '''
+        SELECT a.* FROM albums a
+        WHERE LOWER(a.label) != 'archive' and LOWER(a.label) != 'favorites'
+    ''',
     'accessible_albums': '''
         SELECT aa.*, COUNT(aia.image_id) as images_count
         FROM accessible_albums_helper aa
         LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
         GROUP BY aa.album_id
+    ''',
+    'accessible_albums_actual': '''
+        SELECT aa.* FROM accessible_albums aa
+        WHERE LOWER(aa.label) != 'archive' and LOWER(aa.label) != 'favorites'
     ''',
     'editable_profiles_details': '''
         SELECT profile_id, label, password FROM profiles

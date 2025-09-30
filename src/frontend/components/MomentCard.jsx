@@ -2,7 +2,6 @@ import { motion } from 'framer-motion';
 import { forwardRef } from 'react';
 import { Image, Clock, Calendar, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { albumsAPI } from '../utils/apiService';
 import SingleImageTile from './SingleImageTile';
 import { useToast } from '../utils/ToastContext';
 
@@ -45,8 +44,6 @@ const MomentCard = forwardRef(({
   selectionMode,
   onSelectAllInMoment,
   onClearMomentSelection,
-  onToggleFavorites,
-  onToggleArchive,
   eventUrl,
   urlHelpers
 }, ref) => {
@@ -188,10 +185,10 @@ const MomentCard = forwardRef(({
                       isSelected={globalSelection.has(`${moment.moment_id}:${image.id}`)}
                       onToggleSelect={(e) => onImageSelect(image.id, moment.moment_id, e)}
                       onOpen={() => onOpenImageViewer(images, image, index)}
-                      onToggleFavorite={async () => { if (onToggleFavorites) await onToggleFavorites([image.id]); }}
-                      onToggleArchive={async (isRemove) => { if (onToggleArchive) await onToggleArchive([image.id], !!isRemove); }}
                       dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
                       showDate={!!image.date_taken}
+                      eventUrl={eventUrl}
+                      urlHelpers={urlHelpers}
                     />
                   </motion.div>
                 );

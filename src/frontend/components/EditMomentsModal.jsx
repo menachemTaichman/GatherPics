@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
@@ -30,6 +30,9 @@ function formatDateTime(dateString) {
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
   const { urlHelpers } = useEventUrls(eventUrl);
   const storeMoments = useDataStore(state => Object.values(state.entities?.moments || {}));
+  const sortedMoments = useMemo(() => {
+    return sortMoments(storeMoments, 'asc');
+  }, [storeMoments]);
 
   // Inline SVG placeholder (gray background with a question mark)
   const PLACEHOLDER_DATA_URL =
@@ -57,7 +60,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setIsLoading(true);
     try {
       // Always fetch all moments for editing, including empty and archived
-      await momentsAPI.getAll(eventUrl);
+      const response = await momentsAPI.getAll(eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
       const allFromStore = Object.values(useDataStore.getState().entities?.moments || {});
       const sortedMoments = sortMoments(allFromStore, 'asc');
       setInternalMoments(sortedMoments);
@@ -133,23 +139,46 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         const { id, moment_id, image_ids, images, ...momentData } = moment;
         // Create moment directly without optimistic updates to avoid duplicates
         const result = await momentsAPI.create(momentData, eventUrl);
-        savedMoment = result.moment;
         
-        // Replace the temporary moment with the saved one, preserving any additional fields
-        setEditingMoments(prev => prev.map(m => 
-          (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment, id: savedMoment.id, moment_id: savedMoment.id } : m
-        ));
+        // Changes are automatically applied by apiService interceptor
+        
+        // Get the created moment from store using moment_id
+        const createdMomentId = result.moment_id;
+        const store = useDataStore.getState();
+        savedMoment = store.entities?.moments?.[createdMomentId];
+        
+        if (savedMoment) {
+          // Replace the temporary moment with the saved one, preserving any additional fields
+          setEditingMoments(prev => prev.map(m => 
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment, id: savedMoment.id, moment_id: savedMoment.id } : m
+          ));
+          
+          // Navigate to the newly created moment in the sorted list
+          setTimeout(() => {
+            const momentElement = document.querySelector(`[data-moment-moment_id="${savedMoment.id}"]`);
+            if (momentElement) {
+              momentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 100);
+        }
       } else {
         // Update existing moment directly without optimistic updates to avoid conflicts
         // Filter out image-related fields that the backend doesn't expect
         const { id, moment_id, image_ids, images, ...momentData } = moment;
         const result = await momentsAPI.update(id || moment_id, momentData, eventUrl);
-        savedMoment = result.moment;
         
-        // Update the moment in editingMoments with the saved data, preserving existing fields
-        setEditingMoments(prev => prev.map(m => 
-          (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment } : m
-        ));
+        // Changes are automatically applied by apiService interceptor
+        
+        // Get the updated moment from store
+        const store = useDataStore.getState();
+        savedMoment = store.entities?.moments?.[id || moment_id];
+        
+        if (savedMoment) {
+          // Update the moment in editingMoments with the saved data, preserving existing fields
+          setEditingMoments(prev => prev.map(m => 
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment } : m
+          ));
+        }
       }
       
       // Remove from changed moments since it's now saved
@@ -251,11 +280,6 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setEditingTitle({ moment_id: moment_id, title: currentTitle });
   };
 
-  const getRepresentativeImagePath = (imageId) => {
-    // Note: We need to resolve the event id from eventUrl for the image URLs
-    // For now, we'll use placeholders until we implement proper event id resolution
-    return PLACEHOLDER_DATA_URL;
-  };
 
 
   return (
@@ -299,30 +323,17 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                   <div className="flex items-center space-x-3 flex-1">
                     {/* Representative image */}
                     <div className="relative">
-                      {moment.representative_image && moment.representative_image.trim() !== '' ? (
-                        <div className="w-16 h-16 rounded-lg overflow-hidden border">
-                          <img 
-                            src={moment.representative_image.startsWith('/api/') 
-                              ? `${API_BASE}${moment.representative_image}` 
-                              : urlHelpers && urlHelpers.getThumbnailUrl(moment.representative_image)}
-                            alt="" 
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
-                            }}
-                          />
-                          <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-100" style={{display: 'none'}}>
-                            <Image className="w-6 h-6 text-gray-400" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden border">
+                        <img 
+                          src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.moment_id) : ''}
+                          alt="" 
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-100" style={{display: 'none'}}>
                           <Image className="w-6 h-6 text-gray-400" />
                         </div>
-                      )}
+                      </div>
                       <button
                         onClick={() => {
                           setSelectedMoment(moment);
@@ -509,18 +520,6 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         onClose={() => setShowImageSelector(false)}
         moment={selectedMoment}
         momentImagesMap={momentImagesMap}
-        onImageSelect={(imageId) => {
-          if (selectedMoment) {
-            if (imageId === '') {
-              // Remove representative image
-              updateMoment(selectedMoment.moment_id, { representative_image: '' });
-            } else {
-              // Store the representative image as a full API path, not just the image id
-              const representativeImagePath = getRepresentativeImagePath(imageId);
-              updateMoment(selectedMoment.moment_id, { representative_image: representativeImagePath });
-            }
-          }
-        }}
       />
     </div>
     </AnimatePresence>

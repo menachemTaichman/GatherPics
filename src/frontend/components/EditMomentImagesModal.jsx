@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortImagesWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
 import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -32,8 +33,10 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const [imagesToRemove, setImagesToRemove] = useState(new Set());
   const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
   const [imagesInPeriod, setImagesInPeriod] = useState([]);
-  const [sortOrder, setSortOrder] = usePreference('EditMomentImagesModal.sortDir', 'asc');
-  const [filterType, setFilterType] = usePreference('EditMomentImagesModal.filter', 'all');
+  const sortOrder = usePreference('EditMomentImagesModal.sortDir', 'asc');
+  const setSortOrder = (value) => setPreference('EditMomentImagesModal.sortDir', value);
+  const filterType = usePreference('EditMomentImagesModal.filter', 'all');
+  const setFilterType = (value) => setPreference('EditMomentImagesModal.filter', value);
   const [error, setError] = useState('');
   const [focusedImageIndex, setFocusedImageIndex] = useState(0);
   const imageRefs = useRef([]);
@@ -82,7 +85,10 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   const fetchAllImagesWithTimestamps = async () => {
     try {
-      const data = await imagesAPI.getAll(eventUrl);
+      const data = await imagesAPI.getImages([], eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
       // Filter out invalid images and ensure they have required properties
       const validImages = (data.images || []).filter(img => 
         img && img.id && typeof img === 'object'

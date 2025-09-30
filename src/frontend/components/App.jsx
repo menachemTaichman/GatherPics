@@ -181,10 +181,7 @@ function AppContent({ eventUrl }) {
       setLoading(true);
       setLocalLoading(true);
       const response = await groupsAPI.getAll(eventUrl);
-      const store = useDataStore.getState();
-      if (response.groups && response.groups.length) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'groups', items: response.groups }]);
-      }
+      // Changes are automatically applied by apiService interceptor
       setError(null);
     } catch (err) {
       console.error('Error fetching groups:', err);

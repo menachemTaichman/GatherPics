@@ -8,10 +8,11 @@ import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiServ
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { getPreference, setPreference } from '../utils/settings';
+import { usePreference } from '../utils/useSettings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
-import { sortImages } from '../utils/sorting';
+import { sortImages, sortGroups, sortByField } from '../utils/sorting';
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -77,7 +78,7 @@ function ImageViewerActions({
   );
 }
 
-export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder }) {
+export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -93,11 +94,25 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return state.entities?.[key]?.[parent]?.images || null;
   });
   const images = useDataStore(state => state.entities.images);
+  const includeArchived = usePreference('general.includeArchived', false);
   const relatedImages = useMemo(() => {
-    const ids = imagesSet instanceof Set ? Array.from(imagesSet) : [];
-    const unsortedImages = ids.map(id => images[id]).filter(Boolean);
+    let ids;
+    if (filteredIds && entity === 'group') {
+      // Use filtered_ids when available for group entities
+      ids = Array.isArray(filteredIds) ? filteredIds : [];
+    } else {
+      // Use relation Set from store
+      ids = imagesSet instanceof Set ? Array.from(imagesSet) : [];
+    }
+    let unsortedImages = ids.map(id => images[id]).filter(Boolean);
+    
+    // Filter out archived images if includeArchived is false
+    if (!includeArchived) {
+      unsortedImages = unsortedImages.filter(img => !img.is_archived);
+    }
+    
     return sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
-  }, [imagesSet, images, sortBy, sortOrder]);
+  }, [imagesSet, images, sortBy, sortOrder, filteredIds, entity, includeArchived]);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -279,10 +294,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     if (!imageInfo) return;
     try {
       const result = await albumsAPI.removeImages(album.id, [imageInfo.id], eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
       const lbl = (album.label || '').toLowerCase();
       if (lbl === 'favorites') setImageInfo(prev => ({ ...prev, is_favorite: false }));
       if (lbl === 'archive') setImageInfo(prev => ({ ...prev, is_archived: false }));
-      const count = result?.len_edited ?? 1;
+      const count = result?.len_added ?? 1;
       showToast(
         <span>
           Removed {count} {count === 1 ? 'photo' : 'photos'} from{' '}
@@ -360,7 +378,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     const ids = Array.from(imageFacesSet);
     const entities = useDataStore.getState().entities || {};
     const map = entities.faces || {};
-    return ids.map(fid => map[fid]).filter(Boolean);
+    const faces = ids.map(fid => map[fid]).filter(Boolean);
+    
+    // Sort faces by group label (person name)
+    return sortByField(faces, 'group_label', 'asc', (face) => {
+      const gid = face?.groupId || face?.group_id;
+      if (!gid) return '';
+      const entities = useDataStore.getState().entities || {};
+      return entities.groups?.[gid]?.label || '';
+    });
   }, [imageFacesSet]);
   
   const albumsList = useMemo(() => {
@@ -368,7 +394,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     const ids = Array.from(imageAlbumsSet);
     const entities = useDataStore.getState().entities || {};
     const map = entities.albums || {};
-    return ids.map(aid => map[aid]).filter(Boolean);
+    const albums = ids.map(aid => map[aid]).filter(Boolean);
+    return sortGroups(albums, 'name', 'asc');
   }, [imageAlbumsSet]);
 
   // Find the current image index in the store data
@@ -396,8 +423,11 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     try {
       setLoading(true);
       if (imageId && eventUrl) {
-        // Request details; interceptor will apply changes to the store
-        await imagesAPI.getDetails([imageId], eventUrl);
+        // Request details using new getImage API
+        const response = await imagesAPI.getImage(imageId, eventUrl);
+        
+        // Changes are automatically applied by apiService interceptor
+        
         const entities = useDataStore.getState().entities || {};
         const info = entities.images?.[imageId] || null;
         if (info) {
@@ -798,7 +828,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                     {/* No image overlay actions */}
                     
                     {/* Face rectangles - now inside the transformed container */}
-                    {showRectangles && imageLoaded && faces.map((face, index) => {
+                    {showRectangles && imageLoaded && facesList.map((face, index) => {
                       let borderColor, bgColor, labelBgColor;
                       if (selectedFaceIndex === index) {
                         borderColor = 'border-red-500';
@@ -1085,22 +1115,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 title={album.label}
                               >
-                                {album.representative_image ? (
-                                  <img
-                                    src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`}
-                                    alt=""
-                                    className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
-                                    loading="lazy"
-                                    onError={(e) => {
-                                      e.target.onerror = null;
-                                      e.target.src = PLACEHOLDER_DATA_URL;
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                    <ImageIcon className="w-5 h-5 text-gray-400" />
-                                  </div>
-                                )}
+                                <img
+                                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : PLACEHOLDER_DATA_URL}
+                                  alt=""
+                                  className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = PLACEHOLDER_DATA_URL;
+                                  }}
+                                />
                                 <span className="font-medium text-gray-900 truncate">{album.label}</span>
                               </a>
                               <button
@@ -1167,14 +1191,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 onClick={() => handleFaceClick(index)}
                               >
                                 <img
-                                  src={getFaceImageSrc(face)}
+                                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id) : PLACEHOLDER_DATA_URL}
                                   alt={getGroupLabel(face)}
                                   className="w-10 h-10 object-cover rounded-full"
                                   loading="lazy"
-                                  onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = PLACEHOLDER_DATA_URL;
-                                  }}
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-gray-900 truncate">

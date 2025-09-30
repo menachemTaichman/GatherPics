@@ -51,11 +51,16 @@ export default function GroupsFilter({
         selected_groups: selectedParam
       };
       const data = await groupsAPI.getRelated(eventUrl, params);
-      // The API should return updated related groups based on current filters
-      // We'll need to update the parent component with these new related groups
-      if (data.related_groups) {
-        // Call a callback to update related groups in parent
-        onRelatedGroupsUpdate?.(data.related_groups);
+      
+      // Changes are automatically applied by apiService interceptor
+      
+      // Get related groups from store using the IDs returned by API
+      if (data.related_groups && Array.isArray(data.related_groups)) {
+        const store = useDataStore.getState();
+        const relatedGroupsFromStore = data.related_groups
+          .map(id => store.entities?.groups?.[id])
+          .filter(Boolean);
+        onRelatedGroupsUpdate?.(relatedGroupsFromStore);
       }
     } catch (error) {
       console.error('Error fetching related groups:', error);
@@ -250,19 +255,11 @@ export default function GroupsFilter({
             onMouseMove={handleMouseMove}
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-              {group.representative_face ? (
-                <img
-                  src={urlHelpers ? urlHelpers.getFaceCropUrl(group.representative_face) : undefined}
-                  alt={getGroupDisplayName(group)}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
-                  }}
-                />
-              ) : (
-                <span className="text-xs text-primary-600 font-medium">?</span>
-              )}
+              <img
+                src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : undefined}
+                alt={getGroupDisplayName(group)}
+                className="w-full h-full object-cover"
+              />
             </div>
             {/* Enhanced Tooltip - Removed since we have floating tooltip */}
           </div>
@@ -285,19 +282,11 @@ export default function GroupsFilter({
                     ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                     : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                 }`}>
-                  {relatedGroup.representative_face ? (
-                    <img
-                      src={urlHelpers ? urlHelpers.getFaceCropUrl(relatedGroup.representative_face) : undefined}
-                      alt={getGroupDisplayName(relatedGroup)}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="16" fill="%239ca3af">?</text></svg>';
-                      }}
-                    />
-                  ) : (
-                    <span className="text-xs text-gray-600 font-medium">?</span>
-                  )}
+                  <img
+                    src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', relatedGroup.id) : undefined}
+                    alt={getGroupDisplayName(relatedGroup)}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 
                 {/* Add/Remove Icon on Hover */}

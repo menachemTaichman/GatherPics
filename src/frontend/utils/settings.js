@@ -99,6 +99,11 @@ export const setPreference = (path, value) => {
   const preferences = getPreferences();
   setNestedValue(preferences, path, value);
   setPreferences(preferences);
+  
+  // Dispatch a custom event to notify same-tab listeners
+  window.dispatchEvent(new CustomEvent('preferenceChanged', {
+    detail: { path, value, preferences }
+  }));
 };
 
 /**

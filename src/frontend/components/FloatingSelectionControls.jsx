@@ -10,7 +10,7 @@ import {
   Move
 } from 'lucide-react';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
-import { albumsAPI } from '../utils/apiService';
+import useImageActions from './ImageActions';
 
 export default function FloatingSelectionControls({
   selectedCount,
@@ -18,9 +18,6 @@ export default function FloatingSelectionControls({
   selectedImages,
   onSelectAll,
   onClearSelection,
-  onAddToBucket,
-  onToggleFavorites,
-  onMoveToArchive,
   onTransferFaces,
   onRemoveFromMoment,
   onMoveToMoment,
@@ -36,6 +33,23 @@ export default function FloatingSelectionControls({
   showAlbum = true,
   selectionMode = false
 }) {  
+  // Use the centralized ImageActions hook for selected images
+  const selectedImageActions = useImageActions({
+    imageIds: Array.from(selectedImages),
+    eventUrl,
+    urlHelpers,
+    placeholderDataUrl,
+    onImageUpdated: () => {}, // Store handles updates automatically
+    onAlbumAdded: () => {}
+  });
+
+  // Get state information for button styling
+  const { allAreFavorited, allAreArchived, isFavorite, isArchived } = selectedImageActions;
+  
+  // For single image, use single state; for multiple, use all-are state
+  const shouldShowFavorited = selectedCount === 1 ? isFavorite : allAreFavorited;
+  const shouldShowArchived = selectedCount === 1 ? isArchived : allAreArchived;
+
   if (!selectionMode && selectedCount === 0) return null;
 
   return (
@@ -118,20 +132,28 @@ export default function FloatingSelectionControls({
           {/* Add to Favorites */}
           {showFavorites && (
             <button
-              onClick={onToggleFavorites}
-              className="w-8 h-8 rounded-md hover:bg-red-50 text-red-600 flex items-center justify-center"
-              title="Add selected to favorites"
+              onClick={selectedImageActions.toggleFavorite}
+              className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                shouldShowFavorited 
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                  : 'hover:bg-red-50 text-red-600'
+              }`}
+              title={shouldShowFavorited ? "Remove selected from favorites" : "Add selected to favorites"}
             >
-              <HeartIcon className="w-4 h-4" />
+              <HeartIcon className={`w-4 h-4 ${shouldShowFavorited ? 'fill-current' : ''}`} />
             </button>
           )}
           
           {/* Move to Archive */}
           {showArchive && (
             <button
-              onClick={onMoveToArchive}
-              className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
-              title="Move selected to archive"
+              onClick={selectedImageActions.toggleArchive}
+              className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                shouldShowArchived 
+                  ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' 
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title={shouldShowArchived ? "Remove selected from archive" : "Move selected to archive"}
             >
               <Archive className="w-4 h-4" />
             </button>
@@ -140,7 +162,7 @@ export default function FloatingSelectionControls({
           {/* Add to Bucket */}
           {showBucket && (
             <button
-              onClick={onAddToBucket}
+              onClick={selectedImageActions.toggleBucket}
               className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
               title="Add selected photos to bucket"
             >

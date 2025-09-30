@@ -25,6 +25,30 @@ import TransferFacesModal from './TransferFacesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
+import { setPreference } from '../utils/settings';
+
+// Simple sessionStorage hook for filtered results only
+const useSessionStorage = (key, defaultValue) => {
+  const [value, setValue] = useState(() => {
+    try {
+      const item = sessionStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  const setStoredValue = (newValue) => {
+    try {
+      setValue(newValue);
+      sessionStorage.setItem(key, JSON.stringify(newValue));
+    } catch {
+      setValue(newValue);
+    }
+  };
+
+  return [value, setStoredValue];
+};
 import useImageSelection from '../utils/useImageSelection';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore, selectors } from '../utils/dataManager';
@@ -57,7 +81,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   // (moved below after sortedImages is defined)
   
-  const [sortOrder, setSortOrder] = usePreference('GroupDetail.sortDir', 'asc');
+  const sortOrder = usePreference('GroupDetail.sortDir', 'asc');
+  const setSortOrder = (value) => setPreference('GroupDetail.sortDir', value);
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
     showToast,
@@ -67,12 +92,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     defaultSortOrder: sortOrder,
   });
   const [loading, setLoading] = useState(false);
-  const [imageSize, setImageSize] = usePreference('general.size', 1.0);
+  const imageSize = usePreference('general.size', 1.0);
+  const setImageSize = (value) => setPreference('general.size', value);
   const [showCrops, setShowCrops] = useState(false);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
-  const [selectionMode, setSelectionMode] = usePreference('general.select', false);
+  const selectionMode = usePreference('general.select', false);
+  const setSelectionMode = (value) => setPreference('general.select', value);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
   const [imageClasses, setImageClasses] = useState({});
@@ -83,10 +110,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   // Filter states
   const [filterVisible, setFilterVisible] = useState(false);
   const [relatedGroups, setRelatedGroups] = useState([]);
-  // Selection now lives in GroupsFilter; keep a derived copy here for fetching images
-  const [filterGroups, setFilterGroups] = usePreference('groupDetail_filterGroups', []);
-  const [filterMode, setFilterMode] = usePreference('groupDetail_filterMode', 'and');
-  const [onlySelected, setOnlySelected] = usePreference('groupDetail_onlySelected', false);
+  // Filter settings are temporary (not stored) - they reset when component unmounts
+  const [filterGroups, setFilterGroups] = useState([]);
+  const [filterMode, setFilterMode] = useState('and');
+  const [onlySelected, setOnlySelected] = useState(false);
+  
+  // Only store the filtered results (the actual image IDs to use instead of relations)
+  const [filteredIds, setFilteredIds] = useSessionStorage('groupDetail_filteredIds', null);
+  const [filteredFacesMapping, setFilteredFacesMapping] = useSessionStorage('groupDetail_filteredFacesMapping', null);
   const lastFetchSignatureRef = useRef('');
   const prevGroupIdRef = useRef(null);
   const suppressSpinnerRef = useRef(false);
@@ -118,15 +149,30 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const PLACEHOLDER_DATA_URL =
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
-  // Derive images from embedded relation Set in group entity
+  // Derive images from embedded relation Set in group entity or filtered_ids
   const groupFromStore = useDataStore(state => (group?.id ? state.entities?.groups?.[group.id] : null));
   const imagesMap = useDataStore(state => state.entities.images);
+  const includeArchived = usePreference('general.includeArchived', false);
+  
   const relatedImages = useMemo(() => {
-    const ids = groupFromStore?.images instanceof Set ? Array.from(groupFromStore.images) : [];
-    return ids.map(id => imagesMap[id]).filter(Boolean);
-  }, [groupFromStore?.images, imagesMap]);
+    let ids;
+    if (filteredIds) {
+      // Use filtered_ids when available
+      ids = Array.isArray(filteredIds) ? filteredIds : [];
+    } else {
+      // Use relation Set from store
+      ids = groupFromStore?.images instanceof Set ? Array.from(groupFromStore.images) : [];
+    }
+    const images = ids.map(id => imagesMap[id]).filter(Boolean);
+    
+    // Filter out archived images if includeArchived is false
+    if (!includeArchived) {
+      return images.filter(img => !img.is_archived);
+    }
+    return images;
+  }, [groupFromStore?.images, imagesMap, filteredIds, includeArchived]);
 
-  const facesMapping = groupFromStore?.faces_mapping || {};
+  const facesMapping = filteredFacesMapping || groupFromStore?.faces_mapping || {};
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
@@ -201,6 +247,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     try {
       const payload = await groupsAPI.getById(group.id, eventUrl, params);
       const changes = Array.isArray(payload?.changes) ? payload.changes : [];
+      
+      // Handle filtered_ids from API response
+      if (payload?.filter && Array.isArray(payload?.filtered_ids)) {
+        setFilteredIds(payload.filtered_ids);
+      } else {
+        setFilteredIds(null);
+      }
+      
+      // Handle faces_mapping from API response (for filtered results)
+      if (payload?.faces_mapping) {
+        setFilteredFacesMapping(payload.faces_mapping);
+      } else {
+        setFilteredFacesMapping(null);
+      }
+      
       const rel = changes.find(ch => (ch.type === 'RELATION_SET' || ch.type === 'RELATION_ADD') && (ch.relation || '') === 'groups.images' && String(ch.parentId) === String(group.id));
       const pageCount = Array.isArray(rel?.ids) ? rel.ids.length : 0;
       setHasMore(pageCount === 50);
@@ -240,6 +301,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     if (sig === lastFetchSignatureRef.current) return;
     const isGroupChange = prevGroupIdRef.current !== group.id;
     prevGroupIdRef.current = group.id;
+    
+    // If this is a group change, clear filtered data
+    if (isGroupChange) {
+      setFilteredIds(null);
+      setFilteredFacesMapping(null);
+    }
+    
     // If this is only a filter change, do a silent fetch and preserve scroll
     if (!isGroupChange) {
       suppressSpinnerRef.current = true;
@@ -302,6 +370,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     setFilterGroups([]);
     setFilterMode('and');
     setOnlySelected(false);
+    setFilteredIds(null);
+    setFilteredFacesMapping(null);
   };
 
   const formatDate = (dateString) => {
@@ -346,66 +416,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     }));
   };
 
-  const handleAddSelectedToBucket = () => {
-    selectedImageActions.toggleBucket();
-  };
 
-  // Individual image action functions - use the same logic as useImageActions but without hooks
-  const handleSingleImageFavorite = async (imageId) => {
-    try {
-      const isFavorite = useDataStore.getState().entities?.images?.[imageId]?.is_favorite || false;
-      const result = await albumsAPI.toggleFavorite([imageId], isFavorite, eventUrl);
-      
-      if (result) {
-        const action = isFavorite ? 'Removed from' : 'Added to';
-        const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : (isFavorite ? result.removed : result.added));
-        
-        showToast(
-          <span>
-            {count} {action}{' '}
-            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
-          </span>,
-          'success'
-        );
-      }
-    } catch (e) {
-      showToast('Failed to update favorites', 'error');
-    }
-  };
-
-  const handleSingleImageArchive = async (imageId) => {
-    try {
-      const isArchived = useDataStore.getState().entities?.images?.[imageId]?.is_archived || false;
-      
-      if (isArchived) {
-        const result = await albumsAPI.toggleArchive([imageId], true, eventUrl);
-        if (result) {
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.removed);
-          showToast(
-            <span>
-              {count} removed from{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
-        }
-      } else {
-        const result = await albumsAPI.addToArchive([imageId], eventUrl);
-        if (result) {
-          const count = (typeof result.len_edited === 'number') ? result.len_edited : (Array.isArray(result.affected_images_ids) ? result.affected_images_ids.length : result.added);
-          showToast(
-            <span>
-              {count} moved to{' '}
-              <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
-            </span>,
-            'success'
-          );
-        }
-      }
-    } catch (e) {
-      showToast('Failed to update archive', 'error');
-    }
-  };
 
   const getSelectedFaces = () => {
     const selectedFaces = [];
@@ -442,7 +453,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     clearSelection();
 
     // Get the number of transferred images
-    const transferredCount = transferData.affected_images_ids?.length || 0;
+    const transferredCount = transferData.len_added || 0;
     const imageText = transferredCount === 1 ? 'image' : 'images';
 
     // Handle source_deleted case - navigate to target group and show merge toast
@@ -538,7 +549,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   }, [sortedImages]);
 
   const openImageViewer = (imageId, index) => {
-    openViewer({ index, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder });
+    openViewer({ index, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder, filteredIds });
   };
 
   
@@ -583,11 +594,20 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       const conflictResult = await groupsAPI.checkName(trimmedTitle, group.id, eventUrl);
       
       if (conflictResult.conflict) {
+        // Changes are automatically applied by apiService interceptor
+        
+        // Get conflicting group from store or use the id from response
+        let conflictingGroup = conflictResult.conflicting_group;
+        if (conflictResult.id && !conflictingGroup) {
+          const store = useDataStore.getState();
+          conflictingGroup = store.entities?.groups?.[conflictResult.id];
+        }
+        
         // Show merge conflict modal with the conflicting group
         try {
           restoreScrollYRef.current = window.scrollY;
         } catch {}
-        showMergeConflictModal(trimmedTitle, group, conflictResult.conflicting_group);
+        showMergeConflictModal(trimmedTitle, group, conflictingGroup);
         setIsEditingTitle(false);
         return;
       }
@@ -651,17 +671,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                 title="Edit group details"
               >
                 <img
-                  key={group.representative_face || 'no-representative'}
-                  src={group.representative_face && group.representative_face.trim() !== '' && urlHelpers
-                    ? urlHelpers.getFaceCropUrl(group.representative_face)
-                    : PLACEHOLDER_DATA_URL}
+                  key={group.id || 'no-representative'}
+                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL}
                   alt={group.label || `Person ${group.id}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = PLACEHOLDER_DATA_URL;
-                  }}
                 />
               </div>
               <div className="flex items-center space-x-3">
@@ -968,16 +982,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                     isSelected={selectedImages.has(image.id)}
                     onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
-                      onToggleFavorite={async () => { 
-                        await handleSingleImageFavorite(image.id);
-                      }}
-                      onToggleArchive={async (isRemove) => {
-                        await handleSingleImageArchive(image.id);
-                      }}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={formatDate(image.date_taken)}
                       showDate={!!image.date_taken}
                       showCropBadge={showCrops && !!facesMapping?.[image.id]}
+                      eventUrl={eventUrl}
+                      urlHelpers={urlHelpers}
                     />
                 </motion.div>
               ))}
@@ -1004,9 +1014,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         selectedImages={selectedImages}
         onSelectAll={selectAllImages}
         onClearSelection={clearSelection}
-        onAddToBucket={handleAddSelectedToBucket}
-        onToggleFavorites={selectedImageActions.toggleFavorite}
-        onMoveToArchive={selectedImageActions.toggleArchive}
         onTransferFaces={handleTransferFaces}
         eventUrl={eventUrl}
         urlHelpers={urlHelpers}

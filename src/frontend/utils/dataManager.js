@@ -16,6 +16,7 @@ function normalizeEntityKey(entity) {
     case 'group': return 'groups';
     case 'moment': return 'moments';
     case 'album': return 'albums';
+    case 'face': return 'faces';
     default: return entity;
   }
 }
@@ -124,7 +125,7 @@ export const useDataStore = create((set, get) => ({
         const map = { ...(nextEntities[key] || {}) };
         items.forEach((it) => {
           if (!it) return;
-          const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id;
+          const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
           if (!id) return;
           const prev = map[id] || { id };
           const merged = { ...prev, ...it };
