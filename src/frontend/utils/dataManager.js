@@ -190,7 +190,17 @@ export const useDataStore = create((set, get) => ({
         return;
       }
 
-      // REMOVE is handled by backend; ignore here.
+      if (ch.type === CHANGE_TYPES.REMOVE) {
+        const key = normalizeEntityKey(ch.entity);
+        if (!key) return;
+        const ids = ch.ids || [];
+        const map = { ...(nextEntities[key] || {}) };
+        ids.forEach((id) => {
+          delete map[id];
+        });
+        nextEntities[key] = map;
+        return;
+      }
     });
 
     set({ entities: nextEntities });

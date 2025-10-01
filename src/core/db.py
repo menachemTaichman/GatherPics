@@ -27,6 +27,7 @@ STRUCTURE = {
     'faces': {
         'primary_key': 'face_id',
         'accessible_table': 'accessible_faces',
+        'fields': ['group_id'],
     },
     'groups': {
         'primary_key': 'group_id',

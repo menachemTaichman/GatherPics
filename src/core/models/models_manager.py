@@ -358,6 +358,47 @@ class ModelsManager:
         return valid_child_ids, detached_parents
 
     # -------- Groups helpers --------
+    def get_faces_mapping(self, group_id: str) -> dict[str, str]:
+        """Return faces mapping for between images and faces in a group.
+        Args:
+            group_id: group id
+        Returns:
+            dict of faces mapping with image ids as keys and face id as value
+        """
+        accessible_groups_images = STRUCTURE['groups_images']['accessible_table']
+        accessible_faces = STRUCTURE['faces']['accessible_table']
+        query = f"""
+            SELECT agi.image_id,
+            (
+                SELECT f.face_id
+                FROM {accessible_faces} f
+                WHERE f.image_id = agi.image_id AND f.group_id = agi.group_id
+                GROUP BY f.image_id, f.group_id
+                ORDER BY (f.width * f.height) DESC
+                LIMIT 1
+            ) as representative_face
+            FROM {accessible_groups_images} agi
+            WHERE agi.group_id = ?
+        """
+        return self.db.execute_query(query, (group_id,), return_format=ReturnFormat.DICT_VALUES)
+
+    def get_groups(self, group_ids: list[str] | str | None = None, *, faces_mapping: bool = True) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
+        """Return groups.
+        Args:
+            group_ids: list of group ids or single group id or None to get all groups
+        Returns:
+            dict of groups with group ids as keys and group data as values
+            if single group id is provided, return the group data
+        """
+        entities = self.get_entities('groups', group_ids)
+        if faces_mapping:
+            if isinstance(group_ids, str):
+                entities['faces_mapping'] = self.get_faces_mapping(group_ids)
+            else:
+                for group_id, group in entities.items():
+                    group['faces_mapping'] = self.get_faces_mapping(group_id)
+        return entities
+
     def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
         Args:

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
-import { imagesAPI } from '../utils/apiService';
+import { albumsAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
@@ -56,7 +56,7 @@ export default function useImageActions({
       const newFavoriteStatus = !shouldRemove;
       
       // Use the new album-based API that handles multiple images in one call
-      const result = await imagesAPI.toggleFavorite(imageIdsArray, newFavoriteStatus, eventUrl);
+      const result = await albumsAPI.toggleFavorite(imageIdsArray, newFavoriteStatus, eventUrl);
       
       if (result && result.success) {
         // The API response interceptor will automatically update the data store
@@ -92,7 +92,7 @@ export default function useImageActions({
       const newArchivedStatus = !shouldRemove;
       
       // Use the new album-based API that handles multiple images in one call
-      const result = await imagesAPI.toggleArchive(imageIdsArray, newArchivedStatus, eventUrl);
+      const result = await albumsAPI.toggleArchive(imageIdsArray, newArchivedStatus, eventUrl);
       
       if (result && result.success) {
         // The API response interceptor will automatically update the data store

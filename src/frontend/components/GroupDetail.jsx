@@ -450,21 +450,17 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   const handleTransferComplete = async (result) => {
     const transferData = { ...(result || {}) };
+    
+    // Clear selection (UI state management)
     clearSelection();
 
-    // Get the number of transferred images
-    const transferredCount = transferData.len_added || 0;
-    const imageText = transferredCount === 1 ? 'image' : 'images';
-
-    // Handle source_deleted case - navigate to target group and show merge toast
+    // Handle source_deleted case (merge) - navigate to target group
+    // The modal already showed the toast, we just need to handle navigation
     if (transferData.source_deleted && transferData.target_group_id) {
       const targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
+      
       if (targetGroup) {
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
-        showToast(
-          `${transferredCount} ${imageText} transferred`,
-          'success'
-        );
         
         // Manually update URL without triggering router navigation, then set group
         window.history.replaceState(null, '', link);
@@ -476,45 +472,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       }
     }
     
-    // Handle partial transfers and new group creation
-    const addChange = (transferData.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
-    const targetId = addChange?.parentId || transferData.target_group_id;
-    
-    if (targetId) {
-      const targetGroup = currentGroups.find(g => g.id === targetId);
-      
-      // Check if this was a new group creation
-      const isNewGroup = transferData.new_group_created || false;
-      
-      if (targetGroup) {
-        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
-        const message = isNewGroup 
-          ? `${transferredCount} ${imageText} transferred to new person `
-          : `${transferredCount} ${imageText} transferred to `;
-        
-        showToast(
-          <span>
-            {message}<Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
-          </span>,
-          'success'
-        );
-      } else if (isNewGroup && transferData.new_group_name) {
-        // For new groups that aren't in the store yet, use the name from the response
-        const link = `/${eventUrl}/persons/${encodeURIComponent(transferData.new_group_name)}`;
-        showToast(
-          <span>
-            {transferredCount} {imageText} transferred to new person <Link to={link} className="underline hover:text-gray-100">{transferData.new_group_name}</Link>
-          </span>,
-          'success'
-        );
-      } else {
-        // Fallback for existing groups not found in currentGroups
-        showToast(
-          `${transferredCount} ${imageText} transferred`,
-          'success'
-        );
-      }
-    }
+    // For partial transfers, the grid will automatically update via store changes
+    // No additional action needed - modal already showed toast
   };
 
   const toggleImageSelection = (imageId, event) => {

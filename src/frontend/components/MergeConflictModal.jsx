@@ -25,6 +25,12 @@ export default function MergeConflictModal({
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore.getState;
   
+  // Resolve conflicting group ID to group object (if accessible)
+  const conflictingGroupId = typeof conflictingGroup === 'string' ? conflictingGroup : conflictingGroup?.id;
+  const conflictingGroupObject = useDataStore(state => 
+    conflictingGroupId ? state.entities?.groups?.[conflictingGroupId] : null
+  );
+  
   // Custom keyboard handler for MergeConflictModal
   const handleMergeModalKeys = (e) => {
     if (e.key === 'Enter' && !loading) {
@@ -50,16 +56,16 @@ export default function MergeConflictModal({
         return;
       }
       
-      // Check if conflictingGroup exists before accessing its id (could be group_id from backend)
-      if (!conflictingGroup || (!conflictingGroup.id && !conflictingGroup.group_id)) {
-        console.error('Conflicting person is null or missing id/group_id');
+      // Check if we have a valid conflicting group ID
+      if (!conflictingGroupId) {
+        console.error('Conflicting group ID is missing');
         return;
       }
       
       // Call transfer faces API without face_ids for merge conflict case
       const result = await groupsAPI.transferFaces(
         currentGroup.id,
-        conflictingGroup.id || conflictingGroup.group_id,
+        conflictingGroupId,
         null, // No face_ids for merge conflict - transfer all faces
         eventUrl
       );
@@ -67,18 +73,14 @@ export default function MergeConflictModal({
       // The API service interceptor will automatically handle state updates
       // No need for manual refresh or window.location.href
       
-      // Call the parent's merge callback if provided
-      if (onMerge) {
-        await onMerge();
-      }
-      
-      // Prefer centralized completion handler for consistent UI updates
+      // Call the appropriate completion handler
       if (onTransferComplete) {
         await onTransferComplete(result);
       } else if (onNavigateToGroup) {
-        onNavigateToGroup(conflictingGroup.id || conflictingGroup.group_id);
+        onNavigateToGroup(conflictingGroupId);
+      } else if (onMerge) {
+        await onMerge();
       }
-      
       onClose();
     } catch (error) {
       console.error('Error transferring faces:', error);
@@ -96,19 +98,19 @@ export default function MergeConflictModal({
     onClose();
   };
 
-  const getRepresentativeImageSrc = (faceId) => {
-    if (!faceId || !urlHelpers) return null;
-    return urlHelpers.getFaceCropUrl(faceId);
+  const getRepresentativeImageSrc = (group) => {
+    if (!group || !group.id || !urlHelpers) return null;
+    return urlHelpers.getRepresentativeUrl('groups', group.id);
   };
 
   const isGroupAccessible = (group) => {
-    return group && group.id && group.representative_face;
+    return group && group.id;
   };
 
   const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   // Early return if modal is not open or required props are missing
-  if (!isOpen || !conflictingGroup || !currentGroup) return null;
+  if (!isOpen || !conflictingGroupId || !currentGroup) return null;
 
   return (
     <AnimatePresence>
@@ -135,7 +137,7 @@ export default function MergeConflictModal({
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
-                    src={getRepresentativeImageSrc(currentGroup?.representative_face) || PLACEHOLDER_DATA_URL}
+                    src={getRepresentativeImageSrc(currentGroup) || PLACEHOLDER_DATA_URL}
                     alt="Current person"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -152,8 +154,8 @@ export default function MergeConflictModal({
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   <img
-                    src={isGroupAccessible(conflictingGroup) 
-                      ? (getRepresentativeImageSrc(conflictingGroup?.representative_face) || PLACEHOLDER_DATA_URL)
+                    src={isGroupAccessible(conflictingGroupObject) 
+                      ? (getRepresentativeImageSrc(conflictingGroupObject) || PLACEHOLDER_DATA_URL)
                       : PLACEHOLDER_DATA_URL}
                     alt="Target person"
                     className="w-full h-full object-cover"

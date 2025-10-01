@@ -179,26 +179,41 @@ export default function TransferFacesModal({
         newGroupName.trim() || undefined
       );
 
-      // Determine if this is a new group
-      const isNewGroup = !selectedGroupId && !!newGroupName.trim();
-      const newGroupNameValue = isNewGroup ? newGroupName.trim() : null;
-
-      // Add new_group_name to the transfer data
-      const modifiedResult = {
-        ...result,
-        // Also expose on top-level so callers that use the full result can access it
-        new_group_name: newGroupNameValue,
-        changes: result.changes?.map(change => ({
-          ...change,
-          data: {
-            ...change.data,
-            new_group_name: newGroupNameValue
-          }
-        }))
-      };
+      // Store has already been updated by apiService interceptor
+      // Trust the result and read from the updated store
+      const transferredCount = result.len_added || selectedFaces.length;
+      const imageText = transferredCount === 1 ? 'photo' : 'photos';
+      const targetGroupId = result.target_group_id;
+      
+      // Get the target group from the freshly updated store
+      const updatedGroups = storeSelectors.groupsAll(useDataStore.getState());
+      const targetGroup = updatedGroups.find(g => g.id === targetGroupId);
+      
+      if (targetGroup) {
+        // Show success toast with link to target group
+        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+        showToast(
+          <span>
+            {transferredCount} {imageText} transferred to <a 
+              href={link} 
+              className="underline hover:text-gray-100" 
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  navigate(link);
+                }
+              }}
+            >{targetGroup.label}</a>
+          </span>,
+          'success'
+        );
+      } else {
+        // Fallback if group not found in store (shouldn't happen)
+        showToast(`${transferredCount} ${imageText} transferred`, 'success');
+      }
 
       if (onTransferComplete) {
-        onTransferComplete(modifiedResult);
+        onTransferComplete(result);
       }
       onClose();
     } catch (error) {
@@ -349,7 +364,7 @@ export default function TransferFacesModal({
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                       <img
-                        src={group.representative_face && urlHelpers ? urlHelpers.getFaceCropUrl(group.representative_face) : PLACEHOLDER_DATA_URL}
+                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL}
                         alt={group.label || `Person ${group.id}`}
                         className="w-full h-full object-cover"
                         loading="lazy"

@@ -18,7 +18,10 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
       const result = await groupsAPI.checkName(name.trim(), currentGroup?.id, eventUrl);
       
       if (result.conflict) {
-        setNameConflict(result.conflicting_group);
+        // result.conflicting_group is just an ID, we need to get the full group object
+        const store = useDataStore.getState();
+        const conflictingGroup = store.entities?.groups?.[result.conflicting_group];
+        setNameConflict(conflictingGroup);
       } else {
         setNameConflict(null);
       }
@@ -57,24 +60,18 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
   };
 
   const showMergeConflictModal = (newName, currentGroupOverride = null, conflictingGroup = null) => {
-    // Ensure we have a valid conflicting group
-    let validConflictingGroup = conflictingGroup || nameConflict;
+    // Pass the conflicting group ID directly - let MergeConflictModal handle accessibility
+    const conflictingGroupId = conflictingGroup || nameConflict;
     
-    // If still no valid conflicting group, try to find it by name in the data store
-    if (!validConflictingGroup && newName) {
-      const groups = useDataStore.getState().entities?.groups || {};
-      validConflictingGroup = Object.values(groups).find(g => g.label === newName);
-    }
-    
-    if (!validConflictingGroup) {
-      console.error('No valid conflicting group found');
+    if (!conflictingGroupId) {
+      console.error('No conflicting group ID found');
       return;
     }
     
     setConflictData({
       newName,
       currentGroup: currentGroupOverride || currentGroup,
-      conflictingGroup: validConflictingGroup
+      conflictingGroup: conflictingGroupId // Pass ID directly
     });
     setShowMergeModal(true);
   };

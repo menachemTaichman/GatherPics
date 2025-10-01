@@ -354,28 +354,6 @@ export const imagesAPI = {
     const data = response.data || {};
     if (data.image) data.image = normalizeImage(data.image);
     return data;
-  },
-
-  toggleFavorite: async (imageIds, isFavorite, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const url = `/api/events/${eventId}/albums/favorites/images`;
-    const payload = { 
-      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
-      is_favorite: isFavorite 
-    };
-    const response = await api.put(url, payload);
-    return response.data;
-  },
-
-  toggleArchive: async (imageIds, isArchived, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const url = `/api/events/${eventId}/albums/archive/images`;
-    const payload = { 
-      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
-      is_archived: isArchived 
-    };
-    const response = await api.put(url, payload);
-    return response.data;
   }
 };
 
@@ -424,80 +402,21 @@ export const albumsAPI = {
   },
 
   toggleFavorite: async (imageIds, isFavorite, eventUrl) => {
-    const store = useDataStore.getState();
-    let favoritesAlbumId = store.favoritesAlbumId;
-
-    if (!favoritesAlbumId) {
-      const eventId = await getEventIdForApi(eventUrl);
-      await api.get(`/api/events/${eventId}/albums/defaults/favorites`);
-      // After changes applied, locate favorites album in store
-      const albumsMap = useDataStore.getState().entities?.albums || {};
-      const fav = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'favorites');
-      if (fav && fav.id) { store.setFavoritesAlbumId(fav.id); favoritesAlbumId = fav.id; }
-    }
-
-    if (!favoritesAlbumId) {
-      throw new Error("Favorites album not found.");
-    }
-    
-    let result;
-    if (isFavorite) {
-      result = await albumsAPI.removeImages(favoritesAlbumId, imageIds, eventUrl);
-    } else {
-      result = await albumsAPI.addImages(favoritesAlbumId, imageIds, eventUrl);
-    }
-    
-    // Changes are automatically applied by response interceptor
-    return result;
-  },
-
-  addToArchive: async (imageIds, eventUrl) => {
-    const store = useDataStore.getState();
-    let archiveAlbumId = store.archiveAlbumId;
-    
-    if (!archiveAlbumId) {
-        const eventId = await getEventIdForApi(eventUrl);
-        await api.get(`/api/events/${eventId}/albums/defaults/archive`);
-        const albumsMap = useDataStore.getState().entities?.albums || {};
-        const arc = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'archive');
-        if (arc && arc.id) { store.setArchiveAlbumId(arc.id); archiveAlbumId = arc.id; }
-    }
-
-    if (!archiveAlbumId) {
-        throw new Error("Archive album not found.");
-    }
-    
-    const result = await albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
-    
-    // Changes are automatically applied by response interceptor
-    return result;
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/albums/favorites/images`, {
+      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
+      is_favorite: isFavorite
+    });
+    return response.data;
   },
 
   toggleArchive: async (imageIds, isArchived, eventUrl) => {
-    const store = useDataStore.getState();
-    let archiveAlbumId = store.archiveAlbumId;
-
-    if (!archiveAlbumId) {
-      const eventId = await getEventIdForApi(eventUrl);
-      await api.get(`/api/events/${eventId}/albums/defaults/archive`);
-      const albumsMap = useDataStore.getState().entities?.albums || {};
-      const arc = Object.values(albumsMap).find(a => String(a.label || '').toLowerCase() === 'archive');
-      if (arc && arc.id) { store.setArchiveAlbumId(arc.id); archiveAlbumId = arc.id; }
-    }
-
-    if (!archiveAlbumId) {
-      throw new Error('Archive album not found.');
-    }
-
-    let result;
-    if (isArchived) {
-      result = await albumsAPI.removeImages(archiveAlbumId, imageIds, eventUrl);
-    } else {
-      result = await albumsAPI.addImages(archiveAlbumId, imageIds, eventUrl);
-    }
-    
-    // Changes are automatically applied by response interceptor
-    return result;
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/albums/archive/images`, {
+      image_ids: Array.isArray(imageIds) ? imageIds : [imageIds],
+      is_archived: isArchived
+    });
+    return response.data;
   }
 };
 
@@ -533,108 +452,54 @@ export const profileAPI = {
 export const optimisticUpdates = {
   // Optimistic group update
   updateGroup: async (groupId, updates, rollbackFn, eventUrl) => {
-    const store = useDataStore.getState();
-    const previousState = store.entities?.groupsById?.[groupId];
-    
-    // Apply optimistic update
-    store.updateGroup(groupId, updates);
-    
+    // Just call the API directly - the response interceptor will handle data updates
     try {
       const result = await groupsAPI.update(groupId, updates, eventUrl);
-      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
-      // Rollback on error
-      if (rollbackFn && previousState) {
-        rollbackFn(previousState);
-      }
       throw error;
     }
   },
 
   // Optimistic group delete
   deleteGroup: async (groupId, rollbackFn, eventUrl) => {
-    const store = useDataStore.getState();
-    const previousState = store.entities?.groupsById?.[groupId];
-    
-    // Apply optimistic update
-    store.deleteGroup(groupId);
-    
+    // Just call the API directly - the response interceptor will handle data updates
     try {
       const result = await groupsAPI.delete(groupId, eventUrl);
       return result;
     } catch (error) {
-      // Rollback on error
-      if (rollbackFn && previousState) {
-        store.addGroup(previousState);
-      }
       throw error;
     }
   },
 
   createMoment: async (momentData, rollbackFn, eventUrl) => {
-    const store = useDataStore.getState();
-    const tempId = `temp-${Date.now()}`;
-    const newMoment = { ...momentData, moment_id: tempId };
-
-    // Apply optimistic update
-    store.addMoment(newMoment);
-
+    // Just call the API directly - the response interceptor will handle data updates
     try {
       const result = await momentsAPI.create(momentData, eventUrl);
-      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
-      // Rollback on error
-      if (rollbackFn) {
-        rollbackFn();
-      }
-      store.deleteMoment(tempId);
       throw error;
     }
   },
 
   // Optimistic moment update
   updateMoment: async (momentId, updates, rollbackFn, eventUrl) => {
-    const store = useDataStore.getState();
-    const previousState = store.entities?.momentsById?.[momentId];
-    
-    // Apply optimistic update
-    store.updateMoment(momentId, updates);
-    
+    // Just call the API directly - the response interceptor will handle data updates
     try {
       const result = await momentsAPI.update(momentId, updates, eventUrl);
-      // Changes are automatically applied by response interceptor
       return result;
     } catch (error) {
-      // Rollback on error
-      if (rollbackFn && previousState) {
-        rollbackFn(previousState);
-      } else if (previousState) {
-        store.updateMoment(momentId, previousState);
-      }
       throw error;
     }
   },
 
   // Optimistic moment delete
   deleteMoment: async (momentId, rollbackFn, eventUrl) => {
-    const store = useDataStore.getState();
-    const previousState = store.entities?.momentsById?.[momentId];
-    
-    // Apply optimistic update
-    store.deleteMoment(momentId);
-    
+    // Just call the API directly - the response interceptor will handle data updates
     try {
       const result = await momentsAPI.delete(momentId, eventUrl);
       return result;
     } catch (error) {
-      // Rollback on error
-      if (rollbackFn && previousState) {
-        rollbackFn(previousState);
-      } else if (previousState) {
-        store.applyChanges([{ type: 'UPSERT', entity: 'moments', items: [previousState] }]);
-      }
       throw error;
     }
   }

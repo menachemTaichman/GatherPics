@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import useImageActions from './ImageActions';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -82,8 +82,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const navigate = useNavigate();
   const location = useLocation();
   const { urlHelpers } = useEventUrls(eventUrl);
-  const lastTransferResult = useDataStore(state => state.lastTransferResult);
-  const clearLastTransferResult = useDataStore(state => state.clearLastTransferResult);
   const groupsMap = useDataStore(state => state.entities?.groups || {});
   
   // Subscribe to embedded relation Set only (stable reference) and derive ids locally
@@ -95,6 +93,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   });
   const images = useDataStore(state => state.entities.images);
   const includeArchived = usePreference('general.includeArchived', false);
+  
+  
   const relatedImages = useMemo(() => {
     let ids;
     if (filteredIds && entity === 'group') {
@@ -111,7 +111,9 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       unsortedImages = unsortedImages.filter(img => !img.is_archived);
     }
     
-    return sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
+    const sorted = sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
+    
+    return sorted;
   }, [imagesSet, images, sortBy, sortOrder, filteredIds, entity, includeArchived]);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
@@ -175,14 +177,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
-  const momentInfo = useMemo(() => {
-    const mid = imageInfo?.moment_id;
-    if (!mid) return null;
-    const entities = useDataStore.getState().entities || {};
-    const m = (entities.moments || {})[mid];
-    if (m) return m;
-    return { id: mid, label: imageInfo?.moment_label };
-  }, [imageInfo?.moment_id, imageInfo?.moment_label]);
+  const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
@@ -291,15 +286,12 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleRemoveFromAlbum = async (album) => {
-    if (!imageInfo) return;
+    if (!storeImageInfo) return;
     try {
-      const result = await albumsAPI.removeImages(album.id, [imageInfo.id], eventUrl);
+      const result = await albumsAPI.removeImages(album.id, [storeImageInfo.id], eventUrl);
       
       // Changes are automatically applied by apiService interceptor
       
-      const lbl = (album.label || '').toLowerCase();
-      if (lbl === 'favorites') setImageInfo(prev => ({ ...prev, is_favorite: false }));
-      if (lbl === 'archive') setImageInfo(prev => ({ ...prev, is_archived: false }));
       const count = result?.len_added ?? 1;
       showToast(
         <span>
@@ -314,18 +306,13 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleImageUpdated = (updates) => {
-    setImageInfo(prev => ({ ...prev, ...updates }));
-    
-    // Handle album_added case
-    if (updates.album_added) {
-      handleAlbumAdded(updates.album_added);
-    }
+    // No need to manually update state - the store is automatically updated by the response interceptor
+    // The component will re-render when the store changes due to our subscriptions
   };
 
   const handleAlbumAdded = (album) => {
-    const lbl = (album.label || '').toLowerCase();
-    if (lbl === 'favorites') setImageInfo(prev => ({ ...prev, is_favorite: true }));
-    if (lbl === 'archive') setImageInfo(prev => ({ ...prev, is_archived: true }));
+    // No need to manually update state - the store is automatically updated by the response interceptor
+    // The component will re-render when the store changes due to our subscriptions
   };
 
   // Circular navigation
@@ -362,6 +349,21 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
 
+  // Subscribe to current image info from store
+  const storeImageInfo = useDataStore(state => imageId ? state.entities?.images?.[imageId] : null);
+  
+  // Subscribe to moments entities for reactive updates
+  const momentsEntities = useDataStore(state => state.entities?.moments || {});
+  
+  const momentInfo = useMemo(() => {
+    const mid = storeImageInfo?.moment_id;
+    if (!mid) return null;
+    const m = momentsEntities[mid];
+    if (m) return m;
+    return { id: mid, label: storeImageInfo?.moment_label };
+  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, momentsEntities]);
+
+
   // Subscribe to embedded relation Sets for the current image (like groups.images)
   const imageFacesSet = useDataStore(state => {
     if (!imageId) return null;
@@ -372,50 +374,49 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return state.entities?.images?.[imageId]?.albums || null;
   });
 
+  // Subscribe to faces and groups entities for reactive updates
+  const facesEntities = useDataStore(state => state.entities?.faces || {});
+  const groupsEntities = useDataStore(state => state.entities?.groups || {});
+  const albumsEntities = useDataStore(state => state.entities?.albums || {});
+  
   // Derived lists from embedded Sets
   const facesList = useMemo(() => {
     if (!imageFacesSet) return [];
     const ids = Array.from(imageFacesSet);
-    const entities = useDataStore.getState().entities || {};
-    const map = entities.faces || {};
-    const faces = ids.map(fid => map[fid]).filter(Boolean);
+    const faces = ids.map(fid => facesEntities[fid]).filter(Boolean);
     
     // Sort faces by group label (person name)
-    return sortByField(faces, 'group_label', 'asc', (face) => {
+    const sorted = sortByField(faces, 'group_label', 'asc', (face) => {
       const gid = face?.groupId || face?.group_id;
       if (!gid) return '';
-      const entities = useDataStore.getState().entities || {};
-      return entities.groups?.[gid]?.label || '';
+      return groupsEntities[gid]?.label || '';
     });
-  }, [imageFacesSet]);
+    
+    return sorted;
+  }, [imageFacesSet, facesEntities, groupsEntities]);
   
   const albumsList = useMemo(() => {
     if (!imageAlbumsSet) return [];
     const ids = Array.from(imageAlbumsSet);
-    const entities = useDataStore.getState().entities || {};
-    const map = entities.albums || {};
-    const albums = ids.map(aid => map[aid]).filter(Boolean);
+    const albums = ids.map(aid => albumsEntities[aid]).filter(Boolean);
     return sortGroups(albums, 'name', 'asc');
-  }, [imageAlbumsSet]);
+  }, [imageAlbumsSet, albumsEntities]);
 
   // Find the current image index in the store data
   const currentImageIndex = useMemo(() => {
     if (!imageId || !relatedImages.length) return 0;
     const foundIndex = relatedImages.findIndex(img => img.id === imageId);
-    return foundIndex >= 0 ? foundIndex : Math.min(currentIndex, relatedImages.length - 1);
+    const result = foundIndex >= 0 ? foundIndex : Math.min(currentIndex, relatedImages.length - 1);
+    
+    return result;
   }, [imageId, relatedImages, currentIndex]);
 
   // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
 
-  // Prevent duplicate fetches for the same image id
-  const lastFetchedIdRef = useRef(null);
-
   // Fetch image info when image changes
   useEffect(() => {
     if (!imageId) return;
-    if (lastFetchedIdRef.current === imageId) return;
-    lastFetchedIdRef.current = imageId;
     fetchImageInfo();
   }, [imageId]);
 
@@ -430,6 +431,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         
         const entities = useDataStore.getState().entities || {};
         const info = entities.images?.[imageId] || null;
+        
         if (info) {
           setImageInfo(info);
           // faces, albums, moment are derived from entities
@@ -437,13 +439,25 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             const store = useDataStore.getState();
             const seen = new Set();
             const items = [];
-            (info.faces || []).forEach((f) => {
-              const gid = f && (f.groupId || f.group_id);
-              if (!gid || seen.has(gid)) return;
-              seen.add(gid);
-              const label = f.group_label || (groupsMap[gid] && groupsMap[gid].label) || undefined;
-              items.push(label ? { id: gid, label } : { id: gid });
-            });
+            
+            // Get face IDs from the Set and look up face data
+            if (info.faces instanceof Set) {
+              const faceIds = Array.from(info.faces);
+              const faceEntities = store.entities?.faces || {};
+              
+              faceIds.forEach((faceId) => {
+                const face = faceEntities[faceId];
+                if (!face) return;
+                
+                const gid = face.groupId || face.group_id;
+                if (!gid || seen.has(gid)) return;
+                seen.add(gid);
+                
+                const label = face.group_label || (groupsMap[gid] && groupsMap[gid].label) || undefined;
+                items.push(label ? { id: gid, label } : { id: gid });
+              });
+            }
+            
             if (items.length > 0) {
               store.applyChanges([{ type: 'UPSERT', entity: 'groups', items }]);
             }
@@ -464,27 +478,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  // Subscribe to data store changes to update face data when transfers happen
-  useEffect(() => {
-    if (lastTransferResult && lastTransferResult.transferred_images_data && imageId) {
-      // Check if the current image was affected by the transfer
-      const updatedImageData = lastTransferResult.transferred_images_data.find(
-        imageData => imageData.id === imageId
-      );
-      
-      if (updatedImageData) {
-        // Update face data without reloading
-        setImageInfo(updatedImageData);
-        
-        // Important: Clear the result after processing to prevent re-triggering
-        setTimeout(() => clearLastTransferResult(), 0);
-      } else if (lastTransferResult) {
-        // If the current image was not affected, but there was a transfer,
-        // still clear the result to prevent it being processed stale later.
-        setTimeout(() => clearLastTransferResult(), 0);
-      }
-    }
-  }, [lastTransferResult, imageId, clearLastTransferResult]);
 
   const handleZoomIn = () => {
     const currentPercent = Math.round(zoom * 100);
@@ -608,44 +601,48 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const handleTransferFace = (face) => {
     setSelectedFaceForTransfer(face);
+    setTransferImageId(imageId); // Store current image ID before transfer
     setShowTransferModal(true);
   };
 
   const handleTransferComplete = async (result) => {
-    // Show a generic success toast using changes array to detect target group
-    if (!onTransferComplete || (selectedFaceForTransfer && selectedFaceForTransfer.group_id !== currentGroupId)) {
-      const addChange = (result.changes || []).find(c => c.type === 'RELATION_ADD' && (c.relation || '').includes('group'));
-      const targetId = addChange?.parentId;
-      if (targetId) {
-        const targetGroup = Object.values(groupsMap).find(g => (g.id || g.group_id) === targetId);
-        if (targetGroup) {
-          const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
-          showToast(
-            <span>
-              Transferred to <Link to={link} className="underline hover:text-gray-100">{targetGroup.label}</Link>
-            </span>, 'success'
-          );
-        } else {
-          showToast('Transfer complete!', 'success');
-        }
-      } else {
-        showToast('Transfer complete!', 'success');
-      }
-    }
+    // Modal already showed the toast, we just handle UI state
+    // Store will be updated automatically by the API response changes
+    
+    // Close the transfer modal
+    setShowTransferModal(false);
+    setSelectedFaceForTransfer(null);
     
     // The parent component (GroupDetail) is responsible for grid/navigation updates.
-    // Only trigger if the transferred face belongs to the currently viewed group.
+    // Pass through the result if the transferred face belongs to the currently viewed group.
     if (onTransferComplete && selectedFaceForTransfer && selectedFaceForTransfer.group_id === currentGroupId) {
       onTransferComplete(result);
     }
 
-    setShowTransferModal(false);
-    setSelectedFaceForTransfer(null);
+    // If the transfer resulted in the source group being deleted (a merge),
+    // navigate to the same image in the target group
+    if (result?.source_deleted && transferImageId) {
+      // Wait for GroupDetail to handle group navigation first
+      setTimeout(() => {
+        // Find the image in the new group's images
+        const targetGroupId = result.target_group_id;
+        if (targetGroupId) {
+          const entities = useDataStore.getState().entities || {};
+          const targetGroupImages = entities.groups?.[targetGroupId]?.images;
 
-    // If the transfer resulted in the source group being deleted (a merge), close the viewer.
-    // The underlying GroupDetail component will handle navigating to the new group.
-    if (result?.source_deleted) {
-      onClose();
+          if (targetGroupImages instanceof Set) {
+            const imageIds = Array.from(targetGroupImages);
+            const newIndex = imageIds.findIndex(id => id === transferImageId);
+            if (newIndex >= 0) {
+              // Navigate to the same image in the target group
+              onNavigate('jump', newIndex);
+            }
+          }
+        }
+        setTransferImageId(null); // Clear stored image ID
+      }, 100); // Small delay to ensure GroupDetail navigation completes first
+    } else {
+      setTransferImageId(null); // Clear stored image ID
     }
   };
 
@@ -725,7 +722,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const getImageSrc = () => {
-    const id = imageInfo?.id;
+    const id = storeImageInfo?.id;
     if (!id) return PLACEHOLDER_DATA_URL;
     if (!urlHelpers) return PLACEHOLDER_DATA_URL;
     return urlHelpers.getDisplayImageUrl(id);
@@ -740,9 +737,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const getGroupLabel = (face) => {
     const gid = face?.groupId || face?.group_id;
     if (!gid) return '';
-    const entities = useDataStore.getState().entities || {};
-    const label = (entities.groups?.[gid]?.label || groupsMap[gid]?.label || '');
-    return label;
+    return groupsEntities[gid]?.label || '';
   };
 
 
@@ -1040,7 +1035,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
                 <ImageViewerActions
                   imageId={imageId}
-                  imageInfo={imageInfo}
+                  imageInfo={storeImageInfo}
                   eventUrl={eventUrl}
                   showToast={showToast}
                   urlHelpers={urlHelpers}
@@ -1052,16 +1047,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {imageInfo?.label || imageMeta.label}</div>
-                    <div><span className="font-semibold">Date:</span> {imageInfo?.date_taken || 'Unknown'}</div>
+                    <div><span className="font-semibold">Name:</span> {storeImageInfo?.label || imageMeta.label}</div>
+                    <div><span className="font-semibold">Date:</span> {storeImageInfo?.date_taken || 'Unknown'}</div>
                     <div><span className="font-semibold">Original size:</span> {(() => {
-                      const size = imageInfo?.file_size;
+                      const size = storeImageInfo?.file_size;
                       if (!size) return 'Unknown';
                       if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
                       if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
                       return (size / 1024).toFixed(1) + ' KB';
                     })()}</div>
-                    <div><span className="font-semibold">Original resolution:</span> {imageInfo?.width && imageInfo?.height ? `${imageInfo.width} x ${imageInfo.height}` : 'Unknown'}</div>
+                    <div><span className="font-semibold">Original resolution:</span> {storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : 'Unknown'}</div>
                   </div>
                   
                                      {/* Moment Information */}
