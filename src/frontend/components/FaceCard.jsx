@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
 import { useEventUrls } from '../utils/useEventUrls';
+import { getImageCount } from '../utils/settings';
 
 
 export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) {
@@ -62,7 +63,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
                 {group.label || `Person ${group.group_id}`}
               </h3>
               <p className="text-xs text-gray-500">
-                {group.images_count || 0} photos
+                {getImageCount(group)} photos
               </p>
             </div>
             

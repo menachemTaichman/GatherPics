@@ -418,7 +418,7 @@ class ModelsManager:
         accessible_faces = STRUCTURE['faces']['accessible_table']
 
         query = f'''
-            SELECT g.group_id, g.label, g.images_count
+            SELECT g.group_id, g.label, g.images_count, g.active_images_count
             FROM {accessible_groups} g
             JOIN {accessible_faces} f ON g.group_id = f.group_id
             WHERE f.image_id IN ({image_placeholders})

@@ -25,7 +25,7 @@ import TransferFacesModal from './TransferFacesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
-import { setPreference } from '../utils/settings';
+import { setPreference, getImageCount } from '../utils/settings';
 
 // Simple sessionStorage hook for filtered results only
 const useSessionStorage = (key, defaultValue) => {
@@ -700,7 +700,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedImages.length} of {Number.isFinite(group.images_count) ? group.images_count : (group.count || 0)} images
+                  {sortedImages.length} of {getImageCount(group)} images
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops

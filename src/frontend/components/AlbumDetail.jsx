@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowUp, ArrowDown, Minus, Plus, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { usePreference } from '../utils/useSettings';
-import { setPreference } from '../utils/settings';
+import { setPreference, getImageCount } from '../utils/settings';
 import { albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
@@ -116,7 +116,7 @@ export default function AlbumDetail() {
                 />
               </div>
               <h1 className="text-3xl font-bold text-gray-900">{album.label}</h1>
-              <p className="text-gray-600">{albumImages.length} images</p>
+              <p className="text-gray-600">{getImageCount(album)} images</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">

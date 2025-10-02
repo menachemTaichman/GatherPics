@@ -178,4 +178,20 @@ export const clearAllSettings = () => {
   } catch (error) {
     console.warn('Failed to clear preferences:', error);
   }
+};
+
+/**
+ * Get the appropriate image count based on includeArchived setting
+ * @param {object} entity - Entity object (group, moment, album, etc.)
+ * @returns {number} The appropriate image count
+ */
+export const getImageCount = (entity) => {
+  if (!entity) return 0;
+  
+  const includeArchived = getPreference('general.includeArchived');
+  if (includeArchived) {
+    return entity.images_count || 0;
+  } else {
+    return entity.active_images_count ?? entity.images_count ?? 0;
+  }
 }; 

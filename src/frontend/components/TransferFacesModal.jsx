@@ -3,7 +3,7 @@ import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { usePreference } from '../utils/useSettings';
-import { setPreference } from '../utils/settings';
+import { setPreference, getImageCount } from '../utils/settings';
 import { toggleSortOrder } from '../utils/sorting';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -71,8 +71,8 @@ export default function TransferFacesModal({
         aValue = a.label || `Person ${a.id}`;
         bValue = b.label || `Person ${b.id}`;
       } else {
-        aValue = a.images_count || 0;
-        bValue = b.images_count || 0;
+        aValue = getImageCount(a);
+        bValue = getImageCount(b);
       }
       
       if (sortOrder === 'asc') {
@@ -379,7 +379,7 @@ export default function TransferFacesModal({
                         {group.label || `Person ${group.id}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {group.images_count || 0} images
+                        {getImageCount(group)} images
                       </p>
                     </div>
                   </div>

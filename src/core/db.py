@@ -32,7 +32,7 @@ STRUCTURE = {
     'groups': {
         'primary_key': 'group_id',
         'accessible_table': 'accessible_groups',
-        'fields': ['label', 'images_count'],
+        'fields': ['label', 'images_count', 'active_images_count'],
         'representative': {'field': 'representative_face', 'table': 'faces'},
         'relations': {
             'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -42,7 +42,7 @@ STRUCTURE = {
     'moments': {
         'primary_key': 'moment_id',
         'accessible_table': 'accessible_moments',
-        'fields': ['label', 'description', 'start', 'end', 'representative_image', 'images_count'],
+        'fields': ['label', 'description', 'start', 'end', 'images_count', 'active_images_count'],
         'representative': {'field': 'representative_image', 'table': 'images'},
         'relations': {
             'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -51,7 +51,7 @@ STRUCTURE = {
     'albums': {
         'primary_key': 'album_id',
         'accessible_table': 'accessible_albums',
-        'fields': ['label', 'description', 'representative_image', 'images_count'],
+        'fields': ['label', 'description', 'images_count', 'active_images_count'],
         'representative': {'field': 'representative_image', 'table': 'images'},
         'relations': {
             'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -245,17 +245,25 @@ VIEWS = {
         INNER JOIN accessible_images ON groups_images.image_id = accessible_images.image_id
     ''',
     'accessible_groups': '''
-        SELECT g.*, COUNT(agi.image_id) as images_count
+        SELECT 
+            g.*,
+            COUNT(agi.image_id) AS images_count,
+            COUNT(agi.image_id) - SUM(ai.is_archived) AS active_images_count
         FROM groups g
-        LEFT JOIN accessible_groups_images agi ON g.group_id = agi.group_id
+        LEFT JOIN accessible_groups_images agi 
+            ON g.group_id = agi.group_id
+        LEFT JOIN accessible_images ai
+            ON agi.image_id = ai.image_id
         GROUP BY g.group_id
         HAVING images_count > 0
         OR (SELECT COUNT(*) FROM faces WHERE group_id = g.group_id) = 0;
     ''',
     'accessible_moments': '''
-        SELECT m.*, COUNT(i.image_id) as images_count
+        SELECT m.*,
+        COUNT(i.image_id) as images_count,
+        COUNT(i.image_id) - SUM(i.is_archived) AS active_images_count
         FROM moments m
-        LEFT JOIN images i ON m.moment_id = i.moment_id
+        LEFT JOIN accessible_images i ON m.moment_id = i.moment_id
         GROUP BY m.moment_id
     ''',
     'albums_images_actual': '''
@@ -281,9 +289,12 @@ VIEWS = {
         WHERE LOWER(a.label) != 'archive' and LOWER(a.label) != 'favorites'
     ''',
     'accessible_albums': '''
-        SELECT aa.*, COUNT(aia.image_id) as images_count
+        SELECT aa.*,
+        COUNT(aia.image_id) as images_count,
+        COUNT(aia.image_id) - SUM(ai.is_archived) AS active_images_count
         FROM accessible_albums_helper aa
         LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
+        LEFT JOIN accessible_images ai ON aia.image_id = ai.image_id
         GROUP BY aa.album_id
     ''',
     'accessible_albums_actual': '''

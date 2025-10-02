@@ -18,10 +18,10 @@ import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
-import { getPreference } from '../utils/settings';
 import useBucketStore from '../utils/bucketStore';
 import { useToast } from '../utils/ToastContext';
 import { sortMoments } from '../utils/sorting';
+import { getImageCount } from '../utils/settings';
 
 
 function formatTimeOnly(dateString) {
@@ -60,7 +60,10 @@ export default function Moments({ eventUrl }) {
   const allMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
   const includeArchived = usePreference('general.includeArchived', false);
   const moments = useMemo(() => {
-    let filteredMoments = allMoments.filter(moment => moment.images_count > 0);
+    let filteredMoments = allMoments.filter(moment => {
+      const imageCount = getImageCount(moment);
+      return imageCount > 0;
+    });
     
     // Filter out archived moments if includeArchived is false
     if (!includeArchived) {

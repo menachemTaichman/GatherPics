@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown, Image as ImageIcon } from 'lucide-react';
 import { albumsAPI } from '../utils/apiService';
 import { usePreference } from '../utils/useSettings';
-import { setPreference } from '../utils/settings';
+import { setPreference, getImageCount } from '../utils/settings';
 import { Link } from 'react-router-dom';
 import { useEventUrls } from '../utils/useEventUrls';
 
@@ -100,7 +100,7 @@ export default function AlbumsGallery({ eventUrl }) {
                       />
                     </div>
                     <div className="text-lg font-semibold text-gray-900 truncate">{album.label}</div>
-                    <div className="text-sm text-gray-500">{(album.image_ids || []).length} images</div>
+                    <div className="text-sm text-gray-500">{getImageCount(album)} images</div>
                   </div>
                 </Link>
               </motion.div>
