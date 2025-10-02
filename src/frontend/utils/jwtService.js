@@ -8,6 +8,7 @@ class JWTService {
   constructor() {
     this.token = null;
     this.loadFromStorage();
+    this._inflight = null;
   }
 
   // Load token and settings from localStorage
@@ -34,19 +35,21 @@ class JWTService {
 
   // Get a new JWT token
   async getToken() {
-    try {
-      const response = await axios.post(`${API_BASE}/login`, {}, { withCredentials: true });
-      
-      this.token = response.data.access_token;
-      
-      // Save to storage
-      this.saveToStorage();
-      
-      return this.token;
-    } catch (error) {
-      console.error('Failed to get JWT token:', error);
-      throw error;
-    }
+    if (this._inflight) return this._inflight;
+    this._inflight = (async () => {
+      try {
+        const response = await axios.post(`${API_BASE}/login`, {}, { withCredentials: true });
+        this.token = response.data.access_token;
+        this.saveToStorage();
+        return this.token;
+      } catch (error) {
+        console.error('Failed to get JWT token:', error);
+        throw error;
+      } finally {
+        this._inflight = null;
+      }
+    })();
+    return this._inflight;
   }
 
   // Get current token, refreshing if needed

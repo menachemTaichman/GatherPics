@@ -27,6 +27,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const storeGroups = useDataStore(state => storeSelectors.groupsAll(state));
 
   useEffect(() => {
+    // Scope: aggregator for groups page
+    try { useDataStore.getState().setScope({ entity: 'all', id: 'groups' }); } catch {}
     async function loadGroups() {
       try {
         await groupsAPI.getAll(eventUrl);

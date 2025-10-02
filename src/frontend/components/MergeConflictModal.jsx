@@ -4,6 +4,7 @@ import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
+import { useModalManager } from '../utils/modalManager';
 import { useModalFocus } from '../utils/useModalFocus';
 
 
@@ -24,6 +25,8 @@ export default function MergeConflictModal({
   const { urlHelpers } = useEventUrls(eventUrl);
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore.getState;
+  const { registerModal, unregisterModal } = useModalManager();
+  const MODAL_ID = 'merge-conflict-modal';
   
   // Resolve conflicting group ID to group object (if accessible)
   const conflictingGroupId = typeof conflictingGroup === 'string' ? conflictingGroup : conflictingGroup?.id;
@@ -44,6 +47,13 @@ export default function MergeConflictModal({
   const { modalRef } = useModalFocus(isOpen, onClose, {
     customKeyHandler: handleMergeModalKeys
   });
+  // Register as popup modal with groups scope
+  useEffect(() => {
+    if (isOpen) {
+      try { registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
+      return () => { try { unregisterModal(MODAL_ID); } catch {} };
+    }
+  }, [isOpen, registerModal, unregisterModal]);
 
 
 

@@ -108,11 +108,6 @@ function AppContent({ eventUrl }) {
     initializeAuth();
   }, []);
 
-  useEffect(() => {
-    if (eventUrl && authInitialized) {
-      fetchGroups();
-    }
-  }, [eventUrl, authInitialized]);
 
   // Load event name for document title
   useEffect(() => {
@@ -226,7 +221,7 @@ function AppContent({ eventUrl }) {
   // The API service interceptor automatically handles transfer updates
   // No need for manual updateGroupsAfterTransfer function
 
-  if (loading || urlLoading || !authInitialized) {
+  if (urlLoading || !authInitialized) {
     return <LoadingSpinner />;
   }
 
@@ -275,6 +270,7 @@ function AppContent({ eventUrl }) {
                 transition={{ duration: 0.3 }}
               >
                 <GroupDetail 
+                  eventUrl={eventUrl}
                   groups={groups}
                   onUpdateGroup={updateGroupHandler}
                   onDeleteGroup={deleteGroupHandler}

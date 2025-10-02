@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useEventUrls } from '../utils/useEventUrls';
 import { groupsAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
+import { useModalManager } from '../utils/modalManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -38,6 +39,8 @@ export default function GroupsFilter({
   const { urlHelpers } = useEventUrls(eventUrl);
   const [selectedGroups, setSelectedGroups] = useState(initialSelectedGroups || []); // excludes currentGroupId
   const groups = useDataStore(state => state.entities?.groups || {});
+  const { registerModal, unregisterModal } = useModalManager();
+  const PANEL_ID = 'groups-filter-panel';
 
   const fetchRelatedGroups = async () => {
     if (!isVisible) return; // fetch only when panel is open
@@ -118,14 +121,22 @@ export default function GroupsFilter({
   // Avoid loops: memoize last request signature
   const lastReqRef = useState({ current: '' })[0];
 
-  // Fetch related groups when selection or imageIds change
+  // Fetch related groups when selection or imageIds change, and manage panel-scoped modal
   useEffect(() => {
+    if (isVisible) {
+      try { registerModal({ id: PANEL_ID, type: 'panel', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
+    }
     const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
     const signature = `${isVisible}|${eventUrl}|${selectedParam}|${imageIds.join(',')}`;
     if (signature === lastReqRef.current) return;
     lastReqRef.current = signature;
     fetchRelatedGroups();
-  }, [selectedGroups, imageIds, currentGroupId, eventUrl, isVisible]);
+    return () => {
+      if (!isVisible) {
+        try { unregisterModal(PANEL_ID); } catch {}
+      }
+    };
+  }, [selectedGroups, imageIds, currentGroupId, eventUrl, isVisible, registerModal, unregisterModal]);
 
   // Reset handler: clear selection (current remains locked implicitly)
   const handleReset = () => {

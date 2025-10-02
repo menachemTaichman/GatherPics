@@ -132,6 +132,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   // Subscribe to normalized groups list
   const currentGroups = useDataStore(state => storeSelectors.groupsAll(state), shallow);
+  const attemptedLookupRef = useRef(false);
+  const decodedGroupName = useMemo(() => {
+    try { return decodeURIComponent(group_name || ''); } catch { return group_name || ''; }
+  }, [group_name]);
 
   // Use the custom hook for conflict handling
   const {
@@ -195,13 +199,34 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   });
 
   useEffect(() => {
-    const foundGroup = (currentGroups || []).find(g => g.label === group_name);
+    if (!eventUrl || !decodedGroupName) return;
+    const resolveByLabel = async () => {
+      try {
+        const res = await groupsAPI.checkName(decodedGroupName, '', eventUrl);
+        if (res && res.conflict) {
+          // Changes (UPSERT) are applied by interceptor; pick from store
+          const after = storeSelectors.groupsAll(useDataStore.getState()) || [];
+          const match = after.find(g => g.id === res.conflicting_group || g.label === decodedGroupName);
+          if (match) {
+            setGroup(match);
+            return;
+          }
+        }
+      } catch {}
+      // Not found -> back to persons list
+      navigate(`/${eventUrl}/persons`);
+    };
+
+    const foundGroup = (currentGroups || []).find(g => g.label === decodedGroupName);
     if (foundGroup) {
       if (!group || group.id !== foundGroup.id || group !== foundGroup) setGroup(foundGroup);
-    } else if (!group || !group.id) {
-      navigate(`/${eventUrl}/persons`);
+      return;
     }
-  }, [group_name, currentGroups, navigate, eventUrl]);
+    if (!attemptedLookupRef.current) {
+      attemptedLookupRef.current = true;
+      resolveByLabel();
+    }
+  }, [decodedGroupName, currentGroups, navigate, eventUrl]);
 
   // Keep local `group` in sync by id when the store object changes (e.g., rename)
   useEffect(() => {
@@ -283,6 +308,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
+    // Scope to the specific group for relation updates
+    if (group?.id) {
+      try { useDataStore.getState().setScope({ entity: 'group', id: String(group.id) }); } catch {}
+    }
     if (!group?.id) return;
 
     if (smoothNextGroupLoad.current) {

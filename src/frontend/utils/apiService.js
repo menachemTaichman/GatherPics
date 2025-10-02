@@ -15,6 +15,24 @@ const api = axios.create({
   },
 });
 
+// In-flight requests deduplication (per-tab)
+const inflightRequests = new Map();
+
+function withDedupe(key, factory) {
+  if (inflightRequests.has(key)) {
+    return inflightRequests.get(key);
+  }
+  const promise = (async () => {
+    try {
+      return await factory();
+    } finally {
+      inflightRequests.delete(key);
+    }
+  })();
+  inflightRequests.set(key, promise);
+  return promise;
+}
+
 // Request interceptor
 api.interceptors.request.use(
   async (config) => {
@@ -220,14 +238,20 @@ async function getEventIdForApi(eventUrl) {
 export const groupsAPI = {
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups`);
-    return response.data || {};
+    const key = `GROUPS_GET_ALL:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups`);
+      return response.data || {};
+    });
   },
 
   getById: async (groupId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
-    return response.data || {};
+    const key = `GROUP_GET_BY_ID:${eventId}:${groupId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/${groupId}`, { params });
+      return response.data || {};
+    });
   },
 
   update: async (groupId, updates, eventUrl) => {
@@ -244,11 +268,14 @@ export const groupsAPI = {
 
   checkName: async (label, excludeGroupId = '', eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/groups/check-name`, {
-      label,
-      exclude_group_id: excludeGroupId
+    const key = `CHECK_NAME:${eventId}:${label}:${excludeGroupId || ''}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/groups/check-name`, {
+        label,
+        exclude_group_id: excludeGroupId
+      });
+      return response.data;
     });
-    return response.data;
   },
 
   transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventUrl, newGroupName = null) => {
@@ -271,22 +298,28 @@ export const groupsAPI = {
 
   getFaces: async (groupId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces`);
-    const data = response.data || {};
-    if (Array.isArray(data.faces)) {
-      data.faces = data.faces.map(normalizeFace);
-    }
-    return data;
+    const key = `GROUP_GET_FACES:${eventId}:${groupId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces`);
+      const data = response.data || {};
+      if (Array.isArray(data.faces)) {
+        data.faces = data.faces.map(normalizeFace);
+      }
+      return data;
+    });
   },
 
   getRelated: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/groups/related`, { params });
-    const data = response.data || {};
-    if (Array.isArray(data.related_groups)) {
-      data.related_groups = data.related_groups.map(normalizeGroup);
-    }
-    return data;
+    const key = `GROUPS_GET_RELATED:${eventId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/related`, { params });
+      const data = response.data || {};
+      if (Array.isArray(data.related_groups)) {
+        data.related_groups = data.related_groups.map(normalizeGroup);
+      }
+      return data;
+    });
   },
 };
 
@@ -294,14 +327,20 @@ export const groupsAPI = {
 export const momentsAPI = {
   getAll: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments`, { params });
-    return response.data || {};
+    const key = `MOMENTS_GET_ALL:${eventId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/moments`, { params });
+      return response.data || {};
+    });
   },
 
   getById: async (momentId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
-    return response.data || {};
+    const key = `MOMENT_GET_BY_ID:${eventId}:${momentId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/moments/${momentId}`, { params });
+      return response.data || {};
+    });
   },
 
   create: async (momentData, eventUrl) => {
@@ -350,10 +389,13 @@ export const imagesAPI = {
   
   getImage: async (imageId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/images/${imageId}`);
-    const data = response.data || {};
-    if (data.image) data.image = normalizeImage(data.image);
-    return data;
+    const key = `GET_IMAGE:${eventId}:${imageId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/images/${imageId}`);
+      const data = response.data || {};
+      if (data.image) data.image = normalizeImage(data.image);
+      return data;
+    });
   }
 };
 
@@ -365,14 +407,20 @@ export const albumsAPI = {
     if (options.exclude_defaults) {
         params.exclude_defaults = 'true';
     }
-    const response = await api.get(`/api/events/${eventId}/albums`, { params });
-    return response.data;
+    const key = `ALBUMS_GET_ALL:${eventId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/albums`, { params });
+      return response.data;
+    });
   },
 
   getById: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
-    return response.data || {};
+    const key = `ALBUM_GET_BY_ID:${eventId}:${albumId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/albums/${albumId}`);
+      return response.data || {};
+    });
   },
 
   update: async (albumId, updates, eventUrl) => {
@@ -383,10 +431,13 @@ export const albumsAPI = {
 
   getImages: async (albumId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
-    const data = response.data || {};
-    if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
-    return data;
+    const key = `ALBUM_GET_IMAGES:${eventId}:${albumId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
+      const data = response.data || {};
+      if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
+      return data;
+    });
   },
 
   addImages: async (albumId, imageIds, eventUrl) => {

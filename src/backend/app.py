@@ -123,8 +123,14 @@ def get_groups(event_id):
     groups = event.models_manager.get_groups()
     changes = [{
         'type': 'UPSERT',
-        'entity': 'group',
-        'items': groups
+        'entity': 'all',
+        'items': { 'groups': { 'id': 'groups' } }
+    },
+    {
+        'type': 'RELATION_SET',
+        'relation': 'all.groups',
+        'parentId': 'groups',
+        'entities': groups
     }]
     return jsonify({ 'changes': changes })
 
@@ -165,14 +171,8 @@ def get_group(event_id, group_id):
             'type': 'RELATION_SET',
             'relation': 'group.images',
             'parentId': group_id,
-            'ids': image_ids
+            'entities': images
         })
-
-    result['changes'].append({
-        'type': 'UPSERT',
-        'entity': 'image',
-        'items': images
-    })
 
     return jsonify(result)
 
@@ -295,7 +295,7 @@ def transfer_faces(event_id):
             'type': 'RELATION_ADD',
             'relation': 'group.images',
             'parentId': target_group_id,
-            'ids': images_added
+            'entities': event.models_manager.get_childs_entities('groups', target_group_id, 'images', images_added)
         })
         changes.append({
             'type': 'UPSERT',
@@ -337,8 +337,14 @@ def get_moments(event_id):
     moments = event.models_manager.get_entities('moments')
     changes = [{
         'type': 'UPSERT',
-        'entity': 'moment',
-        'items': moments
+        'entity': 'all',
+        'items': { 'moments': { 'id': 'moments' } }
+    },
+    {
+        'type': 'RELATION_SET',
+        'relation': 'all.moments',
+        'parentId': 'moments',
+        'entities': moments
     }]
     return jsonify({'changes': changes})
 
@@ -366,7 +372,7 @@ def get_moment(event_id, moment_id):
         'type': 'RELATION_SET',
         'relation': 'moment.images',
         'parentId': moment_id,
-        'ids': image_ids
+        'entities': images
     })
     
     return jsonify({ 'changes': changes })
@@ -522,8 +528,14 @@ def get_albums(event_id):
     albums = event.models_manager.get_entities(table)
     changes = [{
         'type': 'UPSERT',
-        'entity': 'album',
-        'items': albums
+        'entity': 'all',
+        'items': { 'albums': { 'id': 'albums' } }
+    },
+    {
+        'type': 'RELATION_SET',
+        'relation': 'all.albums',
+        'parentId': 'albums',
+        'entities': albums
     }]
     return jsonify({'changes': changes})
 
@@ -543,15 +555,10 @@ def get_album(event_id, album_id):
         'items': [album]
     }]
     changes.append({
-        'type': 'UPSERT',
-        'entity': 'image',
-        'items': images
-    })
-    changes.append({
         'type': 'RELATION_SET',
         'relation': 'album.images',
         'parentId': album_id,
-        'ids': image_ids
+        'entities': images
     })
     return jsonify({ 'changes': changes })
 
@@ -742,32 +749,30 @@ def get_image(event_id, image_id):
     image = event.models_manager.get_entities('images', image_id)
     album_ids, albums = event.models_manager.get_childs_entities('images', image_id, 'albums')
     face_ids, faces = event.models_manager.get_childs_entities('images', image_id, 'faces')
+    group_ids = [face['group_id'] for face in faces.values()]
+    groups = event.models_manager.get_entities('groups', group_ids)
     changes = [{
         'type': 'UPSERT',
         'entity': 'image',
         'items': {image_id: image}
     }]
     changes.append({
-        'type': 'UPSERT',
-        'entity': 'album',
-        'items': albums
-    })
-    changes.append({
         'type': 'RELATION_SET',
         'relation': 'image.albums',
         'parentId': image_id,
-        'ids': album_ids
-    })
-    changes.append({
-        'type': 'UPSERT',
-        'entity': 'face',
-        'items': faces
+        'entities': albums
     })
     changes.append({
         'type': 'RELATION_SET',
         'relation': 'image.faces',
         'parentId': image_id,
-        'ids': face_ids
+        'entities': faces
+    })
+    # TODO: add relations image.faces.groups
+    changes.append({
+        'type': 'UPSERT',
+        'entity': 'group',
+        'items': groups
     })
     return jsonify({ 'changes': changes })
 

@@ -52,6 +52,15 @@ export default function AlbumDetail() {
     if (eventUrl && album_name) fetchAlbum();
   }, [eventUrl, album_name, navigate]);
 
+  // Set scope to this album for relation updates
+  useEffect(() => {
+    if (album?.id) {
+      try { useDataStore.getState().setScope({ entity: 'album', id: String(album.id) }); } catch {}
+    } else {
+      try { useDataStore.getState().setScope({ entity: 'all', id: 'albums' }); } catch {}
+    }
+  }, [album?.id]);
+
   const albumImages = useDataStore(state => (album?.id ? storeSelectors.albumImages(state, album.id) : []));
   const sortedImages = useMemo(() => {
     const arr = [...albumImages];

@@ -160,12 +160,13 @@ class ModelsManager:
 
         return valid_child_ids
 
-    def get_childs_entities(self, parent: str, entity_id: str, child: str) -> tuple[list[str], dict[str, dict]]:
+    def get_childs_entities(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None) -> tuple[list[str], dict[str, dict]]:
         """Get childs entities of a parent.
         Args:
             parent: parent entity
             entity_id: parent id
             child: child entity
+            child_ids: list of child ids or None to get all childs
         Returns:
             list of child ids, dict of childs data with child ids as keys and child data as values
 
@@ -181,13 +182,20 @@ class ModelsManager:
             join_clause = f'INNER JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field}'
             parent = 'r'
 
+        where_clause = ''
+        if child_ids:
+            where_clause = f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
+        else:
+            child_ids = []
+
         query = f"""
             SELECT {view_fields}
             FROM {accessible_child} c
             {join_clause}
             WHERE {parent}.{id_field} = ?
+            {where_clause}
         """
-        results = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.LIST_AND_DICT_DICTS)
+        results = self.db.execute_query(query, (entity_id, *child_ids), return_format=ReturnFormat.LIST_AND_DICT_DICTS)
         return results
 
     def get_parents(self, child: str, entity_id: str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:

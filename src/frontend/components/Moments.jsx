@@ -101,6 +101,8 @@ export default function Moments({ eventUrl }) {
     defaultSortOrder: 'asc',
   });
   const { addImages, open } = useBucketStore();
+  const addScope = useDataStore(state => state.addScope);
+  const removeScope = useDataStore(state => state.removeScope);
   
   // New state for checkbox visibility and selection mode
   const selectionMode = usePreference('general.select', false);
@@ -169,6 +171,50 @@ export default function Moments({ eventUrl }) {
     momentsRef.current = {};
   }, [moments]);
 
+  // Manage scopes for visible moments using IntersectionObserver
+  useEffect(() => {
+    if (!('IntersectionObserver' in window)) return; // graceful fallback
+    const observed = new Set();
+    const callback = (entries) => {
+      entries.forEach((entry) => {
+        const el = entry.target;
+        const momentId = el?.getAttribute?.('data-moment-id');
+        if (!momentId) return;
+        if (entry.isIntersecting) {
+          try { addScope && addScope({ entity: 'moment', id: String(momentId) }); } catch {}
+        } else {
+          try { removeScope && removeScope({ entity: 'moment', id: String(momentId) }); } catch {}
+        }
+      });
+    };
+    const observer = new IntersectionObserver(callback, { root: null, threshold: 0.2 });
+
+    // Attach to current moment cards after first render frame
+    const attach = () => {
+      try {
+        const nodes = document.querySelectorAll('[data-moment-id]');
+        nodes.forEach((node) => {
+          if (observed.has(node)) return;
+          observed.add(node);
+          observer.observe(node);
+        });
+      } catch {}
+    };
+    const id = setTimeout(attach, 0);
+
+    return () => {
+      clearTimeout(id);
+      try { observer.disconnect(); } catch {}
+      // Remove all moment scopes on teardown (component unmount or moments change)
+      try {
+        (document.querySelectorAll('[data-moment-id]') || []).forEach((node) => {
+          const mid = node.getAttribute('data-moment-id');
+          if (mid) removeScope && removeScope({ entity: 'moment', id: String(mid) });
+        });
+      } catch {}
+    };
+  }, [moments.length, addScope, removeScope]);
+
   // Callback ref function to set refs for moment elements
   const setMomentRef = useCallback((momentIdOrName) => (element) => {
     if (element) {
@@ -183,6 +229,8 @@ export default function Moments({ eventUrl }) {
   }, []);
 
   useEffect(() => {
+    // Scope to aggregator for moments page so relations apply
+    try { useDataStore.getState().setScope({ entity: 'all', id: 'moments' }); } catch {}
     // Clear signature when component mounts or event changes
     lastFetchSignatureRef.current = '';
     fetchMoments();
@@ -844,6 +892,7 @@ export default function Moments({ eventUrl }) {
                   urlHelpers={urlHelpers}
                   includeArchived={includeArchived}
                   ref={setMomentRef(moment.label)}
+                  data-moment-id={moment.id}
                 />
               ))}
             </div>

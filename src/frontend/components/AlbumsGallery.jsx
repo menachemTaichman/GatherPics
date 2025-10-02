@@ -6,6 +6,7 @@ import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { Link } from 'react-router-dom';
 import { useEventUrls } from '../utils/useEventUrls';
+import { useDataStore } from '../utils/dataManager';
 
 export default function AlbumsGallery({ eventUrl }) {
   const [albums, setAlbums] = useState([]);
@@ -18,6 +19,8 @@ export default function AlbumsGallery({ eventUrl }) {
     'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
+    // Scope to aggregator for albums page
+    try { useDataStore.getState().setScope({ entity: 'all', id: 'albums' }); } catch {}
     async function loadAlbums() {
       try {
         const res = await albumsAPI.getAll(eventUrl);

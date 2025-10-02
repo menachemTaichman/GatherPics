@@ -9,6 +9,7 @@ import { useDataStore, selectors as storeSelectors } from '../utils/dataManager'
 import { useModalFocus } from '../utils/useModalFocus';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../utils/ToastContext';
+import { useModalStore } from '../utils/modalManager';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -23,9 +24,11 @@ export default function TransferFacesModal({
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const navigate = useNavigate();
   const groups = useDataStore(state => storeSelectors.groupsAll(state));
+  const MODAL_ID = 'transfer-faces-modal';
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingGroups, setIsLoadingGroups] = useState(false);
   const [error, setError] = useState('');
   const [nameConflict, setNameConflict] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,7 +52,9 @@ export default function TransferFacesModal({
   
   // Use modal focus hook
   const { modalRef } = useModalFocus(isOpen, onClose, {
-    customKeyHandler: handleTransferModalKeys
+    customKeyHandler: handleTransferModalKeys,
+    modalType: 'popup',
+    modalId: MODAL_ID
   });
 
   // Filter out current group and source group from available groups
@@ -91,19 +96,42 @@ export default function TransferFacesModal({
 
   useEffect(() => {
     if (isOpen) {
+      const { registerModal, unregisterModal } = useModalStore.getState();
+      try {
+        registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }], allowOutsideScroll: true });
+      } catch {}
+      
+      // Load groups with loading state
+      const loadGroups = async () => {
+        setIsLoadingGroups(true);
+        try {
+          await groupsAPI.getAll(eventUrl);
+        } catch (error) {
+          console.error('Failed to load groups:', error);
+        } finally {
+          setIsLoadingGroups(false);
+        }
+      };
+      
+      loadGroups();
+      
       setSelectedGroupId('');
       setNewGroupName('');
       setError('');
       setNameConflict(false);
       setSearchTerm('');
+      return () => {
+        try { unregisterModal(MODAL_ID); } catch {}
+      };
     } else {
       // Clean up timeout when modal closes
       if (window.nameConflictTimeout) {
         clearTimeout(window.nameConflictTimeout);
         window.nameConflictTimeout = null;
       }
+      setIsLoadingGroups(false);
     }
-  }, [isOpen]);
+  }, [isOpen, eventUrl]);
 
   const checkNameConflict = async (name) => {
     if (!name.trim()) {
@@ -124,13 +152,9 @@ export default function TransferFacesModal({
     const name = e.target.value;
     setNewGroupName(name);
     
-    // Clear any existing timeout
-    if (window.nameConflictTimeout) {
-      clearTimeout(window.nameConflictTimeout);
-    }
-    
-    // Debounce the name conflict check
-    window.nameConflictTimeout = setTimeout(() => {
+    if (!handleNewGroupNameChange._t) handleNewGroupNameChange._t = null;
+    if (handleNewGroupNameChange._t) clearTimeout(handleNewGroupNameChange._t);
+    handleNewGroupNameChange._t = setTimeout(() => {
       checkNameConflict(name);
     }, 300);
   };
@@ -250,7 +274,7 @@ export default function TransferFacesModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[92vh] overflow-y-auto" tabIndex={-1}>
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[94vh] overflow-y-auto" tabIndex={-1}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -294,17 +318,17 @@ export default function TransferFacesModal({
         {/* Content */}
         <div className="p-6">
           {/* Loading state */}
-          {urlLoading && (
+          {(urlLoading || isLoadingGroups) && (
             <div className="text-center py-8">
               <div className="inline-flex items-center space-x-2 text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
-                <span>Loading...</span>
+                <span>{urlLoading ? 'Loading...' : 'Loading groups...'}</span>
               </div>
             </div>
           )}
           
           {/* Search and Sort Controls */}
-          {!urlLoading && (
+          {!urlLoading && !isLoadingGroups && (
             <>
             <div className="mb-4 flex flex-col sm:flex-row gap-3">
             {/* Search */}

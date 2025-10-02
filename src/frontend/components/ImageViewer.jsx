@@ -10,9 +10,8 @@ import { useDataStore, selectors as storeSelectors } from '../utils/dataManager'
 import { getPreference, setPreference } from '../utils/settings';
 import { usePreference } from '../utils/useSettings';
 import { useModalFocus } from '../utils/useModalFocus';
-import { clearTransferredImagesFromCache } from '../utils/selection';
-import timelineManager from '../utils/timeline';
 import { sortImages, sortGroups, sortByField } from '../utils/sorting';
+import { useModalStore } from '../utils/modalManager';
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -116,6 +115,19 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return sorted;
   }, [imagesSet, images, sortBy, sortOrder, filteredIds, entity, includeArchived]);
   
+  // Determine the current image id from store data (clamped index to avoid oscillation)
+  const currentImageId = useMemo(() => {
+    if (relatedImages.length > 0) {
+      const idx = Math.min(Math.max(0, currentIndex), relatedImages.length - 1);
+      return relatedImages[idx]?.id || null;
+    }
+    return typeof image === 'string' ? image : (image?.id || null);
+  }, [relatedImages, currentIndex, image]);
+  
+  const imageId = currentImageId;
+  const imageMeta = { id: imageId, label: imageId };
+  const displayFilename = imageMeta.label;
+  
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
     // If the event is coming from one of our specific inputs, let it be handled locally.
@@ -151,10 +163,19 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return false; // Not handled
   };
   
+  // Stable modal id (must be defined before using useModalFocus)
+  const imageViewerModalIdRef = useRef(null);
+  if (!imageViewerModalIdRef.current) {
+    imageViewerModalIdRef.current = `image-viewer-${Math.random().toString(36).slice(2)}`;
+  }
+  const imageViewerModalId = imageViewerModalIdRef.current;
+
   // Use modal focus hook
   const { modalRef } = useModalFocus(true, onClose, {
     customKeyHandler: handleImageViewerKeys,
-    allowOutsideScroll: true
+    allowOutsideScroll: true,
+    modalType: 'popup',
+    modalId: imageViewerModalId
   });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -191,6 +212,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
   const [dynamicHeight, setDynamicHeight] = useState(null);
+  // Modal registration for scope lifecycle tied to actual modal open/close (no subscription to modal store)
 
   useEffect(() => {
     let rafId = 0;
@@ -223,6 +245,29 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
       window.removeEventListener('resize', resizeHandler);
     };
   }, [sidebarVisible]);
+
+  // Register modal on mount and keep scopes in sync with current image id
+  useEffect(() => {
+    // Register once on mount (actions fetched without subscribing)
+    const { registerModal, unregisterModal } = useModalStore.getState();
+    try {
+      registerModal({ id: imageViewerModalId, type: 'popup', scopes: imageId ? [{ entity: 'image', id: String(imageId) }] : [], allowOutsideScroll: true });
+    } catch {}
+    return () => { try { unregisterModal(imageViewerModalId); } catch {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const prevScopedImageIdRef = useRef(null);
+  useEffect(() => {
+    if (prevScopedImageIdRef.current === imageId) return;
+    prevScopedImageIdRef.current = imageId;
+    const { updateModalScopes } = useModalStore.getState();
+    try {
+      updateModalScopes(imageViewerModalId, imageId ? [{ entity: 'image', id: String(imageId) }] : []);
+    } catch {}
+  }, [imageId, imageViewerModalId]);
+
+  // Scroll lock and focus trapping handled by useModalFocus (popup)
 
   // Force re-render of face rectangles when zoom/rotation changes
   useEffect(() => {
@@ -336,18 +381,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     }
   };
 
-  // Determine the current image id from store data (clamped index to avoid oscillation)
-  const currentImageId = useMemo(() => {
-    if (relatedImages.length > 0) {
-      const idx = Math.min(Math.max(0, currentIndex), relatedImages.length - 1);
-      return relatedImages[idx]?.id || null;
-    }
-    return typeof image === 'string' ? image : (image?.id || null);
-  }, [relatedImages, currentIndex, image]);
-
-  const imageId = currentImageId;
-  const imageMeta = { id: imageId, label: imageId };
-  const displayFilename = imageMeta.label;
 
   // Subscribe to current image info from store
   const storeImageInfo = useDataStore(state => imageId ? state.entities?.images?.[imageId] : null);
