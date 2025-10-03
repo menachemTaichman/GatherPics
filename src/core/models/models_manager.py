@@ -515,8 +515,8 @@ class ModelsManager:
         Returns:
             dict:
                 detached_groups: dict of detached groups with group ids as keys and list of detached images ids as values
-                faces_added: list of faces ids added
-                images_added: list of images ids added
+                length_faces_added: length of faces ids added
+                images_added: dict of images ids added with image ids as keys and dict of faces entities added to the imageas values
                 source_deleted: if source group is deleted
                 new_group_created: if new group is created
                 target_group_id: target group id
@@ -534,8 +534,6 @@ class ModelsManager:
 
         if not target_group_id:
             raise ValueError("target_group_id or new_group_name must be provided")
-
-        old_images = self.get_child_ids('groups', target_group_id, 'images')
         
         faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, add=True)
 
@@ -552,15 +550,14 @@ class ModelsManager:
             
             detached_groups_images[group_id] = list(set(detached_images))
                  
-        images_added = []
+        images_added = {}
         for face_id in faces_added:
-            images_added.extend(self.get_parents('faces', face_id, 'images'))
-        
-        images_added = list(set(images_added) - set(old_images))
+            face = self.get_entities('faces', face_id)
+            images_added.setdefault(face['image_id'], {})[face_id] = face
         
         result = {
             'detached_groups': detached_groups_images,
-            'faces_added': faces_added,
+            'length_faces_added': len(faces_added),
             'images_added': images_added,
             'source_deleted': source_deleted,
             'new_group_created': bool(new_group_name),

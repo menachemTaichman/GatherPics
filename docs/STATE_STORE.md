@@ -1,9 +1,9 @@
-## Frontend State and Data Changes Architecture
+## Frontend State and Data Changes Architecture (v4)
 
 ### Overview
-The frontend maintains a single source of truth via a normalized Zustand store. Components subscribe to granular slices using selectors and shallow comparison to achieve smooth, incremental UI updates without full refreshes or scroll jumps.
+The frontend maintains a single source of truth via a normalized Zustand store. UI updates are driven by minimal change-sets with scope-based gating so tabs only apply relevant data. Cross-tab sync uses BroadcastChannel.
 
-### Store Shape (v3 - high-level)
+### Store Shape (high-level)
 ```
 useDataStore state
   entities:
@@ -11,33 +11,62 @@ useDataStore state
     groups:  { [groupId]: Group & { images?: Set<imageId>, faces_mapping?: { [imageId]: faceId }, images_count?: number } }
     moments: { [momentId]: Moment & { images?: Set<imageId>, images_count?: number } }
     albums:  { [albumId]: Album  & { images?: Set<imageId>, images_count?: number } }
-  view:
-    includeArchived: boolean
-    current: { type, id?, filter?, sort? }
+
+  // Per-tab scopes: which parents/collections are considered "main" for this session
+  scope:   { entity: 'group'|'album'|'moment'|'image'|'all', id?: string }
+  scopes:  { [key: string]: { entity: string, id?: string } } // ref-counted
+  scopeCounts: { [key: string]: number }
+
+  // UI state (trimmed)
+  selectedImages: Set<string>
+  imageViewer: { show: boolean, image: string|null, index: number }
 ```
 
-- Relations are embedded inside the corresponding parent entity as Sets of child ids (e.g., `groups[groupId].images` is `Set<string>`).
-- The store persists only `entities` in `localStorage['entities']`. On hydration, any relation arrays are coerced to `Set` for runtime efficiency.
+- Relations are embedded in parent entities as Sets (e.g., `groups[groupId].images` is `Set<string>`).
+- Only `entities` are persisted in `sessionStorage['entities']`. On hydration, arrays are coerced back to `Set`.
 
-### Generic Change Schema (API → Interceptor → Store)
-Backend endpoints return a `changes` array (lists only; no sets). An Axios interceptor applies them to the store via `store.applyChanges`.
+### Change Schema (API → Interceptor → Store)
+Endpoints may return a `changes` array. The interceptor forwards them to `store.applyChanges(changes)`.
 
-- UPSERT
+Supported change types:
 ```
-{ type: 'UPSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id: string, ...partialOrFullEntity }, ... ] }
+// Insert or update (gated by scopes). Defaults: ignoreScope=false, broadcast=true
+{ type: 'UPSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
+
+// Update-only (never inserts). Defaults: ignoreScope=true, broadcast=true
+{ type: 'UPDATE', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
+
+// Insert-only (skip if exists). Defaults: ignoreScope=true, broadcast=false
+{ type: 'INSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
+
+// Remove entities by id. Defaults: ignoreScope=true, broadcast=true
+{ type: 'REMOVE', entity: 'images'|'groups'|'moments'|'albums', ids: [string,...], ignoreScope?, broadcast? }
+
+// Relation mutations on parent. Defaults: ignoreScope=false, broadcast=true
+{ type: 'RELATION_ADD'|'RELATION_REMOVE'|'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images'|'image.groups'|..., parentId, ids?,
+  // Optional child entities to upsert locally (labels, etc.)
+  entities?: { [childId]: Partial<ChildEntity> }, ignoreScope?, broadcast? }
 ```
 
-- REMOVE (not used by the client)
-  - The client does not execute removal logic. Server state is authoritative and emits relation updates and upserts that reflect deletes. If a REMOVE item appears, the client ignores it.
+Scope gating rules:
+- UPSERT/INSERT apply only if allowed by scopes unless `ignoreScope=true`.
+  - Allowed when:
+    - A matching global scope exists: `all:<entity>` (e.g., `all:groups`), or
+    - A specific parent scope is active that references the entity type (e.g., `group:<id>`, `album:<id>`, `moment:<id>` allow `images`; `image:<id>` allows `images` and `groups` for `image.groups`).
+- UPDATE applies regardless of scopes and never inserts.
+- Relation changes apply only if the parent matches an active scope. There is no special-casing (e.g., `image.*` is not auto-allowed).
 
-- RELATION_ADD / RELATION_REMOVE / RELATION_MOVE / RELATION_SET
+Child entities in relation changes:
+- When a relation change includes an `entities` dict, the store performs a local, non-broadcast upsert of those child entities with `ignoreScope=true`. The broadcasted relation change is sanitized (its `entities` field is stripped) before sending to other tabs.
+
+Broadcasting:
+- Each change or call may control broadcasting via `broadcast` (default varies by type). Changes with `broadcast=false` are applied locally and not sent to other tabs.
+
+applyChanges API:
 ```
-{ type: 'RELATION_ADD', relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
-{ type: 'RELATION_REMOVE', relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
-{ type: 'RELATION_MOVE', relation: 'group.images'|'moment.images', fromParentId: string, toParentId: string, ids: [string,...] }
-{ type: 'RELATION_SET',  relation: 'group.images'|'moment.images'|'album.images', parentId: string, ids: [string,...] }
+applyChanges(changes: Change[], options?: { ignoreScope?: boolean, broadcast?: boolean })
 ```
-The store applies relation changes by mutating the embedded `images` Set on the parent entity. This yields precise, minimal UI diffs without reloads.
+- Per-change flags override call-level options. If omitted, type defaults apply.
 
 ### Normalization and Field Conventions
 - Images: `id`
@@ -48,19 +77,17 @@ The store applies relation changes by mutating the embedded `images` Set on the 
 - Counts: `images_count` on groups, albums, moments
 - Group face selection: `groups[groupId].faces_mapping: { [imageId]: faceId }`
 
-All payloads and components must use the normalized keys above; legacy aliases are not supported.
-
 ### Rendering Pattern
-1) Subscribe to embedded relation Sets on parent entities and map them to images via `useMemo`.
-2) Derive visible/sorted lists with `useMemo` (no setState inside effects to avoid loops).
-3) Use store-driven flags where possible (e.g., favorites/archive via album entities’ `images` Set).
+1) Components register scopes on mount (e.g., `group:<id>`, `image:<id>`, `all:groups`), and unregister on unmount.
+2) Subscribe to embedded relation Sets and derive lists with `useMemo`.
+3) Use UPDATE for broad metadata tweaks; rely on relation changes for precise UI diffs.
 
-### Optimistic Updates (Optional)
-Components may optimistically update (e.g., label change) but must rely on API responses for final state. The interceptor’s `changes` serve as the single authority. Endpoints that edit child relations return `len_edited` for concise UI feedback.
+### Examples
+- Group page: register `group:<id>`, fetch details, apply `UPSERT group`, `RELATION_SET group.images`; child `images` entities from the same change are upserted locally (`ignoreScope=true`, `broadcast=false`).
+- Image viewer: register `image:<id>`, fetch details; `RELATION_SET image.groups` arrives with `entities` → local upsert of `groups` for labels, relation broadcast without entities.
+- Related groups panel: register `all:groups`; `get_related_groups` inserts groups locally via `INSERT groups` with `broadcast=false`.
 
 ### Why This Works Smoothly
-- Normalized entities with embedded relation Sets minimize writes and re-renders.
-- Relation edits mutate stable Set instances, guarded by shallow-equality selectors.
-- Components subscribe to precise slices, reducing update depth and preventing feedback loops.
-
-
+- Scope-gated inserts prevent unrelated tabs from growing their stores while keeping in-view data reactive.
+- Local child upserts deliver instant labels without leaking across tabs.
+- Relation Sets mutate stable Set instances, guarded by shallow-equality selectors, minimizing re-renders.

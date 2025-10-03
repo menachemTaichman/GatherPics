@@ -491,9 +491,6 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
               });
             }
             
-            if (items.length > 0) {
-              store.applyChanges([{ type: 'UPSERT', entity: 'groups', items }]);
-            }
           } catch {}
         } else {
           setImageInfo(null);

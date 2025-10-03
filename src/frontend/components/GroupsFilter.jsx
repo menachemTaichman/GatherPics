@@ -55,16 +55,18 @@ export default function GroupsFilter({
       };
       const data = await groupsAPI.getRelated(eventUrl, params);
       
-      // Changes are automatically applied by apiService interceptor
-      
-      // Get related groups from store using the IDs returned by API
-      if (data.related_groups && Array.isArray(data.related_groups)) {
+        // Store related groups in session storage (replace any existing value)
+        sessionStorage.setItem('groupDetail_filteredRelatedGroups', JSON.stringify(data.related_group_ids || []));
+        
+        // Insert related groups locally into store (no broadcast), regardless of scopes
         const store = useDataStore.getState();
-        const relatedGroupsFromStore = data.related_groups
-          .map(id => store.entities?.groups?.[id])
-          .filter(Boolean);
-        onRelatedGroupsUpdate?.(relatedGroupsFromStore);
-      }
+        store.applyChanges([
+          { type: 'INSERT', entity: 'groups', items: data.related_groups, broadcast: false, ignoreScope: true }
+        ], { broadcast: false, ignoreScope: true });
+
+        const after = useDataStore.getState().entities?.groups || {};
+        const relatedList = Object.values(data.related_groups).map(it => after?.[it.id]).filter(Boolean);
+        onRelatedGroupsUpdate?.(relatedList);
     } catch (error) {
       console.error('Error fetching related groups:', error);
     } finally {
@@ -121,16 +123,18 @@ export default function GroupsFilter({
   // Avoid loops: memoize last request signature
   const lastReqRef = useState({ current: '' })[0];
 
-  // Fetch related groups when selection or imageIds change, and manage panel-scoped modal
+  // Fetch related groups when filter opens and store in session storage
   useEffect(() => {
     if (isVisible) {
       try { registerModal({ id: PANEL_ID, type: 'panel', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
+      
+      // Fetch related groups when filter opens and store in session storage
+      const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
+      const signature = `${isVisible}|${eventUrl}|${selectedParam}|${imageIds.join(',')}`;
+      if (signature === lastReqRef.current) return;
+      lastReqRef.current = signature;
+      fetchRelatedGroups();
     }
-    const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
-    const signature = `${isVisible}|${eventUrl}|${selectedParam}|${imageIds.join(',')}`;
-    if (signature === lastReqRef.current) return;
-    lastReqRef.current = signature;
-    fetchRelatedGroups();
     return () => {
       if (!isVisible) {
         try { unregisterModal(PANEL_ID); } catch {}
@@ -145,21 +149,39 @@ export default function GroupsFilter({
     onReset?.();
   };
 
-  // Build display list: selected first (in order), then API related (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
+  // Build display list: selected first (in order), then related groups from session storage (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
     const seen = new Set((selectedGroups || []).map(v => String(v)));
     const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.group_id), g]));
-    const byRelated = new Map((relatedGroups || []).map(g => [String(g.id || g.group_id), g]));
+    
+    // Get related group IDs from session storage
+    let sessionRelatedGroupIds = [];
+    try {
+      const stored = sessionStorage.getItem('groupDetail_filteredRelatedGroups');
+      if (stored) {
+        sessionRelatedGroupIds = JSON.parse(stored);
+      }
+    } catch (error) {
+      console.error('Error reading related groups from session storage:', error);
+    }
+    
     const currentIdStr = currentGroupId != null ? String(currentGroupId) : null;
+    
+    // Get selected groups objects
     const selectedObjs = (selectedGroups || [])
       .filter(id => String(id) !== currentIdStr)
-      .map(id => byRelated.get(String(id)) || groupMap.get(String(id)) || { id, label: `Person ${id}` });
-    const tail = (relatedGroups || []).filter(g => {
-      const gid = String(g.id || g.group_id);
-      return !seen.has(gid) && gid !== currentIdStr;
-    });
+      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` });
+    
+    // Get remaining related groups (not selected)
+    const tail = sessionRelatedGroupIds
+      .filter(id => {
+        const gid = String(id);
+        return !seen.has(gid) && gid !== currentIdStr;
+      })
+      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` });
+    
     return [...selectedObjs, ...tail];
-  }, [selectedGroups, relatedGroups, currentGroupId, groups]);
+  }, [selectedGroups, currentGroupId, groups]);
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';
@@ -276,45 +298,48 @@ export default function GroupsFilter({
           </div>
 
           {/* Related Groups */}
-          {displayGroups.map((relatedGroup) => (
-            <div
-              key={relatedGroup.id || relatedGroup.group_id}
-              className="flex-shrink-0 relative group"
-              onMouseEnter={(event) => handleMouseEnter(relatedGroup.id || relatedGroup.group_id, event)}
-              onMouseLeave={handleMouseLeave}
-              onMouseMove={handleMouseMove}
-            >
-              <div 
-                className="cursor-pointer"
-                onClick={() => handleGroupClick(relatedGroup.id || relatedGroup.group_id)}
+          {displayGroups.map((relatedGroup, index) => {
+            const groupId = relatedGroup.id || relatedGroup.group_id;
+            return (
+              <div
+                key={groupId || `related-${index}`}
+                className="flex-shrink-0 relative group"
+                onMouseEnter={(event) => handleMouseEnter(groupId, event)}
+                onMouseLeave={handleMouseLeave}
+                onMouseMove={handleMouseMove}
               >
-                <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
-                  selectedGroups.includes(relatedGroup.id || relatedGroup.group_id)
-                    ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
-                    : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
-                }`}>
-                  <img
-                    src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', relatedGroup.id) : undefined}
-                    alt={getGroupDisplayName(relatedGroup)}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                
-                {/* Add/Remove Icon on Hover */}
                 <div 
-                  className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
+                  className="cursor-pointer"
+                  onClick={() => handleGroupClick(groupId)}
                 >
-                  {selectedGroups.includes(relatedGroup.id || relatedGroup.group_id) ? (
-                    <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
-                  ) : (
-                    <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
-                  )}
+                  <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
+                    selectedGroups.includes(groupId)
+                      ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
+                      : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
+                  }`}>
+                    <img
+                      src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', groupId) : undefined}
+                      alt={getGroupDisplayName(relatedGroup)}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  
+                  {/* Add/Remove Icon on Hover */}
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
+                  >
+                    {selectedGroups.includes(groupId) ? (
+                      <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                    ) : (
+                      <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Enhanced Group Name Tooltip - Removed since we have floating tooltip */}
-            </div>
-          ))}
+                {/* Enhanced Group Name Tooltip - Removed since we have floating tooltip */}
+              </div>
+            );
+          })}
         </div>
 
         {/* Filter Status */}

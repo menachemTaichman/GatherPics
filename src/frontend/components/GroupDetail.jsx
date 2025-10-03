@@ -401,6 +401,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     setOnlySelected(false);
     setFilteredIds(null);
     setFilteredFacesMapping(null);
+    sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
   };
 
   const formatDate = (dateString) => {

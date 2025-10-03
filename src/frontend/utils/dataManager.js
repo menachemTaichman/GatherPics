@@ -2,10 +2,11 @@ import { create } from 'zustand';
 
 export const CHANGE_TYPES = {
   UPSERT: 'UPSERT',
+  UPDATE: 'UPDATE',
+  INSERT: 'INSERT',
   REMOVE: 'REMOVE',
   RELATION_ADD: 'RELATION_ADD',
   RELATION_REMOVE: 'RELATION_REMOVE',
-  RELATION_MOVE: 'RELATION_MOVE',
   RELATION_SET: 'RELATION_SET',
 };
 
@@ -42,8 +43,8 @@ function coerceToSet(val) {
 
 function persistEntitiesSession(entities) {
   try {
-    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, all: {} };
-    ['images','groups','moments','albums','faces','all'].forEach((k) => {
+    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
+    ['images','groups','moments','albums','faces'].forEach((k) => {
       const src = entities[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -72,11 +73,11 @@ function hydrateEntitiesSession() {
 
   try {
     const raw = sessionStorage.getItem('entities');
-    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, all: {} };
+    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
     if (!raw) return base;
     const parsed = JSON.parse(raw);
     const revived = { ...base };
-    ['images','groups','moments','albums','faces','all'].forEach((k) => {
+    ['images','groups','moments','albums','faces'].forEach((k) => {
       const src = parsed?.[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -90,7 +91,7 @@ function hydrateEntitiesSession() {
     });
     return revived;
   } catch {
-    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, all: {} };
+    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
   }
 }
 
@@ -110,8 +111,8 @@ export const useDataStore = create((set, get) => {
     favoritesAlbumId: null,
     archiveAlbumId: null,
 
-    // Per-tab scopes: what relations to apply
-    scope: { entity: 'all', id: 'groups' },
+    // Per-tab scopes: what relations to apply (components add/remove)
+    scope: {},
     scopes: {},
     scopeCounts: {},
 
@@ -140,13 +141,43 @@ export const useDataStore = create((set, get) => {
     const scopesList = [single, ...Object.values(scopesMap)];
     const [parentType] = String(relation || '').split('.');
     const parentKey = normalizeEntityKey(parentType);
-    // Always allow image.* relations so the ImageViewer can update regardless of scope
-    if (parentType === 'image') return true;
     for (const sc of scopesList) {
       if (!sc || !sc.entity) continue;
       if (sc.entity === parentType && (!sc.id || String(sc.id) === String(parentId))) return true;
       if (sc.entity === 'all' && String(sc.id) === String(parentKey)) return true;
     }
+    return false;
+  };
+
+  const isEntityInsertAllowedByScopes = (entityKey) => {
+    const state = get();
+    const single = state.scope || {};
+    const scopesMap = state.scopes || {};
+    const scopesList = [single, ...Object.values(scopesMap)];
+
+    // Helper: does any scope match exactly this entity set?
+    const hasAllScope = scopesList.some((sc) => sc && sc.entity === 'all' && String(sc.id) === String(entityKey));
+    if (hasAllScope) return true;
+
+    // Singular entity type
+    const singular = String(entityKey).replace(/s$/, '');
+
+    // Direct entity scope (e.g., group:<id> allows group upserts)
+    const hasDirect = scopesList.some((sc) => sc && sc.entity === singular);
+    if (hasDirect) return true;
+
+    // Relationship-derived allowances
+    // images are allowed under group/album/moment/image scopes
+    if (entityKey === 'images') {
+      const hasParent = scopesList.some((sc) => sc && (sc.entity === 'group' || sc.entity === 'album' || sc.entity === 'moment' || sc.entity === 'image'));
+      if (hasParent) return true;
+    }
+    // groups/albums/faces are allowed under image scope (e.g., image.groups, image.albums, image.faces)
+    if (entityKey === 'groups' || entityKey === 'albums' || entityKey === 'faces') {
+      const hasImage = scopesList.some((sc) => sc && sc.entity === 'image');
+      if (hasImage) return true;
+    }
+
     return false;
   };
 
@@ -213,6 +244,25 @@ export const useDataStore = create((set, get) => {
       if (!Array.isArray(changes) || changes.length === 0) return;
       const nextEntities = { ...get().entities };
 
+      // Helper to resolve effective flags (per-change overrides > call-level > type defaults)
+      const resolveFlags = (ch) => {
+        const type = ch?.type;
+        const typeDefaults = {
+          UPSERT: { ignoreScope: false, broadcast: true },
+          UPDATE: { ignoreScope: true, broadcast: true },
+          INSERT: { ignoreScope: true, broadcast: false },
+          RELATION_ADD: { ignoreScope: false, broadcast: true },
+          RELATION_REMOVE: { ignoreScope: false, broadcast: true },
+          RELATION_SET: { ignoreScope: false, broadcast: true },
+          REMOVE: { ignoreScope: false, broadcast: true },
+        }[type] || { ignoreScope: false, broadcast: true };
+        const callIgnore = Object.prototype.hasOwnProperty.call(options, 'ignoreScope') ? !!options.ignoreScope : undefined;
+        const callBroadcast = Object.prototype.hasOwnProperty.call(options, 'broadcast') ? !!options.broadcast : undefined;
+        const effIgnore = Object.prototype.hasOwnProperty.call(ch, 'ignoreScope') ? !!ch.ignoreScope : (callIgnore !== undefined ? callIgnore : typeDefaults.ignoreScope);
+        const effBroadcast = Object.prototype.hasOwnProperty.call(ch, 'broadcast') ? !!ch.broadcast : (callBroadcast !== undefined ? callBroadcast : typeDefaults.broadcast);
+        return { ignoreScope: effIgnore, broadcast: effBroadcast };
+      };
+
       const ensureEntity = (key, id) => {
         const map = nextEntities[key] || {};
         const curr = map[id] || { id };
@@ -224,8 +274,11 @@ export const useDataStore = create((set, get) => {
         nextEntities[key] = { ...nextEntities[key], [id]: obj };
       };
 
+      const outgoing = [];
+
       changes.forEach((ch) => {
         if (!ch || !ch.type) return;
+        const { ignoreScope: effIgnoreScope, broadcast: effBroadcast } = resolveFlags(ch);
 
         if (ch.type === CHANGE_TYPES.UPSERT) {
           const key = normalizeEntityKey(ch.entity);
@@ -240,6 +293,9 @@ export const useDataStore = create((set, get) => {
             if (!it) return;
             const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
             if (!id) return;
+            const exists = !!map[id];
+            // Gate only inserts unless ignoreScope=true
+            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
             const prev = map[id] || { id };
             const merged = { ...prev, ...it };
             ['images', 'faces', 'albums'].forEach((rk) => {
@@ -248,21 +304,71 @@ export const useDataStore = create((set, get) => {
             map[id] = merged;
           });
           nextEntities[key] = map;
+          if (effBroadcast) outgoing.push(ch);
+          return;
+        }
+
+        if (ch.type === CHANGE_TYPES.UPDATE) {
+          const key = normalizeEntityKey(ch.entity);
+          if (!key) return;
+          const items = Array.isArray(ch.items)
+            ? ch.items
+            : (ch.items && typeof ch.items === 'object')
+              ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
+              : [];
+          const map = { ...(nextEntities[key] || {}) };
+          items.forEach((it) => {
+            if (!it) return;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
+            if (!id) return;
+            if (!map[id]) return; // update-only
+            const merged = { ...map[id], ...it };
+            ['images', 'faces', 'albums'].forEach((rk) => {
+              if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+            });
+            map[id] = merged;
+          });
+          nextEntities[key] = map;
+          if (effBroadcast) outgoing.push(ch);
+          return;
+        }
+
+        if (ch.type === CHANGE_TYPES.INSERT) {
+          const key = normalizeEntityKey(ch.entity);
+          if (!key) return;
+          const items = Array.isArray(ch.items)
+            ? ch.items
+            : (ch.items && typeof ch.items === 'object')
+              ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
+              : [];
+          const map = { ...(nextEntities[key] || {}) };
+          items.forEach((it) => {
+            if (!it) return;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
+            if (!id) return;
+            if (map[id]) return; // insert-only
+            const merged = { id, ...it };
+            ['images', 'faces', 'albums'].forEach((rk) => {
+              if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+            });
+            map[id] = merged;
+          });
+          nextEntities[key] = map;
+          if (effBroadcast) outgoing.push(ch);
           return;
         }
 
         if (
           ch.type === CHANGE_TYPES.RELATION_SET ||
           ch.type === CHANGE_TYPES.RELATION_ADD ||
-          ch.type === CHANGE_TYPES.RELATION_REMOVE ||
-          ch.type === CHANGE_TYPES.RELATION_MOVE
+          ch.type === CHANGE_TYPES.RELATION_REMOVE
         ) {
           const [parentType, childType] = String(ch.relation || '').split('.');
           const parentKey = normalizeEntityKey(parentType);
           if (!parentKey) return;
           const field = normalizeEntityKey(childType).replace(/s$/, 's');
 
-          // Apply child entity upserts when 'entities' dict is provided
+          // Apply child entity upserts when 'entities' dict is provided (local only, ignore scopes)
           if (ch.entities && (ch.type === CHANGE_TYPES.RELATION_SET || ch.type === CHANGE_TYPES.RELATION_ADD)) {
             const childKey = normalizeEntityKey(childType);
             applyUpsertsFromEntitiesDict(childKey, ch.entities, nextEntities);
@@ -271,27 +377,9 @@ export const useDataStore = create((set, get) => {
           // Gate relation mutations by scope
           const parentId = String(ch.parentId ?? '');
           if (!parentId) return;
-          if (!shouldApplyRelation(ch.relation, parentId)) return;
+          if (!effIgnoreScope && !shouldApplyRelation(ch.relation, parentId)) return;
 
-          if (ch.type === CHANGE_TYPES.RELATION_MOVE) {
-            const fromId = String(ch.fromParentId);
-            const toId = String(ch.toParentId);
-            if (fromId) {
-              const fromParent = ensureEntity(parentKey, fromId);
-              const s = coerceToSet(fromParent[field]);
-              (ch.ids || []).forEach((id) => s.delete(String(id)));
-              fromParent[field] = s;
-              saveBack(parentKey, fromId, fromParent);
-            }
-            if (toId) {
-              const toParent = ensureEntity(parentKey, toId);
-              const s = coerceToSet(toParent[field]);
-              (ch.ids || []).forEach((id) => s.add(String(id)));
-              toParent[field] = s;
-              saveBack(parentKey, toId, toParent);
-            }
-            return;
-          }
+          // RELATION_MOVE unsupported in v4
 
           const parent = ensureEntity(parentKey, parentId);
           const current = coerceToSet(parent[field]);
@@ -311,6 +399,10 @@ export const useDataStore = create((set, get) => {
             parent[field] = set;
           }
           saveBack(parentKey, parentId, parent);
+          if (effBroadcast) {
+            const { entities, ...sanitized } = ch;
+            outgoing.push({ ...sanitized });
+          }
           return;
         }
 
@@ -321,20 +413,23 @@ export const useDataStore = create((set, get) => {
           const map = { ...(nextEntities[key] || {}) };
           ids.forEach((id) => { delete map[id]; });
           nextEntities[key] = map;
+          // Removal broadcast as-is
+          const { broadcast: effBroadcastRemove } = resolveFlags(ch);
+          if (effBroadcastRemove) outgoing.push(ch);
           return;
         }
       });
 
       set({ entities: nextEntities });
       persistEntitiesSession(nextEntities);
-      if (!options.fromBroadcast) broadcast(changes);
+      if (!options.fromBroadcast && outgoing.length > 0) broadcast(outgoing);
     },
 
     // Image operations
     setSelectedImages: (selectedImages) => set({ selectedImages }),
     setImageViewer: (imageViewer) => set({ imageViewer }),
     clearData: () => {
-      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, all: {} };
+      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
       persistEntitiesSession(empty);
       set({
         selectedImages: new Set(),

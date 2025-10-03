@@ -22,6 +22,7 @@ STRUCTURE = {
         'relations': {
             'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},
             'faces': {'relation_table': 'faces', 'fields_needed': ['group_id', 'width', 'height', 'left', 'top']},
+            'groups': {'relation_table': 'groups_images', 'fields_needed': ['label']},
         }
     },
     'faces': {
