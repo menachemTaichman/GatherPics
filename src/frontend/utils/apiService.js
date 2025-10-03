@@ -468,6 +468,23 @@ export const albumsAPI = {
       is_archived: isArchived
     });
     return response.data;
+  },
+
+  create: async (albumData, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/albums`, albumData);
+    return response.data;
+  },
+
+  checkName: async (label, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `CHECK_ALBUM_NAME:${eventId}:${label}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/albums/check-name`, {
+        label,
+      });
+      return response.data;
+    });
   }
 };
 

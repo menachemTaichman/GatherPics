@@ -282,11 +282,12 @@ def transfer_faces(event_id):
                 'ids': images_ids
             })
 
+        images_added_id, images_added_entities = event.models_manager.get_childs_entities('groups', target_group_id, 'images', list(images_added.keys()))
         changes.append({
             'type': 'RELATION_ADD',
             'relation': 'group.images',
             'parentId': target_group_id,
-            'entities': event.models_manager.get_childs_entities('groups', target_group_id, 'images', list(images_added.keys()))
+            'entities': images_added_entities
         })
         changes.append({
             'type': 'UPDATE',
@@ -522,7 +523,7 @@ def get_albums(event_id):
     table = 'albums_actual' if exclude_defaults else 'albums'
     albums = event.models_manager.get_entities(table)
     changes = [{
-        'type': 'UPSERT',
+        'type': 'INSERT',
         'entity': 'album',
         'items': albums
     }]
@@ -566,6 +567,43 @@ def get_archive_album(event_id):
     event = get_event(event_id)
     archive_album_id = event.models_manager.get_archive_album()
     return get_album(event_id, archive_album_id)
+
+@app.route("/api/events/<event_id>/albums/check-name", methods=["POST"])
+@require_auth
+def check_album_name(event_id):
+    """Check if an album name already exists."""
+    event = get_event(event_id)
+    data = request.json or {}
+    label = data.get('label', '')
+    if not label:
+        return jsonify({"error": "Label is required"}), 400
+    conflict_album_id = event.models_manager.is_exists('albums', {'label': label})
+    return jsonify({"conflict": bool(conflict_album_id)})
+
+@app.route("/api/events/<event_id>/albums", methods=["POST"])
+@require_auth
+def create_album(event_id):
+    """Create a new album."""
+    event = get_event(event_id)
+    data = request.json or {}
+    
+    try:
+        allowed_fields = {'label', 'description', 'representative_image'}
+        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+        if sanitized:
+            album_id = event.models_manager.add('albums', sanitized)
+            created_album = event.models_manager.get_entities('albums', [album_id])
+            changes = [{
+                'type': 'UPSERT',
+                'entity': 'album',
+                'items': created_album
+            }]
+            response = {"success": True, "album_id": album_id, "changes": changes}
+        else:
+            response = {"success": False}
+        return jsonify(response)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/albums/<album_id>", methods=["PUT"])
 @require_auth

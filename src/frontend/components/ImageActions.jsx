@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { albumsAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
@@ -68,11 +67,11 @@ export default function useImageActions({
         
         const action = newFavoriteStatus ? 'Added to' : 'Removed from';
         const actualCount = newFavoriteStatus ? result.len_added : result.len_removed;
-        const countText = actualCount === 1 ? '' : `${actualCount} `;
+        const countText = actualCount // === 1 ? '' : `${actualCount} `;
         
         showToast(
           <span>
-            {countText}{action}{' '}
+            {countText} {action}{' '}
             <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
           </span>,
           'success'
@@ -104,7 +103,7 @@ export default function useImageActions({
         
         const action = newArchivedStatus ? 'moved to' : 'removed from';
         const actualCount = newArchivedStatus ? result.len_added : result.len_removed;
-        const countText = actualCount === 1 ? '' : `${actualCount} `;
+        const countText = actualCount // actualCount === 1 ? '' : `${actualCount} `;
         
         showToast(
           <span>
@@ -149,6 +148,16 @@ export default function useImageActions({
     }
   };
 
+  // Stable props for AlbumQuickAddButton to avoid inline component remounts
+  const albumQuickAddProps = {
+    imageId: primaryImageId,
+    selectedImages: imageIdsArray,
+    eventUrl,
+    urlHelpers,
+    placeholderDataUrl,
+    onAlbumAdded: handleAlbumAdded,
+  };
+
   // Return action functions for UX components to use
   return {
     // Action functions
@@ -166,17 +175,7 @@ export default function useImageActions({
     someInBucket,
     imagesInBucket,
     
-    // Album quick add component for UX components to render
-    AlbumQuickAddButton: (props) => (
-      <AlbumQuickAddButton
-        imageId={primaryImageId}
-        selectedImages={imageIdsArray}
-        eventUrl={eventUrl}
-        urlHelpers={urlHelpers}
-        placeholderDataUrl={placeholderDataUrl}
-        onAlbumAdded={handleAlbumAdded}
-        {...props}
-      />
-    )
+    // Stable props for AlbumQuickAddButton; consumers should render the shared component directly
+    albumQuickAddProps,
   };
 }

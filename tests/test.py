@@ -319,7 +319,7 @@ def drop_views_triggers_and_indexes():
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
     views = db.execute_query('SELECT name FROM sqlite_master WHERE type="view"')
     triggers = db.execute_query('SELECT name FROM sqlite_master WHERE type="trigger"')
-    indexes = db.execute_query('SELECT name FROM sqlite_master WHERE type="index"')
+    indexes = db.execute_query('SELECT name FROM sqlite_master WHERE type="index" AND name NOT LIKE "sqlite_autoindex%"')
 
     for view in views:
         try:
@@ -356,6 +356,77 @@ def create_views_triggers_and_indexes():
 def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
+
+def recreate_tables_with_data(db):
+    from src.core.db import TABLES
+    db.execute_query("ALTER TABLE images RENAME TO images_old")
+    db.execute_query("ALTER TABLE moments RENAME TO moments_old")
+
+    # 2️⃣ צור את הטבלאות החדשות לפי ההגדרות שלך
+    db.execute_query(f"CREATE TABLE images ({TABLES['images']})")
+    db.execute_query(f"CREATE TABLE moments ({TABLES['moments']})")
+
+    # 3️⃣ העתק את כל הנתונים ממומנטים בלי representative_image
+    db.execute_query("""
+    INSERT INTO moments(moment_id, label, description, start, end)
+    SELECT moment_id, label, description, start, end FROM moments_old
+    """)
+
+    # 4️⃣ העתק את כל הנתונים מ‑images
+    db.execute_query("""
+    INSERT INTO images(image_id, label, date_taken, file_size, width, height, moment_id)
+    SELECT image_id, label, date_taken, file_size, width, height, moment_id FROM images_old
+    """)
+
+    # 5️⃣ עכשיו העתק representative_image של moments
+    db.execute_query("""
+    UPDATE moments
+    SET representative_image = (
+        SELECT representative_image
+        FROM moments_old
+        WHERE moments_old.moment_id = moments.moment_id
+    )
+    """)
+
+    # 6️⃣ מחק את הטבלאות הישנות
+    db.execute_query("DROP TABLE images_old")
+    db.execute_query("DROP TABLE moments_old")
+
+
+
+    creation_order = [
+        'groups',       # אין תלות
+    #    'moments',      # תלוי ב-images, אבל ניצור אחרי כדי שתוכלו להשלים images קודם
+    #    'images',       # תלוי ב-moments, אבל נוצר קודם
+        'albums',
+        'profiles',
+        'faces',        # תלוי ב-groups, images
+        'albums_images',# תלוי ב-albums, images
+        'profile_images',# תלוי ב-profiles, images
+        'profile_albums' # תלוי ב-profiles, albums
+    ]
+    db.execute_query('PRAGMA foreign_keys = OFF;')
+    for table_name in creation_order:
+        ddl = TABLES[table_name]
+        print(f"Processing table '{table_name}'...")
+
+        temp_table = f"{table_name}_new"
+        db.execute_query(f"DROP TABLE IF EXISTS {temp_table}")
+        db.execute_query(f"CREATE TABLE {temp_table} ({ddl})")
+
+        # קבלת עמודות מהטבלה הישנה הנכונה
+        cols = [row[1] for row in db.execute_query(f"PRAGMA table_info({table_name});", return_format=ReturnFormat.LIST_TUPLES)]
+        cols_str = ', '.join(cols)
+
+        # העתקת נתונים מהטבלה הישנה לטבלה החדשה
+        db.execute_query(f"INSERT INTO {temp_table}({cols_str}) SELECT {cols_str} FROM {table_name}")
+
+        db.execute_query(f"DROP TABLE {table_name}")
+        db.execute_query(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
+
+        print(f"  ✅ Table '{table_name}' recreated with data")
+
+    db.execute_query('PRAGMA foreign_keys = ON;')
 
 def test_gets_methods(entities_tables: list, ids: dict, relations: list):
     for table in entities_tables:
@@ -403,7 +474,7 @@ def test_edit_methods():
     # print(result)
     # print('--------------------------------')
 
-#recreate_views_triggers_and_indexes()
+# recreate_views_triggers_and_indexes()
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [

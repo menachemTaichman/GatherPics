@@ -28,7 +28,7 @@ STRUCTURE = {
     'faces': {
         'primary_key': 'face_id',
         'accessible_table': 'accessible_faces',
-        'fields': ['group_id'],
+        'fields': ['image_id', 'group_id'],
     },
     'groups': {
         'primary_key': 'group_id',
@@ -61,6 +61,7 @@ STRUCTURE = {
     'albums_actual': {
         'primary_key': 'album_id',
         'accessible_table': 'accessible_albums_actual',
+        'fields': ['label'],
     },
     'albums_images_actual': {
         'primary_key': ['album_id', 'image_id'],
@@ -116,12 +117,12 @@ TABLES = {
     ''',
     'groups': '''
         group_id TEXT PRIMARY KEY,
-        label TEXT UNIQUE,
+        label TEXT COLLATE NOCASE UNIQUE,
         representative_face TEXT
     ''',
     'moments': '''
         moment_id TEXT PRIMARY KEY,
-        label TEXT UNIQUE,
+        label TEXT COLLATE NOCASE UNIQUE,
         description TEXT,
         start TEXT,
         end TEXT,
@@ -130,7 +131,7 @@ TABLES = {
     ''',
     'albums': '''
         album_id TEXT PRIMARY KEY,
-        label TEXT UNIQUE,
+        label TEXT COLLATE NOCASE UNIQUE,
         description TEXT,
         representative_image TEXT,
         FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL
@@ -144,7 +145,7 @@ TABLES = {
     ''',
     'profiles': '''
         profile_id TEXT PRIMARY KEY,
-        label TEXT,
+        label TEXT COLLATE NOCASE UNIQUE,
         password TEXT DEFAULT '',
         hierarchy_rank INTEGER DEFAULT 0,
         is_profiles_manager BOOLEAN DEFAULT 0,
@@ -181,7 +182,6 @@ INDEXES = [
     'idx_moments_representative_image ON moments(representative_image)',
     'idx_faces_group_id_image_id ON faces(group_id, image_id)',
     'idx_images_date_taken ON images(date_taken)',
-    'idx_albums_label ON albums(label)',
     'idx_albums_representative_image ON albums(representative_image)',
 ]
 

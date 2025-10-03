@@ -17,15 +17,16 @@ class ModelsManager:
 
         where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
         where_params = tuple(fields.values())
-
+        if exclude_id:
+            where_clause += f' AND {AppDB.get_id_field(table)} != ?'
+            where_params += (exclude_id,)
         id_field = AppDB.get_id_field(table)
         query = f"""
             SELECT {id_field}
             FROM {table}
             WHERE {where_clause}
-            AND {id_field} != ?
         """
-        results = self.db.execute_query(query, (*where_params, exclude_id))
+        results = self.db.execute_query(query, where_params)
         return results[0][0] if results else None
 
     def is_empty(self, table: str, entity_id: str, *, child: str | None = None, only_accessible: bool = False) -> bool:
@@ -145,7 +146,7 @@ class ModelsManager:
             else:
                 where_clause = f'r.{child_id_field} IS NULL'
 
-        if child_ids:
+        if child_ids is not None:
             where_clause += f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
         else:
             child_ids = []
@@ -183,7 +184,7 @@ class ModelsManager:
             parent = 'r'
 
         where_clause = ''
-        if child_ids:
+        if child_ids is not None:
             where_clause = f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
         else:
             child_ids = []

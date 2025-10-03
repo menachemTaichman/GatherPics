@@ -4,6 +4,7 @@ import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import useImageActions from './ImageActions';
+import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
@@ -51,7 +52,10 @@ function ImageViewerActions({
       </button>
 
       {/* Add to album */}
-      <imageActions.AlbumQuickAddButton dropdownDirection="down" />
+      <AlbumQuickAddButton 
+        {...imageActions.albumQuickAddProps}
+        dropdownDirection="down"
+      />
 
       {/* Add to bucket / Remove from bucket */}
       <button
@@ -130,10 +134,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
-    // If the event is coming from one of our specific inputs, let it be handled locally.
-    const targetId = e.target.id;
-    if ((targetId === 'image-viewer-index' || targetId === 'image-viewer-zoom') && e.key === 'Enter') {
-        return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
+    // Allow all normal input behavior for input, textarea, and select elements
+    const targetTagName = e.target.tagName?.toLowerCase();
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
     }
       
     switch (e.key) {
