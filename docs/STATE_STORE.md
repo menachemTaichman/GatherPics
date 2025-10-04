@@ -43,7 +43,7 @@ Supported change types:
 { type: 'REMOVE', entity: 'images'|'groups'|'moments'|'albums', ids: [string,...], ignoreScope?, broadcast? }
 
 // Relation mutations on parent. Defaults: ignoreScope=false, broadcast=true
-{ type: 'RELATION_ADD'|'RELATION_REMOVE'|'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images'|'image.groups'|..., parentId, ids?,
+{ type: 'RELATION_ADD'|'RELATION_REMOVE'|'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images'|'image.groups'|'image.moments'|'image.faces'..., parentId, ids?,
   // Optional child entities to upsert locally (labels, etc.)
   entities?: { [childId]: Partial<ChildEntity> }, ignoreScope?, broadcast? }
 ```

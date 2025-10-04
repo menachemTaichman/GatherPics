@@ -5,6 +5,7 @@ import { groupsAPI, handleAPIError, API_BASE } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useDataStore } from '../utils/dataManager';
+import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 
 export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRefreshGroups, onNameConflict }) {
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -65,14 +66,6 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
   useEffect(() => {
     currentSelectionRef.current = currentSelection;
   }, [currentSelection]);
-
-  // Inline SVG placeholder (gray background with a question mark)
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-
-  const handleImageError = (e) => {
-    e.target.src = PLACEHOLDER_DATA_URL; // Fallback image
-  };
 
   // Fetch faces for the group
   useEffect(() => {
@@ -196,7 +189,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
     const representativeId = displayData.representative_face;
     const imageUrl = representativeId && urlHelpers
       ? urlHelpers.getFaceCropUrl(representativeId)
-      : PLACEHOLDER_DATA_URL;
+      : null;
     return imageUrl;
   };
 
@@ -216,17 +209,12 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200 shadow-lg">
-                  <img
-                    key={displayData.representative_face}
-                    src={getRepresentativeImageSrc()}
-                    alt="Representative"
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
+                  {ImageComponent(getRepresentativeImageSrc(), {
+                    width: 48,
+                    height: 48,
+                    className: 'w-full h-full object-cover',
+                    alt: 'Representative'
+                  })}
                 </div>
                 <div className="flex items-center space-x-2">
                   {isEditingName ? (
@@ -325,7 +313,7 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                         const faceId = face.id || face.face_id;
                         const imageSrc = faceId && urlHelpers
                           ? urlHelpers.getFaceCropUrl(faceId)
-                          : PLACEHOLDER_DATA_URL;
+                          : null;
                         
                         return (
                           <button
@@ -350,16 +338,12 @@ export default function EditGroupModal({ group, eventUrl, onClose, onSave, onRef
                             data-faceid={faceId}
                             data-currentselection={currentSelection}
                           >
-                            <img
-                              src={imageSrc}
-                              alt={`Face ${index + 1}`}
-                              className="w-full h-16 object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = PLACEHOLDER_DATA_URL;
-                              }}
-                            />
+                            {ImageComponent(imageSrc, {
+                              width: 64,
+                              height: 64,
+                              className: 'w-full h-16 object-cover',
+                              alt: `Face ${index + 1}`
+                            })}
                             {currentSelection === faceId && faceId && (
                               <div className="absolute inset-0 bg-primary-500 bg-opacity-20 flex items-center justify-center">
                                 <div className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">

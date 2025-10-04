@@ -58,6 +58,7 @@ class Event(JsonModel):
             AppDB.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
             self._initialize_default_profiles()
             self._initialize_default_albums()
+            self._initialize_default_groups()
 
     def _initialize_default_profiles(self, default_profiles: dict = {}):
         """Initialize default profiles for the event: Main Manager and Event Manager"""
@@ -71,11 +72,17 @@ class Event(JsonModel):
         values = tuple(profile.values() for profile in default_profiles.values())
 
         self.db.execute_query(f'''
-            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, save_preferences)
-            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1)
+            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, unassociated_group, save_preferences)
+            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1)
         ''', values)
+
+    def _initialize_default_groups(self):
+        """Initialize default groups for the event: Unassociated"""
+        Unassociated_group_id = self.models_manager.get_unassociated_group()
+        if not Unassociated_group_id:
+            self.models_manager.add('groups', {'label': 'Unassociated'})
 
     def _initialize_default_albums(self):
         """Initialize default albums for the event: Main Album and Event Album"""

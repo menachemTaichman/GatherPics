@@ -10,6 +10,7 @@ import { useModalFocus } from '../utils/useModalFocus';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../utils/ToastContext';
 import { useModalStore } from '../utils/modalManager';
+import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -39,7 +40,6 @@ export default function TransferFacesModal({
 
 
 
-  const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   
   // Custom keyboard handler for TransferFacesModal
   const handleTransferModalKeys = (e) => {
@@ -387,16 +387,16 @@ export default function TransferFacesModal({
                   <div className="flex flex-col items-center space-y-1">
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
-                      <img
-                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL}
-                        alt={group.label || `Person ${group.id}`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = PLACEHOLDER_DATA_URL;
-                        }}
-                      />
+                      {ImageComponent(
+                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+                        {
+                          width: 48,
+                          height: 48,
+                          className: 'w-full h-full object-cover rounded-full',
+                          alt: group.label || `Person ${group.id}`,
+                          iconType: 'person'
+                        }
+                      )}
                     </div>
                     <div className="text-center">
                       <p className="font-medium text-gray-900 text-xs truncate w-full">

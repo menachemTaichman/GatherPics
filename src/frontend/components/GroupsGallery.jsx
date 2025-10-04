@@ -6,7 +6,7 @@ import EditGroupModal from './EditGroupModal';
 import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
-import { setPreference } from '../utils/settings';
+import { setPreference, getImageCount } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
@@ -57,10 +57,17 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   } = useGroupNameConflict(selectedGroup, onRefreshGroups, eventUrl);
 
   const filteredAndSortedGroups = useMemo(() => {
-    let filtered = currentGroups.filter(group => 
-      group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              String(group.id || '').includes(searchTerm)
-    );
+    let filtered = currentGroups.filter(group => {
+      // Filter by search term
+      const matchesSearch = group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           String(group.id || '').includes(searchTerm);
+      
+      // Filter out groups with 0 images based on includeArchive setting
+      const imageCount = getImageCount(group);
+      const hasImages = imageCount > 0;
+      
+      return matchesSearch && hasImages;
+    });
 
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);

@@ -3,6 +3,7 @@ import { useEventUrls } from '../utils/useEventUrls';
 import { groupsAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { useModalManager } from '../utils/modalManager';
+import { getImageCount } from '../utils/settings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, 
@@ -16,6 +17,7 @@ import {
   Plus,
   Minus
 } from 'lucide-react';
+import { ImageComponent } from '../utils/useImage.jsx';
 
 export default function GroupsFilter({ 
   group,
@@ -167,18 +169,26 @@ export default function GroupsFilter({
     
     const currentIdStr = currentGroupId != null ? String(currentGroupId) : null;
     
-    // Get selected groups objects
+    // Get selected groups objects (filter out groups with 0 images)
     const selectedObjs = (selectedGroups || [])
       .filter(id => String(id) !== currentIdStr)
-      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` });
+      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` })
+      .filter(group => {
+        const imageCount = getImageCount(group);
+        return imageCount > 0;
+      });
     
-    // Get remaining related groups (not selected)
+    // Get remaining related groups (not selected, filter out groups with 0 images)
     const tail = sessionRelatedGroupIds
       .filter(id => {
         const gid = String(id);
         return !seen.has(gid) && gid !== currentIdStr;
       })
-      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` });
+      .map(id => groupMap.get(String(id)) || { id, label: `Person ${id}` })
+      .filter(group => {
+        const imageCount = getImageCount(group);
+        return imageCount > 0;
+      });
     
     return [...selectedObjs, ...tail];
   }, [selectedGroups, currentGroupId, groups]);
@@ -288,11 +298,16 @@ export default function GroupsFilter({
             onMouseMove={handleMouseMove}
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
-              <img
-                src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : undefined}
-                alt={getGroupDisplayName(group)}
-                className="w-full h-full object-cover"
-              />
+              {ImageComponent(
+                urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+                {
+                  width: 32,
+                  height: 32,
+                  className: 'w-full h-full object-cover',
+                  alt: getGroupDisplayName(group),
+                  iconType: 'person'
+                }
+              )}
             </div>
             {/* Enhanced Tooltip - Removed since we have floating tooltip */}
           </div>
@@ -317,11 +332,16 @@ export default function GroupsFilter({
                       ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                       : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                   }`}>
-                    <img
-                      src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', groupId) : undefined}
-                      alt={getGroupDisplayName(relatedGroup)}
-                      className="w-full h-full object-cover"
-                    />
+                    {ImageComponent(
+                      urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', groupId) : null,
+                      {
+                        width: 32,
+                        height: 32,
+                        className: 'w-full h-full object-cover',
+                        alt: getGroupDisplayName(relatedGroup),
+                        iconType: 'person'
+                      }
+                    )}
                   </div>
                   
                   {/* Add/Remove Icon on Hover */}

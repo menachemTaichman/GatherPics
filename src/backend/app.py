@@ -615,7 +615,7 @@ def update_album(event_id, album_id):
         return not_found(f"Album {album_id} not found or not accessible")
 
     data = request.json or {}
-    if (album.get('label').lower() in ('archive', 'favorites')) and 'label' in data:
+    if (album.get('label', '').lower() in ('archive', 'favorites')) and 'label' in data:
         data.pop('label', None)
 
     try:
@@ -812,6 +812,15 @@ def get_image(event_id, image_id):
         'parentId': image_id,
         'entities': groups
     })
+    moments = image.get(image_id, {}).get('moment_id')
+    if moments:
+        moments = event.models_manager.get_entities('moments', [moments])
+        changes.append({
+            'type': 'RELATION_SET',
+            'relation': 'image.moments',
+            'parentId': image_id,
+            'entities': moments
+        })
     return jsonify({ 'changes': changes })
 
 # ==============================================================================
@@ -880,7 +889,7 @@ def get_high_quality_image_webp(event_id, image_id):
 def get_original_image_webp(event_id, image_id):
     return get_file_webp(event_id, 'original', image_id)
 
-@app.route('/api/events/<event_id>/<entity>/<parent_id>/representative')
+@app.route('/api/events/<event_id>/<entity>/<parent_id>/representative', methods=['GET', 'HEAD'])
 @require_auth
 def get_representative_webp(event_id, entity, parent_id):
     
@@ -897,6 +906,9 @@ def get_representative_webp(event_id, entity, parent_id):
     if not event.models_manager.is_accessible(entity, parent_id):
         abort(403)
     _, file_id = event.models_manager.get_representative(entity, parent_id)
+    
+    if not file_id:
+        return '', 204
     
     file_path = os.path.join(dir_map[entity], f'{file_id}.webp')
     print(file_path)

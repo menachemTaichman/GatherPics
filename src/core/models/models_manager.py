@@ -367,6 +367,10 @@ class ModelsManager:
         return valid_child_ids, detached_parents
 
     # -------- Groups helpers --------
+    def get_unassociated_group(self) -> str | None:
+        """Get the unassociated group id."""
+        return self.db.execute_query('SELECT group_id FROM accessible_groups WHERE LOWER(label) = "unassociated"', return_format=ReturnFormat.VALUE)
+
     def get_faces_mapping(self, group_id: str) -> dict[str, str]:
         """Return faces mapping for between images and faces in a group.
         Args:

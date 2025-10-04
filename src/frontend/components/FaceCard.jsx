@@ -3,19 +3,16 @@ import { Link, useParams } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
 import { useEventUrls } from '../utils/useEventUrls';
 import { getImageCount } from '../utils/settings';
+import { useImageComponent } from '../utils/useImage.jsx';
 
 
 export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) {
   const params = useParams();
   const eventUrl = params.eventUrl;
   const { urlHelpers } = useEventUrls(eventUrl);
-
-  // Inline SVG placeholder (gray background with a question mark)
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-
-  // Use representative API for the group representative image
-  const imageSrc = urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL;
+  
+  // Get representative URL for the group
+  const imageSrc = urlHelpers?.getRepresentativeUrl('groups', group.id) || null;
 
   return (
     <>
@@ -40,15 +37,16 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
               height: `${144 * cardSize}px` 
             }}
           >
-            <img
-              src={imageSrc}
-              alt={group.label || `Person ${group.group_id}`}
-              className="w-full h-full object-cover"
-              style={{
-                objectPosition: 'center center'
-              }}
-              loading="lazy"
-            />
+      {useImageComponent(imageSrc, {
+        width: 144 * cardSize,
+        height: 144 * cardSize,
+        className: 'w-full h-full object-cover',
+        alt: group.label || `Person ${group.group_id}`,
+        iconType: 'person',
+        style: {
+          objectPosition: 'center center'
+        }
+      })}
             
             {/* Shadow overlay on hover */}
             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-full"></div>

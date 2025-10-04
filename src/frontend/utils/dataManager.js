@@ -400,8 +400,7 @@ export const useDataStore = create((set, get) => {
           }
           saveBack(parentKey, parentId, parent);
           if (effBroadcast) {
-            const { entities, ...sanitized } = ch;
-            outgoing.push({ ...sanitized });
+            outgoing.push(ch);
           }
           return;
         }

@@ -7,6 +7,7 @@ import { setPreference, getImageCount } from '../utils/settings';
 import { Link } from 'react-router-dom';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
+import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 
 export default function AlbumsGallery({ eventUrl }) {
   const [albums, setAlbums] = useState([]);
@@ -15,8 +16,6 @@ export default function AlbumsGallery({ eventUrl }) {
   const setSortOrder = (value) => setPreference('AlbumsGallery.sortDir', value);
   const { urlHelpers } = useEventUrls(eventUrl);
 
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   useEffect(() => {
     // Scope to aggregator for albums page
@@ -95,12 +94,15 @@ export default function AlbumsGallery({ eventUrl }) {
                 <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="block" title={album.label}>
                   <div className="relative rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow h-40 p-4 flex flex-col">
                     <div className="flex-1 flex items-center justify-center mb-3">
-                      <img
-                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : PLACEHOLDER_DATA_URL}
-                        alt=""
-                        className="w-16 h-16 object-cover rounded-lg"
-                        loading="lazy"
-                      />
+                      {ImageComponent(
+                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                        {
+                          width: 64,
+                          height: 64,
+                          className: 'w-16 h-16 object-cover rounded-lg',
+                          alt: ''
+                        }
+                      )}
                     </div>
                     <div className="text-lg font-semibold text-gray-900 truncate">{album.label}</div>
                     <div className="text-sm text-gray-500">{getImageCount(album)} images</div>

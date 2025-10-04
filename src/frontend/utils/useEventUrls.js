@@ -61,6 +61,13 @@ export function useEventUrls(eventUrl) {
       return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
     },
     
+    getRepresentativeWithFallback: (entity, parentId) => {
+      if (!eventId) return null;
+      return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
+    },
+    
+    getDefaultPlaceholder: () => null,
+    
     // Relative URLs
     getRelativeDisplayUrl: (imageId) => {
       if (!eventId) return null;

@@ -13,6 +13,7 @@ import { usePreference } from '../utils/useSettings';
 import { useModalFocus } from '../utils/useModalFocus';
 import { sortImages, sortGroups, sortByField } from '../utils/sorting';
 import { useModalStore } from '../utils/modalManager';
+import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -189,8 +190,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+  // Use universal placeholder components instead of hardcoded data URI
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
   const [zoomInputValue, setZoomInputValue] = useState();
@@ -597,13 +597,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   };
 
   const handleMomentLinkClick = (e) => {
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
     e.stopPropagation();
+    e.preventDefault();
     // Navigate first, then close modal
     if (momentInfo && onJumpToMoment) {
       onJumpToMoment(momentInfo);
     } else if (momentInfo) {
       // Navigate to timeline page with moment parameter (scoped to event)
-      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
+      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`);
     }
     // Close the modal after navigation
     onClose();
@@ -757,14 +759,34 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const getImageSrc = () => {
     const id = storeImageInfo?.id;
-    if (!id) return PLACEHOLDER_DATA_URL;
-    if (!urlHelpers) return PLACEHOLDER_DATA_URL;
+    if (!id) return null;
+    if (!urlHelpers) return null;
     return urlHelpers.getDisplayImageUrl(id);
   };
 
+  // Use hooks at component level to avoid conditional hook calls
+  const mainImageComponent = useImageComponent(getImageSrc(), {
+    width: 1050,
+    height: 700,
+    className: 'max-w-full max-h-full object-contain select-none',
+    alt: imageId,
+    draggable: false,
+    ref: imageRef,
+    onLoad: (e) => {
+      setImageLoaded(true);
+      if (imageRef.current) {
+        setImageDimensions({
+          width: imageRef.current.naturalWidth,
+          height: imageRef.current.naturalHeight
+        });
+      }
+    },
+    style: { display: 'block' }
+  });
+
   const getFaceImageSrc = (face) => {
     const fid = face?.id || face?.face_id;
-    if (!fid || !urlHelpers) return PLACEHOLDER_DATA_URL;
+    if (!fid || !urlHelpers) return null;
     return urlHelpers.getFaceCropUrl(fid);
   };
 
@@ -831,28 +853,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   }}
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img
-                      src={getImageSrc()}
-                      alt={imageId}
-                      className="max-w-full max-h-full object-contain select-none"
-                      draggable={false}
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = PLACEHOLDER_DATA_URL;
-                      }}
-                      ref={imageRef}
-                      onLoad={() => {
-                        setImageLoaded(true);
-                        if (imageRef.current) {
-                          setImageDimensions({
-                            width: imageRef.current.naturalWidth,
-                            height: imageRef.current.naturalHeight
-                          });
-                        }
-                      }}
-                      style={{display: 'block'}}
-                    />
+                    {mainImageComponent}
                     {/* Overlays: show unarchive when archived */}
                     {/* No image overlay actions */}
                     
@@ -1073,7 +1074,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   eventUrl={eventUrl}
                   showToast={showToast}
                   urlHelpers={urlHelpers}
-                  placeholderDataUrl={PLACEHOLDER_DATA_URL}
+                  placeholderDataUrl={null}
                   onImageUpdated={handleImageUpdated}
                 />
 
@@ -1144,16 +1145,15 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 title={album.label}
                               >
-                                <img
-                                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : PLACEHOLDER_DATA_URL}
-                                  alt=""
-                                  className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = PLACEHOLDER_DATA_URL;
-                                  }}
-                                />
+                                {ImageComponent(
+                                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                                  {
+                                    width: 40,
+                                    height: 40,
+                                    className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                    alt: ''
+                                  }
+                                )}
                                 <span className="font-medium text-gray-900 truncate">{album.label}</span>
                               </a>
                               <button
@@ -1219,12 +1219,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                                 className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                 onClick={() => handleFaceClick(index)}
                               >
-                                <img
-                                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id) : PLACEHOLDER_DATA_URL}
-                                  alt={getGroupLabel(face)}
-                                  className="w-10 h-10 object-cover rounded-full"
-                                  loading="lazy"
-                                />
+                                {ImageComponent(
+                                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id) : null,
+                                  {
+                                    width: 40,
+                                    height: 40,
+                                    className: 'w-10 h-10 object-cover rounded-full',
+                                    alt: getGroupLabel(face),
+                                    iconType: 'person'
+                                  }
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-gray-900 truncate">
                                     {getGroupLabel(face)}

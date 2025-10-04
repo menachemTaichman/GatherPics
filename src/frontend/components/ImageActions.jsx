@@ -107,7 +107,7 @@ export default function useImageActions({
         
         showToast(
           <span>
-            {countText}{action}{' '}
+            {countText} {action}{' '}
             <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
           </span>,
           'success'

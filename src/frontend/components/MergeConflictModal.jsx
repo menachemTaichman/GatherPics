@@ -6,6 +6,7 @@ import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
 import { useModalManager } from '../utils/modalManager';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useImageComponent } from '../utils/useImage.jsx';
 
 
 
@@ -117,7 +118,7 @@ export default function MergeConflictModal({
     return group && group.id;
   };
 
-  const PLACEHOLDER_DATA_URL = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+  // Use the centralized placeholder from urlHelpers
 
   // Early return if modal is not open or required props are missing
   if (!isOpen || !conflictingGroupId || !currentGroup) return null;
@@ -146,15 +147,13 @@ export default function MergeConflictModal({
             <div className="flex items-center justify-center space-x-4 mb-6">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
-                  <img
-                    src={getRepresentativeImageSrc(currentGroup) || PLACEHOLDER_DATA_URL}
-                    alt="Current person"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
+                  {useImageComponent(getRepresentativeImageSrc(currentGroup), {
+                    width: 64,
+                    height: 64,
+                    className: 'w-full h-full object-cover',
+                    alt: 'Current person',
+                    iconType: 'person'
+                  })}
                 </div>
                 <p className="text-xs text-gray-500">Current</p>
               </div>
@@ -163,17 +162,18 @@ export default function MergeConflictModal({
 
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
-                  <img
-                    src={isGroupAccessible(conflictingGroupObject) 
-                      ? (getRepresentativeImageSrc(conflictingGroupObject) || PLACEHOLDER_DATA_URL)
-                      : PLACEHOLDER_DATA_URL}
-                    alt="Target person"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = PLACEHOLDER_DATA_URL;
-                    }}
-                  />
+                  {useImageComponent(
+                    isGroupAccessible(conflictingGroupObject) 
+                      ? getRepresentativeImageSrc(conflictingGroupObject)
+                      : null,
+                    {
+                      width: 64,
+                      height: 64,
+                      className: 'w-full h-full object-cover',
+                      alt: 'Target person',
+                      iconType: 'person'
+                    }
+                  )}
                 </div>
                 <p className="text-xs text-gray-500">Target</p>
               </div>

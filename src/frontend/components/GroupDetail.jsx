@@ -59,10 +59,10 @@ import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
-import { Plus as PlusIcon, Heart as HeartIcon } from 'lucide-react';
 import SingleImageTile from './SingleImageTile';
 import GroupsFilter from './GroupsFilter';
 import { shallow } from 'zustand/shallow';
+import { useImageComponent } from '../utils/useImage.jsx';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -73,6 +73,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const { showToast } = useToast();
   const [group, setGroup] = useState(null);
+  
+  // Use the hook at component level to avoid conditional hook calls
+  const groupRepresentativeComponent = useImageComponent(
+    group && urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+    {
+      width: 64,
+      height: 64,
+      className: 'w-full h-full object-cover',
+      alt: group?.label || `Person ${group?.id}`,
+      key: group?.id || 'no-representative',
+      iconType: 'person'
+    }
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   // Derived list; avoid state to prevent effect loops
@@ -262,8 +275,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     setShowMergeModal
   } = useGroupNameConflict(group, onRefreshGroups, eventUrl);
 
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
 
   // Derive images from embedded relation Set in group entity or filtered_ids
   const groupFromStore = useDataStore(state => (group?.id ? state.entities?.groups?.[group.id] : null));
@@ -544,7 +555,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     imageIds: Array.from(selectedImages),
     eventUrl,
     urlHelpers,
-    placeholderDataUrl: PLACEHOLDER_DATA_URL,
+    placeholderDataUrl: null, // Use universal placeholder components
     onImageUpdated: () => {}, // No need to update local state, store handles it
     onAlbumAdded: () => {} // No special handling needed
   });
@@ -779,13 +790,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                 onClick={() => setShowEditModal(true)}
                 title="Edit group details"
               >
-                <img
-                  key={group.id || 'no-representative'}
-                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : PLACEHOLDER_DATA_URL}
-                  alt={group.label || `Person ${group.id}`}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
+                {groupRepresentativeComponent}
               </div>
               <div className="flex items-center space-x-3">
                 {isEditingTitle ? (
@@ -1126,7 +1131,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         onTransferFaces={handleTransferFaces}
         eventUrl={eventUrl}
         urlHelpers={urlHelpers}
-        placeholderDataUrl={PLACEHOLDER_DATA_URL}
+        placeholderDataUrl={null}
         showTransferFaces={true}
         showRemoveFromMoment={false}
         showMoveToMoment={false}

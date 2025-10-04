@@ -152,6 +152,7 @@ TABLES = {
         can_edit BOOLEAN DEFAULT 0,
         all_images BOOLEAN,
         all_albums BOOLEAN,
+        unassociated_group BOOLEAN,
         save_preferences BOOLEAN
     ''',
     'profile_images': '''
@@ -232,6 +233,8 @@ VIEWS = {
         SELECT f.*
         FROM faces f 
         INNER JOIN accessible_images i ON f.image_id = i.image_id
+        INNER JOIN groups g ON f.group_id = g.group_id
+        WHERE (LOWER(g.label) != 'unassociated' OR cur_profile('unassociated_group') = 1)
     ''',
     'groups_images': '''
         SELECT i.image_id as image_id, g.group_id as group_id
@@ -249,7 +252,7 @@ VIEWS = {
         SELECT 
             g.*,
             COUNT(agi.image_id) AS images_count,
-            COUNT(agi.image_id) - SUM(ai.is_archived) AS active_images_count
+            COUNT(agi.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
         FROM groups g
         LEFT JOIN accessible_groups_images agi 
             ON g.group_id = agi.group_id
@@ -262,7 +265,7 @@ VIEWS = {
     'accessible_moments': '''
         SELECT m.*,
         COUNT(i.image_id) as images_count,
-        COUNT(i.image_id) - SUM(i.is_archived) AS active_images_count
+        COUNT(i.image_id) - COALESCE(SUM(i.is_archived), 0) AS active_images_count
         FROM moments m
         LEFT JOIN accessible_images i ON m.moment_id = i.moment_id
         GROUP BY m.moment_id
@@ -292,7 +295,7 @@ VIEWS = {
     'accessible_albums': '''
         SELECT aa.*,
         COUNT(aia.image_id) as images_count,
-        COUNT(aia.image_id) - SUM(ai.is_archived) AS active_images_count
+        COUNT(aia.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
         FROM accessible_albums_helper aa
         LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
         LEFT JOIN accessible_images ai ON aia.image_id = ai.image_id
@@ -711,6 +714,18 @@ TRIGGERS = {
         END;
     END;
     """,
+
+    # ensure_default_groups
+    'trg_delete_ensure_default_groups': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_groups
+    BEFORE DELETE ON groups
+    BEGIN
+        SELECT CASE
+            WHEN OLD.label = 'Unassociated' THEN
+                RAISE(ABORT, 'Permission denied: cannot delete default group')
+        END;
+    END;
+    """,
 }
 
 class AppDB:
@@ -838,7 +853,8 @@ class AppDB:
             'is_profiles_manager': False,
             'can_edit': False,
             'all_images': False,
-            'all_albums': False
+            'all_albums': False,
+            'unassociated_group': False,
         }
         profile = {}
         if profile_id:
@@ -978,6 +994,12 @@ class AppDB:
 
         values = tuple(fields.values()) + tuple(where_values)
         
+        if table == 'groups' and (where.get('label', '').lower() == 'unassociated' or 'representative_face' in fields):
+            return []
+
+        if table == 'albums' and where.get('label', '').lower() in ['favorites', 'archive']:
+            return []
+
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'
 
         p_keys = STRUCTURE[table]['primary_key']

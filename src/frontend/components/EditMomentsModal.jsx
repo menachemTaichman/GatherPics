@@ -6,9 +6,9 @@ import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../util
 import { useModalFocus } from '../utils/useModalFocus';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
+import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
-import RepresentativeImageModal from './RepresentativeImageModal';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -34,9 +34,6 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     return sortMoments(storeMoments, 'asc');
   }, [storeMoments]);
 
-  // Inline SVG placeholder (gray background with a question mark)
-  const PLACEHOLDER_DATA_URL =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
   const [internalMoments, setInternalMoments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingMoments, setEditingMoments] = useState([]);
@@ -324,15 +321,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     {/* Representative image */}
                     <div className="relative">
                       <div className="w-16 h-16 rounded-lg overflow-hidden border">
-                        <img 
-                          src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.moment_id) : ''}
-                          alt="" 
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-100" style={{display: 'none'}}>
-                          <Image className="w-6 h-6 text-gray-400" />
-                        </div>
+                        {ImageComponent(
+                          urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.moment_id) : null,
+                          {
+                            width: 64,
+                            height: 64,
+                            className: 'w-full h-full object-cover',
+                            alt: ''
+                          }
+                        )}
                       </div>
                       <button
                         onClick={() => {

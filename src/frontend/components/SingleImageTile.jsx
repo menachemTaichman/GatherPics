@@ -1,5 +1,6 @@
 import React from 'react';
 import useImageActions from './ImageActions';
+import { useImageComponent } from '../utils/useImage.jsx';
 
 export default function SingleImageTile({
   image,
@@ -15,7 +16,7 @@ export default function SingleImageTile({
   showDate = false,
   showCropBadge = false,
   imageFit = 'cover',
-  placeholderDataUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>',
+  placeholderDataUrl = null, // Use universal placeholder components instead
   eventUrl, // Required for useImageActions
   urlHelpers // Required for useImageActions
 }) {
@@ -52,18 +53,14 @@ export default function SingleImageTile({
         }`}
       />
       <div className="relative w-full h-full">
-        <img
-          src={thumbSrc || placeholderDataUrl}
-          alt={image.label || image.id}
-          className={`w-full h-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`}
-          loading="lazy"
-          onLoad={onImageLoad}
-          onError={(e) => {
-            e.target.onerror = null;
-            e.target.src = placeholderDataUrl;
-            if (onImageError) onImageError(e);
-          }}
-        />
+        {useImageComponent(thumbSrc, {
+          width: 200,
+          height: 200,
+          className: `w-full h-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`,
+          alt: image.label || image.id,
+          onLoad: onImageLoad,
+          onError: onImageError
+        })}
 
         {/* Action buttons - bottom-left */}
         {isArchived ? (

@@ -7,6 +7,7 @@ import { useDataStore } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
+import { ImageComponent } from '../utils/useImage.jsx';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
@@ -229,16 +230,14 @@ export default function AlbumQuickAddButton({
                 className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
                 onClick={() => handleAddToAlbum(album)}
               >
-                {album.representative_image ? (
-                  <img 
-                    src={urlHelpers?.getThumbnailUrl ? urlHelpers.getThumbnailUrl(album.representative_image) : `/api/events/${eventUrl}/thumb/${album.representative_image}.webp`} 
-                    alt="" 
-                    className="w-8 h-8 rounded object-cover" 
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
-                    <ImageIcon className="w-4 h-4 text-gray-400" />
-                  </div>
+                {ImageComponent(
+                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                  {
+                    width: 32,
+                    height: 32,
+                    className: 'w-8 h-8 rounded object-cover',
+                    alt: album.label
+                  }
                 )}
                 <span className="text-sm text-gray-700 truncate">{album.label}</span>
               </button>

@@ -22,6 +22,7 @@ import useBucketStore from '../utils/bucketStore';
 import { useToast } from '../utils/ToastContext';
 import { sortMoments } from '../utils/sorting';
 import { getImageCount } from '../utils/settings';
+import { ImageComponent } from '../utils/useImage.jsx';
 
 
 function formatTimeOnly(dateString) {
@@ -782,13 +783,15 @@ export default function Moments({ eventUrl }) {
                     }}
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
-                      <img 
-                        src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.id) : ''} 
-                        alt="" 
-                        className="object-cover w-full h-full" 
-                        loading="lazy" 
-                      />
-                      <Image className="w-8 h-8 text-white" style={{ display: 'none' }} />
+                      {ImageComponent(
+                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.id) : null,
+                        {
+                          width: 80,
+                          height: 80,
+                          className: 'object-cover w-full h-full',
+                          alt: moment.label
+                        }
+                      )}
                     </div>
                       <div className="text-center">
                       <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
