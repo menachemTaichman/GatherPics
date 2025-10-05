@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { resolveEventId } from './eventResolver';
 import { API_BASE } from './apiService';
 
@@ -6,21 +6,37 @@ export function useEventUrls(eventUrl) {
   const [eventId, setEventId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
 
   useEffect(() => {
+    
     if (!eventUrl) {
       setError('Event URL is required');
       setLoading(false);
       return;
     }
 
+    // Single-flight + idempotent resolve for same eventUrl
+    const inFlightRef = useEventUrls.__inFlightRef || (useEventUrls.__inFlightRef = { current: false });
+    const lastResolvedRef = useEventUrls.__lastResolvedRef || (useEventUrls.__lastResolvedRef = { current: null });
+    if (inFlightRef.current) {
+      
+      return;
+    }
+    if (lastResolvedRef.current === eventUrl && eventId) {
+      
+      return;
+    }
+
     const resolveEvent = async () => {
       try {
+        inFlightRef.current = true;
         setLoading(true);
         const id = await resolveEventId(eventUrl);
         if (id) {
           setEventId(id);
           setError(null);
+          lastResolvedRef.current = eventUrl;
         } else {
           setError(`Event not found: ${eventUrl}`);
         }
@@ -28,6 +44,7 @@ export function useEventUrls(eventUrl) {
         setError(err.message);
       } finally {
         setLoading(false);
+        inFlightRef.current = false;
       }
     };
 
@@ -35,7 +52,7 @@ export function useEventUrls(eventUrl) {
   }, [eventUrl]);
 
   // Synchronous URL helpers that work with the resolved eventId
-  const urlHelpers = {
+  const urlHelpers = useMemo(() => ({
     getDisplayImageUrl: (imageId) => {
       if (!eventId) return null;
       return `${API_BASE}/api/events/${eventId}/display/${imageId}.webp`;
@@ -81,7 +98,9 @@ export function useEventUrls(eventUrl) {
       if (!eventId) return null;
       return `/api/events/${eventId}/faces/${faceId}.webp`;
     },
-  };
+  }), [eventId]);
+
+  
 
   return {
     eventId,

@@ -7,6 +7,8 @@ export default function useImageViewerController({
   onJumpToMoment = null,
   defaultSortBy = 'date',
   defaultSortOrder = 'asc',
+  urlHelpers = null,
+  filteredIds = null,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -16,6 +18,25 @@ export default function useImageViewerController({
   const [sortOrder, setSortOrder] = useState(defaultSortOrder);
   const [currentGroupId, setCurrentGroupId] = useState(null);
   const lastClosedAtRef = useRef(0);
+
+  // Stabilize external callbacks to avoid prop churn
+  const onTransferCompleteRef = useRef(onTransferComplete);
+  const onJumpToMomentRef = useRef(onJumpToMoment);
+  const showToastRef = useRef(showToast);
+  onTransferCompleteRef.current = onTransferComplete;
+  onJumpToMomentRef.current = onJumpToMoment;
+  showToastRef.current = showToast;
+
+  // Stable wrappers so prop identities don't churn when viewerProps changes
+  const stableOnTransferComplete = useCallback((...args) => {
+    if (onTransferCompleteRef.current) return onTransferCompleteRef.current(...args);
+  }, []);
+  const stableOnJumpToMoment = useCallback((...args) => {
+    if (onJumpToMomentRef.current) return onJumpToMomentRef.current(...args);
+  }, []);
+  const stableShowToast = useCallback((...args) => {
+    if (showToastRef.current) return showToastRef.current(...args);
+  }, []);
 
   const open = useCallback(({ index: startIndex = 0, parent: p, entity: e, sortBy: sb, sortOrder: so, currentGroupId: cg } = {}) => {
     const now = Date.now();
@@ -52,14 +73,16 @@ export default function useImageViewerController({
     totalImages: 0,
     currentIndex: index,
     currentGroupId,
-    onJumpToMoment,
-    onTransferComplete,
-    showToast,
+    onJumpToMoment: stableOnJumpToMoment,
+    onTransferComplete: stableOnTransferComplete,
+    showToast: stableShowToast,
+    urlHelpers,
+    filteredIds,
     parent,
     entity,
     sortBy,
     sortOrder,
-  }), [eventUrl, close, navigate, index, currentGroupId, onJumpToMoment, onTransferComplete, showToast, parent, entity, sortBy, sortOrder]);
+  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers, filteredIds]);
 
   return { isOpen, open, close, navigate, viewerProps };
 }

@@ -52,7 +52,8 @@ const useSessionStorage = (key, defaultValue) => {
 import useImageSelection from '../utils/useImageSelection';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 import { useDataStore, selectors } from '../utils/dataManager';
-import { selectors as storeSelectors } from '../utils/dataManager';
+import { selectors as storeSelectors, useGroupsList, useGroupById } from '../utils/dataManager';
+import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
 import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
@@ -61,12 +62,16 @@ import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
 import SingleImageTile from './SingleImageTile';
 import GroupsFilter from './GroupsFilter';
-import { shallow } from 'zustand/shallow';
 import { useImageComponent } from '../utils/useImage.jsx';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
 export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) {
+  // Render counter to spot potential render loops
+  const __renderCountRef = useRef(0);
+  __renderCountRef.current += 1;
+  
+  const __lastUrlRef = useRef('');
   const { group_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,6 +91,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       iconType: 'person'
     }
   );
+  useEffect(() => {
+    
+  }, [urlHelpers, group?.id]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   // Derived list; avoid state to prevent effect loops
@@ -96,14 +104,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   
   const sortOrder = usePreference('GroupDetail.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('GroupDetail.sortDir', value);
-  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
-    eventUrl,
-    showToast,
-    onTransferComplete: (result) => handleTransferComplete(result),
-    onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
-    defaultSortBy: 'date',
-    defaultSortOrder: sortOrder,
-  });
+  // ImageViewer controller is initialized after filteredIds declaration to avoid TDZ issues
   const [loading, setLoading] = useState(false);
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
@@ -116,6 +117,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const [showTransferModal, setShowTransferModal] = useState(false);
   const { addImages, open } = useBucketStore();
   const [imageClasses, setImageClasses] = useState({});
+  const imageClassesRef = useRef(imageClasses);
+  useEffect(() => { imageClassesRef.current = imageClasses; }, [imageClasses]);
+  const pendingClassUpdatesRef = useRef({});
+  const flushClassesRafRef = useRef(null);
 
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [albums, setAlbums] = useState([]);
@@ -130,6 +135,17 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   
   // Only store the filtered results (the actual image IDs to use instead of relations)
   const [filteredIds, setFilteredIds] = useSessionStorage('groupDetail_filteredIds', null);
+  // Initialize ImageViewer controller after filteredIds is defined
+  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
+    eventUrl,
+    showToast,
+    onTransferComplete: (result) => handleTransferComplete(result),
+    onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
+    defaultSortBy: 'date',
+    defaultSortOrder: sortOrder,
+    urlHelpers,
+    filteredIds,
+  });
   const [filteredFacesMapping, setFilteredFacesMapping] = useSessionStorage('groupDetail_filteredFacesMapping', null);
   const lastFetchSignatureRef = useRef('');
   const prevGroupIdRef = useRef(null);
@@ -139,14 +155,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const skipNextAnimation = useRef(false);
 
   // Subscribe to normalized groups list
-  const currentGroups = useDataStore(state => storeSelectors.groupsAll(state), shallow);
+  const currentGroups = useGroupsList();
   const attemptedLookupRef = useRef(false);
   const decodedGroupName = useMemo(() => {
     try { return decodeURIComponent(group_name || ''); } catch { return group_name || ''; }
   }, [group_name]);
 
+  useEffect(() => {
+    
+  }, [eventUrl, group_name, decodedGroupName]);
+
   // Initialize filter state from URL on first load - only run once
   useEffect(() => {
+    
     const searchParams = new URLSearchParams(location.search);
     const mode = searchParams.get('filterMode');
     const only = searchParams.get('only');
@@ -210,6 +231,29 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     if (window.__pendingFilterGroups) {
       return;
     }
+    const depSig = {
+      filterGroups: Array.isArray(filterGroups) ? `[${filterGroups.join(',')}]` : 'null',
+      filterMode,
+      onlySelected,
+      relatedGroupsLen: relatedGroups.length,
+      currentGroupsLen: (currentGroups || []).length,
+      path: location.pathname,
+      groupLabel: group?.label,
+    };
+    // Diff against previous deps
+    const prevRef = GroupDetail.__prevDepsRef || (GroupDetail.__prevDepsRef = { current: null });
+    const prev = prevRef.current;
+    if (prev) {
+      const changedKeys = Object.keys(depSig).filter(k => depSig[k] !== prev[k]);
+      if (changedKeys.length > 0) {
+        const diff = {};
+        changedKeys.forEach(k => { diff[k] = { from: prev[k], to: depSig[k] }; });
+        
+      } else {
+        
+      }
+    }
+    prevRef.current = depSig;
     
     const searchParams = new URLSearchParams(location.search);
     
@@ -256,7 +300,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     
     // Update URL without triggering navigation
     const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    const same = __lastUrlRef.current === newUrl;
+    if (same) {
+      
+      return;
+    }
     window.history.replaceState(null, '', newUrl);
+    __lastUrlRef.current = newUrl;
+    
   }, [filterGroups, filterMode, onlySelected, relatedGroups, location.pathname, currentGroups, group?.label]);
 
   // Memoize props for GroupsFilter to prevent infinite re-renders (defined after sortedImages below)
@@ -276,35 +327,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   } = useGroupNameConflict(group, onRefreshGroups, eventUrl);
 
 
-  // Derive images from embedded relation Set in group entity or filtered_ids
-  const groupFromStore = useDataStore(state => (group?.id ? state.entities?.groups?.[group.id] : null));
-  const imagesMap = useDataStore(state => state.entities.images);
+  // Derive images using the universal util; keep scopes in sync
   const includeArchived = usePreference('general.includeArchived', false);
-  
-  const relatedImages = useMemo(() => {
-    let ids;
-    if (filteredIds) {
-      // Use filtered_ids when available
-      ids = Array.isArray(filteredIds) ? filteredIds : [];
-    } else {
-      // Use relation Set from store
-      ids = groupFromStore?.images instanceof Set ? Array.from(groupFromStore.images) : [];
-    }
-    const images = ids.map(id => imagesMap[id]).filter(Boolean);
-    
-    // Filter out archived images if includeArchived is false
-    if (!includeArchived) {
-      return images.filter(img => !img.is_archived);
-    }
-    return images;
-  }, [groupFromStore?.images, imagesMap, filteredIds, includeArchived]);
+  useApplyScopes(group?.id ? [{ entity: 'group', id: String(group.id) }] : []);
+  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, filteredIds, includeArchived, sortBy: 'date', sortOrder });
 
-  const facesMapping = filteredFacesMapping || groupFromStore?.faces_mapping || {};
+  const facesMapping = filteredFacesMapping || group?.faces_mapping || {};
 
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
-    return sortImages(relatedImages, 'date', sortOrder);
+    const out = sortImages(relatedImages, 'date', sortOrder);
+    
+    return out;
   }, [group?.id, relatedImages, sortOrder]);
+
+  useEffect(() => {
+    
+  }, [sortedImages]);
 
   // Now compute memoizedImageIds after sortedImages exists
   const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
@@ -323,6 +362,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   useEffect(() => {
     if (!eventUrl || !decodedGroupName) return;
+    
     const resolveByLabel = async () => {
       try {
         const res = await groupsAPI.checkName(decodedGroupName, '', eventUrl);
@@ -331,18 +371,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
           const after = storeSelectors.groupsAll(useDataStore.getState()) || [];
           const match = after.find(g => g.id === res.conflicting_group || g.label === decodedGroupName);
           if (match) {
+            
             setGroup(match);
             return;
           }
         }
       } catch {}
       // Not found -> back to persons list
+      
       navigate(`/${eventUrl}/persons`);
     };
 
     const foundGroup = (currentGroups || []).find(g => g.label === decodedGroupName);
     if (foundGroup) {
-      if (!group || group.id !== foundGroup.id || group !== foundGroup) setGroup(foundGroup);
+      if (!group || group.id !== foundGroup.id || group !== foundGroup) {
+        
+        setGroup(foundGroup);
+      }
       return;
     }
     if (!attemptedLookupRef.current) {
@@ -355,7 +400,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   useEffect(() => {
     if (!group?.id) return;
     const byId = (currentGroups || []).find(g => g.id === group.id);
-    if (byId && byId !== group) setGroup(byId);
+    if (byId && byId !== group) {
+      
+      setGroup(byId);
+    }
   }, [currentGroups, group?.id]);
 
   // Legacy subscription removed; updates flow from normalized selectors
@@ -375,6 +423,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     if (!group?.id) {
       return;
     }
+    
     if (!suppressSpinnerRef.current) {
       setLoading(!isFetchingMore);
     }
@@ -394,7 +443,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
     try {
       const payload = await groupsAPI.getById(group.id, eventUrl, params);
-      const changes = Array.isArray(payload?.changes) ? payload.changes : [];
       
       // Handle filtered_ids from API response
       if (payload?.filter && Array.isArray(payload?.filtered_ids)) {
@@ -410,8 +458,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         setFilteredFacesMapping(null);
       }
       
-      const rel = changes.find(ch => (ch.type === 'RELATION_SET' || ch.type === 'RELATION_ADD') && (ch.relation || '') === 'groups.images' && String(ch.parentId) === String(group.id));
-      const pageCount = Array.isArray(rel?.ids) ? rel.ids.length : 0;
+      const pageCount = Array.isArray(payload?.images)
+        ? payload.images.length
+        : (Array.isArray(payload?.filtered_ids) ? payload.filtered_ids.length : 0);
       setHasMore(pageCount === 50);
       
     } catch (error) {
@@ -446,11 +495,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       prevGroupIdRef.current = group.id;
       
       // The scroll restoration is now handled in useLayoutEffect
+      
       return;
     }
 
     const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
-    if (sig === lastFetchSignatureRef.current) return;
+    if (sig === lastFetchSignatureRef.current) {
+      
+      return;
+    }
     const isGroupChange = prevGroupIdRef.current !== group.id;
     prevGroupIdRef.current = group.id;
     
@@ -470,6 +523,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       // We don't need to explicitly nullify the ref, as it's only set when needed.
     }
     lastFetchSignatureRef.current = sig;
+    
     setOffset(0);
     fetchGroupData(0, true);
   }, [group?.id, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
@@ -480,6 +534,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const handleLoadMore = () => {
     if (!isFetchingMore && hasMore) {
       const nextOffset = offset + 50;
+      
       setOffset(nextOffset);
       setIsFetchingMore(true);
       fetchGroupData(nextOffset);
@@ -488,11 +543,16 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   const handleToggleSortOrder = () => {
     const newOrder = toggleSortOrder(sortOrder);
+    
     setSortOrder(newOrder);
   };
 
   const handleFilterVisibilityToggle = () => {
-    setFilterVisible(prev => !prev);
+    setFilterVisible(prev => {
+      const next = !prev;
+      
+      return next;
+    });
   };
 
   const arraysEqual = (a = [], b = []) => {
@@ -505,20 +565,24 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     return true;
   };
 
-  const handleFilterChange = (newFilterGroups) => {
+  const handleFilterChange = useCallback((newFilterGroups) => {
     if (arraysEqual(filterGroups, newFilterGroups)) return;
+    
     setFilterGroups(newFilterGroups);
-  };
+  }, [filterGroups]);
 
-  const handleFilterModeChange = (newMode) => {
+  const handleFilterModeChange = useCallback((newMode) => {
+    
     setFilterMode(newMode);
-  };
+  }, [filterMode]);
 
-  const handleOnlySelectedChange = (newOnlySelected) => {
+  const handleOnlySelectedChange = useCallback((newOnlySelected) => {
+    
     setOnlySelected(newOnlySelected);
-  };
+  }, [onlySelected]);
 
-  const handleFilterReset = () => {
+  const handleFilterReset = useCallback(() => {
+    
     setFilterGroups([]);
     setFilterMode('and');
     setOnlySelected(false);
@@ -533,7 +597,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     searchParams.delete('only');
     const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
     window.history.replaceState(null, '', newUrl);
-  };
+  }, []);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -560,6 +624,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     onAlbumAdded: () => {} // No special handling needed
   });
 
+  useEffect(() => {
+    
+  }, [selectedImages]);
+
   const handleImageLoad = (imageId, e) => {
     const img = e.target;
     const aspectRatio = img.naturalWidth / img.naturalHeight;
@@ -571,11 +639,55 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       imageClass = 'portrait';
     }
     
-    setImageClasses(prev => ({
-      ...prev,
-      [imageId]: imageClass
-    }));
+    
+    // Skip if unchanged to avoid extra renders
+    const current = imageClassesRef.current?.[imageId];
+    if (current === imageClass) return;
+
+    // Batch updates per frame to coalesce N image onLoad events
+    pendingClassUpdatesRef.current[imageId] = imageClass;
+    if (!flushClassesRafRef.current) {
+      try {
+        flushClassesRafRef.current = requestAnimationFrame(() => {
+          const updates = pendingClassUpdatesRef.current;
+          pendingClassUpdatesRef.current = {};
+          flushClassesRafRef.current = null;
+          setImageClasses(prev => {
+            let changed = false;
+            const next = { ...prev };
+            for (const id in updates) {
+              if (Object.prototype.hasOwnProperty.call(updates, id)) {
+                if (prev[id] !== updates[id]) {
+                  next[id] = updates[id];
+                  changed = true;
+                }
+              }
+            }
+            return changed ? next : prev;
+          });
+        });
+      } catch {
+        // Fallback without RAF
+        setImageClasses(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const id in pendingClassUpdatesRef.current) {
+            if (prev[id] !== pendingClassUpdatesRef.current[id]) {
+              next[id] = pendingClassUpdatesRef.current[id];
+              changed = true;
+            }
+          }
+          pendingClassUpdatesRef.current = {};
+          return changed ? next : prev;
+        });
+      }
+    }
   };
+
+  useEffect(() => {
+    const size = imageClasses ? Object.keys(imageClasses).length : 0;
+    
+  }, [imageClasses]);
 
 
 
@@ -603,6 +715,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       showToast('Please select photos to transfer', 'error');
       return;
     }
+    
     try {
       restoreScrollYRef.current = window.scrollY;
     } catch {}
@@ -627,6 +740,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         window.history.replaceState(null, '', link);
         smoothNextGroupLoad.current = true;
         skipNextAnimation.current = true;
+        
         setGroup(targetGroup);
 
         return;
@@ -638,6 +752,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   };
 
   const toggleImageSelection = (imageId, event) => {
+    
     toggleSelectedImageKey(imageId, event);
   };
 
@@ -676,94 +791,36 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
 
   const navigateImage = (direction, index) => navigateViewer(direction, index);
 
-  const handleTitleEdit = () => {
-    setEditingTitle(group.label || `Person ${group.id}`);
+  const handleTitleEdit = useCallback(() => {
+    
     setIsEditingTitle(true);
-    clearConflict(); // Clear any previous conflict
-  };
+    setTimeout(() => {
+      // titleInputRef.current?.focus(); // This ref is not defined in the original file
+    }, 0);
+  }, []);
 
-  const handleTitleSave = async () => {
-    // Check if the current group still exists in the store
-  const currentGroups = storeSelectors.groupsAll(useDataStore.getState());
-    const groupExists = currentGroups.some(g => g.id === group?.id);
-    
-    if (!groupExists) {
-      setIsEditingTitle(false);
-      clearConflict();
-      return;
-    }
-    
-    // Validate editingTitle
-    const trimmedTitle = editingTitle.trim();
-    if (!trimmedTitle) {
-      alert('Group name cannot be empty');
-      setIsEditingTitle(false);
-      clearConflict();
-      return;
-    }
-    
-    if (trimmedTitle === group.label) {
-      // No change needed
-      setIsEditingTitle(false);
-      clearConflict();
-      return;
-    }
-    
-    try {
-      // Check for conflicts first - call the API directly to avoid state timing issues
-      const conflictResult = await groupsAPI.checkName(trimmedTitle, group.id, eventUrl);
-      
-      if (conflictResult.conflict) {
-        // Changes are automatically applied by apiService interceptor
-        
-        // Get conflicting group from store or use the id from response
-        let conflictingGroup = conflictResult.conflicting_group;
-        if (conflictResult.id && !conflictingGroup) {
-          const store = useDataStore.getState();
-          conflictingGroup = store.entities?.groups?.[conflictResult.id];
-        }
-        
-        // Show merge conflict modal with the conflicting group
-        try {
-          restoreScrollYRef.current = window.scrollY;
-        } catch {}
-        showMergeConflictModal(trimmedTitle, group, conflictingGroup);
-        setIsEditingTitle(false);
-        return;
-      }
-      
-      // No conflict, proceed with update
-      await optimisticUpdates.updateGroup(group.id, { label: trimmedTitle }, null, eventUrl);
-      
-      // Update the URL to reflect the new group name
-      const newUrl = `/${eventUrl}/persons/${encodeURIComponent(trimmedTitle)}`;
-      navigate(newUrl, { replace: true });
-      
-      setIsEditingTitle(false);
-      clearConflict();
-    } catch (error) {
-      // Show user-friendly error message
-      if (error.response?.status === 400 && error.response?.data?.error) {
-        // Backend returned a specific error message
-        alert(`Failed to update group name: ${error.response.data.error}`);
-      } else {
-        alert('Failed to update group name. Please try again.');
-      }
-      
-      setIsEditingTitle(false);
-      clearConflict();
-    }
-  };
+  const handleTitleSave = useCallback(() => {
+    if (!group) return;
+    const ds = useDataStore.getState();
+    const payload = { id: group.id, label: editingTitle };
+    ds.applyChanges([{ type: 'UPDATE', entity: 'group', items: [payload] }]);
+  }, [group, editingTitle]);
 
-  const handleTitleCancel = () => {
+  const handleTitleCancel = useCallback(() => {
+    
     setIsEditingTitle(false);
-    clearConflict(); // Clear conflict on cancel
-  };
+    setEditingTitle(group?.label || '');
+  }, [group]);
 
-  const handleMergeCancelLocal = () => {
-    handleMergeCancel(); // Use the hook's function
+  const handleMergeCancelLocal = useCallback(() => {
+    
     setIsEditingTitle(true); // Restore editing mode
-  };
+  }, []);
+
+  // Snapshot log on key state changes
+  useEffect(() => {
+    // Useful during development; intentionally empty in production
+  }, [group?.id, group?.label, sortedImages, relatedImages, filterGroups, filterMode, onlySelected, hasMore, offset, sortOrder, selectionMode]);
 
 
 

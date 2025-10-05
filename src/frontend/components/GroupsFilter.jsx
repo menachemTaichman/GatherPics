@@ -3,6 +3,7 @@ import { useEventUrls } from '../utils/useEventUrls';
 import { groupsAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { useModalManager } from '../utils/modalManager';
+import { useApplyScopes, getRepresentativeUrl } from '../utils/storeUtils';
 import { getImageCount } from '../utils/settings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -129,6 +130,7 @@ export default function GroupsFilter({
   useEffect(() => {
     if (isVisible) {
       try { registerModal({ id: PANEL_ID, type: 'panel', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
+      try { useApplyScopes([{ entity: 'all', id: 'groups' }]); } catch {}
       
       // Fetch related groups when filter opens and store in session storage
       const selectedParam = [currentGroupId, ...selectedGroups].filter(Boolean).join(',');
@@ -299,7 +301,7 @@ export default function GroupsFilter({
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
               {ImageComponent(
-                urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+                getRepresentativeUrl(urlHelpers, 'groups', group.id),
                 {
                   width: 32,
                   height: 32,
@@ -333,7 +335,7 @@ export default function GroupsFilter({
                       : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                   }`}>
                     {ImageComponent(
-                      urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', groupId) : null,
+                      getRepresentativeUrl(urlHelpers, 'groups', groupId),
                       {
                         width: 32,
                         height: 32,

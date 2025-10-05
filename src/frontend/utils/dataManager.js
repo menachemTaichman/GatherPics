@@ -10,6 +10,73 @@ export const CHANGE_TYPES = {
   RELATION_SET: 'RELATION_SET',
 };
 
+// Shallow compare two plain objects (compares own enumerable keys, by reference for values)
+function shallowEqualObjects(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i++) {
+    const k = aKeys[i];
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
+// Compare two Sets by contents
+function setsEqual(a, b) {
+  if (a === b) return true;
+  if (!(a instanceof Set) || !(b instanceof Set)) return false;
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function objectDiffKeys(a, b) {
+  const diffs = [];
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  keys.forEach((k) => {
+    if ((a && a[k]) instanceof Set && (b && b[k]) instanceof Set) {
+      if (!setsEqual(a[k], b[k])) diffs.push(k);
+    } else if ((a ? a[k] : undefined) !== (b ? b[k] : undefined)) {
+      diffs.push(k);
+    }
+  });
+  return diffs;
+}
+
+function objectDiffDetails(a, b, limit = 5) {
+  const keys = objectDiffKeys(a, b).slice(0, limit);
+  const details = keys.map((k) => {
+    const av = a ? a[k] : undefined;
+    const bv = b ? b[k] : undefined;
+    const preview = (v) => {
+      if (v instanceof Set) return `Set(size=${v.size})`;
+      if (typeof v === 'object' && v !== null) return '[object]';
+      return v;
+    };
+    return { key: k, from: preview(av), to: preview(bv) };
+  });
+  return details;
+}
+
+// Shallow compare two plain objects by own keys and primitive values
+function shallowEqualPlainObject(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i++) {
+    const k = aKeys[i];
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
 // Generate a stable tab id per reload
 const TAB_ID = (() => {
   try {
@@ -21,6 +88,9 @@ const TAB_ID = (() => {
   try { sessionStorage.setItem('__tab_id__', id); } catch {}
   return id;
 })();
+
+// Per-runtime channel id (unique even for duplicated tabs)
+const CHANNEL_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 function normalizeEntityKey(entity) {
   if (!entity) return entity;
@@ -102,6 +172,8 @@ export const useDataStore = create((set, get) => {
     channel = new BroadcastChannel('data-sync');
   } catch {}
 
+  // Sync diagnostics removed
+
   const initialState = {
     // Minimal UI state (not persisted)
     selectedImages: new Set(),
@@ -122,16 +194,42 @@ export const useDataStore = create((set, get) => {
 
   const applyUpsertsFromEntitiesDict = (childTypeKey, entitiesDict, nextEntities) => {
     if (!entitiesDict || typeof entitiesDict !== 'object') return;
-    const map = { ...(nextEntities[childTypeKey] || {}) };
+    const prevMap = nextEntities[childTypeKey] || {};
+    let map = prevMap;
     Object.keys(entitiesDict).forEach((id) => {
       const raw = entitiesDict[id] || {};
       const normalized = { id, ...raw };
       ['images','faces','albums'].forEach((rk) => {
         if (rk in normalized) normalized[rk] = coerceToSet(normalized[rk]);
       });
-      map[id] = { ...(map[id] || { id }), ...normalized };
+      const before = prevMap[id];
+      const mergedCandidate = { ...(before || { id }), ...normalized };
+      // Preserve Set references when contents didn’t change
+      ['images','faces','albums'].forEach((rk) => {
+        if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+          if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
+        }
+      });
+      // Preserve faces_mapping (plain object) when contents are equal
+      if (childTypeKey === 'groups' && before && before.faces_mapping && mergedCandidate.faces_mapping) {
+        if (shallowEqualPlainObject(before.faces_mapping, mergedCandidate.faces_mapping)) {
+          mergedCandidate.faces_mapping = before.faces_mapping;
+          
+        }
+      }
+      const nextObj = before && shallowEqualObjects(before, mergedCandidate) ? before : mergedCandidate;
+      if (nextObj !== before) {
+        if (map === prevMap) map = { ...prevMap };
+        map[id] = nextObj;
+      }
+      if (childTypeKey === 'images' || childTypeKey === 'groups') {
+        const replaced = nextObj !== before;
+        const diff = replaced ? objectDiffKeys(before, nextObj) : [];
+        const details = replaced ? objectDiffDetails(before, nextObj) : [];
+        
+      }
     });
-    nextEntities[childTypeKey] = map;
+    if (map !== prevMap) nextEntities[childTypeKey] = map;
   };
 
   const shouldApplyRelation = (relation, parentId) => {
@@ -181,23 +279,55 @@ export const useDataStore = create((set, get) => {
     return false;
   };
 
+  // Fallback broadcast via localStorage 'storage' event for browsers/environments without BroadcastChannel
+  const storageBroadcastPrefix = 'data-sync:';
+  const fallbackBroadcast = (changes) => {
+    try {
+      const payload = { tabId: CHANNEL_ID, ts: Date.now(), changes };
+      // Unique key per message to ensure storage events always fire
+      const key = `${storageBroadcastPrefix}${payload.ts}:${Math.random().toString(36).slice(2,8)}`;
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch {}
+  };
+
   const broadcast = (changes) => {
     try {
-      if (!channel) return;
-      channel.postMessage({ tabId: TAB_ID, changes });
-    } catch {}
+      // Send via BroadcastChannel when available
+      if (channel) {
+        channel.postMessage({ tabId: CHANNEL_ID, changes });
+      }
+      // Always send storage fallback to maximize delivery reliability
+      fallbackBroadcast(changes);
+    } catch {
+      // If BroadcastChannel fails at runtime, fall back
+      fallbackBroadcast(changes);
+    }
   };
 
   if (channel) {
     try {
       channel.onmessage = (ev) => {
         const data = ev?.data || {};
-        if (!data || data.tabId === TAB_ID) return;
+        if (!data || data.tabId === CHANNEL_ID) return;
         const incoming = Array.isArray(data.changes) ? data.changes : [];
-        get().applyChanges(incoming, { fromBroadcast: true });
+        get().applyChanges(incoming, { fromBroadcast: true, ignoreScope: true });
       };
     } catch {}
   }
+  // Always register storage listener as a secondary path (covers cases where BroadcastChannel isn’t available)
+  try {
+    window.addEventListener('storage', (e) => {
+      if (!e.key || !e.key.startsWith(storageBroadcastPrefix) || !e.newValue) return;
+      try {
+        const data = JSON.parse(e.newValue || '{}');
+        if (!data || data.tabId === CHANNEL_ID) return;
+        const incoming = Array.isArray(data.changes) ? data.changes : [];
+        get().applyChanges(incoming, { fromBroadcast: true, ignoreScope: true });
+        // Clear key so subsequent writes always fire storage event (some browsers coalesce identical values)
+        try { localStorage.removeItem(e.key); } catch {}
+      } catch {}
+    });
+  } catch {}
 
   return {
     ...initialState,
@@ -208,6 +338,11 @@ export const useDataStore = create((set, get) => {
     setFavoritesAlbumId: (id) => set({ favoritesAlbumId: id }),
     setArchiveAlbumId: (id) => set({ archiveAlbumId: id }),
     setScope: (scope) => set((state) => {
+      const prev = state.scope || {};
+      if ((prev.entity || '') === (scope?.entity || '') && String(prev.id || '') === String(scope?.id || '')) {
+        return {};
+      }
+      
       const scopes = {};
       if (scope?.entity) {
         const key = `${scope.entity}:${scope.id ?? ''}`;
@@ -218,9 +353,14 @@ export const useDataStore = create((set, get) => {
     addScope: (scope) => set((state) => {
       if (!scope?.entity) return {};
       const key = `${scope.entity}:${scope.id ?? ''}`;
+      const existing = state.scopes?.[key];
+      if (existing && existing.entity === scope.entity && String(existing.id || '') === String(scope.id || '')) {
+        // Already present; do not increment or change state
+        return {};
+      }
       const nextScopes = { ...(state.scopes || {}), [key]: { entity: scope.entity, id: scope.id } };
       const counts = { ...(state.scopeCounts || {}) };
-      counts[key] = (counts[key] || 0) + 1;
+      counts[key] = 1;
       return { scopes: nextScopes, scopeCounts: counts };
     }),
     removeScope: (scope) => set((state) => {
@@ -241,8 +381,18 @@ export const useDataStore = create((set, get) => {
 
     // Core change applier (supports new relation entities dict)
     applyChanges: (changes, options = {}) => {
+      const applyId = Math.random().toString(36).slice(2, 7);
       if (!Array.isArray(changes) || changes.length === 0) return;
+      const prevEntities = get().entities;
+      const prevGroupsRef = prevEntities?.groups;
+      const typeCounts = {};
+      const relationSummaries = [];
       const nextEntities = { ...get().entities };
+
+    // Broadcast early so receivers can process regardless of this tab's gating
+    if (!options.fromBroadcast && Array.isArray(changes) && changes.length > 0) {
+      try { broadcast(changes); } catch {}
+    }
 
       // Helper to resolve effective flags (per-change overrides > call-level > type defaults)
       const resolveFlags = (ch) => {
@@ -271,7 +421,12 @@ export const useDataStore = create((set, get) => {
       };
 
       const saveBack = (key, id, obj) => {
-        nextEntities[key] = { ...nextEntities[key], [id]: obj };
+        const prevMap = nextEntities[key] || {};
+        const prevObj = prevMap[id];
+        if (prevObj === obj) return; // No-op; keep map ref stable
+        const nextMap = { ...prevMap, [id]: obj };
+        nextEntities[key] = nextMap;
+        
       };
 
       const outgoing = [];
@@ -279,6 +434,7 @@ export const useDataStore = create((set, get) => {
       changes.forEach((ch) => {
         if (!ch || !ch.type) return;
         const { ignoreScope: effIgnoreScope, broadcast: effBroadcast } = resolveFlags(ch);
+        typeCounts[ch.type] = (typeCounts[ch.type] || 0) + 1;
 
         if (ch.type === CHANGE_TYPES.UPSERT) {
           const key = normalizeEntityKey(ch.entity);
@@ -288,7 +444,8 @@ export const useDataStore = create((set, get) => {
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const map = { ...(nextEntities[key] || {}) };
+          const prevMap = nextEntities[key] || {};
+          let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
             const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
@@ -296,14 +453,32 @@ export const useDataStore = create((set, get) => {
             const exists = !!map[id];
             // Gate only inserts unless ignoreScope=true
             if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
-            const prev = map[id] || { id };
-            const merged = { ...prev, ...it };
+            const prev = prevMap[id] || { id };
+            const mergedCandidate = { ...prev, ...it };
             ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
             });
-            map[id] = merged;
+            // Preserve set refs when contents equal
+            ['images','faces','albums'].forEach((rk) => {
+              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+              }
+            });
+            // Preserve faces_mapping (plain object) when contents are equal
+            if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
+              if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
+                mergedCandidate.faces_mapping = prev.faces_mapping;
+                
+              }
+            }
+            const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
+            if (nextObj !== prev) {
+              if (map === prevMap) map = { ...prevMap };
+              map[id] = nextObj;
+              
+            }
           });
-          nextEntities[key] = map;
+          if (map !== prevMap) nextEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -316,19 +491,38 @@ export const useDataStore = create((set, get) => {
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const map = { ...(nextEntities[key] || {}) };
+          const prevMap = nextEntities[key] || {};
+          let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
             const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
             if (!id) return;
-            if (!map[id]) return; // update-only
-            const merged = { ...map[id], ...it };
+            if (!prevMap[id]) return; // update-only
+            const prev = prevMap[id];
+            const mergedCandidate = { ...prev, ...it };
             ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
             });
-            map[id] = merged;
+            ['images','faces','albums'].forEach((rk) => {
+              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+              }
+            });
+            // Preserve faces_mapping (plain object) when contents are equal
+            if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
+              if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
+                mergedCandidate.faces_mapping = prev.faces_mapping;
+                
+              }
+            }
+            const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
+            if (nextObj !== prev) {
+              if (map === prevMap) map = { ...prevMap };
+              map[id] = nextObj;
+              
+            }
           });
-          nextEntities[key] = map;
+          if (map !== prevMap) nextEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -377,26 +571,51 @@ export const useDataStore = create((set, get) => {
           // Gate relation mutations by scope
           const parentId = String(ch.parentId ?? '');
           if (!parentId) return;
-          if (!effIgnoreScope && !shouldApplyRelation(ch.relation, parentId)) return;
+          if (!effIgnoreScope) {
+            const allowed = shouldApplyRelation(ch.relation, parentId);
+            if (!allowed) return;
+          }
 
           // RELATION_MOVE unsupported in v4
 
           const parent = ensureEntity(parentKey, parentId);
           const current = coerceToSet(parent[field]);
+          const beforeSize = current.size;
+          let beforeKeysSample = [];
+          try { beforeKeysSample = Array.from(current).slice(0, 5); } catch {}
 
           if (ch.type === CHANGE_TYPES.RELATION_SET) {
             // Prefer entities dict keys when present
             const ids = ch.entities ? Object.keys(ch.entities).map(String) : (ch.ids || []).map(String);
-            parent[field] = coerceToSet(ids);
+            const nextSet = coerceToSet(ids);
+            if (setsEqual(current, nextSet)) {
+              // No change; skip saveBack
+            } else {
+              parent[field] = nextSet;
+            }
+            if (parentKey === 'groups' && field === 'images') {
+              const afterSize = parent[field].size;
+              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, changed: beforeSize !== afterSize });
+            }
           } else if (ch.type === CHANGE_TYPES.RELATION_ADD) {
             const set = new Set(current);
             const ids = ch.entities ? Object.keys(ch.entities).map(String) : (ch.ids || []).map(String);
             ids.forEach((id) => set.add(String(id)));
-            parent[field] = set;
+            if (!setsEqual(current, set)) parent[field] = set;
+            if (parentKey === 'groups' && field === 'images') {
+              const afterSize = set.size;
+              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, delta: afterSize - beforeSize });
+            }
+            
           } else if (ch.type === CHANGE_TYPES.RELATION_REMOVE) {
             const set = new Set(current);
             (ch.ids || []).forEach((id) => set.delete(String(id)));
-            parent[field] = set;
+            if (!setsEqual(current, set)) parent[field] = set;
+            if (parentKey === 'groups' && field === 'images') {
+              const afterSize = set.size;
+              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, delta: afterSize - beforeSize });
+            }
+            
           }
           saveBack(parentKey, parentId, parent);
           if (effBroadcast) {
@@ -420,8 +639,11 @@ export const useDataStore = create((set, get) => {
       });
 
       set({ entities: nextEntities });
+      const nextGroupsRef = nextEntities?.groups;
+      const prevGroupsSize = prevGroupsRef ? Object.keys(prevGroupsRef).length : 0;
+      const nextGroupsSize = nextGroupsRef ? Object.keys(nextGroupsRef).length : 0;
       persistEntitiesSession(nextEntities);
-      if (!options.fromBroadcast && outgoing.length > 0) broadcast(outgoing);
+      // Receiver-side will have already received the early broadcast
     },
 
     // Image operations
@@ -470,6 +692,25 @@ export const selectors = {
     return (state) => {
       const ref = state.entities?.groups || null;
       if (ref === lastRef) return lastArr;
+      const prevLen = lastArr.length;
+      lastRef = ref;
+      const nextArr = Object.values(ref || {});
+      // Check referential stability of elements
+      let sameRefs = 0;
+      const prevById = {};
+      lastArr.forEach(g => { if (g && g.id) prevById[g.id] = g; });
+      nextArr.forEach(g => { if (g && prevById[g.id] === g) sameRefs += 1; });
+      lastArr = nextArr;
+      
+      return lastArr;
+    };
+  })(),
+  imagesAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.images || null;
+      if (ref === lastRef) return lastArr;
       lastRef = ref;
       lastArr = Object.values(ref || {});
       return lastArr;
@@ -480,6 +721,28 @@ export const selectors = {
     let lastArr = [];
     return (state) => {
       const ref = state.entities?.moments || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
+  albumsAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.albums || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
+  facesAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.faces || null;
       if (ref === lastRef) return lastArr;
       lastRef = ref;
       lastArr = Object.values(ref || {});
@@ -529,5 +792,46 @@ export const selectors = {
     return list.filter((img) => !img?.is_archived);
   },
 };
+
+// Convenience hooks with stable outputs so components don't need local useMemo for store data
+export function useGroupsList() {
+  return useDataStore((state) => selectors.groupsAll(state));
+}
+
+export function useGroupById(groupId) {
+  return useDataStore((state) => (groupId ? state.entities?.groups?.[groupId] || null : null));
+}
+
+export function useImagesList() {
+  return useDataStore((state) => selectors.imagesAll(state));
+}
+
+export function useImageById(imageId) {
+  return useDataStore((state) => (imageId ? state.entities?.images?.[imageId] || null : null));
+}
+
+export function useAlbumsList() {
+  return useDataStore((state) => selectors.albumsAll(state));
+}
+
+export function useAlbumById(albumId) {
+  return useDataStore((state) => (albumId ? state.entities?.albums?.[albumId] || null : null));
+}
+
+export function useMomentsList() {
+  return useDataStore((state) => selectors.momentsAll(state));
+}
+
+export function useMomentById(momentId) {
+  return useDataStore((state) => (momentId ? state.entities?.moments?.[momentId] || null : null));
+}
+
+export function useFacesList() {
+  return useDataStore((state) => selectors.facesAll(state));
+}
+
+export function useFaceById(faceId) {
+  return useDataStore((state) => (faceId ? state.entities?.faces?.[faceId] || null : null));
+}
 
  

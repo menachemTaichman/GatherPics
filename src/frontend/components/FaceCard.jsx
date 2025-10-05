@@ -1,18 +1,22 @@
 import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
-import { useEventUrls } from '../utils/useEventUrls';
 import { getImageCount } from '../utils/settings';
 import { useImageComponent } from '../utils/useImage.jsx';
+import { getRepresentativeUrl } from '../utils/storeUtils';
 
 
-export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) {
+export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload, urlHelpers: injectedUrlHelpers, eventUrl }) {
+  // Resolve eventUrl from props or route params
   const params = useParams();
-  const eventUrl = params.eventUrl;
-  const { urlHelpers } = useEventUrls(eventUrl);
+  const evUrl = eventUrl || params?.eventUrl || '';
+  // Require urlHelpers from parent to avoid many hook instances resolving eventId independently
+  const urlHelpers = injectedUrlHelpers || null;
   
-  // Get representative URL for the group
-  const imageSrc = urlHelpers?.getRepresentativeUrl('groups', group.id) || null;
+  // Get representative URL for the group and append a version to avoid cached 204s on back nav
+  const baseRep = getRepresentativeUrl(urlHelpers, 'groups', group.id);
+  const version = (group?.images instanceof Set ? group.images.size : getImageCount(group)) || 0;
+  const imageSrc = baseRep ? `${baseRep}${baseRep.includes('?') ? '&' : '?'}v=${version}` : null;
 
   return (
     <>
@@ -29,7 +33,7 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/${eventUrl}/persons/${group.label}`} className="block mb-3 w-full flex justify-center">
+        <Link to={`/${evUrl}/persons/${group.label}`} className="block mb-3 w-full flex justify-center">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg group"
             style={{ 
@@ -43,6 +47,8 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
         className: 'w-full h-full object-cover',
         alt: group.label || `Person ${group.group_id}`,
         iconType: 'person',
+        // Force reload when URL or group count changes (fix stale placeholders on back nav)
+        key: `${imageSrc || 'null'}:${getImageCount(group)}`,
         style: {
           objectPosition: 'center center'
         }
@@ -83,3 +89,4 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload }) 
     </>
   );
 } 
+

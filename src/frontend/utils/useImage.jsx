@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Image as ImageIcon, User } from 'lucide-react';
 
 /**
@@ -67,6 +67,13 @@ export function useImage(src, options = {}) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isError, setIsError] = useState(false);
   const [isNoContent, setIsNoContent] = useState(false);
+
+  // Reset state when the src changes to avoid stale placeholders persisting
+  useEffect(() => {
+    setIsLoaded(false);
+    setIsError(false);
+    setIsNoContent(false);
+  }, [src]);
 
   const handleLoad = useCallback((e) => {
     setIsLoaded(true);

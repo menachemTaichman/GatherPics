@@ -2,16 +2,20 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, Download, Edit, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
+import { useEventUrls } from '../utils/useEventUrls';
+import { useApplyScopes } from '../utils/storeUtils';
 import EditGroupModal from './EditGroupModal';
 import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
-import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors, useGroupsList } from '../utils/dataManager';
 import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
+  const { urlHelpers } = useEventUrls(eventUrl);
+  useApplyScopes([{ entity: 'all', id: 'groups' }]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -24,11 +28,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups
-  const storeGroups = useDataStore(state => storeSelectors.groupsAll(state));
+  const storeGroups = useGroupsList();
 
   useEffect(() => {
-    // Scope: aggregator for groups page
-    try { useDataStore.getState().setScope({ entity: 'all', id: 'groups' }); } catch {}
     async function loadGroups() {
       try {
         await groupsAPI.getAll(eventUrl);
@@ -240,6 +242,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 cardSize={cardSize}
                 onEdit={() => handleEditGroup(group)}
                 onDownload={() => handleAddGroupToBucket(group)}
+                urlHelpers={urlHelpers}
+                eventUrl={eventUrl}
               />
             </motion.div>
           ))}

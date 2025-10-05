@@ -115,7 +115,6 @@ export const initializePreferences = () => {
     if (!existingPreferences) {
       // No preferences exist, create them with defaults
       setPreferences(DEFAULT_PREFERENCES);
-      console.log('Initialized preferences with defaults');
     }
   } catch (error) {
     console.warn('Failed to initialize preferences:', error);

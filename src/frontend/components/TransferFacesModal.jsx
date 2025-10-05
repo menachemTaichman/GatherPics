@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../utils/ToastContext';
 import { useModalStore } from '../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
+import { getRepresentativeUrl, useApplyScopes } from '../utils/storeUtils';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -100,6 +101,7 @@ export default function TransferFacesModal({
       try {
         registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }], allowOutsideScroll: true });
       } catch {}
+      try { useApplyScopes([{ entity: 'all', id: 'groups' }]); } catch {}
       
       // Load groups with loading state
       const loadGroups = async () => {
@@ -388,7 +390,7 @@ export default function TransferFacesModal({
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                       {ImageComponent(
-                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+                        getRepresentativeUrl(urlHelpers, 'groups', group.id),
                         {
                           width: 48,
                           height: 48,

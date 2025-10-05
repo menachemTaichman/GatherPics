@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -6,8 +6,8 @@ import TransferFacesModal from './TransferFacesModal';
 import useImageActions from './ImageActions';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { useApplyScopes, useImagesForParent, useFacesForImage, useAlbumsForImage } from '../utils/storeUtils';
 import { getPreference, setPreference } from '../utils/settings';
 import { usePreference } from '../utils/useSettings';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -82,43 +82,19 @@ function ImageViewerActions({
   );
 }
 
-export default function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, urlHelpers }) {
+  const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
-  const { urlHelpers } = useEventUrls(eventUrl);
-  const groupsMap = useDataStore(state => state.entities?.groups || {});
+  // urlHelpers provided by parent, already memoized by eventId
   
-  // Subscribe to embedded relation Set only (stable reference) and derive ids locally
-  const imagesSet = useDataStore(state => {
-    if (!parent || !entity) return null;
-    const key = entity === 'group' ? 'groups' : (entity === 'album' ? 'albums' : (entity === 'moment' ? 'moments' : null));
-    if (!key) return null;
-    return state.entities?.[key]?.[parent]?.images || null;
-  });
-  const images = useDataStore(state => state.entities.images);
   const includeArchived = usePreference('general.includeArchived', false);
   
   
-  const relatedImages = useMemo(() => {
-    let ids;
-    if (filteredIds && entity === 'group') {
-      // Use filtered_ids when available for group entities
-      ids = Array.isArray(filteredIds) ? filteredIds : [];
-    } else {
-      // Use relation Set from store
-      ids = imagesSet instanceof Set ? Array.from(imagesSet) : [];
-    }
-    let unsortedImages = ids.map(id => images[id]).filter(Boolean);
-    
-    // Filter out archived images if includeArchived is false
-    if (!includeArchived) {
-      unsortedImages = unsortedImages.filter(img => !img.is_archived);
-    }
-    
-    const sorted = sortImages(unsortedImages, sortBy || 'date', sortOrder || 'asc');
-    
-    return sorted;
-  }, [imagesSet, images, sortBy, sortOrder, filteredIds, entity, includeArchived]);
+  // Use universal util for related images
+  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds, includeArchived, sortBy, sortOrder });
+  useEffect(() => {
+  }, [relatedImages, entity, parent, includeArchived, sortBy, sortOrder, filteredIds]);
   
   // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
@@ -130,8 +106,47 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   }, [relatedImages, currentIndex, image]);
   
   const imageId = currentImageId;
+  
+  // Apply scopes after computing current image id so image.albums updates always pass
+  useApplyScopes([
+    ...(parent && entity ? [{ entity, id: String(parent) }] : []),
+    ...(imageId ? [{ entity: 'image', id: String(imageId) }] : []),
+  ]);
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
+
+  // Diagnostics: track imagesSet ref churn and dependency diffs
+  const imagesSetRef = useRef(null);
+  useEffect(() => {
+    // We no longer read imagesSet directly; rely on useImagesForParent.
+    const prev = imagesSetRef.current;
+    const signature = `${entity || 'none'}:${parent || 'none'}:${Array.isArray(filteredIds) ? filteredIds.length : 0}`;
+    const same = prev === signature;
+    imagesSetRef.current = signature;
+  }, [entity, parent, filteredIds]);
+
+  const depsSigRef = useRef(null);
+  useEffect(() => {
+    const sig = {
+      imageId,
+      currentIndex,
+      parent,
+      entity,
+      sortBy,
+      sortOrder,
+      filteredLen: Array.isArray(filteredIds) ? filteredIds.length : null,
+      includeArchived
+    };
+    const next = JSON.stringify(sig);
+    if (depsSigRef.current && depsSigRef.current !== next) {
+      try {
+        const prev = JSON.parse(depsSigRef.current);
+        const diff = {};
+        Object.keys(sig).forEach(k => { if (prev[k] !== sig[k]) diff[k] = { from: prev[k], to: sig[k] }; });
+      } catch {}
+    }
+    depsSigRef.current = next;
+  }, [imageId, currentIndex, parent, entity, sortBy, sortOrder, includeArchived]);
   
   // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
@@ -235,7 +250,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
         const verticalMarginPx = verticalMarginRem * rootFontSize;
         const maxHeight = window.innerHeight - verticalMarginPx;
         newHeight = Math.min(newHeight, maxHeight);
-        setDynamicHeight(prev => (prev !== newHeight ? newHeight : prev));
+        // Avoid triggering re-renders from unused state; log once if changed
+        if (dynamicHeight !== newHeight) {
+        }
+        // setDynamicHeight(prev => (prev !== newHeight ? newHeight : prev));
       });
     };
 
@@ -390,54 +408,32 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const storeImageInfo = useDataStore(state => imageId ? state.entities?.images?.[imageId] : null);
   
   // Subscribe to moments entities for reactive updates
-  const momentsEntities = useDataStore(state => state.entities?.moments || {});
+  // Avoid subscribing to entire moments map; read on demand
   
   const momentInfo = useMemo(() => {
     const mid = storeImageInfo?.moment_id;
     if (!mid) return null;
-    const m = momentsEntities[mid];
+    const m = (useDataStore.getState().entities?.moments || {})[mid];
     if (m) return m;
     return { id: mid, label: storeImageInfo?.moment_label };
-  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, momentsEntities]);
+  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label]);
 
 
-  // Subscribe to embedded relation Sets for the current image (like groups.images)
-  const imageFacesSet = useDataStore(state => {
-    if (!imageId) return null;
-    return state.entities?.images?.[imageId]?.faces || null;
-  });
-  const imageAlbumsSet = useDataStore(state => {
-    if (!imageId) return null;
-    return state.entities?.images?.[imageId]?.albums || null;
-  });
-
-  // Subscribe to faces and groups entities for reactive updates
-  const facesEntities = useDataStore(state => state.entities?.faces || {});
-  const groupsEntities = useDataStore(state => state.entities?.groups || {});
-  const albumsEntities = useDataStore(state => state.entities?.albums || {});
-  
-  // Derived lists from embedded Sets
-  const facesList = useMemo(() => {
-    if (!imageFacesSet) return [];
-    const ids = Array.from(imageFacesSet);
-    const faces = ids.map(fid => facesEntities[fid]).filter(Boolean);
-    
-    // Sort faces by group label (person name)
-    const sorted = sortByField(faces, 'group_label', 'asc', (face) => {
-      const gid = face?.groupId || face?.group_id;
-      if (!gid) return '';
-      return groupsEntities[gid]?.label || '';
-    });
-    
-    return sorted;
-  }, [imageFacesSet, facesEntities, groupsEntities]);
-  
-  const albumsList = useMemo(() => {
-    if (!imageAlbumsSet) return [];
-    const ids = Array.from(imageAlbumsSet);
-    const albums = ids.map(aid => albumsEntities[aid]).filter(Boolean);
-    return sortGroups(albums, 'name', 'asc');
-  }, [imageAlbumsSet, albumsEntities]);
+  const facesList = useFacesForImage(imageId);
+  const albumsList = useAlbumsForImage(imageId);
+  useEffect(() => {
+  }, [facesList, albumsList]);
+  // If albums list seems stale after an add/remove, refresh image info once
+  const prevAlbumsCountRef = useRef(null);
+  useEffect(() => {
+    const count = Array.isArray(albumsList) ? albumsList.length : 0;
+    if (prevAlbumsCountRef.current !== null && count === prevAlbumsCountRef.current && imageId) {
+      // Trigger a lightweight info refresh to ensure relations are hydrated
+      try { useDataStore.getState().addScope({ entity: 'image', id: String(imageId) }); } catch {}
+      imagesAPI.getImage(imageId, eventUrl).catch(() => {});
+    }
+    prevAlbumsCountRef.current = count;
+  }, [albumsList, imageId, eventUrl]);
 
   // Find the current image index in the store data
   const currentImageIndex = useMemo(() => {
@@ -459,9 +455,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const fetchImageInfo = async () => {
     try {
-      setLoading(true);
+      setLoading(prev => (prev === true ? prev : true));
       if (imageId && eventUrl) {
         // Request details using new getImage API
+        try { useDataStore.getState().addScope({ entity: 'image', id: String(imageId) }); } catch {}
         const response = await imagesAPI.getImage(imageId, eventUrl);
         
         // Changes are automatically applied by apiService interceptor
@@ -490,7 +487,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                 if (!gid || seen.has(gid)) return;
                 seen.add(gid);
                 
-                const label = face.group_label || (groupsMap[gid] && groupsMap[gid].label) || undefined;
+                const groups = store.entities?.groups || {};
+                const label = face.group_label || (groups[gid] && groups[gid].label) || undefined;
                 items.push(label ? { id: gid, label } : { id: gid });
               });
             }
@@ -508,7 +506,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     } catch (error) {
       console.error('Error fetching image info:', error);
     } finally {
-      setLoading(false);
+      setLoading(prev => (prev === false ? prev : false));
     }
   };
 
@@ -543,13 +541,16 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     if (e.ctrlKey || e.metaKey) {
       // Zoom with Ctrl/Cmd + wheel
       const delta = e.deltaY > 0 ? -0.2 : 0.2;
-      setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
+      setZoom(prev => {
+        const next = Math.max(0.5, Math.min(3, prev + delta));
+        return next === prev ? prev : next;
+      });
     } else {
       // Pan with wheel
-      setPan(prev => ({
-        x: prev.x - e.deltaX * 0.5,
-        y: prev.y - e.deltaY * 0.5
-      }));
+      setPan(prev => {
+        const next = { x: prev.x - e.deltaX * 0.5, y: prev.y - e.deltaY * 0.5 };
+        return (next.x === prev.x && next.y === prev.y) ? prev : next;
+      });
     }
   }, []);
 
@@ -578,7 +579,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
   const handleFaceNavigation = (face) => {
     const gid = face?.groupId || face?.group_id;
-    const label = gid ? groupsMap[gid]?.label : '';
+    const label = gid ? ((useDataStore.getState().entities?.groups || {})[gid]?.label || '') : '';
     if (label) {
       navigate(`/persons/${encodeURIComponent(label)}`);
       onClose();
@@ -697,14 +698,14 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const handleMouseMove = (e) => {
     // Show overlay controls on any mouse movement
     try {
-      setControlsVisible(true);
+      if (!controlsVisible) setControlsVisible(true);
       if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
       hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
     } catch {}
     if (isDragging && zoom > 1) {
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
+      setPan(prev => {
+        const next = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
+        return (next.x === prev.x && next.y === prev.y) ? prev : next;
       });
     }
   };
@@ -715,40 +716,48 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
 
 
 
-  // Fixed face rectangle style calculation - accounts for object-contain image scaling
+  // Face rectangle calculation accounting for object-contain and portrait/landscape
   const getFaceRectangleStyle = (face) => {
-    // Always use the complex calculation when image is loaded
     if (imageRef.current && imageLoaded) {
       const img = imageRef.current;
-      const container = img.parentElement;
-      
-      // Get the actual displayed image dimensions
-      const imgRect = img.getBoundingClientRect();
+      const container = img.parentElement; // relative positioning context
       const containerRect = container.getBoundingClientRect();
-      
-      // Calculate the offset of the image within the container
-      const offsetX = (imgRect.left - containerRect.left) / containerRect.width * 100;
-      const offsetY = (imgRect.top - containerRect.top) / containerRect.height * 100;
-      
-      // Calculate the scaled dimensions of the image as percentages of the container
-      const imageWidthPercent = (imgRect.width / containerRect.width) * 100;
-      const imageHeightPercent = (imgRect.height / containerRect.height) * 100;
-      
-      // Calculate the face rectangle position and size
-      const left = offsetX + (face.left * imageWidthPercent);
-      const top = offsetY + (face.top * imageHeightPercent);
-      const width = face.width * imageWidthPercent;
-      const height = face.height * imageHeightPercent;
+      const containerW = containerRect.width;
+      const containerH = containerRect.height;
+      const naturalW = img.naturalWidth || (storeImageInfo?.width || 1);
+      const naturalH = img.naturalHeight || (storeImageInfo?.height || 1);
+
+      // object-contain sizing math (independent of transforms)
+      const scale = Math.min(containerW / naturalW, containerH / naturalH);
+      const displayedW = naturalW * scale;
+      const displayedH = naturalH * scale;
+      const offsetXpx = (containerW - displayedW) / 2; // letterbox left
+      const offsetYpx = (containerH - displayedH) / 2; // letterbox top
+
+      // Faces may be normalized (0..1) or absolute in original pixels. Detect heuristically.
+      const isNormalized = face.left <= 1 && face.top <= 1 && face.width <= 1 && face.height <= 1;
+      const toPx = (value, axis) => {
+        if (isNormalized) {
+          return value * (axis === 'x' ? displayedW : displayedH);
+        }
+        const base = axis === 'x' ? (storeImageInfo?.width || naturalW) : (storeImageInfo?.height || naturalH);
+        return (value / base) * (axis === 'x' ? displayedW : displayedH);
+      };
+
+      const leftPx = offsetXpx + toPx(face.left, 'x');
+      const topPx = offsetYpx + toPx(face.top, 'y');
+      const widthPx = toPx(face.width, 'x');
+      const heightPx = toPx(face.height, 'y');
       
       return {
-        left: `${left}%`,
-        top: `${top}%`,
-        width: `${width}%`,
-        height: `${height}%`,
+        left: `${(leftPx / containerW) * 100}%`,
+        top: `${(topPx / containerH) * 100}%`,
+        width: `${(widthPx / containerW) * 100}%`,
+        height: `${(heightPx / containerH) * 100}%`,
       };
     }
-    
-    // Fallback to simple calculation only when image is not loaded
+
+    // Fallback when not loaded: assume normalized coords
     return {
       left: `${face.left * 100}%`,
       top: `${face.top * 100}%`,
@@ -764,25 +773,8 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     return urlHelpers.getDisplayImageUrl(id);
   };
 
-  // Use hooks at component level to avoid conditional hook calls
-  const mainImageComponent = useImageComponent(getImageSrc(), {
-    width: 1050,
-    height: 700,
-    className: 'max-w-full max-h-full object-contain select-none',
-    alt: imageId,
-    draggable: false,
-    ref: imageRef,
-    onLoad: (e) => {
-      setImageLoaded(true);
-      if (imageRef.current) {
-        setImageDimensions({
-          width: imageRef.current.naturalWidth,
-          height: imageRef.current.naturalHeight
-        });
-      }
-    },
-    style: { display: 'block' }
-  });
+  // Render main image directly with stable element type to avoid remount loops
+  const mainImageSrc = getImageSrc();
 
   const getFaceImageSrc = (face) => {
     const fid = face?.id || face?.face_id;
@@ -793,7 +785,7 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
   const getGroupLabel = (face) => {
     const gid = face?.groupId || face?.group_id;
     if (!gid) return '';
-    return groupsEntities[gid]?.label || '';
+    return (useDataStore.getState().entities?.groups || {})[gid]?.label || '';
   };
 
 
@@ -853,7 +845,38 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
                   }}
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {mainImageComponent}
+                    {mainImageSrc ? (
+                      <img
+                        ref={imageRef}
+                        src={mainImageSrc}
+                        alt={imageId}
+                        className="max-w-full max-h-full object-contain select-none"
+                        width={1050}
+                        height={700}
+                        draggable={false}
+                        onLoad={(e) => {
+                          setImageLoaded(prev => (prev ? prev : true));
+                          if (imageRef.current) {
+                            setImageDimensions({
+                              width: imageRef.current.naturalWidth,
+                              height: imageRef.current.naturalHeight
+                            });
+                          }
+                        }}
+                        onError={() => {
+                          // Do not set state if already errored
+                          if (!imageLoaded) setImageLoaded(false);
+                        }}
+                        style={{ display: 'block' }}
+                      />
+                    ) : (
+                      ImageComponent(null, {
+                        width: 1050,
+                        height: 700,
+                        className: 'max-w-full max-h-full object-contain select-none',
+                        alt: imageId
+                      })
+                    )}
                     {/* Overlays: show unarchive when archived */}
                     {/* No image overlay actions */}
                     
@@ -1267,9 +1290,10 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
           }}
-          currentGroup={groupsMap && selectedFaceForTransfer ? (() => {
+          currentGroup={selectedFaceForTransfer ? (() => {
             const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
-            return gid ? Object.values(groupsMap).find(g => (g.id || g.group_id) === gid) : null;
+            if (!gid) return null;
+            return (useDataStore.getState().entities?.groups || {})[gid] || null;
           })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
@@ -1279,3 +1303,23 @@ export default function ImageViewer({ image, eventUrl, onClose, onNavigate, tota
     </AnimatePresence>
   );
 }
+
+function arePropsEqual(prev, next) {
+  // Shallow compare key props that affect rendering; functions by ref
+  if (prev.eventUrl !== next.eventUrl) { return false; }
+  if (prev.currentIndex !== next.currentIndex) { return false; }
+  if (prev.currentGroupId !== next.currentGroupId) { return false; }
+  if (prev.parent !== next.parent) { return false; }
+  if (prev.entity !== next.entity) { return false; }
+  if (prev.sortBy !== next.sortBy) { return false; }
+  if (prev.sortOrder !== next.sortOrder) { return false; }
+  if (prev.image !== next.image) { return false; }
+  if (prev.urlHelpers !== next.urlHelpers) { return false; }
+  const prevFilteredLen = Array.isArray(prev.filteredIds) ? prev.filteredIds.length : prev.filteredIds;
+  const nextFilteredLen = Array.isArray(next.filteredIds) ? next.filteredIds.length : next.filteredIds;
+  if (prevFilteredLen !== nextFilteredLen) { return false; }
+  // Ignore function identity differences
+  return true;
+}
+
+export default memo(ImageViewer, arePropsEqual);
