@@ -350,8 +350,8 @@ def get_moment(event_id, moment_id):
     if not event.models_manager.is_accessible('moments', moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
 
-    moment = event.models_manager.get_entities('moments', moment_id)
-    image_ids, images = event.models_manager.get_childs_entities('moments', [moment_id], 'images')
+    moment = event.models_manager.get_entities('moments', [moment_id])
+    image_ids, images = event.models_manager.get_childs_entities('moments', moment_id, 'images')
     changes = [{
         'type': 'UPSERT',
         'entity': 'moment',

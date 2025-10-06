@@ -1,19 +1,19 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Image, Minus, Plus, Settings, Clock, Calendar, CheckCheck, X, ShoppingBag, Trash2, Move, Pencil, Square, CheckSquare } from 'lucide-react';
+import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare } from 'lucide-react';
 import ImageViewer from './ImageViewer';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import EditMomentsModal from './EditMomentsModal';
-import EditMomentImagesModal from './EditMomentImagesModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import Toast from './Toast';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useImageSelection from '../utils/useImageSelection';
 import { usePreference } from '../utils/useSettings';
 import { setPreference } from '../utils/settings';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { shallow } from 'zustand/shallow';
-import { momentsAPI, imagesAPI, API_BASE } from '../utils/apiService';
+import { momentsAPI } from '../utils/apiService';
 import useImageActions from './ImageActions';
 import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
@@ -58,7 +58,14 @@ export default function Moments({ eventUrl }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  
+  // Apply scope for all moments
+  useApplyScopes([{ entity: 'all', id: 'moments' }]);
+  
   const allMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  
+  // Subscribe to entities changes to make the component reactive
+  const entities = useDataStore(state => state.entities, shallow);
   const includeArchived = usePreference('general.includeArchived', false);
   const moments = useMemo(() => {
     let filteredMoments = allMoments.filter(moment => {
@@ -73,20 +80,15 @@ export default function Moments({ eventUrl }) {
     
     return sortMoments(filteredMoments, 'asc');
   }, [allMoments, includeArchived]);
-  const updateMoment = useDataStore(state => state.updateMoment);
-  const deleteMoment = useDataStore(state => state.deleteMoment);
-  const addMoment = useDataStore(state => state.addMoment);
+  
   const storeLoading = useDataStore(state => state.loading);
   const storeError = useDataStore(state => state.error);
   const setStoreLoading = useDataStore(state => state.setLoading);
   const setStoreError = useDataStore(state => state.setError);
   
-  const [images, setImages] = useState([]);
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
-  const [momentImagesMap, setMomentImagesMap] = useState({});
-  const [imagesLoading, setImagesLoading] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetMoment, setTargetMoment] = useState(null);
   const carouselVisible = usePreference('Moments.carouselExpanded', true);
@@ -100,25 +102,37 @@ export default function Moments({ eventUrl }) {
     onJumpToMoment: (momentInfo) => handleJumpToMoment(momentInfo),
     defaultSortBy: 'date',
     defaultSortOrder: 'asc',
+    urlHelpers,
   });
   const { addImages, open } = useBucketStore();
-  const addScope = useDataStore(state => state.addScope);
-  const removeScope = useDataStore(state => state.removeScope);
   
-  // New state for checkbox visibility and selection mode
+  // Selection mode and state
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
 
-  const flatSelectionItems = useMemo(() => {
-    const items = [];
-    Object.entries(momentImagesMap).forEach(([momentId, imgs]) => {
-      (imgs || []).forEach(img => {
-        const key = `${momentId}:${img && img.id}`;
-        items.push({ key, group: momentId });
-      });
+  // Get all images across all moments for selection
+  // We'll collect images from the store directly since we can't call hooks in loops
+  const allImages = useMemo(() => {
+    const images = [];
+    
+    moments.forEach(moment => {
+      const momentImages = entities?.moments?.[moment.id]?.images;
+      if (momentImages && momentImages instanceof Set) {
+        Array.from(momentImages).forEach(imageId => {
+          const image = entities?.images?.[imageId];
+          if (image && (includeArchived || !image.is_archived)) {
+            images.push({ 
+              key: `${moment.id}:${image.id}`, 
+              group: moment.id,
+              image: image 
+            });
+          }
+        });
+      }
     });
-    return items;
-  }, [momentImagesMap]);
+    
+    return images;
+  }, [moments, includeArchived, entities]);
 
   const {
     selectedKeys,
@@ -129,7 +143,7 @@ export default function Moments({ eventUrl }) {
     deselectMany,
     allKeys
   } = useImageSelection({
-    items: flatSelectionItems,
+    items: allImages,
     getKey: (it) => it.key,
     storageKey: 'moments_selection',
     persist: true,
@@ -137,13 +151,12 @@ export default function Moments({ eventUrl }) {
     groupKey: (it) => it.group,
   });
 
-  // Selection persistence handled by useImageSelection
-
 
   const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
   const navigateRef = useRef(navigate);
-  const lastFetchSignatureRef = useRef('');
+  const momentsRefForCallback = useRef(moments);
+  const momentsReadyCalled = useRef(false);
 
 
   // Update the ref when navigate changes
@@ -151,20 +164,26 @@ export default function Moments({ eventUrl }) {
     navigateRef.current = navigate;
   }, [navigate]);
 
-  // Initialize timeline manager when component mounts
+  // Update moments ref for callback
   useEffect(() => {
-    timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-16', (momentKey) => {
-      // Callback from timeline manager when moment changes
-      const moment = moments.find(m => m.label === momentKey);
-      if (moment) {
-        setCurrentVisibleMoment(moment);
-      }
-    });
-    
-    return () => {
-      timelineManager.destroy();
-    };
-  }, [eventUrl]);
+    momentsRefForCallback.current = moments;
+  }, [moments]);
+
+  // Initialize timeline manager when component mounts
+	useEffect(() => {
+		// Initialize timeline manager but don't handle URL yet (moments not ready)
+		timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-16', (momentKey) => {
+			// Callback from timeline manager when moment changes
+			const moment = momentsRefForCallback.current.find(m => m.label === momentKey);
+			if (moment) {
+				setCurrentVisibleMoment(moment);
+			}
+		}, false); // momentsReady = false
+		
+		return () => {
+			timelineManager.destroy();
+		};
+	}, [eventUrl]);
 
   // Clean up refs when moments change
   useEffect(() => {
@@ -172,49 +191,6 @@ export default function Moments({ eventUrl }) {
     momentsRef.current = {};
   }, [moments]);
 
-  // Manage scopes for visible moments using IntersectionObserver
-  useEffect(() => {
-    if (!('IntersectionObserver' in window)) return; // graceful fallback
-    const observed = new Set();
-    const callback = (entries) => {
-      entries.forEach((entry) => {
-        const el = entry.target;
-        const momentId = el?.getAttribute?.('data-moment-id');
-        if (!momentId) return;
-        if (entry.isIntersecting) {
-          try { addScope && addScope({ entity: 'moment', id: String(momentId) }); } catch {}
-        } else {
-          try { removeScope && removeScope({ entity: 'moment', id: String(momentId) }); } catch {}
-        }
-      });
-    };
-    const observer = new IntersectionObserver(callback, { root: null, threshold: 0.2 });
-
-    // Attach to current moment cards after first render frame
-    const attach = () => {
-      try {
-        const nodes = document.querySelectorAll('[data-moment-id]');
-        nodes.forEach((node) => {
-          if (observed.has(node)) return;
-          observed.add(node);
-          observer.observe(node);
-        });
-      } catch {}
-    };
-    const id = setTimeout(attach, 0);
-
-    return () => {
-      clearTimeout(id);
-      try { observer.disconnect(); } catch {}
-      // Remove all moment scopes on teardown (component unmount or moments change)
-      try {
-        (document.querySelectorAll('[data-moment-id]') || []).forEach((node) => {
-          const mid = node.getAttribute('data-moment-id');
-          if (mid) removeScope && removeScope({ entity: 'moment', id: String(mid) });
-        });
-      } catch {}
-    };
-  }, [moments.length, addScope, removeScope]);
 
   // Callback ref function to set refs for moment elements
   const setMomentRef = useCallback((momentIdOrName) => (element) => {
@@ -230,15 +206,22 @@ export default function Moments({ eventUrl }) {
   }, []);
 
   useEffect(() => {
-    // Scope to aggregator for moments page so relations apply
-    try { useDataStore.getState().setScope({ entity: 'all', id: 'moments' }); } catch {}
-    // Clear signature when component mounts or event changes
-    lastFetchSignatureRef.current = '';
     fetchMoments();
-    fetchImages();
   }, [eventUrl]);
 
+  // Note: Timeline elements are automatically registered/unregistered through setMomentRef callback
+  // No need to call refreshElements() as it clears all registered elements unnecessarily
 
+  // Handle initial URL when moments are loaded
+	useEffect(() => {
+		if (moments.length > 0 && !momentsReadyCalled.current) {
+			momentsReadyCalled.current = true; // Prevent multiple calls
+			// Small delay to ensure DOM elements are rendered
+			setTimeout(() => {
+				timelineManager.handleMomentsReady();
+			}, 200);
+		}
+	}, [moments.length]); // Only when moments are first loaded
 
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
@@ -252,21 +235,9 @@ export default function Moments({ eventUrl }) {
     }
   }, [location.state, moments]);
 
-  // Handle URL query parameter for moment (moment name)
-  useEffect(() => {
-    if (moments.length > 0) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const momentName = urlParams.get('moment');
-      if (momentName) {
-        const decodedName = decodeURIComponent(momentName);
-        const moment = moments.find(m => m.label === decodedName);
-        if (moment) {
-          timelineManager.navigateToMoment(moment.label, moment.label);
-          setCurrentVisibleMoment(moment);
-        }
-      }
-    }
-  }, [moments, location.search]);
+  // REMOVED: URL query parameter handling - this is now handled by timelineManager.handleInitialURL()
+  // The timeline manager handles both initial URL navigation and URL parameter navigation
+  // This prevents duplicate navigation calls
 
   // Recalculate timeline offset when carousel visibility changes
   useEffect(() => {
@@ -279,95 +250,6 @@ export default function Moments({ eventUrl }) {
 
   // The timeline manager now handles all scroll detection and URL updates automatically
 
-  const fetchAllMomentImages = useCallback(async (specificMomentId = null, updatedImages = null, forceRefetch = false) => {
-    try {
-      setImagesLoading(true);
-      
-      // If specific moment and images are provided, update just that moment
-      if (specificMomentId && updatedImages !== null) {
-
-        setMomentImagesMap(prev => ({
-          ...prev,
-          [specificMomentId]: updatedImages
-        }));
-        setImagesLoading(false);
-        return;
-      }
-      
-      const validMoments = moments.filter(moment => moment.id && !String(moment.id).startsWith('temp-'));
-      
-      // Check which moments need images fetched (or all if forceRefetch is true)
-      const momentsToFetch = forceRefetch ? validMoments : validMoments.filter(moment => !momentImagesMap[moment.id]);
-      
-      if (momentsToFetch.length === 0) {
-        // All images are already loaded
-        setImagesLoading(false);
-        return;
-      }
-      
-      // Use parallel API calls for moments that need images fetched
-      const imagePromises = momentsToFetch.map(async (moment) => {
-        try {
-          const result = await momentsAPI.getById(moment.id, eventUrl);
-          // After interceptor applies changes, read images from store
-          const entities = useDataStore.getState().entities;
-          const idsSet = entities?.moments?.[moment.id]?.images || new Set();
-          let imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
-          
-          // Filter out archived images if includeArchived is false
-          if (!includeArchived) {
-            imgs = imgs.filter(img => !img.is_archived);
-          }
-          
-          return { momentId: moment.id, images: imgs };
-        } catch (error) {
-          console.error(`Error fetching images for moment ${moment.id}:`, error);
-          return { momentId: moment.id, images: [] };
-        }
-      });
-
-      // Wait for all image requests to complete in parallel
-      const results = await Promise.all(imagePromises);
-      
-      // Update the images map
-      setMomentImagesMap(prev => {
-        const newMap = { ...prev };
-        results.forEach(({ momentId, images }) => {
-          newMap[momentId] = images;
-        });
-        return newMap;
-      });
-      
-    } catch (error) {
-      console.error('Error fetching moment images:', error);
-    } finally {
-      setImagesLoading(false);
-    }
-  }, [includeArchived, eventUrl]);
-
-  useEffect(() => {
-    if (moments.length > 0) {
-      // Create signature from moments and includeArchived to detect changes
-      const momentIds = moments.map(m => m.id).sort().join(',');
-      const sig = `${momentIds}|${includeArchived ? '1' : '0'}`;
-      
-      // Only fetch if signature has changed
-      if (sig === lastFetchSignatureRef.current) return;
-      
-      lastFetchSignatureRef.current = sig;
-      fetchAllMomentImages();
-    }
-  }, [moments, includeArchived, fetchAllMomentImages]);
-
-  // Separate effect for includeArchived changes to force immediate refetch
-  const prevIncludeArchivedRef = useRef(includeArchived);
-  useEffect(() => {
-    if (prevIncludeArchivedRef.current !== includeArchived && moments.length > 0) {
-      // Force refetch when includeArchived changes
-      fetchAllMomentImages(null, null, true);
-      prevIncludeArchivedRef.current = includeArchived;
-    }
-  }, [includeArchived, moments.length, fetchAllMomentImages]);
 
   const fetchMoments = async () => {
     try {
@@ -382,64 +264,25 @@ export default function Moments({ eventUrl }) {
     }
   };
 
-  const fetchImages = async () => {
-    try {
-      const response = await imagesAPI.getImages([], eventUrl);
-      
-      // Changes are automatically applied by apiService interceptor
-      
-      const imgs = response.images || [];
-      setImages(imgs);
-    } catch (err) {
-      console.error('Error fetching images:', err);
-    }
-  };
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
       const response = await momentsAPI.update(updatedMoment.id, updatedMoment, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      updateMoment(updatedMoment.id, response.moment || updatedMoment);
-      updateMomentImagesMap(updatedMoment.id);
       
       // Return the response so the caller knows the operation succeeded
       return response;
-
-      // setShowEditModal(false); // This state is now managed by modalManager
     } catch (error) {
       console.error('Error updating moment:', error);
       showToast('Failed to update moment', 'error');
     }
   };
 
-  // Function to update the momentImagesMap for a specific moment
-  const updateMomentImagesMap = useCallback(async (momentId) => {
-    try {
-      await momentsAPI.getById(momentId, eventUrl);
-      const entities = useDataStore.getState().entities;
-      const idsSet = entities?.moments?.[momentId]?.images || new Set();
-      let imgs = Array.from(idsSet).map(id => entities?.images?.[id]).filter(Boolean);
-      
-      // Filter out archived images if includeArchived is false
-      if (!includeArchived) {
-        imgs = imgs.filter(img => !img.is_archived);
-      }
-
-      setMomentImagesMap(prev => ({
-        ...prev,
-        [momentId]: imgs
-      }));
-      
-    } catch (error) {
-      console.error('Error updating moment images map:', error);
-    }
-  }, [includeArchived, eventUrl]);
 
   const handleDeleteMoment = async (id) => {
     try {
       const response = await momentsAPI.delete(id, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      deleteMoment(id);
     } catch (error) {
       console.error('Error deleting moment:', error);
     }
@@ -450,16 +293,12 @@ export default function Moments({ eventUrl }) {
     toggleKey(key, event);
   };
 
-  // Helper function to get all current image keys
-  const getAllCurrentImageKeys = () => {
-    return new Set(allKeys);
-  };
-
-
-
   const selectAllImages = () => {
     if (allKeys.length === 0) return;
-    const allCurrentImages = getAllCurrentImageKeys();
+    const allCurrentImages = new Set(allKeys);
+    const allCurrentSelected = allCurrentImages.size > 0 && 
+      Array.from(allCurrentImages).every(key => selectedKeys.has(key));
+    
     if (allCurrentSelected) {
       clearGlobalSelection();
     } else {
@@ -473,21 +312,27 @@ export default function Moments({ eventUrl }) {
     const currentMoment = currentVisibleMoment;
     
     if (currentMoment) {
-      const currentMomentImages = momentImagesMap[currentMoment.id] || [];
-      const currentMomentImageKeys = currentMomentImages.map(image => `${currentMoment.id}:${image && image.id}`);
+      const momentImages = entities?.moments?.[currentMoment.id]?.images;
+      if (!momentImages || !(momentImages instanceof Set)) return;
       
-            // Check if all images in current moment are already selected
-        const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
-          currentMomentImageKeys.every(key => selectedKeys.has(key));
-        
-        if (allCurrentMomentSelected) {
-          // Current moment is fully selected, now select all from all moments
-          const allCurrentImages = getAllCurrentImageKeys();
-          selectMany(Array.from(allCurrentImages));
-        } else {
-          // Select all images from current moment
-          selectMany(currentMomentImageKeys);
-        }
+      const currentMomentImageKeys = Array.from(momentImages)
+        .map(imageId => {
+          const image = entities?.images?.[imageId];
+          return image && (includeArchived || !image.is_archived) ? `${currentMoment.id}:${imageId}` : null;
+        })
+        .filter(Boolean);
+      
+      // Check if all images in current moment are already selected
+      const allCurrentMomentSelected = currentMomentImageKeys.length > 0 && 
+        currentMomentImageKeys.every(key => selectedKeys.has(key));
+      
+      if (allCurrentMomentSelected) {
+        // Current moment is fully selected, now select all from all moments
+        selectMany(Array.from(allKeys));
+      } else {
+        // Select all images from current moment
+        selectMany(currentMomentImageKeys);
+      }
     } else {
       // No current moment focused, use the same logic as button
       selectAllImages();
@@ -496,8 +341,15 @@ export default function Moments({ eventUrl }) {
 
 
   const selectAllInMoment = (momentId) => {
-    const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image && image.id}`);
+    const momentImages = entities?.moments?.[momentId]?.images;
+    if (!momentImages || !(momentImages instanceof Set)) return;
+    
+    const momentImageKeys = Array.from(momentImages)
+      .map(imageId => {
+        const image = entities?.images?.[imageId];
+        return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
+      })
+      .filter(Boolean);
     
     // Check if all images in this moment are already selected
     const allSelected = momentImageKeys.every(key => selectedKeys.has(key));
@@ -512,12 +364,17 @@ export default function Moments({ eventUrl }) {
   };
 
   const clearMomentSelection = (momentId) => {
-    const momentImages = momentImagesMap[momentId] || [];
-    const momentImageKeys = momentImages.map(image => `${momentId}:${image && image.id}`);
+    const momentImages = entities?.moments?.[momentId]?.images;
+    if (!momentImages || !(momentImages instanceof Set)) return;
+    
+    const momentImageKeys = Array.from(momentImages)
+      .map(imageId => {
+        const image = entities?.images?.[imageId];
+        return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
+      })
+      .filter(Boolean);
     
     deselectMany(momentImageKeys);
-    
-    // Note: Cache will be automatically updated by the useEffect that watches globalSelection
   };
 
   // clearGlobalSelection provided by useImageSelection
@@ -540,7 +397,7 @@ export default function Moments({ eventUrl }) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [momentImagesMap, selectedKeys]);
+  }, [moments, selectedKeys, currentVisibleMoment, includeArchived]);
 
   // Helper function to convert selectedKeys to actual image ids
   const getSelectedImageIds = () => {
@@ -586,10 +443,47 @@ export default function Moments({ eventUrl }) {
 
 
 
+  // Helper function to get images for a moment (filtered for display)
+  const getMomentImages = (momentId) => {
+    const momentImages = entities?.moments?.[momentId]?.images;
+    if (!momentImages || !(momentImages instanceof Set)) return [];
+    
+    return Array.from(momentImages)
+      .map(imageId => entities?.images?.[imageId])
+      .filter(image => image && (includeArchived || !image.is_archived))
+      .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
+  };
+
+  // Helper function to get total image count for a moment (from store, no filtering)
+  const getMomentTotalImageCount = (momentId) => {
+    const momentImages = entities?.moments?.[momentId]?.images;
+    if (!momentImages || !(momentImages instanceof Set)) return 0;
+    
+    return Array.from(momentImages)
+      .map(imageId => entities?.images?.[imageId])
+      .filter(image => image) // Only filter out null/undefined, not archived status
+      .length;
+  };
+
+  // Calculate total photo count from all moments in store (depends on includeArchived flag)
+  const totalPhotoCount = useMemo(() => {
+    return allMoments.reduce((total, moment) => {
+      if (includeArchived) {
+        // Show all images including archived
+        return total + (moment.images_count || 0);
+      } else {
+        // Show only active images
+        return total + (moment.active_images_count || 0);
+      }
+    }, 0);
+  }, [allMoments, includeArchived]);
+
   const openImageViewer = (images, image, index) => {
-    const momentId = Object.keys(momentImagesMap).find(mId => 
-      momentImagesMap[mId]?.some(img => img.id === image?.id)
-    );
+    const momentId = moments.find(m => {
+      const momentImages = entities?.moments?.[m.id]?.images;
+      return momentImages instanceof Set && momentImages.has(image?.id);
+    })?.id;
+    
     openViewer({ index, parent: momentId, entity: 'moment', sortBy: 'date', sortOrder: 'asc' });
   };
 
@@ -611,7 +505,7 @@ export default function Moments({ eventUrl }) {
   if (urlLoading) return <div className="p-8 text-center">Loading event...</div>;
 
   // Calculate if all current images are selected for the select all button
-  const allCurrentImages = getAllCurrentImageKeys();
+  const allCurrentImages = new Set(allKeys);
   const allCurrentSelected = allCurrentImages.size > 0 && 
     Array.from(allCurrentImages).every(key => selectedKeys.has(key));
 
@@ -627,7 +521,7 @@ export default function Moments({ eventUrl }) {
             <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>
             <div className="flex items-center space-x-4">
               <p className="text-gray-600">
-                {allCurrentImages.size} photos
+                {totalPhotoCount} photos
               </p>
             </div>
           </div>
@@ -647,7 +541,7 @@ export default function Moments({ eventUrl }) {
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: View and Size Controls */}
             <div className="flex items-center space-x-3 px-4">
-              {imagesLoading && (
+              {storeLoading && (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 h-4 border-b-2 border-primary-600"></div>
                   <span>Loading photos...</span>
@@ -704,7 +598,7 @@ export default function Moments({ eventUrl }) {
 
             {/* Group 2: Selection Controls */}
             <div className="flex items-center space-x-3 px-4">
-              {imagesLoading ? (
+              {storeLoading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                   <span>Loading...</span>
@@ -763,7 +657,7 @@ export default function Moments({ eventUrl }) {
                     No moments yet
                   </div>
                 )}
-                {imagesLoading && moments.length > 0 && (
+                {storeLoading && moments.length > 0 && (
                   <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
                     <div className="flex items-center space-x-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
@@ -817,7 +711,7 @@ export default function Moments({ eventUrl }) {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No moments yet</h3>
             <p className="text-gray-500">Create your first moment to start building your timeline.</p>
           </div>
-        ) : imagesLoading && Object.keys(momentImagesMap).length === 0 ? (
+        ) : storeLoading ? (
           <div className="text-center py-12">
             <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600"></div>
@@ -871,7 +765,7 @@ export default function Moments({ eventUrl }) {
             
             {/* Timeline items */}
             <div className="space-y-12 pr-4">
-              {imagesLoading && (
+              {storeLoading && (
                 <div className="text-center py-8">
                   <div className="inline-flex items-center space-x-2 text-gray-500">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
@@ -879,25 +773,31 @@ export default function Moments({ eventUrl }) {
                   </div>
                 </div>
               )}
-              {moments.map((moment, index) => (
-                <MomentCard
-                  key={moment.id}
-                  moment={moment}
-                  images={momentImagesMap[moment.id] || []}
-                  imageSize={imageSize}
-                  globalSelection={selectedKeys}
-                  onImageSelect={handleImageSelect}
-                  onOpenImageViewer={openImageViewer}
-                  selectionMode={selectionMode}
-                  onSelectAllInMoment={selectAllInMoment}
-                  onClearMomentSelection={clearMomentSelection}
-                  eventUrl={eventUrl}
-                  urlHelpers={urlHelpers}
-                  includeArchived={includeArchived}
-                  ref={setMomentRef(moment.label)}
-                  data-moment-id={moment.id}
-                />
-              ))}
+              {moments.map((moment, index) => {
+                const momentImages = getMomentImages(moment.id);
+                const totalImageCount = getMomentTotalImageCount(moment.id);
+                
+                return (
+                  <MomentCard
+                    key={moment.id}
+                    moment={moment}
+                    images={momentImages}
+                    totalImageCount={totalImageCount}
+                    imageSize={imageSize}
+                    globalSelection={selectedKeys}
+                    onImageSelect={handleImageSelect}
+                    onOpenImageViewer={openImageViewer}
+                    selectionMode={selectionMode}
+                    onSelectAllInMoment={selectAllInMoment}
+                    onClearMomentSelection={clearMomentSelection}
+                    eventUrl={eventUrl}
+                    urlHelpers={urlHelpers}
+                    includeArchived={includeArchived}
+                    ref={setMomentRef(moment.label)}
+                    data-moment-id={moment.id}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -907,11 +807,9 @@ export default function Moments({ eventUrl }) {
         <EditMomentsModal
           eventUrl={eventUrl}
           moments={moments}
-          images={images}
-          momentImagesMap={momentImagesMap}
+          images={allImages.map(item => item.image)}
           onSave={handleSaveMoments}
           onDelete={handleDeleteMoment}
-          onRefreshImages={fetchAllMomentImages}
           onToast={showToast}
           onClose={() => setShowEditMomentsModal(false)}
         />

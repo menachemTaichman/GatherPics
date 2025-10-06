@@ -1,9 +1,12 @@
 import { motion } from 'framer-motion';
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useState, useRef, useCallback } from 'react';
 import { Image, Clock, Calendar, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import SingleImageTile from './SingleImageTile';
 import { useToast } from '../utils/ToastContext';
+import { useApplyScopes } from '../utils/storeUtils';
+import { useDataStore } from '../utils/dataManager';
+import { momentsAPI } from '../utils/apiService';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -37,6 +40,7 @@ function formatDate(dateString) {
 const MomentCard = forwardRef(({
   moment,
   images,
+  totalImageCount,
   imageSize,
   globalSelection,
   onImageSelect,
@@ -45,11 +49,23 @@ const MomentCard = forwardRef(({
   onSelectAllInMoment,
   onClearMomentSelection,
   eventUrl,
-  urlHelpers
+  urlHelpers,
+  includeArchived
 }, ref) => {
+  // Note: Individual moment scopes are managed by TimelineManager for UI observation optimization
+  // Data loading is handled by 'all:moments' scope from the parent Moments component
+  
   const { showToast } = useToast();
+  
+  // State for image aspect ratio classes (same approach as GroupDetail)
+  const [imageClasses, setImageClasses] = useState({});
+  const pendingClassUpdatesRef = useRef({});
+  const flushClassesRafRef = useRef(null);
+  
+  // Note: Individual moment data (including images) is loaded on-demand by TimelineManager
+  // when moments become visible. The 'all:moments' scope only loads moment summaries.
   // Calculate selection stats for this moment
-  const momentimageKeys = images.map(image => `${moment.moment_id}:${image.id}`);
+  const momentimageKeys = images.map(image => `${moment.id}:${image.id}`);
   const selectedInMoment = momentimageKeys.filter(key => globalSelection.has(key));
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
@@ -66,9 +82,55 @@ const MomentCard = forwardRef(({
     return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
   };
 
+  // Handle image load to determine aspect ratio (same approach as GroupDetail)
+  const handleImageLoad = useCallback((imageId, e) => {
+    const img = e.target;
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+    
+    let imageClass = 'square';
+    if (aspectRatio > 1.2) {
+      imageClass = 'landscape';
+    } else if (aspectRatio < 0.8) {
+      imageClass = 'portrait';
+    }
+    
+    // Skip if unchanged to avoid extra renders
+    const current = imageClasses[imageId];
+    if (current === imageClass) return;
+
+    // Batch updates per frame to coalesce N image onLoad events
+    pendingClassUpdatesRef.current[imageId] = imageClass;
+    if (!flushClassesRafRef.current) {
+      try {
+        flushClassesRafRef.current = requestAnimationFrame(() => {
+          const updates = pendingClassUpdatesRef.current;
+          pendingClassUpdatesRef.current = {};
+          flushClassesRafRef.current = null;
+          setImageClasses(prev => {
+            let changed = false;
+            const next = { ...prev };
+            for (const id in updates) {
+              if (Object.prototype.hasOwnProperty.call(updates, id)) {
+                if (prev[id] !== updates[id]) {
+                  next[id] = updates[id];
+                  changed = true;
+                }
+              }
+            }
+            return changed ? next : prev;
+          });
+        });
+      } catch {
+        // Fallback if RAF fails
+        pendingClassUpdatesRef.current = {};
+        flushClassesRafRef.current = null;
+        setImageClasses(prev => ({ ...prev, [imageId]: imageClass }));
+      }
+    }
+  }, [imageClasses]);
+
   return (
     <motion.div
-      ref={ref}
       initial={{ opacity: 0, x: -50 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.1 }}
@@ -76,6 +138,9 @@ const MomentCard = forwardRef(({
     >
       <div className="flex-1">
         <motion.div
+          ref={ref}
+          data-moment-key={moment.label}
+          data-moment-id={moment.id}
           className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow duration-300"
           whileHover={{ y: -2 }}
         >
@@ -94,12 +159,15 @@ const MomentCard = forwardRef(({
                      <Calendar className="w-4 h-4" />
                      <span>{formatDate(moment.start)}</span>
                    </div>
-                   {images.length > 0 && (
-                     <div className="flex items-center space-x-1">
-                       <Image className="w-4 h-4" />
-                       <span>{images.length} photos</span>
-                     </div>
-                   )}
+                   {(() => {
+                     const photoCount = includeArchived ? moment.images_count : moment.active_images_count;
+                     return photoCount > 0 && (
+                       <div className="flex items-center space-x-1">
+                         <Image className="w-4 h-4" />
+                         <span>{photoCount} photos</span>
+                       </div>
+                     );
+                   })()}
                    
                    {/* Per-moment selection controls */}
                    {images.length > 0 && (
@@ -107,7 +175,7 @@ const MomentCard = forwardRef(({
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                        {selectionMode && !allSelectedInMoment && (
                          <button
-                           onClick={() => onSelectAllInMoment(moment.moment_id)}
+                           onClick={() => onSelectAllInMoment(moment.id)}
                            className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
                              selectedInMoment.length > 0 
                                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
@@ -122,7 +190,7 @@ const MomentCard = forwardRef(({
                        {/* Clear button - always visible when any images are selected */}
                        {selectedInMoment.length > 0 && (
                          <button
-                           onClick={() => onClearMomentSelection(moment.moment_id)}
+                           onClick={() => onClearMomentSelection(moment.id)}
                            className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
                            title="Clear selection"
                          >
@@ -156,18 +224,6 @@ const MomentCard = forwardRef(({
               transition={{ duration: 0.3 }}
             >
               {images.map((image, index) => {
-                // Determine aspect ratio class for masonry layout
-                let aspectRatioClass = 'square';
-                if (image.width && image.height) {
-                  const ratio = image.width / image.height;
-                  if (ratio > 1.2) aspectRatioClass = 'landscape';
-                  else if (ratio < 0.8) aspectRatioClass = 'portrait';
-                } else if (image.aspect_ratio) {
-                  const ratio = image.aspect_ratio;
-                  if (ratio > 1.2) aspectRatioClass = 'landscape';
-                  else if (ratio < 0.8) aspectRatioClass = 'portrait';
-                }
-                
                 return (
                 <motion.div
                   key={image.id}
@@ -175,16 +231,17 @@ const MomentCard = forwardRef(({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className={`photo-card ${aspectRatioClass}`}
+                    className={`photo-card ${imageClasses[image.id] || 'square'}`}
                   >
                     <SingleImageTile
                       image={image}
-                      aspectClass={aspectRatioClass}
+                      aspectClass={imageClasses[image.id] || 'square'}
                       thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
                       selectionMode={selectionMode}
-                      isSelected={globalSelection.has(`${moment.moment_id}:${image.id}`)}
-                      onToggleSelect={(e) => onImageSelect(image.id, moment.moment_id, e)}
+                      isSelected={globalSelection.has(`${moment.id}:${image.id}`)}
+                      onToggleSelect={(e) => onImageSelect(image.id, moment.id, e)}
                       onOpen={() => onOpenImageViewer(images, image, index)}
+                      onImageLoad={(e) => handleImageLoad(image.id, e)}
                       dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
                       showDate={!!image.date_taken}
                       eventUrl={eventUrl}

@@ -171,6 +171,10 @@ export const useDataStore = create((set, get) => {
   try {
     channel = new BroadcastChannel('data-sync');
   } catch {}
+  // Debug: Expose store to window for browser inspection
+  if (typeof window !== 'undefined') {
+    window.__dataStore = { getState: get };
+  }
 
   // Sync diagnostics removed
 
