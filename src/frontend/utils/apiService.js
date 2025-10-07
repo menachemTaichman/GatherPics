@@ -374,6 +374,27 @@ export const momentsAPI = {
     const response = await api.delete(`/api/events/${eventId}/moments/${momentId}/images`, { data: { image_ids: imageIds } });
     return response.data;
   },
+
+  getImages: async (momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `MOMENTS_GET_IMAGES:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/moments/images`);
+      return response.data || {};
+    });
+  },
+
+  checkName: async (label, excludeMomentId = '', eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `CHECK_MOMENT_NAME:${eventId}:${label}:${excludeMomentId || ''}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/moments/check-name`, { 
+        label,
+        exclude_moment_id: excludeMomentId 
+      });
+      return response.data;
+    });
+  },
 };
 
 // Images API

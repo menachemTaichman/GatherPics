@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortImagesWithDatePriority, toggleSortOrder } from '../utils/sorting';
@@ -7,7 +7,9 @@ import { setPreference } from '../utils/settings';
 import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
+import { useApplyScopes } from '../utils/storeUtils';
+import { useModalStore } from '../utils/modalManager';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -29,10 +31,39 @@ function formatDateTime(dateString) {
 function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose }) {
   const { urlHelpers } = useEventUrls(eventUrl);
   const { updateMoment } = useDataStore();
+  
+  const MODAL_ID = 'edit-moment-images-modal';
+  
+  // Subscribe to includeArchived preference
+  const includeArchived = usePreference('general.includeArchived', false);
+  
+  // Subscribe to all images from store using selector
+  const storeImages = useDataStore(state => storeSelectors.imagesAll(state));
+  
+  // Subscribe to current moment from store (for reactive label updates)
+  const currentMoment = useDataStore(state => {
+    const momentId = moment?.id || moment?.moment_id;
+    if (!momentId) return null;
+    return state.entities?.moments?.[momentId] || null;
+  });
+  
+  // Subscribe to current moment's images from store
+  const currentMomentImageIds = useDataStore(state => {
+    const momentId = moment?.id || moment?.moment_id;
+    if (!momentId) return new Set();
+    return state.entities?.moments?.[momentId]?.images || new Set();
+  });
+  
+  // Subscribe to all moments for getting image-moment relationships
+  const allMomentsFromStore = useDataStore(state => storeSelectors.momentsAll(state));
+  
+  // Filter images based on includeArchived preference
+  const allImagesWithTimestamps = useMemo(() => {
+    return storeImages.filter(img => includeArchived || !img.is_archived);
+  }, [storeImages, includeArchived]);
+  
   const [imagesToAdd, setImagesToAdd] = useState(new Set());
   const [imagesToRemove, setImagesToRemove] = useState(new Set());
-  const [allImagesWithTimestamps, setAllImagesWithTimestamps] = useState([]);
-  const [imagesInPeriod, setImagesInPeriod] = useState([]);
   const sortOrder = usePreference('EditMomentImagesModal.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('EditMomentImagesModal.sortDir', value);
   const filterType = usePreference('EditMomentImagesModal.filter', 'all');
@@ -40,10 +71,13 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const [error, setError] = useState('');
   const [focusedImageIndex, setFocusedImageIndex] = useState(0);
   const imageRefs = useRef([]);
+  const scrollContainerRef = useRef(null);
 
-  // Use modal focus hook with allowOutsideScroll: false to prevent space key scrolling
+  // Use modal focus hook with proper modal manager integration
   const { modalRef } = useModalFocus(true, onClose, {
-    allowOutsideScroll: false
+    allowOutsideScroll: true,
+    modalType: 'popup',
+    modalId: MODAL_ID
   });
 
   // Reset method - creates empty lists and doesn't pre-select anything
@@ -52,60 +86,40 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     setImagesToRemove(new Set());
   };
 
+  // Register modal with modal manager
   useEffect(() => {
     if (moment) {
-      // Call reset when modal opens to ensure clean state
+      const { registerModal, unregisterModal } = useModalStore.getState();
+      try {
+        registerModal({ 
+          id: MODAL_ID, 
+          type: 'popup', 
+          scopes: [{ entity: 'all', id: 'images' }], 
+          allowOutsideScroll: true 
+        });
+      } catch {}
+      
       handleReset();
+      fetchImagesForEditing();
+      setError('');
       
-      fetchImagesInPeriod();
-      fetchAllImagesWithTimestamps();
-      setError('');
-    }
-  }, [moment, momentImagesMap]);
-
-  // Fetch all images with timestamps when modal opens
-  useEffect(() => {
-    if (moment) {
-      fetchAllImagesWithTimestamps();
+      return () => {
+        try { unregisterModal(MODAL_ID); } catch {}
+      };
     }
   }, [moment]);
 
-  // Refetch images when dependencies change (only if modal is open)
-  useEffect(() => {
-    if (moment && Object.keys(momentImagesMap).length > 0) {
-      fetchAllImagesWithTimestamps();
-    }
-  }, [momentImagesMap, moment]);
-
-  useEffect(() => {
-    if (moment) {
-      setError('');
-    }
-  }, [moment]);
-
-  const fetchAllImagesWithTimestamps = async () => {
+  const fetchImagesForEditing = async () => {
     try {
-      const data = await imagesAPI.getImages([], eventUrl);
-      
+      // Fetch all images with timestamps for moment editing
+      await momentsAPI.getImages(null, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      
-      // Filter out invalid images and ensure they have required properties
-      const validImages = (data.images || []).filter(img => 
-        img && img.id && typeof img === 'object'
-      );
-      setAllImagesWithTimestamps(validImages);
+      // storeImages will update reactively via the subscription
     } catch (error) {
-      console.error('Error fetching images:', error);
+      console.error('Error fetching images for editing:', error);
       const errorInfo = handleAPIError(error, 'Failed to fetch images');
       setError(errorInfo.message);
-      setAllImagesWithTimestamps([]);
     }
-  };
-
-  const fetchImagesInPeriod = async () => {
-    // We don't need to fetch images in period separately anymore
-    // The filtering will be done locally in getFilteredAndSortedImages
-    setImagesInPeriod([]);
   };
 
   const handleSaveImages = async () => {
@@ -120,141 +134,29 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       const actualAdditions = Array.from(imagesToAdd).filter(id => !isImageInMoment(id));
       const actualRemovals = Array.from(imagesToRemove).filter(id => isImageInMoment(id));
       
-      // Call the API directly
-      await momentsAPI.update(moment.id || moment.moment_id, {
-        images_to_add: actualAdditions,
-        images_to_remove: actualRemovals
-      }, eventUrl);
+      const momentId = moment.id || moment.moment_id;
       
-      // Get the updated images for this moment to update the local state
-      const updatedImagesResult = await momentsAPI.getImages(moment.id || moment.moment_id, eventUrl);
-      const updatedImages = updatedImagesResult.images || [];
+      // Call the separate add/remove endpoints - changes are applied by interceptor
+      if (actualAdditions.length > 0) {
+        await momentsAPI.addImages(momentId, actualAdditions, eventUrl);
+      }
       
-      // Update the momentImagesMap directly in the parent component
-      // This ensures the UI reflects the changes immediately
+      if (actualRemovals.length > 0) {
+        await momentsAPI.removeImages(momentId, actualRemovals, eventUrl);
+      }
+      
+      // Wait a bit for store to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Refresh the current moment to get updated representative image
+      await momentsAPI.getById(momentId, eventUrl);
+      
+      // Legacy parent callback (can be removed in future if parent uses store)
       if (onRefreshImages) {
-        // Pass the updated images data to the parent
-        onRefreshImages(moment.id || moment.moment_id, updatedImages);
-      }
-      
-      // Handle images that were moved from other moments
-      // We need to remove them from those moments in the local state
-      const imagesMovedFromOtherMoments = actualAdditions.filter(id => {
-        const momentInfo = getImageMomentInfo(id);
-        return momentInfo && !momentInfo.isCurrentMoment;
-      });
-      
-      // Store moment info for moved images before making changes
-      // This is needed because getImageMomentInfo won't work after momentImagesMap is updated
-      const movedImagesMomentInfo = imagesMovedFromOtherMoments.map(id => {
-        const momentInfo = getImageMomentInfo(id);
-        return { imageId: id, momentInfo };
-      }).filter(item => item.momentInfo && !item.momentInfo.isCurrentMoment);
-      
-      // Update the momentImagesMap for moments that lost images
-      for (const { imageId, momentInfo } of movedImagesMomentInfo) {
-        // Remove this image from the other moment in the local state
-        if (onRefreshImages) {
-          // Get the current images for that moment and remove the moved image
-          const otherMomentImages = momentImagesMap[momentInfo.momentId] || [];
-          const updatedOtherMomentImages = otherMomentImages.filter(p => p.id !== imageId);
-          // Update the other moment's images
-          onRefreshImages(momentInfo.momentId, updatedOtherMomentImages);
-        }
-      }
-      
-      // Wait a bit for images to be updated, then update moment data
-      // This ensures representative images are calculated with the latest image data
-      // Increased delay to ensure backend has fully processed representative image calculation
-      await new Promise(resolve => setTimeout(resolve, 300));
-            
-      // Also trigger a moment update to refresh the moment data
-      // This ensures the representative image and other moment data is updated
-      // We update the moment directly to avoid triggering change handlers that might conflict
-      let updatedMoment = await momentsAPI.getById(moment.id || moment.moment_id, eventUrl);
-      if (updatedMoment) {
-        
-        // If the representative image hasn't changed, wait a bit more and try again
-        // This handles cases where the backend needs more time to calculate
-        if (updatedMoment.representative_image === moment.representative_image) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          updatedMoment = await momentsAPI.getById(moment.id || moment.moment_id, eventUrl);
-          if (updatedMoment) {
-          }
-        }
-        
-        // Update the moment data directly without triggering change handlers
-        // This ensures the representative image and other moment data is updated
-        updateMoment(moment.id || moment.moment_id, updatedMoment);
-      } else {
-        console.warn('Could not get updated moment data for:', moment.id || moment.moment_id);
-      }
-      
-      // Also update the moment data for moments that lost images
-      // This ensures the representative image is recalculated
-      for (const { imageId, momentInfo } of movedImagesMomentInfo) {
-        try {
-          let otherMoment = await momentsAPI.getById(momentInfo.momentId, eventUrl);
-          if (otherMoment) {
-            // Get the current moment data to compare
-          const currentMoment = useDataStore.getState().entities?.momentsById?.[momentInfo.momentId];
-            if (currentMoment) {
-              
-              // If the representative image hasn't changed, wait a bit more and try again
-              if (otherMoment.representative_image === currentMoment.representative_image) {
-                await new Promise(resolve => setTimeout(resolve, 200));
-                otherMoment = await momentsAPI.getById(momentInfo.momentId, eventUrl);
-                if (otherMoment) {
-                }
-              }
-            }
-            updateMoment(momentInfo.momentId, otherMoment);
-          } else {
-            console.warn('Could not get updated moment data for:', momentInfo.momentId);
-          }
-        } catch (error) {
-          console.error(`Error updating moment ${momentInfo.momentId}:`, error);
-        }
-      }
-      
-      // Force a refresh of the data store to ensure all components get the latest data
-      // This is especially important for representative images in carousels and other components
-      try {
-        // Trigger a small delay to ensure all updates are processed
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Also try to refresh the moments data to ensure representative images are up to date
-        // This is a fallback in case the individual moment updates didn't work
-        try {
-          const allMoments = await momentsAPI.getAll(eventUrl);
-          if (allMoments && allMoments.moments) {
-            // Update the data store with all moments to ensure consistency
-            allMoments.moments.forEach(momentData => {
-              updateMoment(momentData.moment_id, momentData);
-            });
-          }
-        } catch (refreshError) {
-          console.warn('Could not refresh all moments:', refreshError);
-        }
-        
-        // Also try to force a re-render by updating a non-critical field
-        // This can help trigger re-renders in components that might be stuck
-        try {
-          const currentMoments = Object.values(useDataStore.getState().entities?.momentsById || {});
-          if (currentMoments.length > 0) {
-            // Update the first moment with a timestamp to force re-renders
-            const firstMoment = currentMoments[0];
-            updateMoment(firstMoment.moment_id, { 
-              ...firstMoment, 
-              _last_updated: new Date().toISOString() 
-            });
-          }
-        } catch (forceUpdateError) {
-          console.warn('Could not force update:', forceUpdateError);
-        }
-                
-      } catch (error) {
-        console.error('Error during data store refresh:', error);
+        const store = useDataStore.getState();
+        const imageIds = store.entities?.moments?.[momentId]?.images || new Set();
+        const images = Array.from(imageIds).map(id => store.entities?.images?.[id]).filter(Boolean);
+        onRefreshImages(momentId, images);
       }
       
       handleClose();
@@ -267,10 +169,21 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   const handleClose = () => {
     setError('');
+    
+    // Store current scroll position before closing
+    const currentScroll = window.scrollY;
+    
     // Call the parent's onClose function
     if (onClose) {
       onClose();
     }
+    
+    // Restore scroll position after a short delay to prevent jumps
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - currentScroll) > 5) {
+        window.scrollTo({ top: currentScroll, behavior: 'instant' });
+      }
+    });
   };
 
   const toggleImage = (imageId) => {
@@ -311,7 +224,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   // Check if an image is currently in the moment
   const isImageInMoment = (imageId) => {
-    return (momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === imageId);
+    return currentMomentImageIds.has(imageId);
   };
 
   // Get the effective selection state for an image (considering pending changes)
@@ -333,22 +246,34 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     }
   };
 
-  // Use moments array to get the title for a moment id
-  const getImageMomentInfo = (imageId) => {
-    for (const momentId in momentImagesMap) {
-      const momentImages = momentImagesMap[momentId] || [];
-      const foundImage = momentImages.find(p => p.id === imageId);
-      if (foundImage) {
-        const momentObj = moments.find(m => (m.id || m.moment_id) === momentId);
-        return {
-          momentId: momentId,
-          title: momentObj ? momentObj.label : momentId,
-          isCurrentMoment: moment && momentId === (moment.id || moment.moment_id)
-        };
+  // Memoize image-to-moment mapping for performance
+  const imageMomentMap = useMemo(() => {
+    const map = new Map();
+    const store = useDataStore.getState();
+    
+    for (const momentObj of allMomentsFromStore) {
+      const momentId = momentObj.id || momentObj.moment_id;
+      const momentImageIds = store.entities?.moments?.[momentId]?.images || new Set();
+      
+      for (const imageId of momentImageIds) {
+        // Store the first moment found for this image (shouldn't be in multiple, but just in case)
+        if (!map.has(imageId)) {
+          map.set(imageId, {
+            momentId: momentId,
+            title: momentObj.label || momentId,
+            isCurrentMoment: moment && momentId === (moment.id || moment.moment_id)
+          });
+        }
       }
     }
-    return null;
-  };
+    
+    return map;
+  }, [allMomentsFromStore, moment]);
+  
+  // Use memoized map to get moment info
+  const getImageMomentInfo = useCallback((imageId) => {
+    return imageMomentMap.get(imageId) || null;
+  }, [imageMomentMap]);
 
   const isImageInPeriod = (imageId) => {
     // Check if image is in period based on moment date range
@@ -368,11 +293,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && (momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === img.id)
+        img && img.id && currentMomentImageIds.has(img.id)
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && !(momentImagesMap[moment?.id || moment?.moment_id] || []).some(p => p.id === img.id)
+        img && img.id && !currentMomentImageIds.has(img.id)
       );
     } else if (filterType === 'in-period') {
       // Filter images locally based on date_taken and moment date range
@@ -605,6 +530,39 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     return () => clearTimeout(timer);
   }, [filteredImages, focusedImageIndex]);
 
+  // Prevent scroll propagation to background when scrolling within modal
+  const handleWheel = useCallback((e) => {
+    const target = scrollContainerRef.current;
+    if (!target) return;
+    
+    const scrollTop = target.scrollTop;
+    const scrollHeight = target.scrollHeight;
+    const height = target.clientHeight;
+    const delta = e.deltaY;
+    
+    const isAtTop = scrollTop === 0;
+    const isAtBottom = scrollTop + height >= scrollHeight - 1;
+    
+    if ((isAtTop && delta < 0) || (isAtBottom && delta > 0)) {
+      // At boundary, prevent propagation to background
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  // Attach wheel event listener with passive: false
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleWheel]);
+
   // Calculate caption text
   const getCaptionText = () => {
     // Use the same filtering logic as handleSaveImages for consistency
@@ -613,7 +571,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     
     const addCount = actualAdditions.length;
     const removeCount = actualRemovals.length;
-    const currentCount = (momentImagesMap[moment?.id || moment?.moment_id] || []).length;
+    const currentCount = currentMomentImageIds.size;
     const finalCount = currentCount - removeCount + addCount;
     
     if (removeCount === 0 && addCount === 0) {
@@ -656,11 +614,29 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
         >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">Edit Photos: {moment.label}</h3>
-            <div className="flex space-x-2">
-              <button onClick={handleReset} className="btn-secondary">Reset</button>
-              <button onClick={handleSaveImages} className="btn-primary">Save Changes</button>
-              <button onClick={handleClose} className="btn-secondary">Cancel</button>
+            <h3 className="text-lg font-bold">Edit Photos: {currentMoment?.label || moment.label}</h3>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={handleReset} 
+                className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
+                title="Reset"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleSaveImages} 
+                className="w-8 h-8 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center"
+                title="Save Changes"
+              >
+                <CheckCheck className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleClose} 
+                className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
+                title="Cancel"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
           {error && (
@@ -757,7 +733,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
 
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {filteredImages.map((image, index) => {
               const selectionState = getImageSelectionState(image.id);

@@ -366,6 +366,19 @@ def get_moment(event_id, moment_id):
     
     return jsonify({ 'changes': changes })
 
+@app.route("/api/events/<event_id>/moments/check-name", methods=["POST"])
+@require_auth
+def check_moment_name(event_id):
+    """Check if a moment name already exists."""
+    event = get_event(event_id)
+    data = request.json or {}
+    label = data.get('label', '')
+    exclude_moment_id = data.get('exclude_moment_id', '')
+    if not label:
+        return jsonify({"error": "Label is required"}), 400
+    conflict_moment_id = event.models_manager.is_exists('moments', {'label': label}, exclude_id=exclude_moment_id)
+    return jsonify({"conflict": bool(conflict_moment_id)})
+
 @app.route("/api/events/<event_id>/moments", methods=["POST"])
 @require_auth
 def create_moment(event_id):
@@ -417,6 +430,19 @@ def update_moment(event_id, moment_id):
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
+
+@app.route("/api/events/<event_id>/moments/images", methods=["GET"])
+@require_auth
+def get_images_to_moments(event_id):
+    """Get all images with data for selecting in moment editor."""
+    event = get_event(event_id)
+    images = event.models_manager.get_images_to_moments()
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    }]
+    return jsonify({'changes': changes})
 
 def _edit_moment_images(event, moment_id, image_ids, add: bool):
     """Helper: Add or remove images from a moment, return response with changes."""

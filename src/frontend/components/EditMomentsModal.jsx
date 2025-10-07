@@ -1,12 +1,14 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock } from 'lucide-react';
+import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock, AlertTriangle } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useEventUrls } from '../utils/useEventUrls';
-import { useDataStore } from '../utils/dataManager';
+import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
+import { useApplyScopes } from '../utils/storeUtils';
+import { useModalStore } from '../utils/modalManager';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
 
@@ -29,55 +31,73 @@ function formatDateTime(dateString) {
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
   const { urlHelpers } = useEventUrls(eventUrl);
-  const storeMoments = useDataStore(state => Object.values(state.entities?.moments || {}));
-  const sortedMoments = useMemo(() => {
+  
+  const MODAL_ID = 'edit-moments-modal';
+  
+  // Subscribe to all moments from store (including archived and empty ones)
+  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state));
+  
+  // Sort moments for display
+  const sortedStoreMoments = useMemo(() => {
     return sortMoments(storeMoments, 'asc');
   }, [storeMoments]);
 
   const [internalMoments, setInternalMoments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [editingMoments, setEditingMoments] = useState([]);
-  const [selectedMoment, setSelectedMoment] = useState(null);
-  const [showImageSelector, setShowImageSelector] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
   const [changedMoments, setChangedMoments] = useState(new Set());
   const [editingImagesForMoment, setEditingImagesForMoment] = useState(null);
   const [tempMomentCounter, setTempMomentCounter] = useState(0);
+  const [nameConflicts, setNameConflicts] = useState(new Map()); // moment_id -> boolean
 
-  // Use modal focus hook
+  // Use modal focus hook with proper modal manager integration
   const { modalRef } = useModalFocus(true, onClose, {
-    allowOutsideScroll: true
+    allowOutsideScroll: true,
+    modalType: 'popup',
+    modalId: MODAL_ID
   });
 
+  // Register modal with modal manager and initialize editing state
   useEffect(() => {
-    fetchMomentsForEdit();
+    const { registerModal, unregisterModal } = useModalStore.getState();
+    try {
+      registerModal({ 
+        id: MODAL_ID, 
+        type: 'popup', 
+        scopes: [{ entity: 'all', id: 'moments' }], 
+        allowOutsideScroll: true 
+      });
+    } catch {}
+    
+    setInternalMoments(sortedStoreMoments);
+    setEditingMoments(sortedStoreMoments);
+    setChangedMoments(new Set());
+    
+    return () => {
+      try { unregisterModal(MODAL_ID); } catch {}
+      
+      // Clear any pending name check timeouts
+      if (updateMoment._timeouts) {
+        Object.values(updateMoment._timeouts).forEach(timeout => clearTimeout(timeout));
+        updateMoment._timeouts = {};
+      }
+    };
   }, []);
 
-  const fetchMomentsForEdit = async () => {
-    setIsLoading(true);
-    try {
-      // Always fetch all moments for editing, including empty and archived
-      const response = await momentsAPI.getAll(eventUrl);
-      
-      // Changes are automatically applied by apiService interceptor
-      
-      const allFromStore = Object.values(useDataStore.getState().entities?.moments || {});
-      const sortedMoments = sortMoments(allFromStore, 'asc');
-      setInternalMoments(sortedMoments);
-      setEditingMoments(sortedMoments);
-      setChangedMoments(new Set());
-    } catch (error) {
-      console.error("Failed to fetch moments for editing:", error);
-      onToast("Failed to load moments for editing.", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleClose = () => {
+    // Store current scroll position before closing
+    const currentScroll = window.scrollY;
+    
     if (onClose) {
       onClose();
     }
+    
+    // Restore scroll position after a short delay to prevent jumps
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - currentScroll) > 5) {
+        window.scrollTo({ top: currentScroll, behavior: 'instant' });
+      }
+    });
   };
 
   const handleDiscard = () => {
@@ -85,9 +105,17 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     const sortedMoments = sortMoments(internalMoments, 'asc');
     setEditingMoments(sortedMoments);
     setChangedMoments(new Set());
+    setNameConflicts(new Map());
   };
 
   const handleSave = async () => {
+    // Check if any moments have name conflicts
+    const hasConflicts = Array.from(changedMoments).some(momentId => nameConflicts.get(momentId));
+    if (hasConflicts) {
+      onToast('Cannot save: One or more moments have duplicate names.', 'error');
+      return;
+    }
+    
     // Only save moments that have been changed and are not temporary
       const momentsToSave = editingMoments.filter(m => 
       changedMoments.has(m.id || m.moment_id) && !(String(m.id || m.moment_id).startsWith('temp-'))
@@ -131,49 +159,70 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
   const handleSaveMoment = async (moment) => {
     try {
+      const momentId = moment.id || moment.moment_id;
+      
+      // Check for name conflict before saving
+      if (nameConflicts.get(momentId)) {
+        onToast('Cannot save: A moment with this name already exists.', 'error');
+        return;
+      }
+      
       let savedMoment;
       if (String(moment.id || moment.moment_id).startsWith('temp-')) {
         const { id, moment_id, image_ids, images, ...momentData } = moment;
-        // Create moment directly without optimistic updates to avoid duplicates
         const result = await momentsAPI.create(momentData, eventUrl);
         
         // Changes are automatically applied by apiService interceptor
-        
-        // Get the created moment from store using moment_id
         const createdMomentId = result.moment_id;
+        
+        // Wait for store to update
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         const store = useDataStore.getState();
         savedMoment = store.entities?.moments?.[createdMomentId];
         
         if (savedMoment) {
-          // Replace the temporary moment with the saved one, preserving any additional fields
+          // Replace the temporary moment with the saved one
           setEditingMoments(prev => prev.map(m => 
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment, id: savedMoment.id, moment_id: savedMoment.id } : m
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
           ));
           
-          // Navigate to the newly created moment in the sorted list
+          // Update internal moments snapshot
+          setInternalMoments(prev => prev.map(m =>
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+          ));
+          
+          // Navigate to the newly created moment within the modal
           setTimeout(() => {
-            const momentElement = document.querySelector(`[data-moment-moment_id="${savedMoment.id}"]`);
+            if (!scrollContainerRef.current) return;
+            const momentElement = scrollContainerRef.current.querySelector(`[data-moment-moment_id="${savedMoment.id}"]`);
             if (momentElement) {
-              momentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              const containerRect = scrollContainerRef.current.getBoundingClientRect();
+              const elementRect = momentElement.getBoundingClientRect();
+              const scrollOffset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+              scrollContainerRef.current.scrollBy({ top: scrollOffset, behavior: 'smooth' });
             }
           }, 100);
         }
       } else {
-        // Update existing moment directly without optimistic updates to avoid conflicts
-        // Filter out image-related fields that the backend doesn't expect
         const { id, moment_id, image_ids, images, ...momentData } = moment;
-        const result = await momentsAPI.update(id || moment_id, momentData, eventUrl);
+        await momentsAPI.update(id || moment_id, momentData, eventUrl);
         
         // Changes are automatically applied by apiService interceptor
+        await new Promise(resolve => setTimeout(resolve, 50));
         
-        // Get the updated moment from store
         const store = useDataStore.getState();
         savedMoment = store.entities?.moments?.[id || moment_id];
         
         if (savedMoment) {
-          // Update the moment in editingMoments with the saved data, preserving existing fields
+          // Update with saved data from store
           setEditingMoments(prev => prev.map(m => 
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? { ...moment, ...savedMoment } : m
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+          ));
+          
+          // Update internal moments snapshot
+          setInternalMoments(prev => prev.map(m =>
+            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
           ));
         }
       }
@@ -185,9 +234,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         return next;
       });
       
-      // Show success message
+      // Clear name conflict for this moment
+      setNameConflicts(prev => {
+        const next = new Map(prev);
+        next.delete(moment.id || moment.moment_id);
+        return next;
+      });
+      
       if (onToast) {
-      if (String(moment.id || moment.moment_id).startsWith('temp-')) {
+        if (String(moment.id || moment.moment_id).startsWith('temp-')) {
           onToast('Moment created successfully.', 'success');
         } else {
           onToast('Moment updated successfully.', 'success');
@@ -220,6 +275,13 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         return next;
       });
       
+      // Clear name conflict for this moment
+      setNameConflicts(prev => {
+        const next = new Map(prev);
+        next.delete(moment_id);
+        return next;
+      });
+      
       // Show success message
       if (onToast) {
         onToast('Moment deleted successfully.', 'success');
@@ -235,10 +297,53 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
+  const checkNameConflict = async (label, momentId) => {
+    if (!label || !label.trim()) {
+      setNameConflicts(prev => {
+        const next = new Map(prev);
+        next.delete(momentId);
+        return next;
+      });
+      return;
+    }
+
+    try {
+      // Exclude current moment from conflict check (for editing existing moments)
+      const excludeId = String(momentId).startsWith('temp-') ? '' : momentId;
+      const result = await momentsAPI.checkName(label.trim(), excludeId, eventUrl);
+      setNameConflicts(prev => {
+        const next = new Map(prev);
+        next.set(momentId, result.conflict || false);
+        return next;
+      });
+    } catch (error) {
+      console.error('Error checking name conflict:', error);
+      setNameConflicts(prev => {
+        const next = new Map(prev);
+        next.delete(momentId);
+        return next;
+      });
+    }
+  };
+
   const updateMoment = (moment_id, updates) => {
     setEditingMoments(prev => prev.map(m => (m.id || m.moment_id) === moment_id ? { ...m, ...updates, id: m.id || moment_id } : m));
     // Mark this moment as changed
     setChangedMoments(prev => new Set([...prev, moment_id]));
+    
+    // Check for name conflicts if label is being updated
+    if (updates.label !== undefined) {
+      // Debounce the name check
+      if (updateMoment._timeouts) {
+        clearTimeout(updateMoment._timeouts[moment_id]);
+      } else {
+        updateMoment._timeouts = {};
+      }
+      
+      updateMoment._timeouts[moment_id] = setTimeout(() => {
+        checkNameConflict(updates.label, moment_id);
+      }, 300);
+    }
   };
 
   const handleEditImages = (moment) => {
@@ -259,11 +364,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setChangedMoments(prev => new Set([...prev, newMoment.moment_id]));
     setTempMomentCounter(prev => prev + 1); // Increment counter for next temporary moment
     
-    // Jump to the newly added moment by scrolling to it
+    // Jump to the newly added moment by scrolling within the modal
     setTimeout(() => {
-      const momentElement = document.querySelector(`[data-moment-moment_id="${newMoment.moment_id}"]`);
+      if (!scrollContainerRef.current) return;
+      const momentElement = scrollContainerRef.current.querySelector(`[data-moment-moment_id="${newMoment.moment_id}"]`);
       if (momentElement) {
-        momentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const containerRect = scrollContainerRef.current.getBoundingClientRect();
+        const elementRect = momentElement.getBoundingClientRect();
+        const scrollOffset = elementRect.top - containerRect.top - (containerRect.height / 2) + (elementRect.height / 2);
+        scrollContainerRef.current.scrollBy({ top: scrollOffset, behavior: 'smooth' });
       }
     }, 100);
   };
@@ -277,7 +386,41 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setEditingTitle({ moment_id: moment_id, title: currentTitle });
   };
 
+  // Ref for scroll container
+  const scrollContainerRef = useRef(null);
 
+  // Prevent scroll propagation to background when scrolling within modal
+  const handleWheel = useCallback((e) => {
+    const target = scrollContainerRef.current;
+    if (!target) return;
+    
+    const scrollTop = target.scrollTop;
+    const scrollHeight = target.scrollHeight;
+    const height = target.clientHeight;
+    const delta = e.deltaY;
+    
+    const isAtTop = scrollTop === 0;
+    const isAtBottom = scrollTop + height >= scrollHeight - 1;
+    
+    if ((isAtTop && delta < 0) || (isAtBottom && delta > 0)) {
+      // At boundary, prevent propagation to background
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  // Attach wheel event listener with passive: false
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleWheel]);
 
   return (
     <AnimatePresence>
@@ -312,7 +455,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
           <div className="space-y-3">
       {editingMoments.filter(m => m && (m.id || m.moment_id)).map((moment, index) => (
               <div key={moment.id || moment.moment_id} data-moment-moment_id={moment.id || moment.moment_id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -322,7 +465,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     <div className="relative">
                       <div className="w-16 h-16 rounded-lg overflow-hidden border">
                         {ImageComponent(
-                          urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.moment_id) : null,
+                          !String(moment.id || moment.moment_id).startsWith('temp-') && urlHelpers?.getRepresentativeUrl 
+                            ? urlHelpers.getRepresentativeUrl('moments', moment.id || moment.moment_id) 
+                            : null,
                           {
                             width: 64,
                             height: 64,
@@ -331,51 +476,58 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                           }
                         )}
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedMoment(moment);
-                          setShowImageSelector(true);
-                        }}
-                        className="absolute -bottom-1 -right-1 w-7 h-7 bg-white border-2 border-gray-400 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-600 transition-colors shadow-md"
-                        title="Edit representative photo"
-                      >
-                        <Pencil className="w-4 h-4 text-gray-700" />
-                      </button>
                     </div>
 
                     {/* Inline Editable Title */}
                     <div className="flex-1">
                       {editingTitle?.moment_id === (moment.id || moment.moment_id) ? (
-                        <input
-                          type="text"
-                          moment_id={`edit-moment-title-${moment.id || moment.moment_id}`}
-                          name={`edit-moment-title-${moment.id || moment.moment_id}`}
-                          value={editingTitle.title}
-                          onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
-                          onBlur={() => handleTitleEdit(moment.id || moment.moment_id, editingTitle.title)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleTitleEdit(moment.id || moment.moment_id, editingTitle.title);
-                            } else if (e.key === 'Escape') {
-                              setEditingTitle(null);
-                            }
-                          }}
-                          className="text-lg font-semibold border-b border-transparent hover:border-gray-300 focus:border-primary-500 focus:outline-none px-1 py-1 w-full"
-                          autoFocus
-                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            moment_id={`edit-moment-title-${moment.id || moment.moment_id}`}
+                            name={`edit-moment-title-${moment.id || moment.moment_id}`}
+                            value={editingTitle.title}
+                            onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
+                            onBlur={() => handleTitleEdit(moment.id || moment.moment_id, editingTitle.title)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleTitleEdit(moment.id || moment.moment_id, editingTitle.title);
+                              } else if (e.key === 'Escape') {
+                                setEditingTitle(null);
+                              }
+                            }}
+                            className={`text-lg font-semibold border-b hover:border-gray-300 focus:outline-none px-1 py-1 w-full ${
+                              nameConflicts.get(moment.id || moment.moment_id) 
+                                ? 'border-red-500 focus:border-red-500' 
+                                : 'border-transparent focus:border-primary-500'
+                            }`}
+                            autoFocus
+                          />
+                          {nameConflicts.get(moment.id || moment.moment_id) && (
+                            <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>Name already exists</span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <div
-                          onClick={() => startTitleEdit(moment.id || moment.moment_id, moment.label)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              startTitleEdit(moment.moment_id, moment.label);
-                            }
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
-                        >
-                          {moment.label || `Moment ${index + 1}`}
+                        <div className="flex items-center space-x-2">
+                          <div
+                            onClick={() => startTitleEdit(moment.id || moment.moment_id, moment.label)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                startTitleEdit(moment.moment_id, moment.label);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
+                          >
+                            {moment.label || `Moment ${index + 1}`}
+                          </div>
+                          {nameConflicts.get(moment.id || moment.moment_id) && (
+                            <AlertTriangle className="w-4 h-4 text-red-500" title="Name already exists" />
+                          )}
                         </div>
                       )}
                     </div>
@@ -387,31 +539,43 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       <>
                         <button 
                           onClick={() => handleSaveMoment(moment)}
-                          className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-green-100 text-green-700"
-                          title="Save Moment"
+                          disabled={nameConflicts.get(moment.id || moment.moment_id)}
+                          className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-green-100 text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={nameConflicts.get(moment.id || moment.moment_id) ? "Cannot save: Name already exists" : "Save Moment"}
                         >
                           <Save className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => {
-                            if (moment.moment_id.startsWith('temp-')) {
+                            const momentId = moment.id || moment.moment_id;
+                            if (String(momentId).startsWith('temp-')) {
                               // Remove temporary moment completely
-                              setEditingMoments(prev => prev.filter(m => (m.id || m.moment_id) !== (moment.id || moment.moment_id)));
+                              setEditingMoments(prev => prev.filter(m => (m.id || m.moment_id) !== momentId));
                               setChangedMoments(prev => {
                                 const next = new Set(prev);
-                                next.delete(moment.id || moment.moment_id);
+                                next.delete(momentId);
+                                return next;
+                              });
+                              setNameConflicts(prev => {
+                                const next = new Map(prev);
+                                next.delete(momentId);
                                 return next;
                               });
                             } else {
                               // Reset to original for existing moment
-                              const originalMoment = internalMoments.find(m => (m.id || m.moment_id) === (moment.id || moment.moment_id));
+                              const originalMoment = internalMoments.find(m => (m.id || m.moment_id) === momentId);
                               if (originalMoment) {
                                 setEditingMoments(prev => prev.map(m => 
-                                  (m.id || m.moment_id) === (moment.id || moment.moment_id) ? originalMoment : m
+                                  (m.id || m.moment_id) === momentId ? originalMoment : m
                                 ));
                                 setChangedMoments(prev => {
                                   const next = new Set(prev);
-                                  next.delete(moment.id || moment.moment_id);
+                                  next.delete(momentId);
+                                  return next;
+                                });
+                                setNameConflicts(prev => {
+                                  const next = new Map(prev);
+                                  next.delete(momentId);
                                   return next;
                                 });
                               }
@@ -510,14 +674,6 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           onClose={() => setEditingImagesForMoment(null)}
         />
       )}
-
-      {/* Representative Image Modal */}
-      <RepresentativeImageModal
-        isOpen={showImageSelector}
-        onClose={() => setShowImageSelector(false)}
-        moment={selectedMoment}
-        momentImagesMap={momentImagesMap}
-      />
     </div>
     </AnimatePresence>
   );

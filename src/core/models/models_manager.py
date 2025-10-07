@@ -366,6 +366,19 @@ class ModelsManager:
 
         return valid_child_ids, detached_parents
 
+    # -------- Moments helpers --------
+    def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:
+        """Return images to moments.
+        Returns:
+            dict of all images with image ids as keys and images data (date_taken, moment_id, is_archived) as values
+        """
+        accessible_images = STRUCTURE['images']['accessible_table']
+        query = f"""
+            SELECT i.image_id, i.date_taken, i.moment_id, i.is_archived
+            FROM {accessible_images} i
+        """
+        return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
+
     # -------- Groups helpers --------
     def get_unassociated_group(self) -> str | None:
         """Get the unassociated group id."""
