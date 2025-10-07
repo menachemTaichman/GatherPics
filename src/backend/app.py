@@ -463,12 +463,12 @@ def _edit_moment_images(event, moment_id, image_ids, add: bool):
     updated_image_ids, detached_moments = event.models_manager.edit_childs('moments', moment_id, child='images', child_ids=image_ids, add=add)
     changes = []
     if updated_image_ids:
-        for moment_id, image_ids in detached_moments.items():
+        for detached_moment_id, detached_image_ids in detached_moments.items():
             changes.append({
                 'type': 'RELATION_REMOVE',
                 'relation': 'moment.images',
-                'parentId': moment_id,
-                'ids': image_ids
+                'parentId': detached_moment_id,
+                'ids': detached_image_ids
             })
         changes.append({
             'type': 'UPSERT',

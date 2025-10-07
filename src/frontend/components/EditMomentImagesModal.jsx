@@ -252,25 +252,26 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const imageMomentMap = useMemo(() => {
     const map = new Map();
     const store = useDataStore.getState();
+    const moments = store.entities?.moments || {};
+    const images = store.entities?.images || {};
     
-    for (const momentObj of allMomentsFromStore) {
-      const loopMomentId = momentObj.id || momentObj.moment_id;
-      const momentImageIds = store.entities?.moments?.[loopMomentId]?.images || EMPTY_SET;
-      
-      for (const imageId of momentImageIds) {
-        // Store the first moment found for this image (shouldn't be in multiple, but just in case)
-        if (!map.has(imageId)) {
+    // Simply iterate through all images and use their moment_id field
+    for (const [imageId, image] of Object.entries(images)) {
+      if (image?.moment_id) {
+        const imageMomentId = image.moment_id;
+        const momentObj = moments[imageMomentId];
+        if (momentObj) {
           map.set(imageId, {
-            momentId: loopMomentId,
-            title: momentObj.label || loopMomentId,
-            isCurrentMoment: loopMomentId === momentId
+            momentId: imageMomentId,
+            title: momentObj.label || imageMomentId,
+            isCurrentMoment: imageMomentId === momentId
           });
         }
       }
     }
     
     return map;
-  }, [allMomentsFromStore, momentId]);
+  }, [storeImages, allMomentsFromStore, momentId]);
   
   // Use memoized map to get moment info
   const getImageMomentInfo = useCallback((imageId) => {
