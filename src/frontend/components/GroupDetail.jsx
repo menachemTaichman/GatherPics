@@ -15,8 +15,8 @@ import {
   Minus,
   Square,
   CheckSquare,
+  Trash2,
 } from 'lucide-react';
-import EditGroupModal from './EditGroupModal';
 import ImageViewer from './ImageViewer';
 import { useToast } from '../utils/ToastContext';
 import useImageViewerController from '../utils/useImageViewerController.js';
@@ -81,7 +81,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   
   // Use the hook at component level to avoid conditional hook calls
   const groupRepresentativeComponent = useImageComponent(
-    group && urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', group.id) : null,
+    group && urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', group.id)}?v=${group.representative_face || 'none'}` : null,
     {
       width: 64,
       height: 64,
@@ -95,7 +95,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     
   }, [urlHelpers, group?.id]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showEditModal, setShowEditModal] = useState(false);
   // Derived list; avoid state to prevent effect loops
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -445,6 +444,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       const payload = await groupsAPI.getById(group.id, eventUrl, params);
       
       // Handle filtered_ids from API response
+      // If filter is active, always use filtered_ids (even if empty array for 0 results)
       if (payload?.filter && Array.isArray(payload?.filtered_ids)) {
         setFilteredIds(payload.filtered_ids);
       } else {
@@ -452,7 +452,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
       }
       
       // Handle faces_mapping from API response (for filtered results)
-      if (payload?.faces_mapping) {
+      if (payload?.filter && payload?.faces_mapping) {
         setFilteredFacesMapping(payload.faces_mapping);
       } else {
         setFilteredFacesMapping(null);
@@ -511,6 +511,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     if (isGroupChange) {
       setFilteredIds(null);
       setFilteredFacesMapping(null);
+      // Also clear from session storage when switching groups
+      sessionStorage.removeItem('groupDetail_filteredIds');
+      sessionStorage.removeItem('groupDetail_filteredFacesMapping');
+      sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
     }
     
     // If this is only a filter change, do a silent fetch and preserve scroll
@@ -588,7 +592,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     setOnlySelected(false);
     setFilteredIds(null);
     setFilteredFacesMapping(null);
+    // Clear all filter-related session storage items
     sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
+    sessionStorage.removeItem('groupDetail_filteredIds');
+    sessionStorage.removeItem('groupDetail_filteredFacesMapping');
     
     // Clear URL parameters
     const searchParams = new URLSearchParams(location.search);
@@ -799,12 +806,50 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     }, 0);
   }, []);
 
-  const handleTitleSave = useCallback(() => {
-    if (!group) return;
-    const ds = useDataStore.getState();
-    const payload = { id: group.id, label: editingTitle };
-    ds.applyChanges([{ type: 'UPDATE', entity: 'group', items: [payload] }]);
-  }, [group, editingTitle]);
+  const handleTitleSave = useCallback(async () => {
+    if (!group || !editingTitle.trim()) {
+      handleTitleCancel();
+      return;
+    }
+
+    // Check if name actually changed
+    if (editingTitle.trim() === group.label) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      // Check for conflicts first
+      const conflictResult = await groupsAPI.checkName(editingTitle.trim(), group.id, eventUrl);
+      
+      if (conflictResult.conflict) {
+        // Changes are automatically applied by apiService interceptor
+        // Get conflicting group from store
+        const store = useDataStore.getState();
+        const conflictingGroup = store.entities?.groups?.[conflictResult.conflicting_group];
+        
+        // Show merge conflict modal
+        showMergeConflictModal(editingTitle.trim(), group, conflictingGroup);
+        setIsEditingTitle(false);
+        return;
+      }
+      
+      // No conflict, proceed with update
+      await groupsAPI.update(group.id, { label: editingTitle.trim() }, eventUrl);
+      // Changes are automatically applied by apiService interceptor
+      
+      // Update the URL to reflect the new group name
+      const newUrl = `/${eventUrl}/persons/${encodeURIComponent(editingTitle.trim())}`;
+      navigate(newUrl, { replace: true });
+      
+      setIsEditingTitle(false);
+      showToast('Person name updated', 'success');
+    } catch (error) {
+      console.error('Error updating group name:', error);
+      showToast('Failed to update person name', 'error');
+      setIsEditingTitle(false);
+    }
+  }, [group, editingTitle, eventUrl, navigate, showToast, showMergeConflictModal]);
 
   const handleTitleCancel = useCallback(() => {
     
@@ -842,12 +887,29 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
             <div className="flex items-center space-x-4">
-              <div 
-                className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
-                onClick={() => setShowEditModal(true)}
-                title="Edit group details"
-              >
-                {groupRepresentativeComponent}
+              <div className="relative">
+                <div 
+                  className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
+                >
+                  {groupRepresentativeComponent}
+                </div>
+                {group?.representative_face && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await groupsAPI.update(group.id, { representative_face: null }, eventUrl);
+                        showToast('Representative removed', 'success');
+                      } catch (error) {
+                        showToast('Failed to remove representative', 'error');
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                    title="Remove representative"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <div className="flex items-center space-x-3">
                 {isEditingTitle ? (
@@ -1197,35 +1259,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         showBucket={true}
         showAlbum={true}
         selectionMode={selectionMode}
+        entity="group"
+        entityId={group?.id}
       />
 
       {/* Modals */}
-      {showEditModal && (
-        <EditGroupModal
-          group={group}
-          eventUrl={eventUrl}
-          onClose={() => setShowEditModal(false)}
-          onSave={async (updates) => {
-            const result = await optimisticUpdates.updateGroup(group.id, updates, null, eventUrl);
-            
-            // Update the URL if the group name changed
-            if (updates.label && updates.label !== group.label) {
-              const newUrl = `/${eventUrl}/persons/${encodeURIComponent(updates.label)}`;
-              navigate(newUrl, { replace: true });
-            }
-            
-            setShowEditModal(false);
-            return result;
-          }}
-          onRefreshGroups={onRefreshGroups}
-          onNameConflict={(newName, conflictingGroup) => {
-            // The modal detected a conflict, so we use the parent's handler
-            // to show the merge modal, ensuring consistent behavior.
-            showMergeConflictModal(newName, group, conflictingGroup);
-          }}
-        />
-      )}
-
       {viewerOpen && (
         <ImageViewer {...viewerProps} />
       )}

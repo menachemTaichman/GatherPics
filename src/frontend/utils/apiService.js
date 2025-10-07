@@ -309,6 +309,19 @@ export const groupsAPI = {
     });
   },
 
+  getFacesInImage: async (groupId, imageId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `GROUP_GET_FACES_IN_IMAGE:${eventId}:${groupId}:${imageId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces?image_id=${imageId}`);
+      const data = response.data || {};
+      if (Array.isArray(data.faces)) {
+        data.faces = data.faces.map(normalizeFace);
+      }
+      return data;
+    });
+  },
+
   getRelated: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `GROUPS_GET_RELATED:${eventId}:${JSON.stringify(params||{})}`;

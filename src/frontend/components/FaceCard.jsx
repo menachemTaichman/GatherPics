@@ -1,21 +1,20 @@
 import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
-import { Pencil } from 'lucide-react';
 import { getImageCount } from '../utils/settings';
 import { useImageComponent } from '../utils/useImage.jsx';
 import { getRepresentativeUrl } from '../utils/storeUtils';
 
 
-export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload, urlHelpers: injectedUrlHelpers, eventUrl }) {
+export default function FaceCard({ group, cardSize = 1.0, urlHelpers: injectedUrlHelpers, eventUrl }) {
   // Resolve eventUrl from props or route params
   const params = useParams();
   const evUrl = eventUrl || params?.eventUrl || '';
   // Require urlHelpers from parent to avoid many hook instances resolving eventId independently
   const urlHelpers = injectedUrlHelpers || null;
   
-  // Get representative URL for the group and append a version to avoid cached 204s on back nav
+  // Get representative URL for the group and append representative_face as version for cache-busting
   const baseRep = getRepresentativeUrl(urlHelpers, 'groups', group.id);
-  const version = (group?.images instanceof Set ? group.images.size : getImageCount(group)) || 0;
+  const version = group?.representative_face || 'none';
   const imageSrc = baseRep ? `${baseRep}${baseRep.includes('?') ? '&' : '?'}v=${version}` : null;
 
   return (
@@ -61,26 +60,13 @@ export default function FaceCard({ group, cardSize = 1.0, onEdit, onDownload, ur
 
         {/* Card Content - Below the circle */}
         <div className="text-center w-full">
-          <div className="flex items-center justify-center space-x-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate text-sm">
-                {group.label || `Person ${group.group_id}`}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {getImageCount(group)} photos
-              </p>
-            </div>
-            
-            {/* Action Menu Button */}
-            <div className="relative">
-              <button
-                onClick={() => onEdit()}
-                className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                title="Edit group"
-              >
-                <Pencil className="w-3 h-3 text-gray-500" />
-              </button>
-            </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-gray-900 truncate text-sm">
+              {group.label || `Person ${group.group_id}`}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {getImageCount(group)} photos
+            </p>
           </div>
         </div>
       </motion.div>

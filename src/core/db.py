@@ -33,7 +33,7 @@ STRUCTURE = {
     'groups': {
         'primary_key': 'group_id',
         'accessible_table': 'accessible_groups',
-        'fields': ['label', 'images_count', 'active_images_count'],
+        'fields': ['label', 'images_count', 'active_images_count', 'representative_face'],
         'representative': {'field': 'representative_face', 'table': 'faces'},
         'relations': {
             'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -43,7 +43,7 @@ STRUCTURE = {
     'moments': {
         'primary_key': 'moment_id',
         'accessible_table': 'accessible_moments',
-        'fields': ['label', 'description', 'start', 'end', 'images_count', 'active_images_count'],
+        'fields': ['label', 'description', 'start', 'end', 'images_count', 'active_images_count', 'representative_image'],
         'representative': {'field': 'representative_image', 'table': 'images'},
         'relations': {
             'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -52,7 +52,7 @@ STRUCTURE = {
     'albums': {
         'primary_key': 'album_id',
         'accessible_table': 'accessible_albums',
-        'fields': ['label', 'description', 'images_count', 'active_images_count'],
+        'fields': ['label', 'description', 'images_count', 'active_images_count', 'representative_image'],
         'representative': {'field': 'representative_image', 'table': 'images'},
         'relations': {
             'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -994,10 +994,10 @@ class AppDB:
 
         values = tuple(fields.values()) + tuple(where_values)
         
-        if table == 'groups' and (where.get('label', '').lower() == 'unassociated' or 'representative_face' in fields):
+        if table == 'groups' and where.get('label', '').lower() == 'unassociated' and ('label' in fields.keys() or 'representative_face' in fields.keys()):
             return []
 
-        if table == 'albums' and where.get('label', '').lower() in ['favorites', 'archive']:
+        if table == 'albums' and where.get('label', '').lower() in ['favorites', 'archive'] and 'label' in fields.keys():
             return []
 
         sql = f'UPDATE {target_table} SET {set_clause} WHERE {where_clause}'

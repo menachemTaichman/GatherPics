@@ -111,7 +111,7 @@ export default function MergeConflictModal({
 
   const getRepresentativeImageSrc = (group) => {
     if (!group || !group.id || !urlHelpers) return null;
-    return urlHelpers.getRepresentativeUrl('groups', group.id);
+    return `${urlHelpers.getRepresentativeUrl('groups', group.id)}?v=${group.representative_face || 'none'}`;
   };
 
   const isGroupAccessible = (group) => {

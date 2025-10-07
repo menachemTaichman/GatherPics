@@ -7,10 +7,13 @@ import {
   Archive, 
   Users,
   Trash2,
-  Move
+  Move,
+  Star
 } from 'lucide-react';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import useImageActions from './ImageActions';
+import SelectFaceForRepModal from './SelectFaceForRepModal';
+import { useDataStore } from '../utils/dataManager';
 
 export default function FloatingSelectionControls({
   selectedCount,
@@ -31,7 +34,9 @@ export default function FloatingSelectionControls({
   showFavorites = true,
   showBucket = true,
   showAlbum = true,
-  selectionMode = false
+  selectionMode = false,
+  entity = null,
+  entityId = null
 }) {  
   // Use the centralized ImageActions hook for selected images
   const selectedImageActions = useImageActions({
@@ -40,7 +45,9 @@ export default function FloatingSelectionControls({
     urlHelpers,
     placeholderDataUrl,
     onImageUpdated: () => {}, // Store handles updates automatically
-    onAlbumAdded: () => {}
+    onAlbumAdded: () => {},
+    entity,
+    entityId
   });
 
   // Get state information for button styling
@@ -50,11 +57,17 @@ export default function FloatingSelectionControls({
   const shouldShowFavorited = selectedCount === 1 ? isFavorite : allAreFavorited;
   const shouldShowArchived = selectedCount === 1 ? isArchived : allAreArchived;
 
+  // Get entity label for modal
+  const entityLabel = entity === 'group' 
+    ? (useDataStore.getState().entities?.groups?.[entityId]?.label || 'person')
+    : (useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment');
+
   if (!selectionMode && selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-40">
-      <span className="text-sm text-gray-700">{selectedCount} selected</span>
+    <>
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-40">
+        <span className="text-sm text-gray-700">{selectedCount} selected</span>
       
       {/* Select all button - only visible when not all are selected */}
       {selectedCount < totalCount && (
@@ -85,6 +98,17 @@ export default function FloatingSelectionControls({
       {/* Action buttons - only show when images are selected */}
       {selectedCount > 0 && (
         <>
+          {/* Set as representative - only for single image selection */}
+          {selectedImageActions.canSetRepresentative && (
+            <button
+              onClick={() => selectedImageActions.setRepresentative()}
+              className="w-8 h-8 rounded-md hover:bg-yellow-100 text-yellow-600 flex items-center justify-center"
+              title={selectedImageActions.representativeTooltip}
+            >
+              <Star className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Transfer faces - only for group detail */}
           {showTransferFaces && (
             <button
@@ -171,6 +195,19 @@ export default function FloatingSelectionControls({
           )}
         </>
       )}
-    </div>
+      </div>
+
+      {/* Face selection modal for representative */}
+      {selectedImageActions.showFaceSelectionModal && (
+        <SelectFaceForRepModal
+          isOpen={selectedImageActions.showFaceSelectionModal}
+          onClose={selectedImageActions.onCloseFaceSelectionModal}
+          faces={selectedImageActions.facesForSelection}
+          urlHelpers={urlHelpers}
+          groupLabel={entityLabel}
+          onSelect={selectedImageActions.onFaceSelected}
+        />
+      )}
+    </>
   );
 }

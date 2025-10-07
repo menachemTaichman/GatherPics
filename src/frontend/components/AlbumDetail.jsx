@@ -118,7 +118,7 @@ export default function AlbumDetail() {
                 title="Album representative image"
               >
                 <img
-                  src={urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : ''}
+                  src={urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : ''}
                   alt={album.label}
                   className="w-full h-full object-cover"
                   loading="lazy"

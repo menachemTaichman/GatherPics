@@ -488,9 +488,16 @@ relations = [
 ids = {
     'images': ['778a6e66-04bd-4a36-b769-527ddb7da4bc'], # noga dances
     'faces': ['c61090e9-80bd-428e-8885-0f583a74703d'], # noga face from the above image
-    'groups': ['275d589e-9673-49d1-bc93-aa427dcada15','7a81acd3-98ee-40c8-aa66-71b60b34bda8'], # noga, menachem
+    'groups': ['8f965866-ec14-4b61-95d8-79bae649dad4','275d589e-9673-49d1-bc93-aa427dcada15'], # noga, menachem
     'moments': ['98ff7b08-bdbe-4b15-9637-290e24a58a7c'], # סיור כלה
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+source_group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
+target_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
+result = event.models_manager.get_filtered_images(
+    group_ids=[source_group_id, target_group_id], mode='or', only=True
+)
+print(result)
+print('--------------------------------')

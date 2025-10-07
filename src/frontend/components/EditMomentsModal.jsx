@@ -50,6 +50,36 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   const [tempMomentCounter, setTempMomentCounter] = useState(0);
   const [nameConflicts, setNameConflicts] = useState(new Map()); // moment_id -> boolean
 
+  // Update local state when store moments change (e.g., representative_image updated)
+  useEffect(() => {
+    setEditingMoments(prev => {
+      return prev.map(localMoment => {
+        const momentId = localMoment.id || localMoment.moment_id;
+        // Skip temporary moments
+        if (String(momentId).startsWith('temp-')) return localMoment;
+        
+        // Find the moment in the store
+        const storeMoment = storeMoments.find(m => m.id === momentId);
+        if (!storeMoment) return localMoment;
+        
+        // If this moment has been changed locally, keep local changes but update other fields
+        if (changedMoments.has(momentId)) {
+          // Only update fields that aren't being edited
+          return {
+            ...storeMoment,
+            ...localMoment, // Local changes override
+            representative_image: storeMoment.representative_image, // Always use store's representative
+          };
+        }
+        
+        // Not changed locally, use store version
+        return storeMoment;
+      });
+    });
+    
+    setInternalMoments(sortedStoreMoments);
+  }, [storeMoments, sortedStoreMoments, changedMoments]);
+
   // Use modal focus hook with proper modal manager integration
   const { modalRef } = useModalFocus(true, onClose, {
     allowOutsideScroll: true,
@@ -466,7 +496,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       <div className="w-16 h-16 rounded-lg overflow-hidden border">
                         {ImageComponent(
                           !String(moment.id || moment.moment_id).startsWith('temp-') && urlHelpers?.getRepresentativeUrl 
-                            ? urlHelpers.getRepresentativeUrl('moments', moment.id || moment.moment_id) 
+                            ? `${urlHelpers.getRepresentativeUrl('moments', moment.id || moment.moment_id)}?v=${moment.representative_image || 'none'}` 
                             : null,
                           {
                             width: 64,
@@ -476,6 +506,27 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                           }
                         )}
                       </div>
+                      {moment.representative_image && !String(moment.id || moment.moment_id).startsWith('temp-') && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await momentsAPI.update(moment.id || moment.moment_id, { representative_image: null }, eventUrl);
+                              if (onToast) {
+                                onToast('Representative removed', 'success');
+                              }
+                            } catch (error) {
+                              if (onToast) {
+                                onToast('Failed to remove representative', 'error');
+                              }
+                            }
+                          }}
+                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                          title="Remove representative"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Inline Editable Title */}

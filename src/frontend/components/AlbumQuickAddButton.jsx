@@ -231,7 +231,7 @@ export default function AlbumQuickAddButton({
                 onClick={() => handleAddToAlbum(album)}
               >
                 {ImageComponent(
-                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
                   {
                     width: 32,
                     height: 32,

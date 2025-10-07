@@ -150,6 +150,10 @@ export default function GroupsFilter({
   const handleReset = () => {
     setSelectedGroups([]);
     onSelectedGroupsChange?.([]);
+    // Clear session storage
+    sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
+    // Trigger a fresh fetch of related groups
+    fetchRelatedGroups();
     onReset?.();
   };
 
@@ -301,7 +305,7 @@ export default function GroupsFilter({
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
               {ImageComponent(
-                getRepresentativeUrl(urlHelpers, 'groups', group.id),
+                `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`,
                 {
                   width: 32,
                   height: 32,
@@ -335,7 +339,7 @@ export default function GroupsFilter({
                       : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                   }`}>
                     {ImageComponent(
-                      getRepresentativeUrl(urlHelpers, 'groups', groupId),
+                      `${getRepresentativeUrl(urlHelpers, 'groups', groupId)}?v=${relatedGroup.representative_face || 'none'}`,
                       {
                         width: 32,
                         height: 32,

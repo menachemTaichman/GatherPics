@@ -1,24 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Download, Edit, User, Minus, Plus, Users, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
 import { useEventUrls } from '../utils/useEventUrls';
 import { useApplyScopes } from '../utils/storeUtils';
-import EditGroupModal from './EditGroupModal';
-import MergeConflictModal from './MergeConflictModal';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors, useGroupsList } from '../utils/dataManager';
-import { useGroupNameConflict } from '../utils/useGroupNameConflict';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
   const { urlHelpers } = useEventUrls(eventUrl);
   useApplyScopes([{ entity: 'all', id: 'groups' }]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
   const sortBy = usePreference('GroupsGallery.sortBy', 'name');
   const setSortBy = (value) => setPreference('GroupsGallery.sortBy', value);
   const sortOrder = usePreference('GroupsGallery.sortDir', 'desc');
@@ -44,20 +39,6 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   // Use groups from store
   const currentGroups = storeGroups;
 
-  // Use the custom hook for conflict handling
-  const {
-    nameConflict,
-    showMergeModal,
-    conflictData,
-    checkNameConflict,
-    handleMergeGroups,
-    handleMergeCancel,
-    showMergeConflictModal,
-    clearConflict,
-    setShowMergeModal,
-    setConflictData
-  } = useGroupNameConflict(selectedGroup, onRefreshGroups, eventUrl);
-
   const filteredAndSortedGroups = useMemo(() => {
     let filtered = currentGroups.filter(group => {
       // Filter by search term
@@ -74,16 +55,6 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);
   }, [currentGroups, searchTerm, sortBy, sortOrder]);
-
-  const handleEditGroup = (group) => {
-    setSelectedGroup(group);
-    setShowEditModal(true);
-  };
-
-  const handleAddGroupToBucket = async (group) => {
-    // TODO: Implement add to bucket functionality
-    alert(`Add ${group.label || `Person_${group.id}`} to bucket functionality will be implemented later`);
-  };
 
   return (
     <div className="w-full">
@@ -240,8 +211,6 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
               <FaceCard
                 group={group}
                 cardSize={cardSize}
-                onEdit={() => handleEditGroup(group)}
-                onDownload={() => handleAddGroupToBucket(group)}
                 urlHelpers={urlHelpers}
                 eventUrl={eventUrl}
               />
@@ -250,70 +219,6 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         </motion.div>
       )}
       </div>
-
-      {/* Modals */}
-      {showEditModal && selectedGroup && (
-        <EditGroupModal
-          group={selectedGroup}
-          eventUrl={eventUrl}
-          onClose={() => {
-            setShowEditModal(false);
-            setSelectedGroup(null);
-          }}
-          onSave={async (updates) => {
-            await optimisticUpdates.updateGroup(selectedGroup.id, updates, null, eventUrl);
-            setShowEditModal(false);
-            setSelectedGroup(null);
-          }}
-          onRefreshGroups={onRefreshGroups}
-          onNameConflict={(newName, conflictingGroup) => {
-            // Pass the current group being edited (selectedGroup) to the merge conflict modal
-            showMergeConflictModal(newName, selectedGroup, conflictingGroup);
-          }}
-        />
-      )}
-
-      {/* Merge Conflict Modal */}
-      {showMergeModal && conflictData && (
-        <MergeConflictModal
-          isOpen={showMergeModal}
-          eventUrl={eventUrl}
-          onClose={() => setShowMergeModal(false)}
-          newName={conflictData.newName}
-          currentGroup={conflictData.currentGroup}
-          conflictingGroup={conflictData.conflictingGroup}
-          onMerge={handleMergeGroups}
-          onCancel={handleMergeCancel}
-          onTransferComplete={async (result) => {
-            // Handle the transfer result to update the UI
-            // Explicitly update the data store like GroupDetail does
-            const transferData = { ...(result || {}) };
-            
-            // For merge operations, ensure we have the old_group_id from the conflict data
-            if (!transferData.old_group_id && conflictData?.currentGroup?.id) {
-              transferData.old_group_id = conflictData.currentGroup.id;
-            }
-            
-            // For merge operations, ensure old_group_deleted is set to true
-            // since all faces are being transferred from the source group
-            if (transferData.old_group_id && transferData.target_group_id) {
-              transferData.old_group_deleted = true;
-            }
-            
-            try {
-              useDataStore.getState().transferFaces(transferData);
-            } catch (e) {
-              console.warn('Failed to update store after transfer:', e);
-            }
-          }}
-          onNavigateToGroup={() => {
-            // No navigation needed - just close the modal
-            setShowMergeModal(false);
-          }}
-        />
-      )}
-      
-
     </div>
   );
 } 

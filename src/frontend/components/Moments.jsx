@@ -407,6 +407,14 @@ export default function Moments({ eventUrl }) {
     }).filter(Boolean);
   };
 
+  // Helper function to get the moment ID for a single selected image
+  const getSelectedImageMomentId = () => {
+    if (selectedKeys.size !== 1) return null;
+    const key = Array.from(selectedKeys)[0];
+    const [momentId] = key.split(':');
+    return momentId || null;
+  };
+
 
   // Create ImageActions instance for selected images
   const selectedImageActions = useImageActions({
@@ -678,7 +686,7 @@ export default function Moments({ eventUrl }) {
                   >
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
                       {ImageComponent(
-                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('moments', moment.id) : null,
+                        urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
                         {
                           width: 80,
                           height: 80,
@@ -874,6 +882,8 @@ export default function Moments({ eventUrl }) {
         showBucket={true}
         showAlbum={true}
         selectionMode={selectionMode}
+        entity="moment"
+        entityId={getSelectedImageMomentId()}
       />
     </div>
   );

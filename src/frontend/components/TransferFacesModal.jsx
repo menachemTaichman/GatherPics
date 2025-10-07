@@ -390,7 +390,7 @@ export default function TransferFacesModal({
                     {/* Representative image - Circular and previous size */}
                     <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                       {ImageComponent(
-                        getRepresentativeUrl(urlHelpers, 'groups', group.id),
+                        `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`,
                         {
                           width: 48,
                           height: 48,

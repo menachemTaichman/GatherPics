@@ -308,8 +308,7 @@ class ModelsManager:
         LIMIT 1
         """
         biggest = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.VALUE)
-        if biggest:
-            self.edit(table, entity_id, {representative_field: biggest})
+        self.edit(table, entity_id, {representative_field: biggest})
         
         return biggest
 
@@ -425,6 +424,19 @@ class ModelsManager:
                     group['faces_mapping'] = self.get_faces_mapping(group_id)
         return entities
 
+    def get_faces_group_in_image(self, group_id: str, image_id: str) -> list[str] | None:
+        """Return the faces in an image from a group.
+        Args:
+            group_id: group id
+            image_id: image id
+        Returns:
+            list of face ids if found, None if not found
+        """
+        accessible_faces = STRUCTURE['faces']['accessible_table']
+        query = f"""
+            SELECT f.face_id FROM {accessible_faces} f WHERE f.image_id = ? AND f.group_id = ?"""
+        return self.db.execute_query(query, (image_id, group_id), return_format=ReturnFormat.LIST_VALUES) or None
+
     def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
         Args:
@@ -504,16 +516,17 @@ class ModelsManager:
 
         if mode == 'and':
             having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id IN ({group_placeholders}) THEN f.group_id END) = {N}")
-        else:
+            params.extend(group_ids)
+        elif mode == 'or' and not only:
             query += f"WHERE f.group_id IN ({group_placeholders})"
+            params.extend(group_ids)
 
-        params.extend(group_ids)
         if only:
             having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id NOT IN ({group_placeholders}) THEN f.group_id END) = 0")
             params.extend(group_ids)
 
+        query += f" GROUP BY f.image_id"
         if having_clause:
-            query += f" GROUP BY f.image_id"
             query += f" HAVING {' AND '.join(having_clause)}"
 
         image_ids, images = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)

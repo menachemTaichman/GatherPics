@@ -145,7 +145,6 @@ def get_group(event_id, group_id):
     filter = filter_group_ids or only_mode
     changes = []
     result = {'changes': changes, 'filter': filter}    
-    # TODO: check faces_mapping and image_ids in frontend
     group = event.models_manager.get_groups([group_id], faces_mapping=not filter)
     result['changes'].append({
         'type': 'UPSERT',
@@ -161,7 +160,11 @@ def get_group(event_id, group_id):
     if filter:
         result['filtered_ids'] = image_ids
         result['faces_mapping'] = faces_mapping
-        result['filtered_images'] = images
+        result['changes'].append({
+            'type': 'INSERT',
+            'entity': 'image',
+            'items': images
+        })
     else:
         result['changes'].append({
             'type': 'RELATION_SET',
@@ -243,6 +246,17 @@ def check_group_name(event_id):
 
     else:
         return jsonify({"conflict": False})
+
+@app.route("/api/events/<event_id>/groups/<group_id>/faces", methods=["GET"])
+@require_auth
+def get_faces_group_in_image(event_id, group_id):
+    """Get the faces in an image from a group."""
+    event = get_event(event_id)
+    image_id = request.args.get('image_id')
+    if not image_id:
+        return jsonify({"error": "Image ID is required"}), 400
+    faces = event.models_manager.get_faces_group_in_image(group_id, image_id)
+    return jsonify({"faces": faces})
 
 @app.route("/api/events/<event_id>/groups/transfer-faces", methods=["POST"])
 @require_auth
@@ -937,7 +951,6 @@ def get_representative_webp(event_id, entity, parent_id):
         return '', 204
     
     file_path = os.path.join(dir_map[entity], f'{file_id}.webp')
-    print(file_path)
     if not os.path.exists(file_path):
         abort(404)
     

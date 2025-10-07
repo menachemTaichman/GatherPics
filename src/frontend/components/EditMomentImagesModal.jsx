@@ -11,6 +11,9 @@ import { useDataStore, selectors as storeSelectors } from '../utils/dataManager'
 import { useApplyScopes } from '../utils/storeUtils';
 import { useModalStore } from '../utils/modalManager';
 
+// Stable empty Set to avoid creating new instances
+const EMPTY_SET = new Set();
+
 function formatDateTime(dateString) {
   if (!dateString) return '';
   try {
@@ -37,22 +40,23 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   // Subscribe to includeArchived preference
   const includeArchived = usePreference('general.includeArchived', false);
   
+  // Get moment ID once and memoize it
+  const momentId = useMemo(() => moment?.id || moment?.moment_id, [moment?.id, moment?.moment_id]);
+  
   // Subscribe to all images from store using selector
   const storeImages = useDataStore(state => storeSelectors.imagesAll(state));
   
-  // Subscribe to current moment from store (for reactive label updates)
-  const currentMoment = useDataStore(state => {
-    const momentId = moment?.id || moment?.moment_id;
+  // Subscribe to current moment from store (for reactive label updates) - use stable selector
+  const currentMoment = useDataStore(useCallback(state => {
     if (!momentId) return null;
     return state.entities?.moments?.[momentId] || null;
-  });
+  }, [momentId]));
   
-  // Subscribe to current moment's images from store
-  const currentMomentImageIds = useDataStore(state => {
-    const momentId = moment?.id || moment?.moment_id;
-    if (!momentId) return new Set();
-    return state.entities?.moments?.[momentId]?.images || new Set();
-  });
+  // Subscribe to current moment's images from store - use stable selector with EMPTY_SET
+  const currentMomentImageIds = useDataStore(useCallback(state => {
+    if (!momentId) return EMPTY_SET;
+    return state.entities?.moments?.[momentId]?.images || EMPTY_SET;
+  }, [momentId]));
   
   // Subscribe to all moments for getting image-moment relationships
   const allMomentsFromStore = useDataStore(state => storeSelectors.momentsAll(state));
@@ -134,8 +138,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       const actualAdditions = Array.from(imagesToAdd).filter(id => !isImageInMoment(id));
       const actualRemovals = Array.from(imagesToRemove).filter(id => isImageInMoment(id));
       
-      const momentId = moment.id || moment.moment_id;
-      
       // Call the separate add/remove endpoints - changes are applied by interceptor
       if (actualAdditions.length > 0) {
         await momentsAPI.addImages(momentId, actualAdditions, eventUrl);
@@ -154,7 +156,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       // Legacy parent callback (can be removed in future if parent uses store)
       if (onRefreshImages) {
         const store = useDataStore.getState();
-        const imageIds = store.entities?.moments?.[momentId]?.images || new Set();
+        const imageIds = store.entities?.moments?.[momentId]?.images || EMPTY_SET;
         const images = Array.from(imageIds).map(id => store.entities?.images?.[id]).filter(Boolean);
         onRefreshImages(momentId, images);
       }
@@ -252,23 +254,23 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     const store = useDataStore.getState();
     
     for (const momentObj of allMomentsFromStore) {
-      const momentId = momentObj.id || momentObj.moment_id;
-      const momentImageIds = store.entities?.moments?.[momentId]?.images || new Set();
+      const loopMomentId = momentObj.id || momentObj.moment_id;
+      const momentImageIds = store.entities?.moments?.[loopMomentId]?.images || EMPTY_SET;
       
       for (const imageId of momentImageIds) {
         // Store the first moment found for this image (shouldn't be in multiple, but just in case)
         if (!map.has(imageId)) {
           map.set(imageId, {
-            momentId: momentId,
-            title: momentObj.label || momentId,
-            isCurrentMoment: moment && momentId === (moment.id || moment.moment_id)
+            momentId: loopMomentId,
+            title: momentObj.label || loopMomentId,
+            isCurrentMoment: loopMomentId === momentId
           });
         }
       }
     }
     
     return map;
-  }, [allMomentsFromStore, moment]);
+  }, [allMomentsFromStore, momentId]);
   
   // Use memoized map to get moment info
   const getImageMomentInfo = useCallback((imageId) => {
@@ -510,7 +512,15 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   if (!moment) return null;
 
-  const filteredImages = getFilteredAndSortedImages();
+  // Memoize filteredImages to prevent infinite loops
+  const filteredImages = useMemo(() => getFilteredAndSortedImages(), [
+    allImagesWithTimestamps,
+    currentMomentImageIds,
+    filterType,
+    sortOrder,
+    moment?.start,
+    moment?.end
+  ]);
 
   // Focus the image element when focusedImageIndex changes
   useEffect(() => {
@@ -528,7 +538,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [filteredImages, focusedImageIndex]);
+  }, [filteredImages.length, focusedImageIndex]);
 
   // Prevent scroll propagation to background when scrolling within modal
   const handleWheel = useCallback((e) => {

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
+import SelectFaceForRepModal from './SelectFaceForRepModal';
 import useImageActions from './ImageActions';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -23,7 +24,9 @@ function ImageViewerActions({
   showToast,
   urlHelpers,
   placeholderDataUrl,
-  onImageUpdated
+  onImageUpdated,
+  entity,
+  entityId
 }) {
   const imageActions = useImageActions({
     imageIds: imageId,
@@ -35,50 +38,82 @@ function ImageViewerActions({
       if (onImageUpdated) {
         onImageUpdated({ album_added: album });
       }
-    }
+    },
+    entity,
+    entityId
   });
 
+  // Get entity label for modal
+  const entityLabel = entity === 'group' 
+    ? (useDataStore.getState().entities?.groups?.[entityId]?.label || 'person')
+    : (useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment');
+
   return (
-    <div className="flex items-center space-x-2">
-      {/* Favorites */}
-      <button
-        onClick={imageActions.toggleFavorite}
-        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
-        title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        aria-pressed={imageActions.isFavorite}
-      >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-        </svg>
-      </button>
+    <>
+      <div className="flex items-center space-x-2">
+        {/* Set as representative */}
+        {imageActions.canSetRepresentative && (
+          <button
+            onClick={() => imageActions.setRepresentative()}
+            className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 text-yellow-600"
+            title={imageActions.representativeTooltip}
+          >
+            <Star className="w-4 h-4" />
+          </button>
+        )}
 
-      {/* Add to album */}
-      <AlbumQuickAddButton 
-        {...imageActions.albumQuickAddProps}
-        dropdownDirection="down"
-      />
+        {/* Favorites */}
+        <button
+          onClick={imageActions.toggleFavorite}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
+          title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-pressed={imageActions.isFavorite}
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+        </button>
 
-      {/* Add to bucket / Remove from bucket */}
-      <button
-        onClick={imageActions.toggleBucket}
-        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${imageActions.allInBucket ? 'text-gray-700' : 'text-gray-700'}`}
-        title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
-      >
-        <ShoppingBag className="w-4 h-4" fill={imageActions.allInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
-      </button>
+        {/* Add to album */}
+        <AlbumQuickAddButton 
+          {...imageActions.albumQuickAddProps}
+          dropdownDirection="down"
+        />
 
-      {/* Archive toggle */}
-      <button
-        onClick={imageActions.toggleArchive}
-        className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
-        title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
-        aria-pressed={imageActions.isArchived}
-      >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
-          <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
-        </svg>
-      </button>
-    </div>
+        {/* Add to bucket / Remove from bucket */}
+        <button
+          onClick={imageActions.toggleBucket}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${imageActions.allInBucket ? 'text-gray-700' : 'text-gray-700'}`}
+          title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
+        >
+          <ShoppingBag className="w-4 h-4" fill={imageActions.allInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
+        </button>
+
+        {/* Archive toggle */}
+        <button
+          onClick={imageActions.toggleArchive}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+          title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
+          aria-pressed={imageActions.isArchived}
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
+            <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Face selection modal for representative */}
+      {imageActions.showFaceSelectionModal && (
+        <SelectFaceForRepModal
+          isOpen={imageActions.showFaceSelectionModal}
+          onClose={imageActions.onCloseFaceSelectionModal}
+          faces={imageActions.facesForSelection}
+          urlHelpers={urlHelpers}
+          groupLabel={entityLabel}
+          onSelect={imageActions.onFaceSelected}
+        />
+      )}
+    </>
   );
 }
 
@@ -788,6 +823,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return (useDataStore.getState().entities?.groups || {})[gid]?.label || '';
   };
 
+  const getGroupRepresentativeFace = (face) => {
+    const gid = face?.groupId || face?.group_id;
+    if (!gid) return 'none';
+    return (useDataStore.getState().entities?.groups || {})[gid]?.representative_face || 'none';
+  };
+
 
   useEffect(() => {
     // Initial auto-hide schedule for controls
@@ -1099,6 +1140,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   urlHelpers={urlHelpers}
                   placeholderDataUrl={null}
                   onImageUpdated={handleImageUpdated}
+                  entity={entity}
+                  entityId={parent}
                 />
 
                 {/* Details Section */}
@@ -1169,7 +1212,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 title={album.label}
                               >
                                 {ImageComponent(
-                                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
                                   {
                                     width: 40,
                                     height: 40,
@@ -1243,7 +1286,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 onClick={() => handleFaceClick(index)}
                               >
                                 {ImageComponent(
-                                  urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id) : null,
+                                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null,
                                   {
                                     width: 40,
                                     height: 40,

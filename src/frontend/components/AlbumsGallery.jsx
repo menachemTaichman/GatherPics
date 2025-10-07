@@ -95,7 +95,7 @@ export default function AlbumsGallery({ eventUrl }) {
                   <div className="relative rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow h-40 p-4 flex flex-col">
                     <div className="flex-1 flex items-center justify-center mb-3">
                       {ImageComponent(
-                        urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl('albums', album.id) : null,
+                        urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
                         {
                           width: 64,
                           height: 64,
