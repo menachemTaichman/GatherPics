@@ -11,6 +11,7 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useModalStore } from '../utils/modalManager';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
+import ConfirmDelete from './ConfirmDelete';
 
 function formatDateTime(dateString) {
   if (!dateString) return '';
@@ -49,6 +50,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   const [editingImagesForMoment, setEditingImagesForMoment] = useState(null);
   const [tempMomentCounter, setTempMomentCounter] = useState(0);
   const [nameConflicts, setNameConflicts] = useState(new Map()); // moment_id -> boolean
+  const [deletingMoment, setDeletingMoment] = useState(null); // { id, label } for confirm modal
 
   // Update local state when store moments change (e.g., representative_image updated)
   useEffect(() => {
@@ -288,7 +290,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
-  const handleDelete = async (moment_id) => {
+  const handleDeleteConfirm = async (moment_id) => {
     try {
       // Call the parent's onDelete function
       if (onDelete) {
@@ -647,7 +649,11 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       <Image className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => handleDelete(moment.id || moment.moment_id)}
+                      onClick={() => setDeletingMoment({ 
+                        id: moment.id || moment.moment_id, 
+                        label: moment.label,
+                        representative_image: moment.representative_image
+                      })}
                       className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
                       title="Delete Moment"
                     >
@@ -723,6 +729,27 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           onSave={onSave}
           moments={internalMoments}
           onClose={() => setEditingImagesForMoment(null)}
+        />
+      )}
+
+      {/* Confirm Delete Modal */}
+      {deletingMoment && (
+        <ConfirmDelete
+          isOpen={!!deletingMoment}
+          onClose={() => setDeletingMoment(null)}
+          onConfirm={() => handleDeleteConfirm(deletingMoment.id)}
+          title="Delete Moment"
+          message="Are you sure you want to delete"
+          itemName={deletingMoment.label || 'this moment'}
+          confirmText="Delete"
+          cancelText="Cancel"
+          imageUrl={
+            !String(deletingMoment.id).startsWith('temp-') && deletingMoment.representative_image && urlHelpers?.getRepresentativeUrl
+              ? `${urlHelpers.getRepresentativeUrl('moments', deletingMoment.id)}?v=${deletingMoment.representative_image}`
+              : null
+          }
+          imageAlt={deletingMoment.label || 'Moment'}
+          caption="Note: Images will not be deleted, only the moment."
         />
       )}
     </div>

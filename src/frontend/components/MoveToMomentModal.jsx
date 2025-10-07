@@ -251,8 +251,17 @@ export default function MoveToMomentModal({
         if (imageDates.length > 0) {
           const minDate = new Date(Math.min(...imageDates));
           const maxDate = new Date(Math.max(...imageDates));
-          newMomentData.start = minDate.toISOString();
-          newMomentData.end = maxDate.toISOString();
+          // Format as "YYYY-MM-DD HH:mm" to match backend format
+          const formatDateForBackend = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+          };
+          newMomentData.start = formatDateForBackend(minDate);
+          newMomentData.end = formatDateForBackend(maxDate);
         }
         
         const createResult = await momentsAPI.create(newMomentData, eventUrl);
