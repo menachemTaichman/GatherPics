@@ -510,6 +510,8 @@ def add_images_to_moment(event_id, moment_id):
     image_ids = data.get('image_ids', [])
     
     try:
+        print(moment_id)
+        print(image_ids)
         response = _edit_moment_images(event, moment_id, image_ids, add=True)
 
         return jsonify(response)
@@ -528,6 +530,34 @@ def remove_images_from_moment(event_id, moment_id):
         return jsonify(response)
     except Exception as e:
         return bad_request(e)
+
+@app.route("/api/events/<event_id>/moments/moments/images", methods=["DELETE"])
+@require_auth
+def remove_images_from_moments(event_id):
+    """Remove images from a moment."""
+    event = get_event(event_id)
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    detached_moments = event.models_manager.remove_images_from_moments(image_ids)
+    changes = []
+    for moment_id, image_ids in detached_moments.items():
+        changes.append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'moment.images',
+            'parentId': moment_id,
+            'ids': image_ids
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'moment',
+            'items': event.models_manager.get_entities('moments', list(detached_moments.keys()))
+        })
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'image',
+            'items': event.models_manager.get_entities('images', image_ids)
+        })
+    return jsonify({"success": True, "changes": changes})
 
 @app.route("/api/events/<event_id>/moments/<moment_id>", methods=["DELETE"])
 @require_auth

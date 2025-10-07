@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import SelectFaceForRepModal from './SelectFaceForRepModal';
+import MoveToMomentModal from './MoveToMomentModal';
 import useImageActions from './ImageActions';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -253,6 +254,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
+  const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
@@ -718,6 +720,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   };
 
+  const handleMoveToMomentComplete = async (result) => {
+    // Handle move completion - toast already shown by modal
+    setShowMoveToMomentModal(false);
+  };
+
 
 
   // Mouse wheel handler for zoom
@@ -1160,22 +1167,33 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     <div><span className="font-semibold">Original resolution:</span> {storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : 'Unknown'}</div>
                   </div>
                   
-                                     {/* Moment Information */}
-                   {momentInfo && (
-                     <div className="mt-3 pt-3 border-t border-gray-200">
-                       <div className="text-xs text-gray-500">
-                         <span className="font-semibold">Moment:</span> 
-                         <a
-                           href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
-                           onClick={handleMomentLinkClick}
-                           className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
-                           title="Jump to moment"
-                         >
-                           {momentInfo.label}
-                         </a>
-                       </div>
-                     </div>
-                   )}
+                  {/* Moment Information */}
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-gray-500 flex-1 min-w-0">
+                        <span className="font-semibold">Moment:</span>
+                        {momentInfo ? (
+                          <a
+                            href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
+                            onClick={handleMomentLinkClick}
+                            className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
+                            title="Jump to moment"
+                          >
+                            {momentInfo.label}
+                          </a>
+                        ) : (
+                          <span className="ml-1 text-gray-400">None</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setShowMoveToMomentModal(true)}
+                        className="w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ml-2"
+                        title="Edit moment"
+                      >
+                        <Edit2 className="w-3 h-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1341,6 +1359,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
           sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
+        />
+      )}
+
+      {/* Move to Moment Modal */}
+      {showMoveToMomentModal && (
+        <MoveToMomentModal
+          key="move-to-moment-modal"
+          isOpen={showMoveToMomentModal}
+          eventUrl={eventUrl}
+          onClose={() => setShowMoveToMomentModal(false)}
+          selectedImages={imageId ? new Set([imageId]) : new Set()}
+          onMoveComplete={handleMoveToMomentComplete}
+          sourceMomentId={momentInfo?.id}
         />
       )}
     </AnimatePresence>

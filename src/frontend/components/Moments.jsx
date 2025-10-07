@@ -4,6 +4,7 @@ import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, Che
 import ImageViewer from './ImageViewer';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import EditMomentsModal from './EditMomentsModal';
+import MoveToMomentModal from './MoveToMomentModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import Toast from './Toast';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -90,7 +91,6 @@ export default function Moments({ eventUrl }) {
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [targetMoment, setTargetMoment] = useState(null);
   const carouselVisible = usePreference('Moments.carouselExpanded', true);
   const setCarouselVisible = (value) => setPreference('Moments.carouselExpanded', value);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
@@ -432,20 +432,13 @@ export default function Moments({ eventUrl }) {
 
   const handleRemoveFromMoment = async () => {
     // This would require backend support to remove images from moments
-          alert('Remove photos from moment functionality would be implemented here');
+    alert('Remove photos from moment functionality would be implemented here');
   };
 
-  const handleMoveToMoment = async () => {
-    if (!targetMoment || selectedKeys.size === 0) return;
-    
-    try {
-      // This would require backend support to move images between moments
-      alert(`Moving ${selectedKeys.size} photos to ${targetMoment.label}`);
-      setShowMoveModal(false);
-      clearGlobalSelection();
-    } catch (error) {
-      alert('Failed to move photos');
-    }
+  const handleMoveComplete = async (result) => {
+    // Handle the move completion - toast already shown by modal
+    setShowMoveModal(false);
+    clearGlobalSelection();
   };
 
 
@@ -823,39 +816,16 @@ export default function Moments({ eventUrl }) {
         />
       )}
 
-
-
-      {/* Move Modal */}
+      {/* Move to Moment Modal */}
       {showMoveModal && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
-        >
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-lg shadow-lg w-full max-w-md p-6"
-          >
-            <h4 className="font-semibold mb-4">Move Photos to Moment</h4>
-            <select
-              value={targetMoment?.id || ''}
-              onChange={(e) => setTargetMoment(moments.find(m => String(m.id) === e.target.value))}
-              className="w-full border rounded px-3 py-2 mb-4"
-            >
-              <option value="">Select a moment for photos...</option>
-              {moments.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowMoveModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleMoveToMoment} className="btn-primary">Move</button>
-            </div>
-          </motion.div>
-        </motion.div>
+        <MoveToMomentModal
+          isOpen={showMoveModal}
+          eventUrl={eventUrl}
+          onClose={() => setShowMoveModal(false)}
+          selectedImages={new Set(getSelectedImageIds())}
+          onMoveComplete={handleMoveComplete}
+          sourceMomentId={getSelectedImageMomentId()}
+        />
       )}
 
       {viewerOpen && (

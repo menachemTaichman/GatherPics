@@ -378,6 +378,15 @@ class ModelsManager:
         """
         return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
 
+    def remove_images_from_moments(self, image_ids: list[str]) -> dict[str, list[str]]:
+        """Remove images from a moment."""
+        valid_image_ids = list(self.get_entities('images', image_ids).keys())
+        detached_moments = self.get_parents('images', valid_image_ids, 'moments')
+        accessible_images = STRUCTURE['images']['accessible_table']
+        query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['?'] * len(valid_image_ids))})'
+        self.db.execute_query(query, valid_image_ids)
+        return detached_moments
+
     # -------- Groups helpers --------
     def get_unassociated_group(self) -> str | None:
         """Get the unassociated group id."""
