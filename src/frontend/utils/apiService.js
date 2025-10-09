@@ -463,17 +463,6 @@ export const albumsAPI = {
     return response.data;
   },
 
-  getImages: async (albumId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const key = `ALBUM_GET_IMAGES:${eventId}:${albumId}`;
-    return await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/albums/${albumId}/images`);
-      const data = response.data || {};
-      if (Array.isArray(data.images)) data.images = data.images.map(normalizeImage);
-      return data;
-    });
-  },
-
   addImages: async (albumId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/albums/${albumId}/images`, { image_ids: imageIds });
@@ -483,6 +472,12 @@ export const albumsAPI = {
   removeImages: async (albumId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/albums/${albumId}/images`, { data: { image_ids: imageIds } });
+    return response.data;
+  },
+
+  delete: async (albumId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/albums/${albumId}`);
     return response.data;
   },
 
@@ -510,12 +505,13 @@ export const albumsAPI = {
     return response.data;
   },
 
-  checkName: async (label, eventUrl) => {
+  checkName: async (label, excludeAlbumId = '', eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const key = `CHECK_ALBUM_NAME:${eventId}:${label}`;
+    const key = `CHECK_ALBUM_NAME:${eventId}:${label}:${excludeAlbumId || ''}`;
     return await withDedupe(key, async () => {
       const response = await api.post(`/api/events/${eventId}/albums/check-name`, {
         label,
+        exclude_album_id: excludeAlbumId
       });
       return response.data;
     });

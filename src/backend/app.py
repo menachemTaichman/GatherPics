@@ -296,7 +296,7 @@ def transfer_faces(event_id):
                 'ids': images_ids
             })
 
-        images_added_id, images_added_entities = event.models_manager.get_childs_entities('groups', target_group_id, 'images', list(images_added.keys()))
+        images_added_entities = event.models_manager.get_childs('groups', target_group_id, 'images', list(images_added.keys()))
         changes.append({
             'type': 'RELATION_ADD',
             'relation': 'group.images',
@@ -365,7 +365,7 @@ def get_moment(event_id, moment_id):
         return not_found(f"Moment {moment_id} not found or not accessible")
 
     moment = event.models_manager.get_entities('moments', [moment_id])
-    image_ids, images = event.models_manager.get_childs_entities('moments', moment_id, 'images')
+    images = event.models_manager.get_childs('moments', moment_id, 'images')
     changes = [{
         'type': 'UPSERT',
         'entity': 'moment',
@@ -607,8 +607,8 @@ def get_album(event_id, album_id):
     if not event.models_manager.is_accessible('albums', album_id):
         return not_found(f"Album {album_id} not found or not accessible")
 
-    album = event.models_manager.get_entities('albums', album_id)
-    image_ids, images = event.models_manager.get_childs_entities('albums', [album_id], 'images')
+    album = event.models_manager.get_entities('albums', [album_id])
+    images = event.models_manager.get_childs('albums', album_id, 'images')
     changes = [{
         'type': 'UPSERT',
         'entity': 'album',
@@ -645,10 +645,11 @@ def check_album_name(event_id):
     event = get_event(event_id)
     data = request.json or {}
     label = data.get('label', '')
+    exclude_album_id = data.get('exclude_album_id', '')
     if not label:
         return jsonify({"error": "Label is required"}), 400
-    conflict_album_id = event.models_manager.is_exists('albums', {'label': label})
-    return jsonify({"conflict": bool(conflict_album_id)})
+    conflict_album_id = event.models_manager.is_exists('albums', {'label': label}, exclude_id=exclude_album_id)
+    return jsonify({"conflict": bool(conflict_album_id), "conflicting_album": conflict_album_id})
 
 @app.route("/api/events/<event_id>/albums", methods=["POST"])
 @require_auth
@@ -707,6 +708,32 @@ def update_album(event_id, album_id):
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/events/<event_id>/albums/<album_id>", methods=["DELETE"])
+@require_auth
+def delete_album(event_id, album_id):
+    """Delete an album."""
+    event = get_event(event_id)
+    if not event.models_manager.is_accessible('albums', album_id):
+        return not_found(f"Album {album_id} not found or not accessible")
+    
+    # Prevent deletion of default albums (favorites, archive)
+    album = event.models_manager.get_entities('albums', album_id)
+    if album and album.get('label', '').lower() in ('archive', 'favorites'):
+        return jsonify({"error": "Cannot delete default albums"}), 400
+    
+    try:
+        event.models_manager.delete('albums', album_id)
+        
+        response = {"success": True, "deleted_ids": [album_id]}
+        response['changes'] = [{
+            'type': 'REMOVE',
+            'entity': 'album',
+            'ids': [album_id]
+        }]
+        return jsonify(response)
+    except Exception as e:
+        return bad_request(e)
+
 def _edit_album_images(event, album_id, image_ids, add: bool):
     """Helper: Add or remove images from an album, return response with changes."""
     updated_image_ids, _ = event.models_manager.edit_childs(
@@ -715,6 +742,11 @@ def _edit_album_images(event, album_id, image_ids, add: bool):
     changes = []
     if updated_image_ids:
         album = event.models_manager.get_entities('albums', [album_id])
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'album',
+            'items': album
+        })
         if add:
             changes.append({
                 'type': 'RELATION_ADD',
@@ -740,6 +772,15 @@ def _edit_album_images(event, album_id, image_ids, add: bool):
                 'entity': 'image',
                 'items': event.models_manager.get_entities('images', updated_image_ids)
             })
+            if album_id == event.models_manager.get_archive_album():
+                for image_id in updated_image_ids:
+                    parents = event.models_manager.get_parents('images', image_id)
+                    for entity, parent_ids in parents.items():
+                        changes.append({
+                            'type': 'UPDATE',
+                            'entity': entity,
+                            'items': event.models_manager.get_entities(entity, parent_ids)
+                        })
         else:
             for image_id in updated_image_ids:
                 if add:
@@ -856,9 +897,9 @@ def get_image(event_id, image_id):
         return not_found(f"Image {image_id} not found or not accessible")
 
     image = event.models_manager.get_entities('images', [image_id])
-    album_ids, albums = event.models_manager.get_childs_entities('images', image_id, 'albums')
-    face_ids, faces = event.models_manager.get_childs_entities('images', image_id, 'faces')
-    group_ids, groups = event.models_manager.get_childs_entities('images', image_id, 'groups')
+    albums = event.models_manager.get_childs('images', image_id, 'albums')
+    faces = event.models_manager.get_childs('images', image_id, 'faces')
+    groups = event.models_manager.get_childs('images', image_id, 'groups')
     changes = [{
         'type': 'UPSERT',
         'entity': 'image',

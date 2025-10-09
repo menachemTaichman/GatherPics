@@ -52,17 +52,6 @@ function ImageViewerActions({
   return (
     <>
       <div className="flex items-center space-x-2">
-        {/* Set as representative */}
-        {imageActions.canSetRepresentative && (
-          <button
-            onClick={() => imageActions.setRepresentative()}
-            className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 text-yellow-600"
-            title={imageActions.representativeTooltip}
-          >
-            <Star className="w-4 h-4" />
-          </button>
-        )}
-
         {/* Favorites */}
         <button
           onClick={imageActions.toggleFavorite}
@@ -73,21 +62,6 @@ function ImageViewerActions({
           <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
           </svg>
-        </button>
-
-        {/* Add to album */}
-        <AlbumQuickAddButton 
-          {...imageActions.albumQuickAddProps}
-          dropdownDirection="down"
-        />
-
-        {/* Add to bucket / Remove from bucket */}
-        <button
-          onClick={imageActions.toggleBucket}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 ${imageActions.allInBucket ? 'text-gray-700' : 'text-gray-700'}`}
-          title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
-        >
-          <ShoppingBag className="w-4 h-4" fill={imageActions.allInBucket ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2" />
         </button>
 
         {/* Archive toggle */}
@@ -101,6 +75,36 @@ function ImageViewerActions({
             <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
           </svg>
         </button>
+
+        {/* Add to album */}
+        <AlbumQuickAddButton 
+          {...imageActions.albumQuickAddProps}
+          dropdownDirection="down"
+        />
+
+        {/* Add to bucket / Remove from bucket */}
+        <button
+          onClick={imageActions.toggleBucket}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+          title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
+        >
+          <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
+        </button>
+
+        {/* Set as representative */}
+        {imageActions.canSetRepresentative && (
+          <button
+            onClick={() => imageActions.setRepresentative()}
+            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
+              imageActions.isRepresentative
+                ? 'text-orange-600'
+                : 'text-yellow-600'
+            }`}
+            title={imageActions.representativeTooltip}
+          >
+            <Star className={`w-4 h-4 ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
+          </button>
+        )}
       </div>
 
       {/* Face selection modal for representative */}

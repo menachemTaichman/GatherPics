@@ -200,6 +200,11 @@ export default function useImageActions({
         // Changes are automatically applied by apiService interceptor
         const entityName = useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment';
         showToast(`Set as representative for ${entityName}`, 'success');
+      } else if (entity === 'album') {
+        const result = await albumsAPI.update(entityId, { representative_image: targetImageId }, eventUrl);
+        // Changes are automatically applied by apiService interceptor
+        const entityName = useDataStore.getState().entities?.albums?.[entityId]?.label || 'album';
+        showToast(`Set as representative for ${entityName}`, 'success');
       }
     } catch (error) {
       console.error('Error setting representative:', error);
@@ -242,16 +247,53 @@ export default function useImageActions({
     } else if (entity === 'moment') {
       const moment = state.entities?.moments?.[entityId];
       return moment?.label || 'moment';
+    } else if (entity === 'album') {
+      const album = state.entities?.albums?.[entityId];
+      return album?.label || 'album';
     }
     return '';
   };
 
   const canSetRepresentative = !!(entity && entityId && imageIdsArray.length === 1);
-  const representativeTooltip = entity === 'group' 
-    ? `Set as representative for ${getEntityLabel()}`
-    : entity === 'moment'
-    ? `Set as representative for ${getEntityLabel()}`
-    : 'Set as representative';
+  
+  // Check if the current image is the representative
+  const isRepresentative = (() => {
+    if (!entity || !entityId || imageIdsArray.length !== 1) return false;
+    const state = useDataStore.getState();
+    
+    if (entity === 'group') {
+      const group = state.entities?.groups?.[entityId];
+      return group?.representative_image === primaryImageId;
+    } else if (entity === 'moment') {
+      const moment = state.entities?.moments?.[entityId];
+      return moment?.representative_image === primaryImageId;
+    } else if (entity === 'album') {
+      const album = state.entities?.albums?.[entityId];
+      return album?.representative_image === primaryImageId;
+    }
+    
+    return false;
+  })();
+  
+  const representativeTooltip = (() => {
+    const label = getEntityLabel();
+    if (isRepresentative) {
+      return entity === 'group' 
+        ? `Current representative for ${label}`
+        : entity === 'moment'
+        ? `Current representative for ${label}`
+        : entity === 'album'
+        ? `Current representative for ${label}`
+        : 'Current representative';
+    }
+    return entity === 'group' 
+      ? `Set as representative for ${label}`
+      : entity === 'moment'
+      ? `Set as representative for ${label}`
+      : entity === 'album'
+      ? `Set as representative for ${label}`
+      : 'Set as representative';
+  })();
 
   // Return action functions for UX components to use
   return {
@@ -273,6 +315,7 @@ export default function useImageActions({
     
     // Representative-related state
     canSetRepresentative,
+    isRepresentative,
     representativeTooltip,
     showFaceSelectionModal,
     facesForSelection,

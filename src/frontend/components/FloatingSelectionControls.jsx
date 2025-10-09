@@ -4,11 +4,11 @@ import {
   X, 
   ShoppingBag, 
   Heart as HeartIcon, 
-  Archive, 
   Users,
   Trash2,
   Move,
-  Star
+  Star,
+  Minus
 } from 'lucide-react';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import useImageActions from './ImageActions';
@@ -24,12 +24,14 @@ export default function FloatingSelectionControls({
   onTransferFaces,
   onRemoveFromMoment,
   onMoveToMoment,
+  onRemoveFromAlbum,
   eventUrl,
   urlHelpers,
   placeholderDataUrl,
   showTransferFaces = false,
   showRemoveFromMoment = false,
   showMoveToMoment = false,
+  showRemoveFromAlbum = false,
   showArchive = true,
   showFavorites = true,
   showBucket = true,
@@ -71,17 +73,20 @@ export default function FloatingSelectionControls({
       
       {/* Select all button - only visible when not all are selected */}
       {selectedCount < totalCount && (
-        <button
-          onClick={onSelectAll}
-          className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
-            selectedCount > 0 
-              ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-              : 'hover:bg-gray-100 text-gray-700'
-          }`}
-          title="Select all photos (Ctrl+A)"
-        >
-          <CheckCheck className="w-4 h-4" />
-        </button>
+        <>
+          <span className="text-gray-300">|</span>
+          <button
+            onClick={onSelectAll}
+            className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+              selectedCount > 0 
+                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                : 'hover:bg-gray-100 text-gray-700'
+            }`}
+            title="Select all photos (Ctrl+A)"
+          >
+            <CheckCheck className="w-4 h-4" />
+          </button>
+        </>
       )}
       
       {/* Clear selection - only show when there are selected items */}
@@ -98,14 +103,76 @@ export default function FloatingSelectionControls({
       {/* Action buttons - only show when images are selected */}
       {selectedCount > 0 && (
         <>
+          <span className="text-gray-300">|</span>
+          
+          {/* Add to Favorites */}
+          {showFavorites && (
+            <button
+              onClick={selectedImageActions.toggleFavorite}
+              className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                shouldShowFavorited 
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                  : 'hover:bg-red-50 text-red-600'
+              }`}
+              title={shouldShowFavorited ? "Remove selected from favorites" : "Add selected to favorites"}
+            >
+              <HeartIcon className={`w-4 h-4 ${shouldShowFavorited ? 'fill-current' : ''}`} />
+            </button>
+          )}
+          
+          {/* Move to Archive */}
+          {showArchive && (
+            <button
+              onClick={selectedImageActions.toggleArchive}
+              className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                shouldShowArchived 
+                  ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' 
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title={shouldShowArchived ? "Remove selected from archive" : "Move selected to archive"}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill={shouldShowArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+              </svg>
+            </button>
+          )}
+          
+          {/* Add to Album */}
+          {showAlbum && (
+            <AlbumQuickAddButton 
+              selectedImages={Array.from(selectedImages)} 
+              eventUrl={eventUrl}
+              urlHelpers={urlHelpers}
+              placeholderDataUrl={placeholderDataUrl}
+              dropdownDirection="up"
+            />
+          )}
+          
+          {/* Add to Bucket */}
+          {showBucket && (
+            <button
+              onClick={selectedImageActions.toggleBucket}
+              className={`w-8 h-8 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-700`}
+              title={selectedImageActions.allInBucket ? "Remove selected from bucket" : "Add selected to bucket"}
+            >
+              <ShoppingBag className={`w-4 h-4 ${selectedImageActions.allInBucket ? 'fill-blue-400' : ''}`} />
+            </button>
+          )}
+
+          <span className="text-gray-300">|</span>
+
           {/* Set as representative - only for single image selection */}
           {selectedImageActions.canSetRepresentative && (
             <button
               onClick={() => selectedImageActions.setRepresentative()}
-              className="w-8 h-8 rounded-md hover:bg-yellow-100 text-yellow-600 flex items-center justify-center"
+              className={`w-8 h-8 rounded-md hover:bg-yellow-100 flex items-center justify-center ${
+                selectedImageActions.isRepresentative
+                  ? 'text-orange-600'
+                  : 'text-yellow-600'
+              }`}
               title={selectedImageActions.representativeTooltip}
             >
-              <Star className="w-4 h-4" />
+              <Star className={`w-4 h-4 ${selectedImageActions.isRepresentative ? 'fill-current' : ''}`} />
             </button>
           )}
 
@@ -136,61 +203,20 @@ export default function FloatingSelectionControls({
             <button
               onClick={onMoveToMoment}
               className="w-8 h-8 rounded-md hover:bg-blue-100 text-blue-700 flex items-center justify-center"
-              title="Move selected photos to another moment"
+              title="Move or remove selected from moment"
             >
               <Move className="w-4 h-4" />
             </button>
           )}
           
-          {/* Add to Album */}
-          {showAlbum && (
-            <AlbumQuickAddButton 
-              selectedImages={Array.from(selectedImages)} 
-              eventUrl={eventUrl}
-              urlHelpers={urlHelpers}
-              placeholderDataUrl={placeholderDataUrl}
-              dropdownDirection="up"
-            />
-          )}
-          
-          {/* Add to Favorites */}
-          {showFavorites && (
+          {/* Remove from album - only for custom albums */}
+          {showRemoveFromAlbum && (
             <button
-              onClick={selectedImageActions.toggleFavorite}
-              className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                shouldShowFavorited 
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200' 
-                  : 'hover:bg-red-50 text-red-600'
-              }`}
-              title={shouldShowFavorited ? "Remove selected from favorites" : "Add selected to favorites"}
+              onClick={onRemoveFromAlbum}
+              className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
+              title="Remove selected from album"
             >
-              <HeartIcon className={`w-4 h-4 ${shouldShowFavorited ? 'fill-current' : ''}`} />
-            </button>
-          )}
-          
-          {/* Move to Archive */}
-          {showArchive && (
-            <button
-              onClick={selectedImageActions.toggleArchive}
-              className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                shouldShowArchived 
-                  ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' 
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-              title={shouldShowArchived ? "Remove selected from archive" : "Move selected to archive"}
-            >
-              <Archive className="w-4 h-4" />
-            </button>
-          )}
-          
-          {/* Add to Bucket */}
-          {showBucket && (
-            <button
-              onClick={selectedImageActions.toggleBucket}
-              className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
-              title="Add selected photos to bucket"
-            >
-              <ShoppingBag className="w-4 h-4" />
+              <Minus className="w-4 h-4" />
             </button>
           )}
         </>

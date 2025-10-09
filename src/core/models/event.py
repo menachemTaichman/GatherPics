@@ -119,13 +119,12 @@ class Event(JsonModel):
         }
 
     def delete_image(self, image_id: str) -> dict:
-        faces = self.models_manager.get_childs_entities('images', image_id)
+        face_ids = self.models_manager.get_childs('images', image_id, 'faces', return_ids=True)
         if not self.face_utils:
             self.face_utils = FaceUtils(self.id)
         
-        self.face_utils.rek_helper.delete_faces(faces)
-        for face in faces:
-            face_id = face['face_id']
+        self.face_utils.rek_helper.delete_faces(face_ids)
+        for face_id in face_ids:
             try:
                 os.remove(os.path.join(self.faces_dir, f"{face_id}.jpg"))
             except FileNotFoundError:

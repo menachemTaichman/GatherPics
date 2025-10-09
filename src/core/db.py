@@ -33,7 +33,7 @@ STRUCTURE = {
     'groups': {
         'primary_key': 'group_id',
         'accessible_table': 'accessible_groups',
-        'fields': ['label', 'images_count', 'active_images_count', 'representative_face'],
+        'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image'],
         'representative': {'field': 'representative_face', 'table': 'faces'},
         'relations': {
             'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
@@ -250,7 +250,7 @@ VIEWS = {
     ''',
     'accessible_groups': '''
         SELECT 
-            g.*,
+            g.*, af.image_id as representative_image,
             COUNT(agi.image_id) AS images_count,
             COUNT(agi.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
         FROM groups g
@@ -258,6 +258,8 @@ VIEWS = {
             ON g.group_id = agi.group_id
         LEFT JOIN accessible_images ai
             ON agi.image_id = ai.image_id
+        LEFT JOIN accessible_faces af
+            ON g.representative_face = af.face_id
         GROUP BY g.group_id
         HAVING images_count > 0
         OR (SELECT COUNT(*) FROM faces WHERE group_id = g.group_id) = 0;

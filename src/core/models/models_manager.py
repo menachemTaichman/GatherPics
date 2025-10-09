@@ -109,16 +109,17 @@ class ModelsManager:
         representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {AppDB.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
         return representative_table, representative_id
 
-    def get_child_ids(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, within: bool = True) -> list[str]:
-        """Get child ids of a parent.
+    def get_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, *, within: bool = True, return_ids: bool = False) -> list[str] | dict[str, dict]:
+        """Get childs of a parent.
         Args:
             parent: parent entity
             entity_id: parent id
             child: child entity
             child_ids: list of child ids or None to get all childs
             within: if True, get childs within the parent, if False, get childs outside the parent
+            return_ids: if True, return list of child ids, if False, return dict of childs data with child ids as keys and child data as values
         Returns:
-            list of child ids
+            list of child ids or dict of childs data with child ids as keys and child data as values
 
         Note:
             if within is True, child_ids will be filtered to only childs within the parent
@@ -132,8 +133,14 @@ class ModelsManager:
         accessible_child = STRUCTURE[child]['accessible_table']
         id_field = AppDB.get_id_field(parent)
 
-        join_clause = ''
-        
+        if return_ids:
+            fields = f'c.{child_id_field}'
+            return_format = ReturnFormat.LIST_VALUES
+        else:
+            fields = view_fields
+            return_format = ReturnFormat.DICT_DICTS
+
+        join_clause = ''        
         if exclusive:
             if within:
                 where_clause = f'c.{id_field} = ?'
@@ -151,53 +158,15 @@ class ModelsManager:
         else:
             child_ids = []
 
-        query = f"""SELECT c.{child_id_field}
+        query = f"""SELECT {fields}
         FROM {accessible_child} c
         {join_clause}
         WHERE {where_clause}
         """
         
-        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), return_format=ReturnFormat.LIST_VALUES)
+        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), return_format=return_format)
 
         return valid_child_ids
-
-    def get_childs_entities(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None) -> tuple[list[str], dict[str, dict]]:
-        """Get childs entities of a parent.
-        Args:
-            parent: parent entity
-            entity_id: parent id
-            child: child entity
-            child_ids: list of child ids or None to get all childs
-        Returns:
-            list of child ids, dict of childs data with child ids as keys and child data as values
-
-            child data is the child fields that are relevent to the parent
-        """
-        id_field = AppDB.get_id_field(parent)
-        relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
-        accessible_child = STRUCTURE[child]['accessible_table']
-        accessible_relation = STRUCTURE[relation]['accessible_table']
-        join_clause = ''
-        parent = 'c'
-        if relation != child:
-            join_clause = f'INNER JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field}'
-            parent = 'r'
-
-        where_clause = ''
-        if child_ids is not None:
-            where_clause = f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
-        else:
-            child_ids = []
-
-        query = f"""
-            SELECT {view_fields}
-            FROM {accessible_child} c
-            {join_clause}
-            WHERE {parent}.{id_field} = ?
-            {where_clause}
-        """
-        results = self.db.execute_query(query, (entity_id, *child_ids), return_format=ReturnFormat.LIST_AND_DICT_DICTS)
-        return results
 
     def get_parents(self, child: str, entity_id: str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
         """Get parents of a child.
@@ -221,6 +190,7 @@ class ModelsManager:
             ]
         parents = dict.fromkeys(parents, [])
 
+        parents_to_remove = []
         for parent in parents.keys():
             relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
             accessible_relation = STRUCTURE[relation]['accessible_table']
@@ -233,8 +203,14 @@ class ModelsManager:
                 AND r.{id_field} IS NOT NULL
             """
             parent_ids = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
-            parents[parent] = parent_ids
-        
+            if parent_ids:
+                parents[parent] = parent_ids
+            else:
+                parents_to_remove.append(parent)
+
+        for parent in parents_to_remove:
+            parents.pop(parent)
+
         if single_item:
             return parents[list(parents.keys())[0]]
         
@@ -329,7 +305,7 @@ class ModelsManager:
         accessible_relation = STRUCTURE[relation]['accessible_table']
         id_field = AppDB.get_id_field(parent)
 
-        valid_child_ids = self.get_child_ids(parent, entity_id, child, child_ids, within=not add)
+        valid_child_ids = self.get_childs(parent, entity_id, child, child_ids, within=not add, return_ids=True)
         if not valid_child_ids:
             return [], {}
 
@@ -565,7 +541,7 @@ class ModelsManager:
         if face_ids is None:
             if not source_group_id:
                 raise ValueError("face_ids or source_group_id must be provided")
-            face_ids = self.get_child_ids('groups', source_group_id, 'faces')
+            face_ids = self.get_childs('groups', source_group_id, 'faces', return_ids=True)
 
         if new_group_name:
             if self.is_exists('groups', {'label': new_group_name}):
@@ -586,7 +562,7 @@ class ModelsManager:
             detached_images = []
             for detached_face in detached_faces:
                 images = self.get_parents('faces', detached_face, 'images')
-                detached_images.extend(self.get_child_ids('groups', group_id, 'images', images, within=False))
+                detached_images.extend(self.get_childs('groups', group_id, 'images', images, within=False, return_ids=True))
             
             detached_groups_images[group_id] = list(set(detached_images))
                  

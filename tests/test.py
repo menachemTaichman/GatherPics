@@ -446,7 +446,7 @@ def test_gets_methods(entities_tables: list, ids: dict, relations: list):
 
     for parent, child in relations:
         id = ids[parent][0]
-        result = event.models_manager.get_childs_entities(parent, id, child)
+        result = event.models_manager.get_childs(parent, id, child)
         print(f'get_childs, {parent}.{child} of {id}')
         print(result)
         print('--------------------------------')
@@ -474,7 +474,7 @@ def test_edit_methods():
     # print(result)
     # print('--------------------------------')
 
-# recreate_views_triggers_and_indexes()
+recreate_views_triggers_and_indexes()
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -494,10 +494,10 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-source_group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
-target_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
-result = event.models_manager.get_filtered_images(
-    group_ids=[source_group_id, target_group_id], mode='or', only=True
-)
-print(result)
-print('--------------------------------')
+# source_group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
+# target_group_id = '275d589e-9673-49d1-bc93-aa427dcada15'
+# result = event.models_manager.get_filtered_images(
+#     group_ids=[source_group_id, target_group_id], mode='or', only=True
+# )
+# print(result)
+# print('--------------------------------')
