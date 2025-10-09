@@ -13,6 +13,7 @@ import {
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import useImageActions from './ImageActions';
 import SelectFaceForRepModal from './SelectFaceForRepModal';
+import ConfirmDelete from './ConfirmDelete';
 import { useDataStore } from '../utils/dataManager';
 
 export default function FloatingSelectionControls({
@@ -159,6 +160,15 @@ export default function FloatingSelectionControls({
             </button>
           )}
 
+          {/* Delete Images */}
+          <button
+            onClick={selectedImageActions.deleteImages}
+            className="w-8 h-8 rounded-md hover:bg-red-100 flex items-center justify-center text-red-600"
+            title="Delete selected photos"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+
           <span className="text-gray-300">|</span>
 
           {/* Set as representative - only for single image selection */}
@@ -232,6 +242,22 @@ export default function FloatingSelectionControls({
           urlHelpers={urlHelpers}
           groupLabel={entityLabel}
           onSelect={selectedImageActions.onFaceSelected}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {selectedImageActions.showDeleteConfirmModal && (
+        <ConfirmDelete
+          isOpen={selectedImageActions.showDeleteConfirmModal}
+          onClose={selectedImageActions.onCancelDelete}
+          onConfirm={selectedImageActions.onConfirmDelete}
+          title="Delete Photos"
+          message={`Are you sure you want to delete ${selectedImageActions.deleteCount} ${selectedImageActions.deleteCount === 1 ? 'photo' : 'photos'}?`}
+          simpleMessage={true}
+          images={selectedImageActions.deleteImagesList}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
         />
       )}
     </>

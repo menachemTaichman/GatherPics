@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { albumsAPI, groupsAPI, momentsAPI } from '../utils/apiService';
+import { albumsAPI, groupsAPI, momentsAPI, imagesAPI } from '../utils/apiService';
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
@@ -28,6 +28,9 @@ export default function useImageActions({
   const [showFaceSelectionModal, setShowFaceSelectionModal] = useState(false);
   const [facesForSelection, setFacesForSelection] = useState([]);
   const [pendingRepImageId, setPendingRepImageId] = useState(null);
+  
+  // State for delete confirmation modal
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   
   // Normalize imageIds to array
   const imageIdsArray = Array.isArray(imageIds) ? imageIds : [imageIds].filter(Boolean);
@@ -227,6 +230,38 @@ export default function useImageActions({
     setPendingRepImageId(null);
   };
 
+  const handleDeleteImages = () => {
+    if (imageIdsArray.length === 0) return;
+    // Show confirmation modal
+    setShowDeleteConfirmModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (imageIdsArray.length === 0) return;
+
+    try {
+      const result = await imagesAPI.delete(imageIdsArray, eventUrl);
+      
+      if (result && result.success) {
+        // The API response interceptor will automatically update the data store
+        const count = imageIdsArray.length;
+        showToast(
+          <span>
+            {count} {count === 1 ? 'photo' : 'photos'} deleted successfully
+          </span>,
+          'success'
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting images:', error);
+      showToast('Failed to delete photos', 'error');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirmModal(false);
+  };
+
   // Stable props for AlbumQuickAddButton to avoid inline component remounts
   const albumQuickAddProps = {
     imageId: primaryImageId,
@@ -295,6 +330,12 @@ export default function useImageActions({
       : 'Set as representative';
   })();
 
+  // Prepare images for delete confirmation modal
+  const deleteImages = imageIdsArray.map(imageId => ({
+    id: imageId,
+    src: urlHelpers ? urlHelpers.getThumbnailUrl(imageId) : null
+  }));
+
   // Return action functions for UX components to use
   return {
     // Action functions
@@ -303,6 +344,7 @@ export default function useImageActions({
     toggleBucket: handleToggleBucket,
     addToAlbum: handleAlbumAdded,
     setRepresentative: handleSetRepresentative,
+    deleteImages: handleDeleteImages,
     
     // State for UX components
     isFavorite,
@@ -321,6 +363,13 @@ export default function useImageActions({
     facesForSelection,
     onFaceSelected: handleFaceSelected,
     onCloseFaceSelectionModal: handleCloseFaceSelectionModal,
+    
+    // Delete confirmation modal state
+    showDeleteConfirmModal,
+    onConfirmDelete: handleConfirmDelete,
+    onCancelDelete: handleCancelDelete,
+    deleteCount: imageIdsArray.length,
+    deleteImagesList: deleteImages,
     
     // Stable props for AlbumQuickAddButton; consumers should render the shared component directly
     albumQuickAddProps,

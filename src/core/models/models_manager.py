@@ -363,6 +363,28 @@ class ModelsManager:
         self.db.execute_query(query, valid_image_ids)
         return detached_moments
 
+    # -------- Images helpers --------
+    def is_image_deletable(self, image_id: str) -> bool:
+        """Check if an image is deletable.
+        Args:
+            image_id: image id
+        Returns:
+            True if image is deletable, False if not
+        """
+        if not self.is_accessible('images', image_id):
+            return False
+        
+        query = f"""
+            SELECT COUNT(*) FROM accessible_faces WHERE image_id = ?
+        """
+        accessible_faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
+        query = f"""
+            SELECT COUNT(*) FROM faces WHERE image_id = ?
+        """
+        faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
+
+        return faces ==  accessible_faces
+
     # -------- Groups helpers --------
     def get_unassociated_group(self) -> str | None:
         """Get the unassociated group id."""

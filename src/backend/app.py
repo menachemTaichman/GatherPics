@@ -934,6 +934,38 @@ def get_image(event_id, image_id):
         })
     return jsonify({ 'changes': changes })
 
+@app.route("/api/events/<event_id>/images", methods=["DELETE"])
+@require_auth
+def delete_image(event_id):
+    """Delete an image."""
+    event = get_event(event_id)
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    if not image_ids:
+        return bad_request("No image IDs provided")
+    try:
+        deleted_groups, parents = event.delete_images(image_ids)
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'image',
+            'ids': image_ids
+        }]
+        if deleted_groups:
+            changes.append({
+                'type': 'REMOVE',
+                'entity': 'group',
+                'ids': deleted_groups
+            })
+        for entity, entity_ids in parents.items():
+            changes.append({
+                'type': 'UPDATE',
+                'entity': entity,
+                'items': event.models_manager.get_entities(entity, entity_ids)
+            })
+        return jsonify({"success": True, "changes": changes})
+    except Exception as e:
+        return bad_request(e)
+
 # ==============================================================================
 # VI. FILE SERVING & DOWNLOADS
 # ==============================================================================

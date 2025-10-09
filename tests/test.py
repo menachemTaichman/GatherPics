@@ -357,76 +357,108 @@ def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
 
-def recreate_tables_with_data(db):
+def recreate_tables_with_data():
     from src.core.db import TABLES
-    db.execute_query("ALTER TABLE images RENAME TO images_old")
-    db.execute_query("ALTER TABLE moments RENAME TO moments_old")
 
-    # 2️⃣ צור את הטבלאות החדשות לפי ההגדרות שלך
-    db.execute_query(f"CREATE TABLE images ({TABLES['images']})")
-    db.execute_query(f"CREATE TABLE moments ({TABLES['moments']})")
-
-    # 3️⃣ העתק את כל הנתונים ממומנטים בלי representative_image
-    db.execute_query("""
-    INSERT INTO moments(moment_id, label, description, start, end)
-    SELECT moment_id, label, description, start, end FROM moments_old
-    """)
-
-    # 4️⃣ העתק את כל הנתונים מ‑images
-    db.execute_query("""
-    INSERT INTO images(image_id, label, date_taken, file_size, width, height, moment_id)
-    SELECT image_id, label, date_taken, file_size, width, height, moment_id FROM images_old
-    """)
-
-    # 5️⃣ עכשיו העתק representative_image של moments
-    db.execute_query("""
-    UPDATE moments
-    SET representative_image = (
-        SELECT representative_image
-        FROM moments_old
-        WHERE moments_old.moment_id = moments.moment_id
-    )
-    """)
-
-    # 6️⃣ מחק את הטבלאות הישנות
-    db.execute_query("DROP TABLE images_old")
-    db.execute_query("DROP TABLE moments_old")
-
-
-
+    # --- הגדרות כלליות שניתן לשנות ---
     creation_order = [
-        'groups',       # אין תלות
-    #    'moments',      # תלוי ב-images, אבל ניצור אחרי כדי שתוכלו להשלים images קודם
-    #    'images',       # תלוי ב-moments, אבל נוצר קודם
+        'groups',
+        'faces',
         'albums',
         'profiles',
-        'faces',        # תלוי ב-groups, images
-        'albums_images',# תלוי ב-albums, images
-        'profile_images',# תלוי ב-profiles, images
-        'profile_albums' # תלוי ב-profiles, albums
+        'images',
+        'moments',
+        'albums_images',
+        'profile_images',
+        'profile_albums'
     ]
-    db.execute_query('PRAGMA foreign_keys = OFF;')
+
+    # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
+    cyclic_pairs = [
+        ('moments', 'images', 'representative_image'),
+        ('groups', 'faces', 'representative_face')
+    ]
+
+    # ------------------------------------------------------
+
+    drop_views_triggers_and_indexes()
+    event.db.execute_query('PRAGMA foreign_keys = OFF;')
+
+    # שלב 1️⃣ – גיבוי כל הטבלאות
+    print("📦 גיבוי כל הטבלאות...")
+    for table_name in creation_order:
+        backup_table = f"{table_name}_backup"
+        event.db.execute_query(f"DROP TABLE IF EXISTS {backup_table}")
+        event.db.execute_query(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}")
+        print(f"  ✅ גובהה {table_name} → {backup_table}")
+
+    # שלב 2️⃣ – יצירה מחדש של כל הטבלאות
+    print("\n🧱 יצירת טבלאות חדשות...")
     for table_name in creation_order:
         ddl = TABLES[table_name]
-        print(f"Processing table '{table_name}'...")
+        event.db.execute_query(f"DROP TABLE IF EXISTS {table_name}")
+        event.db.execute_query(f"CREATE TABLE {table_name} ({ddl})")
+        print(f"  ✅ נוצרה טבלה חדשה {table_name}")
 
-        temp_table = f"{table_name}_new"
-        db.execute_query(f"DROP TABLE IF EXISTS {temp_table}")
-        db.execute_query(f"CREATE TABLE {temp_table} ({ddl})")
+    # עוזר כללי להעתקת נתונים בין טבלאות לפי עמודות משותפות
+    def copy_common_columns(src, dst):
+        old_cols = [r[1] for r in event.db.execute_query(f"PRAGMA table_info({src});", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[1] for r in event.db.execute_query(f"PRAGMA table_info({dst});", return_format=ReturnFormat.LIST_TUPLES)]
+        common = [c for c in old_cols if c in new_cols]
+        if not common:
+            print(f"  ⚠️ אין עמודות משותפות בין {src} ל-{dst}")
+            return
+        cols = ', '.join(common)
+        event.db.execute_query(f"INSERT INTO {dst}({cols}) SELECT {cols} FROM {src}")
 
-        # קבלת עמודות מהטבלה הישנה הנכונה
-        cols = [row[1] for row in db.execute_query(f"PRAGMA table_info({table_name});", return_format=ReturnFormat.LIST_TUPLES)]
-        cols_str = ', '.join(cols)
+    # שלב 3️⃣ – שחזור נתונים (כולל טיפול בצמדים)
+    print("\n📤 שחזור נתונים...")
 
-        # העתקת נתונים מהטבלה הישנה לטבלה החדשה
-        db.execute_query(f"INSERT INTO {temp_table}({cols_str}) SELECT {cols_str} FROM {table_name}")
+    handled = set()
+    for a, b, problematic in cyclic_pairs:
+        print(f"  🔁 טיפול בצמד {a} ↔ {b} (שדה בעייתי: {problematic})")
 
-        db.execute_query(f"DROP TABLE {table_name}")
-        db.execute_query(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
+        # העתקה של טבלה A בלי השדה הבעייתי
+        old_cols = [r[1] for r in event.db.execute_query(f"PRAGMA table_info({a}_backup);", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[1] for r in event.db.execute_query(f"PRAGMA table_info({a});", return_format=ReturnFormat.LIST_TUPLES)]
+        common_cols = [c for c in old_cols if c in new_cols and c != problematic]
+        if common_cols:
+            cols = ', '.join(common_cols)
+            event.db.execute_query(f"INSERT INTO {a}({cols}) SELECT {cols} FROM {a}_backup")
+            print(f"    ✅ {a}: הועתקו כל השדות למעט {problematic}")
 
-        print(f"  ✅ Table '{table_name}' recreated with data")
+        # העתקה של טבלה B כרגיל
+        copy_common_columns(f"{b}_backup", b)
+        print(f"    ✅ {b}: הועתקו כל הנתונים")
 
-    db.execute_query('PRAGMA foreign_keys = ON;')
+        # עדכון שדה בעייתי אחרי שטבלת B קיימת
+        event.db.execute_query(f"""
+            UPDATE {a}
+            SET {problematic} = (
+                SELECT {problematic}
+                FROM {a}_backup
+                WHERE {a}_backup.rowid = {a}.rowid
+            )
+        """)
+        print(f"    🔄 {a}: עודכן השדה {problematic}")
+
+        handled |= {a, b}
+
+    # שאר הטבלאות (שלא בצמדים)
+    for table_name in creation_order:
+        if table_name in handled:
+            continue
+        print(f"  🔁 משחזר {table_name}...")
+        copy_common_columns(f"{table_name}_backup", table_name)
+
+    # שלב 4️⃣ – מחיקת טבלאות הגיבוי
+    print("\n🧹 מחיקת טבלאות הגיבוי...")
+    for table_name in creation_order:
+        event.db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
+    event.db.execute_query('PRAGMA foreign_keys = ON;')
+    create_views_triggers_and_indexes()
+
+    print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
 
 def test_gets_methods(entities_tables: list, ids: dict, relations: list):
     for table in entities_tables:
@@ -474,7 +506,7 @@ def test_edit_methods():
     # print(result)
     # print('--------------------------------')
 
-recreate_views_triggers_and_indexes()
+# recreate_views_triggers_and_indexes()
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -501,3 +533,8 @@ ids = {
 # )
 # print(result)
 # print('--------------------------------')
+image_id = '53bed515-c414-416a-80d0-1f97cd64944e'
+deleted_groups, parents = event.delete_images([image_id])
+print(deleted_groups)
+print(parents)
+print('--------------------------------')

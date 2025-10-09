@@ -118,7 +118,8 @@ TABLES = {
     'groups': '''
         group_id TEXT PRIMARY KEY,
         label TEXT COLLATE NOCASE UNIQUE,
-        representative_face TEXT
+        representative_face TEXT,
+        FOREIGN KEY (representative_face) REFERENCES faces(face_id) ON DELETE SET NULL
     ''',
     'moments': '''
         moment_id TEXT PRIMARY KEY,
@@ -149,6 +150,7 @@ TABLES = {
         password TEXT DEFAULT '',
         hierarchy_rank INTEGER DEFAULT 0,
         is_profiles_manager BOOLEAN DEFAULT 0,
+        can_upload_and_delete_images BOOLEAN DEFAULT 0,
         can_edit BOOLEAN DEFAULT 0,
         all_images BOOLEAN,
         all_albums BOOLEAN,
@@ -342,6 +344,19 @@ TRIGGERS = {
         WHERE face_id = OLD.face_id;
     END;
     """,
+    'trg_delete_accessible_faces': """
+    CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_faces
+    INSTEAD OF DELETE ON accessible_faces
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        DELETE FROM faces
+        WHERE face_id = OLD.face_id;
+    END;
+    """,
 
     # accessible_images
     'trg_update_accessible_images': """
@@ -363,12 +378,25 @@ TRIGGERS = {
     INSTEAD OF DELETE ON accessible_images
     BEGIN
         SELECT CASE
-            WHEN cur_profile('can_edit') = 0 THEN
+            WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
                 RAISE(ABORT, 'Permission denied')
         END;
 
         DELETE FROM images
         WHERE image_id = OLD.image_id;
+    END;
+    """,
+    'trg_insert_accessible_images': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_images
+    INSTEAD OF INSERT ON accessible_images
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        INSERT INTO images (image_id, date_taken, is_archived, is_favorite, label, file_size, width, height, moment_id)
+        VALUES (NEW.image_id, NEW.date_taken, NEW.is_archived, NEW.is_favorite, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id);
     END;
     """,
 
@@ -853,6 +881,7 @@ class AppDB:
             'profile_id': '',
             'hierarchy_rank': 0,
             'is_profiles_manager': False,
+            'can_upload_and_delete_images': False,
             'can_edit': False,
             'all_images': False,
             'all_albums': False,

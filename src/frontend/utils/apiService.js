@@ -430,6 +430,14 @@ export const imagesAPI = {
       if (data.image) data.image = normalizeImage(data.image);
       return data;
     });
+  },
+
+  delete: async (imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/images`, { 
+      data: { image_ids: Array.isArray(imageIds) ? imageIds : [imageIds] } 
+    });
+    return response.data;
   }
 };
 

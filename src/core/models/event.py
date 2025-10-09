@@ -1,5 +1,5 @@
 import os
-from ..db import AppDB
+from ..db import AppDB, ReturnFormat
 from ..face_utils import FaceUtils
 from .json_model import JsonModel
 from .models_manager import ModelsManager
@@ -72,10 +72,10 @@ class Event(JsonModel):
         values = tuple(profile.values() for profile in default_profiles.values())
 
         self.db.execute_query(f'''
-            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_edit, all_images, all_albums, unassociated_group, save_preferences)
-            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1)
+            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_upload_and_delete_images, can_edit, all_images, all_albums, unassociated_group, save_preferences)
+            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1, 1)
         ''', values)
 
     def _initialize_default_groups(self):
@@ -107,6 +107,18 @@ class Event(JsonModel):
         """Get the current profile id."""
         return self.db.get_profile_id()
 
+    def can_profile_upload_and_delete_images(self) -> bool:
+        """Check if the current profile can upload and delete images."""
+        profile_id = self.get_profile_id()
+        if not profile_id:
+            return False
+
+        query = f"""
+            SELECT can_upload_and_delete_images FROM profiles WHERE profile_id = ?
+        """
+        can_upload_and_delete_images = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
+        return can_upload_and_delete_images
+
     def get_info(self) -> dict:
         return {
             'id': self.id,
@@ -118,35 +130,61 @@ class Event(JsonModel):
             'DB_PATH': self.DB_PATH
         }
 
-    def delete_image(self, image_id: str) -> dict:
-        face_ids = self.models_manager.get_childs('images', image_id, 'faces', return_ids=True)
-        if not self.face_utils:
-            self.face_utils = FaceUtils(self.id)
+    def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
+        """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
         
-        self.face_utils.rek_helper.delete_faces(face_ids)
-        for face_id in face_ids:
+        if not self.can_profile_upload_and_delete_images():
+            raise Exception("Profile not allowed to delete images")
+
+        for image_id in image_ids:
+            if not self.models_manager.is_image_deletable(image_id):
+                raise Exception(f"Profile not allowed to delete {image_id}")
+
+        parents = {}
+        deleted_groups = set()
+        for image_id in image_ids:
+            image_parents = self.models_manager.get_parents('images', image_id)
+
+            face_ids = self.models_manager.get_childs('images', image_id, 'faces', return_ids=True)
+            if not self.face_utils:
+                self.face_utils = FaceUtils(self.id)
+            
+            self.models_manager.delete('faces', face_ids)
+            self.models_manager.delete('images', image_id)
+            self.face_utils.rek_helper.delete_faces(face_ids)
+            for face_id in face_ids:
+                try:
+                    os.remove(os.path.join(self.faces_dir, f"{face_id}.webp"))
+                except FileNotFoundError:
+                    pass
+
             try:
-                os.remove(os.path.join(self.faces_dir, f"{face_id}.jpg"))
+                os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
+                os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
+                os.remove(os.path.join(self.display_dir, f"{image_id}.webp"))
+                os.remove(os.path.join(self.thumb_dir, f"{image_id}.webp"))
             except FileNotFoundError:
                 pass
+            
+            for group_id in image_parents.get('groups', set()):
+                if self.models_manager.is_empty('groups', group_id):
+                    self.models_manager.delete('groups', group_id)
+                    deleted_groups.add(group_id)
+                    image_parents.get('groups', set()).discard(group_id)
+                elif self.models_manager.is_empty('groups', group_id, only_accessible=True):
+                    self.models_manager.ensure_representative('groups', group_id)
+                    deleted_groups.add(group_id)
+                    image_parents.get('groups', set()).discard(group_id)
 
-        self.models_manager.delete('images', image_id)
-        try:
-            os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.display_dir, f"{image_id}.jpg"))
-            os.remove(os.path.join(self.thumb_dir, f"{image_id}.jpg"))
-        except FileNotFoundError:
-            pass
+            for entity, entity_ids in image_parents.items():
+                parents.setdefault(entity, set()).update(entity_ids)
 
-        result = {
-            'changes': [{
-                'type': 'REMOVE',
-                'entity': 'images',
-                'ids': [image_id]
-            }]
-        }
-        return result
+        for entity, entity_ids in parents.items():
+            parents[entity] = list(entity_ids)
+            for entity_id in entity_ids:
+                self.models_manager.ensure_representative(entity, entity_id)
+                
+        return list(deleted_groups), parents
 
     def process_new_images(self, display_size: int = 2048, thumb_size: int = 512, cluster_threshold: int = 90, max_matches_faces: int = 100, verbose: bool = True) -> dict:
         """
@@ -193,7 +231,7 @@ class Event(JsonModel):
                     'label': f"Person {group_num}",
                 }])[0]
                 group_id = group_data['group_id']
-                self.models_manager.edit_childs('faces', group_id, cluster, add=True)
+                self.models_manager.edit_childs('groups', group_id, 'faces', cluster, add=True)
                 self.last_group_id = group_num
             return len(clusters)
 
@@ -209,11 +247,13 @@ class Event(JsonModel):
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
                 image_id = self.models_manager.add(
                     'images',
-                    name=image_file,
-                    date_taken=date_taken,
-                    file_size=file_size,
-                    width=width,
-                    height=height
+                    {
+                        'label': image_file,
+                        'date_taken': date_taken,
+                        'file_size': file_size,
+                        'width': width,
+                        'height': height
+                    }
                 )["image_id"]
                 # Save high quality (4096px, jpg, quality=95, with EXIF)
                 high_quality_img = resize_image(original_img, 4096)

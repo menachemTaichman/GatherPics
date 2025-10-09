@@ -17,6 +17,8 @@ import { useModalStore } from '../utils/modalManager';
  * @param {string} imageUrl - Optional representative image URL
  * @param {string} imageAlt - Alt text for image
  * @param {string} caption - Optional caption/note to display
+ * @param {Array} images - Optional array of image objects with 'src' property (shows grid, max 3, with +X on third if more)
+ * @param {boolean} simpleMessage - If true, displays message as-is without quotes/bold formatting
  */
 function ConfirmDelete({ 
   isOpen, 
@@ -29,7 +31,9 @@ function ConfirmDelete({
   cancelText = "Cancel",
   imageUrl = null,
   imageAlt = "",
-  caption = null
+  caption = null,
+  images = null,
+  simpleMessage = false
 }) {
   const MODAL_ID = useState(() => `confirm-delete-${Math.random().toString(36).substr(2, 9)}`)[0];
   
@@ -97,9 +101,34 @@ function ConfirmDelete({
 
           {/* Content */}
           <div className="p-6">
+            {/* Image grid (if provided) */}
+            {images && images.length > 0 && (
+              <div className="mb-4">
+                <div className="flex gap-2 justify-center">
+                  {images.slice(0, 3).map((image, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={image.src}
+                        alt={image.alt || `Image ${index + 1}`}
+                        className="w-24 h-24 rounded-lg object-cover border-2 border-gray-200"
+                      />
+                      {/* Show +X overlay on third image if there are more than 3 */}
+                      {index === 2 && images.length > 3 && (
+                        <div className="absolute inset-0 bg-black bg-opacity-60 rounded-lg flex items-center justify-center">
+                          <span className="text-white text-xl font-semibold">
+                            +{images.length - 3}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-start space-x-4">
-              {/* Optional representative image */}
-              {imageUrl && (
+              {/* Optional single representative image (legacy) */}
+              {!images && imageUrl && (
                 <div className="flex-shrink-0">
                   <img
                     src={imageUrl}
@@ -111,9 +140,13 @@ function ConfirmDelete({
               
               {/* Message */}
               <div className="flex-1">
-                <p className="text-gray-700">
-                  {message} <span className="font-semibold text-gray-900">"{itemName}"</span>?
-                </p>
+                {simpleMessage ? (
+                  <p className="text-gray-700">{message}</p>
+                ) : (
+                  <p className="text-gray-700">
+                    {message} <span className="font-semibold text-gray-900">"{itemName}"</span>?
+                  </p>
+                )}
                 {caption && (
                   <p className="text-sm text-gray-500 mt-2">
                     {caption}

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2 } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import SelectFaceForRepModal from './SelectFaceForRepModal';
 import MoveToMomentModal from './MoveToMomentModal';
+import ConfirmDelete from './ConfirmDelete';
 import useImageActions from './ImageActions';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -91,6 +92,15 @@ function ImageViewerActions({
           <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
         </button>
 
+        {/* Delete image */}
+        <button
+          onClick={imageActions.deleteImages}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
+          title="Delete photo"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+
         {/* Set as representative */}
         {imageActions.canSetRepresentative && (
           <button
@@ -116,6 +126,22 @@ function ImageViewerActions({
           urlHelpers={urlHelpers}
           groupLabel={entityLabel}
           onSelect={imageActions.onFaceSelected}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {imageActions.showDeleteConfirmModal && (
+        <ConfirmDelete
+          isOpen={imageActions.showDeleteConfirmModal}
+          onClose={imageActions.onCancelDelete}
+          onConfirm={imageActions.onConfirmDelete}
+          title="Delete Photo"
+          message="Are you sure you want to delete this photo?"
+          simpleMessage={true}
+          images={imageActions.deleteImagesList}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
         />
       )}
     </>
