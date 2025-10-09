@@ -438,6 +438,35 @@ export const imagesAPI = {
       data: { image_ids: Array.isArray(imageIds) ? imageIds : [imageIds] } 
     });
     return response.data;
+  },
+
+  getUploadLimits: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `GET_UPLOAD_LIMITS:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/upload/limits`);
+      return response.data;
+    });
+  },
+
+  upload: async (files, assignMoments, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const formData = new FormData();
+    
+    // Add files to FormData
+    for (const file of files) {
+      formData.append('files', file);
+    }
+    
+    // Add assign_moments option
+    formData.append('assign_moments', assignMoments ? 'true' : 'false');
+    
+    const response = await api.post(`/api/events/${eventId}/images`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   }
 };
 

@@ -907,7 +907,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                     className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
                     title="Remove representative"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Minus className="w-3 h-3" />
                   </button>
                 )}
               </div>
@@ -974,7 +974,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedImages.length} of {getImageCount(group)} images
+                  {sortedImages.length === getImageCount(group)
+                    ? `${sortedImages.length} photos`
+                    : `${sortedImages.length} of ${getImageCount(group)} photos`
+                  }
                   {showCrops && (
                     <span className="ml-2 text-primary-600 font-medium">
                       • Showing face crops

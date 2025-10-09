@@ -119,16 +119,19 @@ class FaceUtils:
         face_ids: list[str],
         threshold_similarity: int = 90,
         max_matches_faces: int = 100,
-    ) -> list[list[str]]:
+    ) -> list[tuple[str, list[str]]]:
         """
         Clusters faces with transitive merging.
 
         Args:
-            face_ids: list of AWS FaceIds
-            threshold: similarity threshold for Rekognition search_similar_faces
+            face_ids: list of AWS FaceIds (new faces to cluster)
+            threshold_similarity: similarity threshold for Rekognition search_similar_faces
+            max_matches_faces: maximum number of matches to retrieve per face
 
         Returns:
-            List of clusters (each cluster is a list of FaceIds)
+            List of tuples: (existing_face_id or 'new', [list of new face_ids in cluster])
+            - If cluster contains an existing face (not in face_ids), returns that face_id
+            - If cluster only contains new faces, returns 'new'
         """
         class UnionFind:
             def __init__(self):
@@ -146,6 +149,8 @@ class FaceUtils:
 
         uf = UnionFind()
         visited = set()
+        new_face_ids_set = set(face_ids)  # Track which faces are new
+        existing_faces_found = set()  # Track existing faces found during matching
 
         for face_id in face_ids:
             if face_id in visited:
@@ -156,12 +161,29 @@ class FaceUtils:
                 match_id = match['Face']['FaceId']
                 uf.union(face_id, match_id)
                 visited.add(match_id)
+                # Track if this is an existing face (not in the new list)
+                if match_id not in new_face_ids_set:
+                    existing_faces_found.add(match_id)
 
         # Group faces by root parent
         clusters = defaultdict(list)
         for face_id in face_ids:
             clusters[uf.find(face_id)].append(face_id)
-        return list(clusters.values())
+        
+        # For each cluster, determine if it contains an existing face
+        result = []
+        for root, new_faces in clusters.items():
+            # Find if there's an existing face in this cluster
+            existing_face = None
+            for existing_id in existing_faces_found:
+                if uf.find(existing_id) == root:
+                    existing_face = existing_id
+                    break
+            
+            cluster_identifier = existing_face if existing_face else 'new'
+            result.append((cluster_identifier, new_faces))
+        
+        return result
 
 
     def duplicate_faces(self, face_details: list[dict], iou_threshold: float = 0.5) -> list[dict]:

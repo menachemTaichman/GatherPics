@@ -154,7 +154,6 @@ TABLES = {
         can_edit BOOLEAN DEFAULT 0,
         all_images BOOLEAN,
         all_albums BOOLEAN,
-        unassociated_group BOOLEAN,
         save_preferences BOOLEAN
     ''',
     'profile_images': '''
@@ -235,8 +234,8 @@ VIEWS = {
         SELECT f.*
         FROM faces f 
         INNER JOIN accessible_images i ON f.image_id = i.image_id
-        INNER JOIN groups g ON f.group_id = g.group_id
-        WHERE (LOWER(g.label) != 'unassociated' OR cur_profile('unassociated_group') = 1)
+        LEFT JOIN groups g ON f.group_id = g.group_id
+        WHERE cur_profile('can_edit') = 1 OR LOWER(g.label) != 'unassociated'
     ''',
     'groups_images': '''
         SELECT i.image_id as image_id, g.group_id as group_id
@@ -357,6 +356,19 @@ TRIGGERS = {
         WHERE face_id = OLD.face_id;
     END;
     """,
+    'trg_insert_accessible_faces': """
+    CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_faces
+    INSTEAD OF INSERT ON accessible_faces
+    BEGIN
+        SELECT CASE
+            WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                RAISE(ABORT, 'Permission denied')
+        END;
+
+        INSERT INTO faces (face_id, image_id, group_id, width, height, left, top)
+        VALUES (NEW.face_id, NEW.image_id, NEW.group_id, NEW.width, NEW.height, NEW.left, NEW.top);
+    END;
+    """,
 
     # accessible_images
     'trg_update_accessible_images': """
@@ -395,8 +407,8 @@ TRIGGERS = {
                 RAISE(ABORT, 'Permission denied')
         END;
 
-        INSERT INTO images (image_id, date_taken, is_archived, is_favorite, label, file_size, width, height, moment_id)
-        VALUES (NEW.image_id, NEW.date_taken, NEW.is_archived, NEW.is_favorite, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id);
+        INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id)
+        VALUES (NEW.image_id, NEW.date_taken, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id);
     END;
     """,
 
@@ -885,7 +897,6 @@ class AppDB:
             'can_edit': False,
             'all_images': False,
             'all_albums': False,
-            'unassociated_group': False,
         }
         profile = {}
         if profile_id:

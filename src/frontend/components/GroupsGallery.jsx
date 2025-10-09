@@ -39,22 +39,26 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   // Use groups from store
   const currentGroups = storeGroups;
 
+  // First filter to only groups with images (baseline for counts)
+  const groupsWithImages = useMemo(() => {
+    return currentGroups.filter(group => {
+      const imageCount = getImageCount(group);
+      return imageCount > 0;
+    });
+  }, [currentGroups]);
+
   const filteredAndSortedGroups = useMemo(() => {
-    let filtered = currentGroups.filter(group => {
+    let filtered = groupsWithImages.filter(group => {
       // Filter by search term
       const matchesSearch = group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            String(group.id || '').includes(searchTerm);
       
-      // Filter out groups with 0 images based on includeArchive setting
-      const imageCount = getImageCount(group);
-      const hasImages = imageCount > 0;
-      
-      return matchesSearch && hasImages;
+      return matchesSearch;
     });
 
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);
-  }, [currentGroups, searchTerm, sortBy, sortOrder]);
+  }, [groupsWithImages, searchTerm, sortBy, sortOrder]);
 
   return (
     <div className="w-full">
@@ -66,7 +70,10 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
               Persons Gallery
             </h1>
             <p className="text-gray-600">
-              {filteredAndSortedGroups.length} of {currentGroups.length} face groups
+              {filteredAndSortedGroups.length === groupsWithImages.length 
+                ? `${filteredAndSortedGroups.length} persons`
+                : `${filteredAndSortedGroups.length} of ${groupsWithImages.length} persons`
+              }
             </p>
           </div>
           

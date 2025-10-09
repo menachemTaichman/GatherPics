@@ -966,6 +966,144 @@ def delete_image(event_id):
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/events/<event_id>/upload/limits", methods=["GET"])
+@require_auth
+def get_upload_limits(event_id):
+    """Get upload limits and current usage."""
+    event = get_event(event_id)
+    
+    current_count = event.get_images_count()
+    
+    available_count = max(0, event.images_count_limit - current_count) if event.images_count_limit > 0 else -1
+    
+    return jsonify({
+        "image_size_limit_bytes": event.image_size_limit_bytes,
+        "images_count_limit": event.images_count_limit,
+        "current_images_count": current_count,
+        "available_images_count": available_count
+    })
+
+@app.route("/api/events/<event_id>/images", methods=["POST"])
+@require_auth
+def upload_images(event_id):
+    """Upload and process images."""
+    from werkzeug.utils import secure_filename
+    import shutil
+    
+    event = get_event(event_id)
+    
+    # Check if files were uploaded
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    files = request.files.getlist('files')
+    assign_moments = request.form.get('assign_moments', 'false').lower() == 'true'
+    
+    if not files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    try:
+        # Save files to to_process directory
+        saved_files = []
+        for file in files:
+            if file and file.filename:
+                # Check file extension
+                if not file.filename.lower().endswith(('.jpg', '.jpeg')):
+                    continue
+                
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(event.to_process_dir, filename)
+                
+                # Handle duplicate filenames
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(filepath):
+                    filename = f"{base}_{counter}{ext}"
+                    filepath = os.path.join(event.to_process_dir, filename)
+                    counter += 1
+                
+                file.save(filepath)
+                saved_files.append(filename)
+        
+        if not saved_files:
+            return jsonify({"error": "No valid JPG files provided"}), 400
+        
+        # Process images
+        result = event.process_new_images(
+            verbose=False,
+            assign_moments=assign_moments
+        )
+        
+        # Build changes for frontend
+        changes = []
+        
+        # Get all processed images
+        processed_image_ids = result.get('processed_image_ids', [])
+        if processed_image_ids:
+            images = event.models_manager.get_entities('images', processed_image_ids)
+            
+            # Get all parent groups for the images
+            all_parent_groups = set()
+            for image_id in processed_image_ids:
+                parent_groups = event.models_manager.get_parents('images', image_id, 'groups')
+                all_parent_groups.update(parent_groups)
+            
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': images,
+            })
+            
+            # Add relation changes for each group
+            for group_id in all_parent_groups:
+                group_images = event.models_manager.get_childs('groups', group_id, 'images', processed_image_ids)
+                if group_images:
+                    changes.append({
+                        'type': 'RELATION_ADD',
+                        'relation': 'group.images',
+                        'parentId': group_id,
+                        'entities': group_images,
+                    })
+            
+            if all_parent_groups:
+                changes.append({
+                    'type': 'UPSERT',
+                    'entity': 'group',
+                    'items': event.models_manager.get_entities('groups', list(all_parent_groups)),
+                })
+            
+            # Handle moment assignments
+            assigned_moments = result.get('assigned_moments', {})
+            if assigned_moments:
+                for moment_id, image_ids in assigned_moments.items():
+                    changes.append({
+                        'type': 'RELATION_ADD',
+                        'relation': 'moment.images',
+                        'parentId': moment_id,
+                        'entities': event.models_manager.get_childs('moments', moment_id, 'images', image_ids)
+                    })
+                
+                changes.append({
+                    'type': 'UPDATE',
+                    'entity': 'moment',
+                    'items': event.models_manager.get_entities('moments', list(assigned_moments.keys()))
+                })
+        
+        return jsonify({
+            "success": True,
+            "images_processed": result['images_processed'],
+            "faces_detected": result['faces_detected'],
+            "groups_created": result['groups_created'],
+            "errors": result.get('errors', []),
+            "changes": changes
+        })
+        
+    except ValueError as e:
+        # Validation errors (limits exceeded, etc.)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return bad_request(e)
+
 # ==============================================================================
 # VI. FILE SERVING & DOWNLOADS
 # ==============================================================================

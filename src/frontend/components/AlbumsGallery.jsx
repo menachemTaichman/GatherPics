@@ -88,7 +88,10 @@ export default function AlbumsGallery({ eventUrl }) {
               Albums
             </h1>
             <p className="text-gray-600">
-              {filteredAndSortedAlbums.length} of {currentAlbums.length} albums
+              {filteredAndSortedAlbums.length === currentAlbums.length
+                ? `${filteredAndSortedAlbums.length} albums`
+                : `${filteredAndSortedAlbums.length} of ${currentAlbums.length} albums`
+              }
             </p>
           </div>
           

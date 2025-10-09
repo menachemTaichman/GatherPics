@@ -101,6 +101,11 @@ function ImageViewerActions({
           <Trash2 className="w-4 h-4" />
         </button>
 
+        {/* Separator */}
+        {imageActions.canSetRepresentative && (
+          <span className="text-gray-300">|</span>
+        )}
+
         {/* Set as representative */}
         {imageActions.canSetRepresentative && (
           <button

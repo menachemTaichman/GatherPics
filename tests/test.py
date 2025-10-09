@@ -506,7 +506,22 @@ def test_edit_methods():
     # print(result)
     # print('--------------------------------')
 
-# recreate_views_triggers_and_indexes()
+def test_faces_in_aws_and_db():
+    faces_in_aws = event.face_utils.rek_helper.get_face_ids()
+    faces_in_db = event.db.execute_query('SELECT face_id FROM faces;', return_format=ReturnFormat.LIST_VALUES)
+    faces_in_aws_but_not_in_db = [face for face in faces_in_aws if face not in faces_in_db]
+    faces_in_db_but_not_in_aws = [face for face in faces_in_db if face not in faces_in_aws]
+    print(faces_in_aws_but_not_in_db)
+    print(faces_in_db_but_not_in_aws)
+
+def find_incomplete_images():
+    images = event.db.execute_query('SELECT image_id FROM images;', return_format=ReturnFormat.LIST_VALUES)
+    incomplete_images = []
+    for image in images:
+        if not os.path.exists(os.path.join(event.original_dir, f"{image}.jpg")):
+            incomplete_images.append(image)
+    
+    return incomplete_images
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -533,8 +548,3 @@ ids = {
 # )
 # print(result)
 # print('--------------------------------')
-image_id = '53bed515-c414-416a-80d0-1f97cd64944e'
-deleted_groups, parents = event.delete_images([image_id])
-print(deleted_groups)
-print(parents)
-print('--------------------------------')

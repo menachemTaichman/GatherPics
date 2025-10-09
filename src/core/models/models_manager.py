@@ -205,7 +205,7 @@ class ModelsManager:
             parent_ids = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
             if parent_ids:
                 parents[parent] = parent_ids
-            else:
+            elif not single_item:
                 parents_to_remove.append(parent)
 
         for parent in parents_to_remove:
@@ -247,6 +247,9 @@ class ModelsManager:
         Returns:
             representative id if found or set, None if not found
         """
+        if table == 'groups' and entity_id == self.get_unassociated_group():
+            return None
+        
         representative = STRUCTURE[table].get('representative','')
         if not representative:
             raise ValueError(f"Representative not found")
@@ -353,6 +356,54 @@ class ModelsManager:
             FROM {accessible_images} i
         """
         return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
+
+    def assign_moments_by_time(self, image_ids: list[str]) -> dict[str, list[str]]:
+        """Assign images to moments based on their date_taken falling within moment time ranges.
+        Args:
+            image_ids: list of image ids to assign
+        Returns:
+            dict of moment ids as keys and list of assigned image ids as values
+        """
+        if not image_ids:
+            return {}
+
+        accessible_moments = STRUCTURE['moments']['accessible_table']
+        accessible_images = STRUCTURE['images']['accessible_table']
+
+        placeholders = ','.join('?' for _ in image_ids)
+        query = f"""
+            WITH matched AS (
+                SELECT i.image_id, m.moment_id
+                FROM {accessible_images} AS i
+                JOIN {accessible_moments} AS m
+                ON i.date_taken BETWEEN m.start AND m.end
+                WHERE i.image_id IN ({placeholders})
+            )
+            UPDATE {accessible_images}
+            SET moment_id = (
+                SELECT m.moment_id
+                FROM matched AS m
+                WHERE m.image_id = {accessible_images}.image_id
+                LIMIT 1
+            )
+            WHERE image_id IN ({placeholders})
+        """
+
+        params = image_ids + image_ids
+        self.db.execute_query(query, params)
+
+        result_query = f"""
+            SELECT image_id, moment_id
+            FROM {accessible_images}
+            WHERE image_id IN ({placeholders})
+            AND moment_id IS NOT NULL
+        """
+        rows = self.db.execute_query(result_query, image_ids, return_format=ReturnFormat.LIST_DICTS)
+
+        assigned = {}
+        for row in rows:
+            assigned.setdefault(row['moment_id'], []).append(row['image_id'])
+        return assigned
 
     def remove_images_from_moments(self, image_ids: list[str]) -> dict[str, list[str]]:
         """Remove images from a moment."""
@@ -577,7 +628,8 @@ class ModelsManager:
 
         source_deleted = self.is_empty('groups', source_group_id, child='faces', only_accessible=True)
         if self.is_empty('groups', source_group_id, child='faces'):
-            self.delete('groups', source_group_id)
+            if source_group_id != self.get_unassociated_group():
+                self.delete('groups', source_group_id)
 
         detached_groups_images = {}
         for group_id, detached_faces in detached_groups_faces.items():

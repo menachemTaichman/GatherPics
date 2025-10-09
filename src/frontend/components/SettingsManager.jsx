@@ -1,142 +1,533 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Settings, RotateCcw, Trash2 } from 'lucide-react';
-import { getPreference, setPreference, resetAllPreferences, getPreferences, clearAllSettings } from '../utils/settings';
-import { useDataStore } from '../utils/dataManager';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Settings, X, Upload, Archive, User, Info, MessageSquare, Loader2, Check, AlertCircle } from 'lucide-react';
+import { useModalFocus } from '../utils/useModalFocus';
+import { getPreference, setPreference } from '../utils/settings';
+import { imagesAPI } from '../utils/apiService';
+import { useParams } from 'react-router-dom';
+import { useToast } from '../utils/ToastContext';
 
 export default function SettingsManager() {
-  const [showSettings, setShowSettings] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
-  const [settings, setSettings] = useState(getPreferences());
-  const settingsRef = useRef(null);
-  const openStoreSnapshot = () => {
-    const store = useDataStore.getState();
-    const replacer = (_key, value) => {
-      if (value instanceof Set) return Array.from(value);
-      return value;
-    };
-    const snapshot = JSON.stringify(store || {}, replacer, 2);
-    const blob = new Blob([snapshot], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const [lastUploadResult, setLastUploadResult] = useState(null);
+  const [assignMoments, setAssignMoments] = useState(true);
+  const [uploadLimits, setUploadLimits] = useState(null);
+  const fileInputRef = useRef(null);
+  const { eventUrl } = useParams();
+  const { showToast } = useToast();
+  
+  const { modalRef } = useModalFocus(isOpen, () => setIsOpen(false), {
+    modalType: 'popup',
+    allowOutsideScroll: true,
+    enableFocusTrapping: true
+  });
+
+  const tabs = [
+    { id: 'general', label: 'General', icon: Settings },
+    { id: 'profiles', label: 'Profiles', icon: User },
+    { id: 'about', label: 'About', icon: Info },
+    { id: 'feedback', label: 'Feedback', icon: MessageSquare }
+  ];
+
+  // Fetch upload limits when opening settings
+  useEffect(() => {
+    if (isOpen && eventUrl) {
+      fetchUploadLimits();
+    }
+  }, [isOpen, eventUrl]);
+
+  const fetchUploadLimits = async () => {
+    try {
+      const limits = await imagesAPI.getUploadLimits(eventUrl);
+      setUploadLimits(limits);
+    } catch (error) {
+      console.error('Failed to fetch upload limits:', error);
+    }
   };
 
-  // Close settings when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
-        setShowSettings(false);
-      }
-    };
+  const handleIncludeArchivedChange = (checked) => {
+    setIncludeArchived(checked);
+    setPreference('general.includeArchived', checked);
+  };
 
-    if (showSettings) {
-      document.addEventListener('mousedown', handleClickOutside);
+  const handleFileSelect = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      handleUpload(files);
+    }
+    // Reset input so the same files can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUpload = async (files) => {
+    // Validate files
+    const jpgFiles = files.filter(file => 
+      file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')
+    );
+
+    if (jpgFiles.length === 0) {
+      showToast('Please select JPG files only', 'error');
+      return;
     }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSettings]);
+    if (jpgFiles.length !== files.length) {
+      showToast(`${files.length - jpgFiles.length} non-JPG file(s) were skipped`, 'warning');
+    }
 
-  const handleResetSettings = () => {
-    resetAllPreferences();
-    setSettings(getPreferences());
-  };
+    // Check count limit
+    if (uploadLimits && uploadLimits.available_images_count !== -1 && jpgFiles.length > uploadLimits.available_images_count) {
+      showToast(`You can only upload ${uploadLimits.available_images_count} more image(s). Limit: ${uploadLimits.images_count_limit}`, 'error');
+      return;
+    }
 
-  const handleClearSettings = () => {
-    clearAllSettings();
-    setSettings(getPreferences());
-  };
+    // Check size limit
+    if (uploadLimits && uploadLimits.image_size_limit_bytes > 0) {
+      const oversizedFiles = jpgFiles.filter(file => file.size > uploadLimits.image_size_limit_bytes);
+      if (oversizedFiles.length > 0) {
+        const maxSizeMB = (uploadLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1);
+        showToast(`${oversizedFiles.length} file(s) exceed the ${maxSizeMB}MB size limit`, 'error');
+        return;
+      }
+    }
 
-  const refreshSettings = () => {
-    setSettings(getPreferences());
+    setUploading(true);
+    setLastUploadResult(null);
+    setUploadProgress({ step: 'uploading', current: jpgFiles.length, total: jpgFiles.length, message: `Uploading ${jpgFiles.length} image(s)...` });
+
+    try {
+      // Simulate upload progress
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      setUploadProgress({ step: 'processing', current: 0, total: 1, message: 'Processing images, detecting faces, and clustering...' });
+      
+      const result = await imagesAPI.upload(jpgFiles, assignMoments, eventUrl);
+      
+      const successMsg = `Successfully processed ${result.images_processed} image(s), detected ${result.faces_detected} face(s), created ${result.groups_created} group(s)`;
+      
+      setUploadProgress({ 
+        step: 'complete', 
+        current: 1, 
+        total: 1, 
+        message: successMsg
+      });
+
+      setLastUploadResult({
+        success: true,
+        message: successMsg,
+        details: result
+      });
+
+      showToast(successMsg, 'success');
+
+      if (result.errors && result.errors.length > 0) {
+        console.warn('Upload errors:', result.errors);
+        showToast(`${result.errors.length} image(s) failed to process`, 'warning');
+        setLastUploadResult(prev => ({
+          ...prev,
+          message: `${successMsg}\n${result.errors.length} image(s) failed to process`
+        }));
+      }
+
+      // Refresh limits
+      await fetchUploadLimits();
+
+      // Reset uploading state after a delay
+      setTimeout(() => {
+        setUploadProgress(null);
+        setUploading(false);
+      }, 2000);
+
+    } catch (error) {
+      console.error('Upload failed:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Upload failed';
+      showToast(errorMsg, 'error');
+      setUploadProgress({ step: 'error', current: 0, total: 0, message: errorMsg });
+      setLastUploadResult({
+        success: false,
+        message: errorMsg
+      });
+      setUploading(false);
+    }
   };
 
   return (
-    <div className="relative" ref={settingsRef}>
+    <>
       <button
-        onClick={() => setShowSettings(!showSettings)}
+        onClick={() => setIsOpen(true)}
         className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
         title="Settings"
       >
         <Settings className="w-4 h-4" />
       </button>
 
-      {showSettings && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-4"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Cached Settings</h3>
-            <div className="flex space-x-2">
-              <button
-                onClick={refreshSettings}
-                className="p-1 text-gray-500 hover:text-gray-700"
-                title="Refresh"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={openStoreSnapshot}
-                className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                title="Open current store JSON in a new tab"
-              >
-                Open store
-              </button>
-              <button
-                onClick={handleResetSettings}
-                className="p-1 text-gray-500 hover:text-gray-700"
-                title="Reset to defaults"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleClearSettings}
-                className="p-1 text-red-500 hover:text-red-700"
-                title="Clear all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
 
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {Object.entries(settings).map(([key, value]) => (
-              <div key={key} className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 font-mono">{key}:</span>
-                <span className="text-gray-900 font-mono">
-                  {typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value)}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick toggles */}
-          <div className="mt-4 pt-3 border-t border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Preferences</h4>
-            <label className="flex items-center space-x-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(e) => {
-                  const newValue = e.target.checked;
-                  setPreference('general.includeArchived', newValue);
-                  setIncludeArchived(newValue);
+            {/* Modal */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                ref={modalRef}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ 
+                  opacity: 1, 
+                  scale: 1
                 }}
-              />
-              <span>Include archived images</span>
-            </label>
-          </div>
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                      <Settings className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-900">Settings</h2>
+                      <p className="text-sm text-gray-500">Manage your preferences</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-          <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
-            Settings are automatically saved to localStorage
-          </div>
-        </motion.div>
-      )}
-    </div>
+                {/* Tabs */}
+                <div className="border-b border-gray-200 px-6">
+                  <div className="flex space-x-1">
+                    {tabs.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                            activeTab === tab.id
+                              ? 'border-primary-500 text-primary-600'
+                              : 'border-transparent text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span className="font-medium">{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  <AnimatePresence mode="wait">
+                    {activeTab === 'general' && (
+                      <motion.div
+                        key="general"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ 
+                          opacity: 1, 
+                          y: 0
+                        }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">General Settings</h3>
+                          
+                          {/* Include Archived */}
+                          <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mb-3">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                <Archive className="w-5 h-5 text-gray-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">Include Archived</p>
+                                <p className="text-sm text-gray-500">Show archived images in galleries</p>
+                              </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={includeArchived}
+                                onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                            </label>
+                          </div>
+
+                          {/* Upload Photos */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                <Upload className="w-5 h-5 text-gray-600" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">Upload Photos</p>
+                                <p className="text-sm text-gray-500">Add new JPG photos to the gallery</p>
+                              </div>
+                            </div>
+
+                            {/* Upload limits info */}
+                            {uploadLimits && (
+                              <div className="mb-3 text-xs text-gray-600 bg-white px-3 py-2 rounded">
+                                <div className="flex justify-between">
+                                  <span>Images:</span>
+                                  <span className="font-medium">
+                                    {uploadLimits.current_images_count} / {uploadLimits.images_count_limit > 0 ? uploadLimits.images_count_limit : '∞'}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Max size per image:</span>
+                                  <span className="font-medium">
+                                    {uploadLimits.image_size_limit_bytes > 0 
+                                      ? `${(uploadLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1)}MB` 
+                                      : '∞'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Assign moments toggle */}
+                            <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg mb-3">
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">Auto-assign to Moments</p>
+                                <p className="text-xs text-gray-500">Assign images to moments by capture time</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={assignMoments}
+                                  onChange={(e) => setAssignMoments(e.target.checked)}
+                                  disabled={uploading}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 peer-disabled:opacity-50"></div>
+                              </label>
+                            </div>
+
+                            {/* Upload button */}
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept=".jpg,.jpeg,image/jpeg"
+                              multiple
+                              onChange={handleFileSelect}
+                              className="hidden"
+                            />
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={uploading}
+                              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {uploading ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span>Processing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4" />
+                                  <span>Select Files</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Progress and status display */}
+                            <AnimatePresence>
+                              {(uploadProgress || lastUploadResult) && (
+                                <motion.div 
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="mt-3 space-y-2">
+                                    {uploadProgress && (
+                                      <>
+                                        <div className="flex items-center space-x-2 text-sm">
+                                          {uploadProgress.step === 'complete' ? (
+                                            <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                          ) : uploadProgress.step === 'error' ? (
+                                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                          ) : (
+                                            <Loader2 className="w-4 h-4 animate-spin text-primary-600 flex-shrink-0" />
+                                          )}
+                                          <span className={`${uploadProgress.step === 'complete' ? 'text-green-700' : uploadProgress.step === 'error' ? 'text-red-700' : 'text-gray-700'} font-medium`}>
+                                            {uploadProgress.message}
+                                          </span>
+                                        </div>
+                                        {uploadProgress.total > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                                          <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div
+                                              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                                              style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                                            />
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                    
+                                    {/* Persistent result message */}
+                                    {!uploading && lastUploadResult && (
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3, delay: 0.1 }}
+                                        className={`p-3 rounded-lg text-sm ${lastUploadResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+                                      >
+                                        <div className="flex items-start space-x-2">
+                                          {lastUploadResult.success ? (
+                                            <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                          ) : (
+                                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                          )}
+                                          <div className={lastUploadResult.success ? 'text-green-800' : 'text-red-800'}>
+                                            <p className="font-medium whitespace-pre-line">{lastUploadResult.message}</p>
+                                            {lastUploadResult.success && lastUploadResult.details && (
+                                              <div className="mt-1 text-xs text-green-700 space-y-0.5">
+                                                <p>• Images: {lastUploadResult.details.images_processed}</p>
+                                                <p>• Faces detected: {lastUploadResult.details.faces_detected}</p>
+                                                <p>• Groups created: {lastUploadResult.details.groups_created}</p>
+                                                {lastUploadResult.details.errors && lastUploadResult.details.errors.length > 0 && (
+                                                  <p className="text-yellow-700">• Errors: {lastUploadResult.details.errors.length}</p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'profiles' && (
+                      <motion.div
+                        key="profiles"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Profiles</h3>
+                          <div className="bg-gray-50 rounded-lg p-8 text-center">
+                            <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-600">Profile settings will be available soon.</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'about' && (
+                      <motion.div
+                        key="about"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-6"
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About Face Gallery</h3>
+                          
+                          <div className="space-y-4">
+                            {/* App Info */}
+                            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6">
+                              <h4 className="text-2xl font-bold text-primary-900 mb-2">Face Gallery</h4>
+                              <p className="text-primary-700 mb-4">AI-Powered Face Recognition System</p>
+                              <p className="text-sm text-primary-600">
+                                An intelligent photo management system that automatically organizes your photos by recognizing faces and creating smart albums.
+                              </p>
+                            </div>
+
+                            {/* Contact */}
+                            <div className="bg-gray-50 rounded-lg p-6">
+                              <h4 className="font-semibold text-gray-900 mb-3">Contact</h4>
+                              <div className="flex items-center space-x-2 text-gray-700">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <a href="mailto:meTaichman@gmail.com" className="hover:text-primary-600 transition-colors">
+                                  meTaichman@gmail.com
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Copyright */}
+                            <div className="bg-gray-50 rounded-lg p-6">
+                              <h4 className="font-semibold text-gray-900 mb-3">Copyright</h4>
+                              <p className="text-sm text-gray-600">
+                                © {new Date().getFullYear()} Face Gallery. All rights reserved.
+                              </p>
+                              <p className="text-xs text-gray-500 mt-2">
+                                This software is provided as-is without any warranties.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'feedback' && (
+                      <motion.div
+                        key="feedback"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Send Feedback</h3>
+                          <div className="bg-gray-50 rounded-lg p-8 text-center">
+                            <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-600">Feedback form will be available soon.</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
-} 
+}

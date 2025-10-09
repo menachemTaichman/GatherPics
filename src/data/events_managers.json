@@ -4,6 +4,7 @@
     "name": "Test Manager",
     "password": "",
     "images_count_limit": 6000,
+    "image_size_limit_bytes": 13631488,
     "events": ["75cb6635-879d-4386-b023-366444dc0fb2"]
   }
 ]

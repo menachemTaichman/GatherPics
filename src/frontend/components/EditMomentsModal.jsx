@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock, AlertTriangle, Minus } from 'lucide-react';
 import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -526,7 +526,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                           className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
                           title="Remove representative"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Minus className="w-3 h-3" />
                         </button>
                       )}
                     </div>

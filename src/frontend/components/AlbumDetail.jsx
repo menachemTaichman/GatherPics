@@ -436,7 +436,7 @@ export default function AlbumDetail() {
                     className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
                     title="Remove representative"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Minus className="w-3 h-3" />
                   </button>
                 )}
               </div>
