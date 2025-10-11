@@ -10,7 +10,11 @@ function QuestionMarkPlaceholder({
   className = "",
   ...props 
 }) {
-  const svgDataUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="${Math.min(width, height) * 0.4}" fill="%239ca3af">?</text></svg>`;
+  // Use viewBox for responsive SVG when w-full or h-full is present
+  const hasResponsive = className.includes('w-full') || className.includes('h-full');
+  const svgDataUrl = hasResponsive 
+    ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid slice"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="${Math.min(width, height) * 0.4}" fill="%239ca3af">?</text></svg>`
+    : `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="${Math.min(width, height) * 0.4}" fill="%239ca3af">?</text></svg>`;
   
   return (
     <img
@@ -34,10 +38,17 @@ function ImageIconPlaceholder({
 }) {
   const IconComponent = iconType === "person" ? User : ImageIcon;
   
+  // If w-full or h-full is in className, don't use inline styles
+  const hasResponsiveWidth = className.includes('w-full');
+  const hasResponsiveHeight = className.includes('h-full');
+  const style = {};
+  if (!hasResponsiveWidth) style.width = width;
+  if (!hasResponsiveHeight) style.height = height;
+  
   return (
     <div
       className={`flex items-center justify-center bg-gray-200 text-gray-400 rounded-lg ${className}`}
-      style={{ width: width, height: height }}
+      style={Object.keys(style).length > 0 ? style : undefined}
       {...props}
     >
       <IconComponent size={Math.min(width, height) * 0.6} strokeWidth={1.5} />

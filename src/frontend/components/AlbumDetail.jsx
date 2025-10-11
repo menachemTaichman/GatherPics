@@ -74,6 +74,7 @@ export default function AlbumDetail() {
   // Subscribe to normalized albums list
   const currentAlbums = useAlbumsList();
   const attemptedLookupRef = useRef(false);
+  const isRenamingRef = useRef(false);
   
   const decodedAlbumName = useMemo(() => {
     try { return decodeURIComponent(album_name || ''); } catch { return album_name || ''; }
@@ -133,13 +134,30 @@ export default function AlbumDetail() {
   useEffect(() => {
     if (!eventUrl || !decodedAlbumName) return;
     
+    // Skip lookup if we're in the middle of a rename
+    if (isRenamingRef.current) {
+      isRenamingRef.current = false; // Reset the flag
+      return;
+    }
+    
     const resolveByLabel = async () => {
+      const searchingForLabel = decodedAlbumName; // Capture the label we're searching for
       try {
         // Load all albums to populate the store
         await albumsAPI.getAll(eventUrl);
+        
+        // Check if we're still looking for the same album (might have been renamed during this async operation)
+        // Use window.location to get the current URL parameter
+        const urlPath = window.location.pathname;
+        const currentAlbumNameFromUrl = urlPath.split('/albums/')[1];
+        const currentDecodedName = currentAlbumNameFromUrl ? decodeURIComponent(currentAlbumNameFromUrl) : '';
+        if (searchingForLabel !== currentDecodedName) {
+          return;
+        }
+        
         // After loading, check if album exists in store
         const storeAlbums = useDataStore.getState().entities?.albums || {};
-        const match = Object.values(storeAlbums).find(a => a.label === decodedAlbumName);
+        const match = Object.values(storeAlbums).find(a => a.label === searchingForLabel);
         if (match) {
           setAlbum(match);
           return;
@@ -153,10 +171,13 @@ export default function AlbumDetail() {
 
     const foundAlbum = (currentAlbums || []).find(a => a.label === decodedAlbumName);
     if (foundAlbum) {
-      // Always update to ensure we have the latest data
-      setAlbum(foundAlbum);
+      // Update only if it's a different album or has different data
+      if (!album || album.id !== foundAlbum.id || album !== foundAlbum) {
+        setAlbum(foundAlbum);
+      }
       return;
     }
+    
     if (!attemptedLookupRef.current) {
       attemptedLookupRef.current = true;
       resolveByLabel();
@@ -354,8 +375,16 @@ export default function AlbumDetail() {
         return;
       }
       
+      // Set flag to prevent the lookup effect from running BEFORE the API call
+      // because the response interceptor will update the store during the API call
+      isRenamingRef.current = true;
+      
+      // Also reset attemptedLookupRef to allow the new name to be looked up if needed
+      attemptedLookupRef.current = false;
+      
       // No conflict, proceed with update
       await albumsAPI.update(album.id, { label: editingTitle.trim() }, eventUrl);
+      
       // Changes are automatically applied by apiService interceptor
       
       // Update local album state immediately to ensure smooth transition
