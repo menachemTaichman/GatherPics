@@ -30,6 +30,7 @@ import { useEventUrls } from '../utils/useEventUrls';
 import SingleImageTile from './SingleImageTile';
 import { useImageComponent } from '../utils/useImage.jsx';
 import ConfirmDelete from './ConfirmDelete';
+import { useImageHighlight } from '../utils/useImageHighlight';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -129,6 +130,9 @@ export default function AlbumDetail() {
     urlHelpers,
     filteredIds: null,
   });
+  
+  // Image highlight hook for navigation
+  const { isHighlighted, registerImageRef } = useImageHighlight();
 
   // Find album by label
   useEffect(() => {
@@ -692,6 +696,7 @@ export default function AlbumDetail() {
                 className={`photo-card ${imageClasses[image.id] || 'square'}`}
               >
                 <SingleImageTile
+                  ref={(el) => registerImageRef(image.id, el)}
                   image={image}
                   aspectClass={imageClasses[image.id] || 'square'}
                   imageFit={'cover'}
@@ -706,6 +711,7 @@ export default function AlbumDetail() {
                   showCropBadge={false}
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
+                  isHighlighted={isHighlighted(image.id)}
                 />
               </motion.div>
             ))}

@@ -287,6 +287,8 @@ def transfer_faces(event_id):
         new_group_created = result['new_group_created']
         target_group_id = result['target_group_id']
 
+        images_added_ids = list(images_added.keys())
+
         changes = []
         for group_id, images_ids in detached_groups.items():
             changes.append({
@@ -296,7 +298,7 @@ def transfer_faces(event_id):
                 'ids': images_ids
             })
 
-        images_added_entities = event.models_manager.get_childs('groups', target_group_id, 'images', list(images_added.keys()))
+        images_added_entities = event.models_manager.get_childs('groups', target_group_id, 'images', images_added_ids)
         changes.append({
             'type': 'RELATION_ADD',
             'relation': 'group.images',
@@ -333,6 +335,7 @@ def transfer_faces(event_id):
             'new_group_created': new_group_created,
             'target_group_id': target_group_id,
             'len_added': len_faces_added,
+            'images_added': images_added_ids,
             'changes': changes
         }
         return jsonify(response)

@@ -218,6 +218,9 @@ export default function TransferFacesModal({
       if (targetGroup) {
         // Show success toast with link to target group
         const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+        // Extract affected images for highlighting using new images_added field
+        const affectedImages = result.images_added || result.affected_images_ids || 
+          selectedFaces.map(f => f.image_id).filter(Boolean);
         showToast(
           <span>
             {transferredCount} {imageText} transferred to <a 
@@ -226,7 +229,9 @@ export default function TransferFacesModal({
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                   e.preventDefault();
-                  navigate(link);
+                  navigate(link, {
+                    state: { highlightImages: affectedImages.slice(0, 10) }
+                  });
                 }
               }}
             >{targetGroup.label}</a>

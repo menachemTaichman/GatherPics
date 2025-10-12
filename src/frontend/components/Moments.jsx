@@ -24,6 +24,7 @@ import { useToast } from '../utils/ToastContext';
 import { sortMoments } from '../utils/sorting';
 import { getImageCount } from '../utils/settings';
 import { ImageComponent } from '../utils/useImage.jsx';
+import { useImageHighlight } from '../utils/useImageHighlight';
 
 
 function formatTimeOnly(dateString) {
@@ -105,6 +106,25 @@ export default function Moments({ eventUrl }) {
     urlHelpers,
   });
   const { addImages, open } = useBucketStore();
+  
+  // Image highlight hook for navigation
+  const { highlightedIds, registerImageRef } = useImageHighlight();
+  
+  // Moment-level scrolling
+  const momentRefsMap = useRef(new Map());
+  useEffect(() => {
+    const highlightMoment = location.state?.highlightMoment;
+    if (highlightMoment) {
+      // Wait a bit for moment to render
+      const scrollTimeout = setTimeout(() => {
+        const momentElement = momentRefsMap.current.get(highlightMoment);
+        if (momentElement) {
+          momentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 200);
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [location.key]);
   
   // Selection mode and state
   const selectionMode = usePreference('general.select', false);
@@ -196,6 +216,7 @@ export default function Moments({ eventUrl }) {
   const setMomentRef = useCallback((momentIdOrName) => (element) => {
     if (element) {
       momentsRef.current[momentIdOrName] = element;
+      momentRefsMap.current.set(momentIdOrName, element);
       // Register with timeline manager using name key
       timelineManager.registerMoment(momentIdOrName, element);
     } else {
@@ -794,6 +815,8 @@ export default function Moments({ eventUrl }) {
                     eventUrl={eventUrl}
                     urlHelpers={urlHelpers}
                     includeArchived={includeArchived}
+                    highlightedIds={highlightedIds}
+                    registerImageRef={registerImageRef}
                     ref={setMomentRef(moment.label)}
                     data-moment-id={moment.id}
                   />

@@ -50,7 +50,9 @@ const MomentCard = forwardRef(({
   onClearMomentSelection,
   eventUrl,
   urlHelpers,
-  includeArchived
+  includeArchived,
+  highlightedIds,
+  registerImageRef
 }, ref) => {
   // Note: Individual moment scopes are managed by TimelineManager for UI observation optimization
   // Data loading is handled by 'all:moments' scope from the parent Moments component
@@ -234,6 +236,7 @@ const MomentCard = forwardRef(({
                     className={`photo-card ${imageClasses[image.id] || 'square'}`}
                   >
                     <SingleImageTile
+                      ref={(el) => registerImageRef?.(image.id, el)}
                       image={image}
                       aspectClass={imageClasses[image.id] || 'square'}
                       thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
@@ -246,6 +249,7 @@ const MomentCard = forwardRef(({
                       showDate={!!image.date_taken}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
+                      isHighlighted={highlightedIds?.has(image.id)}
                     />
                   </motion.div>
                 );

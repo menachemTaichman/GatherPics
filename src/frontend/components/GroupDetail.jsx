@@ -63,6 +63,7 @@ import useBucketStore from '../utils/bucketStore';
 import SingleImageTile from './SingleImageTile';
 import GroupsFilter from './GroupsFilter';
 import { useImageComponent } from '../utils/useImage.jsx';
+import { useImageHighlight } from '../utils/useImageHighlight';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -139,7 +140,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
     eventUrl,
     showToast,
     onTransferComplete: (result) => handleTransferComplete(result),
-    onJumpToMoment: (momentInfo) => timelineManager.navigateToMoment(momentInfo.label, momentInfo.label),
+    onJumpToMoment: null, // Let ImageViewer handle navigation with proper eventUrl
     defaultSortBy: 'date',
     defaultSortOrder: sortOrder,
     urlHelpers,
@@ -151,6 +152,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const suppressSpinnerRef = useRef(false);
   const restoreScrollYRef = useRef(null);
   const smoothNextGroupLoad = useRef(false);
+  
+  // Image highlight hook for navigation
+  const { isHighlighted, registerImageRef } = useImageHighlight();
   const skipNextAnimation = useRef(false);
 
   // Subscribe to normalized groups list
@@ -1210,6 +1214,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                   className={`photo-card ${imageClasses[image.id] || 'square'}`}
                 >
                   <SingleImageTile
+                    ref={(el) => registerImageRef(image.id, el)}
                     image={image}
                     aspectClass={imageClasses[image.id] || 'square'}
                     imageFit={'cover'}
@@ -1224,6 +1229,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
                       showCropBadge={showCrops && !!facesMapping?.[image.id]}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
+                      isHighlighted={isHighlighted(image.id)}
                     />
                 </motion.div>
               ))}

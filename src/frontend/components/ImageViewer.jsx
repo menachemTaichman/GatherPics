@@ -653,35 +653,54 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const gid = face?.groupId || face?.group_id;
     const label = gid ? ((useDataStore.getState().entities?.groups || {})[gid]?.label || '') : '';
     if (label) {
-      navigate(`/persons/${encodeURIComponent(label)}`);
+      navigate(`/${eventUrl}/persons/${encodeURIComponent(label)}`, {
+        state: { highlightImages: [imageId] }
+      });
       onClose();
     }
   };
 
   const handleJumpToMoment = () => {
-    if (momentInfo && onJumpToMoment) {
+    if (momentInfo && eventUrl) {
+      // Always use direct navigation when we have eventUrl for proper routing
+      const targetUrl = `/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`;
+      navigate(targetUrl, {
+        state: {
+          highlightImages: [imageId],
+          highlightMoment: momentInfo.label
+        }
+      });
+      // Close the modal after a short delay to let navigation complete
+      setTimeout(() => onClose(), 50);
+    } else if (momentInfo && onJumpToMoment) {
+      // Fallback to callback if no eventUrl
       onJumpToMoment(momentInfo);
-    } else if (momentInfo) {
-      // Navigate to timeline page with moment parameter (scoped to event)
-      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.title)}`);
+      onClose();
     }
-    // Close the modal when navigating to moment
-    onClose();
   };
 
   const handleMomentLinkClick = (e) => {
     if (shouldLetBrowserHandle(e)) return; // Let browser handle
     e.stopPropagation();
     e.preventDefault();
+    
     // Navigate first, then close modal
-    if (momentInfo && onJumpToMoment) {
+    if (momentInfo && eventUrl) {
+      // Always use direct navigation when we have eventUrl for proper routing
+      const targetUrl = `/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`;
+      navigate(targetUrl, {
+        state: {
+          highlightImages: [imageId],
+          highlightMoment: momentInfo.label
+        }
+      });
+      // Close the modal after a short delay to let navigation complete
+      setTimeout(() => onClose(), 50);
+    } else if (momentInfo && onJumpToMoment) {
+      // Fallback to callback if no eventUrl
       onJumpToMoment(momentInfo);
-    } else if (momentInfo) {
-      // Navigate to timeline page with moment parameter (scoped to event)
-      navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`);
+      onClose();
     }
-    // Close the modal after navigation
-    onClose();
   };
 
   const shouldLetBrowserHandle = (e) => {
@@ -694,7 +713,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     e.stopPropagation();
     e.preventDefault();
     if (!album) return;
-    navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`);
+    navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, {
+      state: { highlightImages: [imageId] }
+    });
     onClose();
   };
 
@@ -704,7 +725,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     e.preventDefault();
     const groupLabel = getGroupLabel(face);
     if (!groupLabel) return;
-    navigate(`/${eventUrl}/persons/${encodeURIComponent(groupLabel)}`);
+    navigate(`/${eventUrl}/persons/${encodeURIComponent(groupLabel)}`, {
+      state: { highlightImages: [imageId] }
+    });
     onClose();
   };
 

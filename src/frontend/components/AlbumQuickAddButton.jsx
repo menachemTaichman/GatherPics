@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Plus as PlusIcon, Image as ImageIcon, Check } from 'lucide-react';
 import { albumsAPI } from '../utils/apiService';
@@ -19,6 +19,7 @@ export default function AlbumQuickAddButton({
   onAlbumAdded // Callback when album is added
 }) {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
@@ -114,9 +115,21 @@ export default function AlbumQuickAddButton({
       // Changes are automatically applied by apiService interceptor
       
       const added = res.len_added || (Array.isArray(res.affected_images_ids) ? res.affected_images_ids.length : (res.affected_images_ids || 0));
+        const images = imagesToAdd || [];
         showToast(
           <span>
-            {added} added to <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</Link> album
+            {added} added to <a 
+              href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, {
+                    state: { highlightImages: images.slice(0, 10) }
+                  });
+                }
+              }}
+              className="underline hover:text-gray-100"
+            >{album.label}</a> album
           </span>,
           'success'
         );
@@ -161,7 +174,18 @@ export default function AlbumQuickAddButton({
         const imageText = imagesToAdd.length === 1 ? 'image' : 'images';
         showToast(
           <span>
-            {imagesToAdd.length} {imageText} added to new album <Link to={`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`} className="underline hover:text-gray-100">{trimmedName}</Link>
+            {imagesToAdd.length} {imageText} added to new album <a
+              href={`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  navigate(`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`, {
+                    state: { highlightImages: imagesToAdd.slice(0, 10) }
+                  });
+                }
+              }}
+              className="underline hover:text-gray-100"
+            >{trimmedName}</a>
           </span>,
           'success'
         );

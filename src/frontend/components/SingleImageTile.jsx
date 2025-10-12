@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../utils/useImage.jsx';
 
-export default function SingleImageTile({
+const SingleImageTile = forwardRef(function SingleImageTile({
   image,
   aspectClass = 'square',
   thumbSrc,
@@ -18,8 +18,9 @@ export default function SingleImageTile({
   imageFit = 'cover',
   placeholderDataUrl = null, // Use universal placeholder components instead
   eventUrl, // Required for useImageActions
-  urlHelpers // Required for useImageActions
-}) {
+  urlHelpers, // Required for useImageActions
+  isHighlighted = false // New prop for highlighting
+}, ref) {
   // Use the centralized ImageActions hook
   const imageActions = useImageActions({
     imageIds: image?.id,
@@ -32,12 +33,25 @@ export default function SingleImageTile({
 
   // Use the state from the hook
   const { isFavorite, isArchived, toggleFavorite, toggleArchive } = imageActions;
+  
+  // Apply highlight styles
+  const highlightStyle = isHighlighted ? {
+    animation: 'pulse-glow 1.5s ease-in-out infinite',
+    border: '3px solid rgb(34, 197, 94)',
+    borderRadius: '0.5rem'
+  } : {};
+  
   return (
-    <div className={`relative group cursor-pointer h-full photo-card ${aspectClass}`} onClick={(e) => {
-      if (!e.target.closest('input[type="checkbox"]')) {
-        onOpen && onOpen();
-      }
-    }}>
+    <div 
+      ref={ref}
+      className={`relative group cursor-pointer h-full photo-card ${aspectClass}`} 
+      style={highlightStyle}
+      onClick={(e) => {
+        if (!e.target.closest('input[type="checkbox"]')) {
+          onOpen && onOpen();
+        }
+      }}
+    >
       <input
         type="checkbox"
         id={`image-checkbox-grid-${image.id}`}
@@ -173,6 +187,6 @@ export default function SingleImageTile({
       )}
     </div>
   );
-}
+});
 
-
+export default SingleImageTile;

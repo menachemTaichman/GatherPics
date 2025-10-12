@@ -295,7 +295,12 @@ export default function MoveToMomentModal({
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                   e.preventDefault();
-                  navigate(link);
+                  navigate(link, {
+                    state: {
+                      highlightImages: imageIds.slice(0, 10),
+                      highlightMoment: targetMoment.label
+                    }
+                  });
                 }
               }}
             >{targetMoment.label}</a>
