@@ -368,18 +368,18 @@ export default function SettingsManager() {
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsOpen(false)}>
-            <motion.div
-              ref={modalRef}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ 
-                opacity: 1, 
-                scale: 1
-              }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.3 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
-            >
+              <motion.div
+                ref={modalRef}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ 
+                  opacity: 1, 
+                  scale: 1
+                }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+              >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
@@ -764,7 +764,7 @@ export default function SettingsManager() {
                                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                                       <User className="w-5 h-5 text-purple-600" />
                                     </div>
-                                    <div>
+                        <div>
                                       <p className="font-medium text-gray-900">{profile.label}</p>
                                       <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank}</p>
                                     </div>
@@ -784,7 +784,7 @@ export default function SettingsManager() {
                                     >
                                       <Trash2 className="w-4 h-4 text-red-600" />
                                     </button>
-                                  </div>
+                          </div>
                                 </div>
                               ))}
                             </div>

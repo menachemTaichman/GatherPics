@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2 } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2, Key } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TransferFacesModal from './TransferFacesModal';
 import SelectFaceForRepModal from './SelectFaceForRepModal';
 import MoveToMomentModal from './MoveToMomentModal';
 import ConfirmDelete from './ConfirmDelete';
+import ManageAccessModal from './ManageAccessModal';
 import useImageActions from './ImageActions';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../utils/apiService';
@@ -30,6 +31,8 @@ function ImageViewerActions({
   entity,
   entityId
 }) {
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+
   const imageActions = useImageActions({
     imageIds: imageId,
     eventUrl,
@@ -104,6 +107,15 @@ function ImageViewerActions({
           <Trash2 className="w-4 h-4" />
         </button>
 
+        {/* Manage Access */}
+        <button
+          onClick={() => setShowManageAccessModal(true)}
+          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
+          title="Manage profile access"
+        >
+          <Key className="w-4 h-4" />
+        </button>
+
         {/* Separator */}
         {imageActions.canSetRepresentative && (
           <span className="text-gray-300">|</span>
@@ -152,6 +164,15 @@ function ImageViewerActions({
           caption="This action cannot be undone."
         />
       )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="image"
+        entityIds={[imageId]}
+        eventUrl={eventUrl}
+      />
     </>
   );
 }

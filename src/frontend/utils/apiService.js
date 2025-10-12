@@ -672,6 +672,24 @@ export const profilesAPI = {
     return response.data;
   },
   
+  // Check image access for profile
+  checkImageAccess: async (profileId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/images/check`, {
+      image_ids: imageIds
+    });
+    return response.data;
+  },
+  
+  // Check album access for profile
+  checkAlbumAccess: async (profileId, albumIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/albums/check`, {
+      album_ids: albumIds
+    });
+    return response.data;
+  },
+  
   // Get archived access for current profile
   getArchivedAccess: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);

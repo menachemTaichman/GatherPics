@@ -8,13 +8,16 @@ import {
   Trash2,
   Move,
   Star,
-  Minus
+  Minus,
+  Key
 } from 'lucide-react';
 import AlbumQuickAddButton from './AlbumQuickAddButton';
 import useImageActions from './ImageActions';
 import SelectFaceForRepModal from './SelectFaceForRepModal';
 import ConfirmDelete from './ConfirmDelete';
+import ManageAccessModal from './ManageAccessModal';
 import { useDataStore } from '../utils/dataManager';
+import { useState } from 'react';
 
 export default function FloatingSelectionControls({
   selectedCount,
@@ -41,6 +44,8 @@ export default function FloatingSelectionControls({
   entity = null,
   entityId = null
 }) {  
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+
   // Use the centralized ImageActions hook for selected images
   const selectedImageActions = useImageActions({
     imageIds: Array.from(selectedImages),
@@ -171,6 +176,15 @@ export default function FloatingSelectionControls({
             <Trash2 className="w-4 h-4" />
           </button>
 
+          {/* Manage Access */}
+          <button
+            onClick={() => setShowManageAccessModal(true)}
+            className="w-8 h-8 rounded-md hover:bg-blue-100 flex items-center justify-center text-blue-600"
+            title="Manage profile access"
+          >
+            <Key className="w-4 h-4" />
+          </button>
+
           <span className="text-gray-300">|</span>
 
           {/* Set as representative - only for single image selection */}
@@ -262,6 +276,15 @@ export default function FloatingSelectionControls({
           caption="This action cannot be undone."
         />
       )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="image"
+        entityIds={Array.from(selectedImages)}
+        eventUrl={eventUrl}
+      />
     </>
   );
 }

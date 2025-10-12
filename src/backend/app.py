@@ -900,23 +900,6 @@ def get_album(event_id, album_id):
     })
     return jsonify({ 'changes': changes })
 
-# TODO: remove these endpoints
-# @app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
-# @require_auth
-# def get_favorites_album(event_id):
-#     """Get the favorites album."""
-#     event = get_event(event_id)
-#     favorites_album_id = event.models_manager.get_favorites_album()
-#     return get_album(event_id, favorites_album_id)
-
-# @app.route("/api/events/<event_id>/albums/defaults/archive", methods=["GET"])
-# @require_auth
-# def get_archive_album(event_id):
-#     """Get the archive album."""
-#     event = get_event(event_id)
-#     archive_album_id = event.models_manager.get_archive_album()
-#     return get_album(event_id, archive_album_id)
-
 # edit albums
 @app.route("/api/events/<event_id>/albums/check-name", methods=["POST"])
 @require_auth
@@ -1203,6 +1186,34 @@ def update_profile_password(event_id, profile_id):
     event.models_manager.edit('profiles', profile_id, {'password': password})
     return jsonify({"success": True})
 
+@app.route("/api/events/<event_id>/profiles/<profile_id>/images/check", methods=["POST"])
+@require_auth
+def check_images_from_profile(event_id, profile_id):
+    """Check accessible images for a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    profile = event.models_manager.get_entities('profiles', profile_id)
+    have_all = bool(profile['all_images'])
+    len_accessible = len(event.models_manager.get_childs('profiles', profile_id, 'images', image_ids, return_ids=True, within=not have_all))
+    return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(image_ids) - len_accessible})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/albums/check", methods=["POST"])
+@require_auth
+def check_albums_from_profile(event_id, profile_id):
+    """Check accessible albums for a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+    profile = event.models_manager.get_entities('profiles', profile_id)
+    have_all = bool(profile['all_albums'])
+    len_accessible = len(event.models_manager.get_childs('profiles', profile_id, 'albums', album_ids, return_ids=True, within=not have_all))
+    return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(album_ids) - len_accessible})
+
 # edit profiles
 @app.route("/api/events/<event_id>/profiles/check-name", methods=["POST"])
 @require_auth
@@ -1301,12 +1312,12 @@ def add_images_to_profile(event_id, profile_id):
 
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    affected_ids = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=True)
+    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=True)
     changes = [{
-        'type': 'RELATION_ADD',
+        'type': 'RELATION_REMOVE' if have_all else 'RELATION_ADD',
         'relation': 'profile.images',
         'parentId': profile_id,
-        'entities': event.models_manager.get_childs('profiles', profile_id, 'images', affected_ids)
+        'ids': affected_ids
     }]
     return jsonify({"success": True, "changes": changes})
 
@@ -1320,9 +1331,10 @@ def remove_images_from_profile(event_id, profile_id):
 
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    affected_ids = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=False)
+    print(f"image_ids: {image_ids}")
+    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=False)
     changes = [{
-        'type': 'RELATION_REMOVE',
+        'type': 'RELATION_ADD' if have_all else 'RELATION_REMOVE',
         'relation': 'profile.images',
         'parentId': profile_id,
         'ids': affected_ids
@@ -1340,12 +1352,12 @@ def add_albums_to_profile(event_id, profile_id):
     data = request.json or {}
     album_ids = data.get('album_ids', [])
 
-    affected_ids = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=True)
+    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=True)
     changes = [{
-        'type': 'RELATION_ADD',
+        'type': 'RELATION_REMOVE' if have_all else 'RELATION_ADD',
         'relation': 'profile.albums',
         'parentId': profile_id,
-        'entities': event.models_manager.get_childs('profiles', profile_id, 'albums', affected_ids)
+        'ids': affected_ids
     }]
     return jsonify({"success": True, "changes": changes})
 
@@ -1359,9 +1371,9 @@ def remove_albums_from_profile(event_id, profile_id):
 
     data = request.json or {}
     album_ids = data.get('album_ids', [])
-    affected_ids = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=False)
+    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=False)
     changes = [{
-        'type': 'RELATION_REMOVE',
+        'type': 'RELATION_ADD' if have_all else 'RELATION_REMOVE',
         'relation': 'profile.albums',
         'parentId': profile_id,
         'ids': affected_ids

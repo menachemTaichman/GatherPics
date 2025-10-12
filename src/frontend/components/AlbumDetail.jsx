@@ -13,12 +13,14 @@ import {
   Trash2,
   Check,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Key
 } from 'lucide-react';
 import ImageViewer from './ImageViewer';
 import { useToast } from '../utils/ToastContext';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import FloatingSelectionControls from './FloatingSelectionControls';
+import ManageAccessModal from './ManageAccessModal';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
@@ -67,6 +69,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const pendingClassUpdatesRef = useRef({});
   const flushClassesRafRef = useRef(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
   const [nameConflict, setNameConflict] = useState(false);
@@ -636,7 +639,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               </div>
             )}
 
-            {/* Group 4: Delete Album - only for custom albums */}
+            {/* Group 4: Delete Album & Manage Access - only for custom albums */}
             {!isDefaultAlbum && (
               <div className="flex items-center space-x-3 px-4">
                 <button
@@ -645,6 +648,13 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   title="Delete album"
                 >
                   <Trash2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowManageAccessModal(true)}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
+                  title="Manage profile access"
+                >
+                  <Key className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -768,6 +778,15 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
           caption="Note: Images will not be deleted, only the album."
         />
       )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="album"
+        entityIds={album?.id ? [album.id] : []}
+        eventUrl={eventUrl}
+      />
     </div>
   );
 }
