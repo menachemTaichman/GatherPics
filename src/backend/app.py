@@ -88,6 +88,32 @@ def get_events():
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/events/resolve", methods=["GET"])
+def resolve_event_url():
+    """Resolve an event URL to its ID and basic info."""
+    event_url = request.args.get('url')
+    if not event_url:
+        return jsonify({"error": "URL parameter is required"}), 400
+    
+    try:
+        from src.core.models.event import list_events
+        events = list_events()
+        
+        # Find the event with matching URL
+        matching_event = next((e for e in events if e.url == event_url), None)
+        
+        if matching_event:
+            return jsonify({
+                'id': matching_event.id,
+                'name': matching_event.name,
+                'url': matching_event.url,
+                'date': matching_event.date
+            })
+        else:
+            return jsonify({"error": f"Event not found: {event_url}"}), 404
+    except Exception as e:
+        return bad_request(e)
+
 @app.route("/login", methods=["POST"])
 def login():
     """Placeholder login endpoint that returns a JWT token."""

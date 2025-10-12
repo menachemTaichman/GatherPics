@@ -2,24 +2,46 @@
 // This file handles resolving event ids from event URLs
 
 // Cache for event data to avoid repeated API calls
-let eventCache = null;
-let eventCacheTimestamp = 0;
+let eventCache = new Map(); // Map<eventUrl, eventData>
+let eventCacheTimestamp = new Map(); // Map<eventUrl, timestamp>
+let inFlightRequests = new Map(); // Map<eventUrl, Promise> - for request deduplication
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Get all events from the backend
+ * Fetch event data by URL from the backend (with request deduplication)
+ * @param {string} eventUrl - The event URL
+ * @returns {object|null} - The event object or null if not found
  */
-async function fetchEvents() {
-  try {
-    const response = await fetch('/api/events');
-    if (!response.ok) {
-      throw new Error('Failed to fetch events');
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching events:', error);
-    return [];
+async function fetchEventByUrl(eventUrl) {
+  // Check if there's already a request in flight for this URL
+  if (inFlightRequests.has(eventUrl)) {
+    return inFlightRequests.get(eventUrl);
   }
+
+  // Create new request
+  const requestPromise = (async () => {
+    try {
+      const response = await fetch(`/api/events/resolve?url=${encodeURIComponent(eventUrl)}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error('Failed to resolve event URL');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      return null;
+    } finally {
+      // Clean up in-flight request after completion
+      inFlightRequests.delete(eventUrl);
+    }
+  })();
+
+  // Store the promise so concurrent calls can reuse it
+  inFlightRequests.set(eventUrl, requestPromise);
+  
+  return requestPromise;
 }
 
 /**
@@ -30,19 +52,24 @@ async function fetchEvents() {
 export async function resolveEventId(eventUrl) {
   // Check cache first
   const now = Date.now();
-  if (eventCache && (now - eventCacheTimestamp) < CACHE_DURATION) {
-    const event = eventCache.find(e => e.url === eventUrl);
-    return event ? event.id : null;
+  const cachedTimestamp = eventCacheTimestamp.get(eventUrl);
+  
+  if (cachedTimestamp && (now - cachedTimestamp) < CACHE_DURATION) {
+    const cachedEvent = eventCache.get(eventUrl);
+    return cachedEvent ? cachedEvent.id : null;
   }
 
   // Fetch fresh data
   try {
-    const events = await fetchEvents();
-    eventCache = events;
-    eventCacheTimestamp = now;
+    const event = await fetchEventByUrl(eventUrl);
     
-    const event = events.find(e => e.url === eventUrl);
-    return event ? event.id : null;
+    if (event) {
+      eventCache.set(eventUrl, event);
+      eventCacheTimestamp.set(eventUrl, now);
+      return event.id;
+    }
+    
+    return null;
   } catch (error) {
     console.error('Error resolving event id:', error);
     return null;
@@ -57,17 +84,23 @@ export async function resolveEventId(eventUrl) {
 export async function getEventData(eventUrl) {
   // Check cache first
   const now = Date.now();
-  if (eventCache && (now - eventCacheTimestamp) < CACHE_DURATION) {
-    return eventCache.find(e => e.url === eventUrl) || null;
+  const cachedTimestamp = eventCacheTimestamp.get(eventUrl);
+  
+  if (cachedTimestamp && (now - cachedTimestamp) < CACHE_DURATION) {
+    return eventCache.get(eventUrl) || null;
   }
 
   // Fetch fresh data
   try {
-    const events = await fetchEvents();
-    eventCache = events;
-    eventCacheTimestamp = now;
+    const event = await fetchEventByUrl(eventUrl);
     
-    return events.find(e => e.url === eventUrl) || null;
+    if (event) {
+      eventCache.set(eventUrl, event);
+      eventCacheTimestamp.set(eventUrl, now);
+      return event;
+    }
+    
+    return null;
   } catch (error) {
     console.error('Error getting event data:', error);
     return null;
@@ -75,9 +108,21 @@ export async function getEventData(eventUrl) {
 }
 
 /**
+ * Manually cache event data (used when data is passed from router state)
+ * @param {string} eventUrl - The event URL
+ * @param {object} data - The event data to cache
+ */
+export function cacheEventData(eventUrl, data) {
+  if (data && eventUrl) {
+    eventCache.set(eventUrl, data);
+    eventCacheTimestamp.set(eventUrl, Date.now());
+  }
+}
+
+/**
  * Clear the event cache (useful for testing or when events change)
  */
 export function clearEventCache() {
-  eventCache = null;
-  eventCacheTimestamp = 0;
+  eventCache.clear();
+  eventCacheTimestamp.clear();
 }

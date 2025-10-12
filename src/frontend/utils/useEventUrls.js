@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { resolveEventId } from './eventResolver';
+import { useLocation } from 'react-router-dom';
+import { getEventData } from './eventResolver';
 import { API_BASE } from './apiService';
 
 export function useEventUrls(eventUrl) {
-  const [eventId, setEventId] = useState(null);
+  const location = useLocation();
+  const [eventData, setEventData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -16,6 +18,21 @@ export function useEventUrls(eventUrl) {
       return;
     }
 
+    // Check if event data was passed via router state (from home page)
+    const passedEventData = location.state?.eventData;
+    if (passedEventData && passedEventData.url === eventUrl) {
+      setEventData(passedEventData);
+      setError(null);
+      setLoading(false);
+      
+      // IMPORTANT: Also cache it in the resolver for future navigations
+      import('./eventResolver').then(({ cacheEventData }) => {
+        cacheEventData(eventUrl, passedEventData);
+      });
+      
+      return;
+    }
+
     // Single-flight + idempotent resolve for same eventUrl
     const inFlightRef = useEventUrls.__inFlightRef || (useEventUrls.__inFlightRef = { current: false });
     const lastResolvedRef = useEventUrls.__lastResolvedRef || (useEventUrls.__lastResolvedRef = { current: null });
@@ -23,7 +40,7 @@ export function useEventUrls(eventUrl) {
       
       return;
     }
-    if (lastResolvedRef.current === eventUrl && eventId) {
+    if (lastResolvedRef.current === eventUrl && eventData) {
       
       return;
     }
@@ -32,9 +49,9 @@ export function useEventUrls(eventUrl) {
       try {
         inFlightRef.current = true;
         setLoading(true);
-        const id = await resolveEventId(eventUrl);
-        if (id) {
-          setEventId(id);
+        const data = await getEventData(eventUrl);
+        if (data) {
+          setEventData(data);
           setError(null);
           lastResolvedRef.current = eventUrl;
         } else {
@@ -49,7 +66,10 @@ export function useEventUrls(eventUrl) {
     };
 
     resolveEvent();
-  }, [eventUrl]);
+  }, [eventUrl, location.state]);
+
+  // Extract eventId from eventData
+  const eventId = eventData?.id || null;
 
   // Synchronous URL helpers that work with the resolved eventId
   const urlHelpers = useMemo(() => ({
@@ -104,6 +124,7 @@ export function useEventUrls(eventUrl) {
 
   return {
     eventId,
+    eventData,
     loading,
     error,
     urlHelpers
