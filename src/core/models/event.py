@@ -11,7 +11,7 @@ class Event(JsonModel):
     ID_FIELD = 'id'
 
     # event utils
-    def __init__(self, event_id: str, load: bool = True, profile_id: str | None = None, include_archived: bool = False):
+    def __init__(self, event_id: str, load: bool = True, profile_id: str | None = None):
         super().__init__(event_id, load=load)
         self.event_dir = os.path.join(DATA_ROOT, self.id)
         self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
@@ -76,10 +76,10 @@ class Event(JsonModel):
         values = tuple(profile.values() for profile in default_profiles.values())
 
         self.db.execute_query(f'''
-            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, is_profiles_manager, can_upload_and_delete_images, can_edit, all_images, all_albums, save_preferences)
-            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1, 1)
+            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_albums, save_preferences)
+            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1),
+                   (?, ?, ?, ?, 1, 1, 1, 1, 1)
         ''', values)
 
     def _initialize_default_groups(self):
@@ -107,21 +107,9 @@ class Event(JsonModel):
         """Set the profile id for access control across all models."""
         self.db.set_profile_id(profile_id)
 
-    def get_profile_id(self) -> str | None:
-        """Get the current profile id."""
-        return self.db.get_profile_id()
-
-    def can_profile_upload_and_delete_images(self) -> bool:
-        """Check if the current profile can upload and delete images."""
-        profile_id = self.get_profile_id()
-        if not profile_id:
-            return False
-
-        query = f"""
-            SELECT can_upload_and_delete_images FROM profiles WHERE profile_id = ?
-        """
-        can_upload_and_delete_images = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
-        return can_upload_and_delete_images
+    def get_profile_context(self) -> dict | None:
+        """Get the current profile context."""
+        return self.db.get_profile_context()
 
     def get_last_group_id(self) -> int:
         """Get the last group id."""
@@ -151,8 +139,8 @@ class Event(JsonModel):
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
-        
-        if not self.can_profile_upload_and_delete_images():
+        cur_profile_context = self.get_profile_context()
+        if not cur_profile_context['can_upload_and_delete_images']:
             raise Exception("Profile not allowed to delete images")
 
         for image_id in image_ids:
@@ -483,5 +471,5 @@ def delete_event(event_id: str) -> None:
     if os.path.exists(event_dir):
         import shutil
         shutil.rmtree(event_dir)
-get_event = lambda event_id, profile_id=None, include_archived=False: Event(event_id, profile_id=profile_id, include_archived=include_archived)
+get_event = lambda event_id, profile_id=None: Event(event_id, profile_id=profile_id)
 list_events = Event.list_all 

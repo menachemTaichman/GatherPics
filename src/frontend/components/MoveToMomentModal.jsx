@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Calendar, Plus, Clock, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { momentsAPI, handleAPIError } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { toggleSortOrder } from '../utils/sorting';
@@ -20,10 +19,11 @@ export default function MoveToMomentModal({
   onClose, 
   selectedImages,
   onMoveComplete,
-  sourceMomentId
+  sourceMomentId,
+  urlHelpers: injectedUrlHelpers
 }) {
   const { showToast } = useToast();
-  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
   const allMoments = useDataStore(state => storeSelectors.momentsAll(state));
   const MODAL_ID = 'move-to-moment-modal';
@@ -383,31 +383,19 @@ export default function MoveToMomentModal({
 
         {/* Content - Scrollable */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {/* Error handling for URL issues */}
-          {urlError && (
-            <div className="mx-4 mt-3 mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-                <p className="text-red-800 text-sm">
-                  {urlError}
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="px-4 py-4">
           {/* Loading state */}
-          {(urlLoading || isLoadingMoments) && (
+          {isLoadingMoments && (
             <div className="text-center py-8">
               <div className="inline-flex items-center space-x-2 text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span>{urlLoading ? 'Loading...' : 'Loading moments...'}</span>
+                <span>Loading moments...</span>
               </div>
             </div>
           )}
           
           {/* Search and Sort Controls */}
-          {!urlLoading && !isLoadingMoments && (
+          {!isLoadingMoments && (
             <>
             <div className={`mb-3 flex flex-col sm:flex-row gap-2 ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Search */}

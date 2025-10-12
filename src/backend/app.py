@@ -14,6 +14,7 @@ import traceback
 import os
 import io
 import zipfile
+from werkzeug.utils import secure_filename
 
 from src.core.models.event import Event
 
@@ -67,6 +68,10 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({"error": "Internal Server Error", "message": str(error), "trace": traceback.format_exc()}), 500
+
+@app.errorhandler(403)
+def forbidden(error):
+    return jsonify({"error": "Forbidden", "message": str(error)}), 403
 
 # ==============================================================================
 # I. PUBLIC & AUTH ENDPOINTS
@@ -138,9 +143,247 @@ def logout():
     return resp
 
 # ==============================================================================
-# II. GROUPS (PERSONS) ENDPOINTS
+# II. GENERAL EVENT ENDPOINTS
 # ==============================================================================
 
+@app.route("/api/events/<event_id>/upload/limits", methods=["GET"])
+@require_auth
+def get_upload_limits(event_id):
+    """Get upload limits and current usage."""
+    event = get_event(event_id)
+    
+    current_count = event.get_images_count()
+    
+    available_count = max(0, event.images_count_limit - current_count) if event.images_count_limit > 0 else -1
+    
+    return jsonify({
+        "image_size_limit_bytes": event.image_size_limit_bytes,
+        "images_count_limit": event.images_count_limit,
+        "current_images_count": current_count,
+        "available_images_count": available_count
+    })
+
+# ==============================================================================
+# V. IMAGES ENDPOINTS
+# ==============================================================================
+
+# get images
+@app.route("/api/events/<event_id>/images", methods=["GET"])
+@require_auth
+def get_images(event_id):
+    """List all accessible images summaries for the specific event."""
+    event = get_event(event_id)
+    images = event.models_manager.get_entities('images')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': images
+    }]
+    return jsonify({'changes': changes})
+
+@app.route("/api/events/<event_id>/images/<image_id>", methods=["GET"])
+@require_auth
+def get_image(event_id, image_id):
+    """Get a specific image's details as changes."""
+    event = get_event(event_id)
+    if not event.models_manager.is_accessible('images', image_id):
+        return not_found(f"Image {image_id} not found or not accessible")
+
+    image = event.models_manager.get_entities('images', [image_id])
+    albums = event.models_manager.get_childs('images', image_id, 'albums')
+    faces = event.models_manager.get_childs('images', image_id, 'faces')
+    groups = event.models_manager.get_childs('images', image_id, 'groups')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': image
+    }]
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.albums',
+        'parentId': image_id,
+        'entities': albums
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.faces',
+        'parentId': image_id,
+        'entities': faces
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.groups',
+        'parentId': image_id,
+        'entities': groups
+    })
+    moments = image.get(image_id, {}).get('moment_id')
+    if moments:
+        moments = event.models_manager.get_entities('moments', [moments])
+        changes.append({
+            'type': 'RELATION_SET',
+            'relation': 'image.moments',
+            'parentId': image_id,
+            'entities': moments
+        })
+    return jsonify({ 'changes': changes })
+
+# edit images
+@app.route("/api/events/<event_id>/images", methods=["DELETE"])
+@require_auth
+def delete_image(event_id):
+    """Delete an image."""
+    event = get_event(event_id)
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    if not image_ids:
+        return bad_request("No image IDs provided")
+    try:
+        deleted_groups, parents = event.delete_images(image_ids)
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'image',
+            'ids': image_ids
+        }]
+        if deleted_groups:
+            changes.append({
+                'type': 'REMOVE',
+                'entity': 'group',
+                'ids': deleted_groups
+            })
+        for entity, entity_ids in parents.items():
+            changes.append({
+                'type': 'UPDATE',
+                'entity': entity,
+                'items': event.models_manager.get_entities(entity, entity_ids)
+            })
+        return jsonify({"success": True, "changes": changes})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/images", methods=["POST"])
+@require_auth
+def upload_images(event_id):
+    """Upload and process images."""
+    
+    event = get_event(event_id)
+    
+    # Check if files were uploaded
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    files = request.files.getlist('files')
+    assign_moments = request.form.get('assign_moments', 'false').lower() == 'true'
+    
+    if not files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    try:
+        # Save files to to_process directory
+        saved_files = []
+        for file in files:
+            if file and file.filename:
+                # Check file extension
+                if not file.filename.lower().endswith(('.jpg', '.jpeg')):
+                    continue
+                
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(event.to_process_dir, filename)
+                
+                # Handle duplicate filenames
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(filepath):
+                    filename = f"{base}_{counter}{ext}"
+                    filepath = os.path.join(event.to_process_dir, filename)
+                    counter += 1
+                
+                file.save(filepath)
+                saved_files.append(filename)
+        
+        if not saved_files:
+            return jsonify({"error": "No valid JPG files provided"}), 400
+        
+        # Process images
+        result = event.process_new_images(
+            verbose=False,
+            assign_moments=assign_moments
+        )
+        
+        # Build changes for frontend
+        changes = []
+        
+        # Get all processed images
+        processed_image_ids = result.get('processed_image_ids', [])
+        if processed_image_ids:
+            images = event.models_manager.get_entities('images', processed_image_ids)
+            
+            # Get all parent groups for the images
+            all_parent_groups = set()
+            for image_id in processed_image_ids:
+                parent_groups = event.models_manager.get_parents('images', image_id, 'groups')
+                all_parent_groups.update(parent_groups)
+            
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': images,
+            })
+            
+            # Add relation changes for each group
+            for group_id in all_parent_groups:
+                group_images = event.models_manager.get_childs('groups', group_id, 'images', processed_image_ids)
+                if group_images:
+                    changes.append({
+                        'type': 'RELATION_ADD',
+                        'relation': 'group.images',
+                        'parentId': group_id,
+                        'entities': group_images,
+                    })
+            
+            if all_parent_groups:
+                changes.append({
+                    'type': 'UPSERT',
+                    'entity': 'group',
+                    'items': event.models_manager.get_entities('groups', list(all_parent_groups)),
+                })
+            
+            # Handle moment assignments
+            assigned_moments = result.get('assigned_moments', {})
+            if assigned_moments:
+                for moment_id, image_ids in assigned_moments.items():
+                    changes.append({
+                        'type': 'RELATION_ADD',
+                        'relation': 'moment.images',
+                        'parentId': moment_id,
+                        'entities': event.models_manager.get_childs('moments', moment_id, 'images', image_ids)
+                    })
+                
+                changes.append({
+                    'type': 'UPDATE',
+                    'entity': 'moment',
+                    'items': event.models_manager.get_entities('moments', list(assigned_moments.keys()))
+                })
+        
+        return jsonify({
+            "success": True,
+            "images_processed": result['images_processed'],
+            "faces_detected": result['faces_detected'],
+            "groups_created": result['groups_created'],
+            "errors": result.get('errors', []),
+            "changes": changes
+        })
+        
+    except ValueError as e:
+        # Validation errors (limits exceeded, etc.)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return bad_request(e)
+
+# ==============================================================================
+# III. GROUPS (PERSONS) ENDPOINTS
+# ==============================================================================
+
+# get groups
 @app.route("/api/events/<event_id>/groups", methods=["GET"])
 @require_auth
 def get_groups(event_id):
@@ -221,31 +464,7 @@ def get_related_groups(event_id):
     )
     return jsonify({"related_groups": groups, "related_group_ids": group_ids})
 
-@app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
-@require_auth
-def update_group(event_id, group_id):
-    """Update a group."""
-    event = get_event(event_id)
-    if not event.models_manager.is_accessible('groups', group_id):
-        return not_found(f"Group {group_id} not found or not accessible")
-        
-    data = request.json or {}
-    try:        
-        changes = []
-        allowed_fields = {'label', 'representative_face'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        if sanitized:
-            event.models_manager.edit('groups', group_id, sanitized)
-            changes.append({
-                'type': 'UPDATE',
-                'entity': 'group',
-                'items': event.models_manager.get_groups([group_id])
-            })
-
-        return jsonify({"success": True, "changes": changes})
-    except Exception as e:
-        return bad_request(e)
-
+# edit groups
 @app.route("/api/events/<event_id>/groups/check-name", methods=["POST"])
 @require_auth
 def check_group_name(event_id):
@@ -273,6 +492,32 @@ def check_group_name(event_id):
     else:
         return jsonify({"conflict": False})
 
+@app.route("/api/events/<event_id>/groups/<group_id>", methods=["PUT"])
+@require_auth
+def update_group(event_id, group_id):
+    """Update a group."""
+    event = get_event(event_id)
+    if not event.models_manager.is_accessible('groups', group_id):
+        return not_found(f"Group {group_id} not found or not accessible")
+        
+    data = request.json or {}
+    try:        
+        changes = []
+        allowed_fields = {'label', 'representative_face'}
+        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+        if sanitized:
+            event.models_manager.edit('groups', group_id, sanitized)
+            changes.append({
+                'type': 'UPDATE',
+                'entity': 'group',
+                'items': event.models_manager.get_groups([group_id])
+            })
+
+        return jsonify({"success": True, "changes": changes})
+    except Exception as e:
+        return bad_request(e)
+
+# transfer faces between groups
 @app.route("/api/events/<event_id>/groups/<group_id>/faces", methods=["GET"])
 @require_auth
 def get_faces_group_in_image(event_id, group_id):
@@ -369,9 +614,10 @@ def transfer_faces(event_id):
         return bad_request(e)
 
 # ==============================================================================
-# III. MOMENTS (TIMELINE) ENDPOINTS
+# IV. MOMENTS (TIMELINE) ENDPOINTS
 # ==============================================================================
 
+# get moments
 @app.route("/api/events/<event_id>/moments", methods=["GET"])
 @require_auth
 def get_moments(event_id):
@@ -409,6 +655,7 @@ def get_moment(event_id, moment_id):
     
     return jsonify({ 'changes': changes })
 
+# edit moments
 @app.route("/api/events/<event_id>/moments/check-name", methods=["POST"])
 @require_auth
 def check_moment_name(event_id):
@@ -474,6 +721,28 @@ def update_moment(event_id, moment_id):
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/events/<event_id>/moments/<moment_id>", methods=["DELETE"])
+@require_auth
+def delete_moment(event_id, moment_id):
+    """Delete a moment."""
+    event = get_event(event_id)
+    if not event.models_manager.is_accessible('moments', moment_id):
+        return not_found(f"Moment {moment_id} not found or not accessible")
+    
+    try:
+        event.models_manager.delete('moments', moment_id)
+        
+        response = {"success": True, "deleted_ids": [moment_id]}
+        response['changes'] = [{
+            'type': 'REMOVE',
+            'entity': 'moment',
+            'ids': [moment_id]
+        }]
+        return jsonify(response)
+    except Exception as e:
+        return bad_request(e)
+
+# edit moment images
 @app.route("/api/events/<event_id>/moments/images", methods=["GET"])
 @require_auth
 def get_images_to_moments(event_id):
@@ -588,31 +857,11 @@ def remove_images_from_moments(event_id):
         })
     return jsonify({"success": True, "changes": changes})
 
-@app.route("/api/events/<event_id>/moments/<moment_id>", methods=["DELETE"])
-@require_auth
-def delete_moment(event_id, moment_id):
-    """Delete a moment."""
-    event = get_event(event_id)
-    if not event.models_manager.is_accessible('moments', moment_id):
-        return not_found(f"Moment {moment_id} not found or not accessible")
-    
-    try:
-        event.models_manager.delete('moments', moment_id)
-        
-        response = {"success": True, "deleted_ids": [moment_id]}
-        response['changes'] = [{
-            'type': 'REMOVE',
-            'entity': 'moment',
-            'ids': [moment_id]
-        }]
-        return jsonify(response)
-    except Exception as e:
-        return bad_request(e)
-
 # ==============================================================================
-# IV. ALBUMS ENDPOINTS
+# V. ALBUMS ENDPOINTS
 # ==============================================================================
 
+# get albums
 @app.route("/api/events/<event_id>/albums", methods=["GET"])
 @require_auth
 def get_albums(event_id):
@@ -651,22 +900,24 @@ def get_album(event_id, album_id):
     })
     return jsonify({ 'changes': changes })
 
-@app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
-@require_auth
-def get_favorites_album(event_id):
-    """Get the favorites album."""
-    event = get_event(event_id)
-    favorites_album_id = event.models_manager.get_favorites_album()
-    return get_album(event_id, favorites_album_id)
+# TODO: remove these endpoints
+# @app.route("/api/events/<event_id>/albums/defaults/favorites", methods=["GET"])
+# @require_auth
+# def get_favorites_album(event_id):
+#     """Get the favorites album."""
+#     event = get_event(event_id)
+#     favorites_album_id = event.models_manager.get_favorites_album()
+#     return get_album(event_id, favorites_album_id)
 
-@app.route("/api/events/<event_id>/albums/defaults/archive", methods=["GET"])
-@require_auth
-def get_archive_album(event_id):
-    """Get the archive album."""
-    event = get_event(event_id)
-    archive_album_id = event.models_manager.get_archive_album()
-    return get_album(event_id, archive_album_id)
+# @app.route("/api/events/<event_id>/albums/defaults/archive", methods=["GET"])
+# @require_auth
+# def get_archive_album(event_id):
+#     """Get the archive album."""
+#     event = get_event(event_id)
+#     archive_album_id = event.models_manager.get_archive_album()
+#     return get_album(event_id, archive_album_id)
 
+# edit albums
 @app.route("/api/events/<event_id>/albums/check-name", methods=["POST"])
 @require_auth
 def check_album_name(event_id):
@@ -763,6 +1014,7 @@ def delete_album(event_id, album_id):
     except Exception as e:
         return bad_request(e)
 
+# edit album images
 def _edit_album_images(event, album_id, image_ids, add: bool):
     """Helper: Add or remove images from an album, return response with changes."""
     updated_image_ids, _ = event.models_manager.edit_childs(
@@ -901,240 +1153,223 @@ def toggle_archive_images(event_id):
         return bad_request(e)
 
 # ==============================================================================
-# V. IMAGES ENDPOINTS
+# VI. PROFILES ENDPOINTS
 # ==============================================================================
 
-@app.route("/api/events/<event_id>/images", methods=["GET"])
+# get profiles
+@app.route("/api/events/<event_id>/profiles", methods=["GET"])
 @require_auth
-def get_images(event_id):
-    """List all accessible images summaries for the specific event."""
+def get_event_profiles(event_id):
     event = get_event(event_id)
-    images = event.models_manager.get_entities('images')
+    profiles = event.models_manager.get_entities('profiles')
     changes = [{
         'type': 'UPSERT',
-        'entity': 'image',
-        'items': images
+        'entity': 'profile',
+        'items': profiles
     }]
-    return jsonify({'changes': changes})
+    return jsonify({"changes": changes})
 
-@app.route("/api/events/<event_id>/images/<image_id>", methods=["GET"])
+@app.route("/api/events/<event_id>/profiles/current/archived-access", methods=["GET"])
 @require_auth
-def get_image(event_id, image_id):
-    """Get a specific image's details as changes."""
+def get_archived_access(event_id):
+    """Get archived access for the current profile."""
     event = get_event(event_id)
-    if not event.models_manager.is_accessible('images', image_id):
-        return not_found(f"Image {image_id} not found or not accessible")
+    return jsonify({"archived_access": bool(event.models_manager.get_archive_album())})
 
-    image = event.models_manager.get_entities('images', [image_id])
-    albums = event.models_manager.get_childs('images', image_id, 'albums')
-    faces = event.models_manager.get_childs('images', image_id, 'faces')
-    groups = event.models_manager.get_childs('images', image_id, 'groups')
-    changes = [{
-        'type': 'UPSERT',
-        'entity': 'image',
-        'items': image
-    }]
-    changes.append({
-        'type': 'RELATION_SET',
-        'relation': 'image.albums',
-        'parentId': image_id,
-        'entities': albums
-    })
-    changes.append({
-        'type': 'RELATION_SET',
-        'relation': 'image.faces',
-        'parentId': image_id,
-        'entities': faces
-    })
-    changes.append({
-        'type': 'RELATION_SET',
-        'relation': 'image.groups',
-        'parentId': image_id,
-        'entities': groups
-    })
-    moments = image.get(image_id, {}).get('moment_id')
-    if moments:
-        moments = event.models_manager.get_entities('moments', [moments])
-        changes.append({
-            'type': 'RELATION_SET',
-            'relation': 'image.moments',
-            'parentId': image_id,
-            'entities': moments
-        })
-    return jsonify({ 'changes': changes })
-
-@app.route("/api/events/<event_id>/images", methods=["DELETE"])
+@app.route("/api/events/<event_id>/profiles/current/favorites-access", methods=["GET"])
 @require_auth
-def delete_image(event_id):
-    """Delete an image."""
+def get_favorites_access(event_id):
+    """Get favorites access for the current profile."""
     event = get_event(event_id)
+    return jsonify({"favorites_access": bool(event.models_manager.get_favorites_album())})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/password", methods=["GET"])
+@require_auth
+def get_profile_password(event_id, profile_id):
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    return jsonify({"password": event.models_manager.get_profile_password(profile_id)})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/password", methods=["PUT"])
+@require_auth
+def update_profile_password(event_id, profile_id):
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
     data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    if not image_ids:
-        return bad_request("No image IDs provided")
+    password = data.get('password', '')
+    event.models_manager.edit('profiles', profile_id, {'password': password})
+    return jsonify({"success": True})
+
+# edit profiles
+@app.route("/api/events/<event_id>/profiles/check-name", methods=["POST"])
+@require_auth
+def check_profile_name(event_id):
+    """Check if a profile name already exists."""
+    event = get_event(event_id)
+    if not event.db.is_profile_manager():
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    label = data.get('label', '')
+    exclude_profile_id = data.get('exclude_profile_id', '')
+    if not label:
+        return jsonify({"error": "Label is required"}), 400
+    conflict_profile_id = event.models_manager.is_exists('profiles', {'label': label}, exclude_id=exclude_profile_id)
+    return jsonify({"conflict": bool(conflict_profile_id)})
+
+@app.route("/api/events/<event_id>/profiles", methods=["POST"])
+@require_auth
+def create_profile(event_id):
+    event = get_event(event_id)
+    if not event.db.is_profile_manager():
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    label = data.get('label', '')
+    hierarchy_rank = data.get('hierarchy_rank', 0)
+    can_upload_and_delete_images = data.get('can_upload_and_delete_images', 0)
+    can_edit = data.get('can_edit', 0)
+    all_images = data.get('all_images', 0)
+    all_albums = data.get('all_albums', 0)
+    save_preferences = data.get('save_preferences', 0)
+    if not label:
+        return jsonify({"error": "Label is required"}), 400
+    conflict_profile_id = event.models_manager.is_exists('profiles', {'label': label})
+    if conflict_profile_id:
+        return jsonify({"error": "Profile with this label already exists"}), 400
+    profile_id = event.models_manager.add('profiles', {'label': label, 'hierarchy_rank': hierarchy_rank, 'can_upload_and_delete_images': can_upload_and_delete_images, 'can_edit': can_edit, 'all_images': all_images, 'all_albums': all_albums, 'save_preferences': save_preferences})
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': event.models_manager.get_entities('profiles', [profile_id])
+    }]
+    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>", methods=["PUT"])
+@require_auth
+def update_profile(event_id, profile_id):
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    allowed = event.models_manager.get_editable_fields(profile_id)
+    sanitized = {k: v for k, v in data.items() if k in allowed}
+
     try:
-        deleted_groups, parents = event.delete_images(image_ids)
+        event.models_manager.edit('profiles', profile_id, sanitized)
+
+        updated = event.models_manager.get_entities('profiles', [profile_id])
         changes = [{
-            'type': 'REMOVE',
-            'entity': 'image',
-            'ids': image_ids
+            'type': 'UPDATE',
+            'entity': 'profile',
+            'items': updated
         }]
-        if deleted_groups:
-            changes.append({
-                'type': 'REMOVE',
-                'entity': 'group',
-                'ids': deleted_groups
-            })
-        for entity, entity_ids in parents.items():
-            changes.append({
-                'type': 'UPDATE',
-                'entity': entity,
-                'items': event.models_manager.get_entities(entity, entity_ids)
-            })
         return jsonify({"success": True, "changes": changes})
     except Exception as e:
         return bad_request(e)
 
-@app.route("/api/events/<event_id>/upload/limits", methods=["GET"])
+@app.route("/api/events/<event_id>/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
-def get_upload_limits(event_id):
-    """Get upload limits and current usage."""
+def delete_profile(event_id, profile_id):
+    """Delete a profile."""
     event = get_event(event_id)
-    
-    current_count = event.get_images_count()
-    
-    available_count = max(0, event.images_count_limit - current_count) if event.images_count_limit > 0 else -1
-    
-    return jsonify({
-        "image_size_limit_bytes": event.image_size_limit_bytes,
-        "images_count_limit": event.images_count_limit,
-        "current_images_count": current_count,
-        "available_images_count": available_count
-    })
-
-@app.route("/api/events/<event_id>/images", methods=["POST"])
-@require_auth
-def upload_images(event_id):
-    """Upload and process images."""
-    from werkzeug.utils import secure_filename
-    import shutil
-    
-    event = get_event(event_id)
-    
-    # Check if files were uploaded
-    if 'files' not in request.files:
-        return jsonify({"error": "No files provided"}), 400
-    
-    files = request.files.getlist('files')
-    assign_moments = request.form.get('assign_moments', 'false').lower() == 'true'
-    
-    if not files:
-        return jsonify({"error": "No files provided"}), 400
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
     
     try:
-        # Save files to to_process directory
-        saved_files = []
-        for file in files:
-            if file and file.filename:
-                # Check file extension
-                if not file.filename.lower().endswith(('.jpg', '.jpeg')):
-                    continue
-                
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(event.to_process_dir, filename)
-                
-                # Handle duplicate filenames
-                base, ext = os.path.splitext(filename)
-                counter = 1
-                while os.path.exists(filepath):
-                    filename = f"{base}_{counter}{ext}"
-                    filepath = os.path.join(event.to_process_dir, filename)
-                    counter += 1
-                
-                file.save(filepath)
-                saved_files.append(filename)
-        
-        if not saved_files:
-            return jsonify({"error": "No valid JPG files provided"}), 400
-        
-        # Process images
-        result = event.process_new_images(
-            verbose=False,
-            assign_moments=assign_moments
-        )
-        
-        # Build changes for frontend
-        changes = []
-        
-        # Get all processed images
-        processed_image_ids = result.get('processed_image_ids', [])
-        if processed_image_ids:
-            images = event.models_manager.get_entities('images', processed_image_ids)
-            
-            # Get all parent groups for the images
-            all_parent_groups = set()
-            for image_id in processed_image_ids:
-                parent_groups = event.models_manager.get_parents('images', image_id, 'groups')
-                all_parent_groups.update(parent_groups)
-            
-            changes.append({
-                'type': 'UPSERT',
-                'entity': 'image',
-                'items': images,
-            })
-            
-            # Add relation changes for each group
-            for group_id in all_parent_groups:
-                group_images = event.models_manager.get_childs('groups', group_id, 'images', processed_image_ids)
-                if group_images:
-                    changes.append({
-                        'type': 'RELATION_ADD',
-                        'relation': 'group.images',
-                        'parentId': group_id,
-                        'entities': group_images,
-                    })
-            
-            if all_parent_groups:
-                changes.append({
-                    'type': 'UPSERT',
-                    'entity': 'group',
-                    'items': event.models_manager.get_entities('groups', list(all_parent_groups)),
-                })
-            
-            # Handle moment assignments
-            assigned_moments = result.get('assigned_moments', {})
-            if assigned_moments:
-                for moment_id, image_ids in assigned_moments.items():
-                    changes.append({
-                        'type': 'RELATION_ADD',
-                        'relation': 'moment.images',
-                        'parentId': moment_id,
-                        'entities': event.models_manager.get_childs('moments', moment_id, 'images', image_ids)
-                    })
-                
-                changes.append({
-                    'type': 'UPDATE',
-                    'entity': 'moment',
-                    'items': event.models_manager.get_entities('moments', list(assigned_moments.keys()))
-                })
-        
-        return jsonify({
-            "success": True,
-            "images_processed": result['images_processed'],
-            "faces_detected": result['faces_detected'],
-            "groups_created": result['groups_created'],
-            "errors": result.get('errors', []),
-            "changes": changes
-        })
-        
-    except ValueError as e:
-        # Validation errors (limits exceeded, etc.)
-        return jsonify({"error": str(e)}), 400
+        event.models_manager.delete('profiles', profile_id)
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'profile',
+            'ids': [profile_id]
+        }]
+        return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
     except Exception as e:
         return bad_request(e)
 
+@app.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["PUT"])
+@require_auth
+def add_images_to_profile(event_id, profile_id):
+    """Add multiple images to a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    affected_ids = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=True)
+    changes = [{
+        'type': 'RELATION_ADD',
+        'relation': 'profile.images',
+        'parentId': profile_id,
+        'entities': event.models_manager.get_childs('profiles', profile_id, 'images', affected_ids)
+    }]
+    return jsonify({"success": True, "changes": changes})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["DELETE"])
+@require_auth
+def remove_images_from_profile(event_id, profile_id):
+    """Remove multiple images from a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    affected_ids = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=False)
+    changes = [{
+        'type': 'RELATION_REMOVE',
+        'relation': 'profile.images',
+        'parentId': profile_id,
+        'ids': affected_ids
+    }]
+    return jsonify({"success": True, "changes": changes})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["PUT"])
+@require_auth
+def add_albums_to_profile(event_id, profile_id):
+    """Add multiple albums to a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+
+    affected_ids = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=True)
+    changes = [{
+        'type': 'RELATION_ADD',
+        'relation': 'profile.albums',
+        'parentId': profile_id,
+        'entities': event.models_manager.get_childs('profiles', profile_id, 'albums', affected_ids)
+    }]
+    return jsonify({"success": True, "changes": changes})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["DELETE"])
+@require_auth
+def remove_albums_from_profile(event_id, profile_id):
+    """Remove multiple albums from a profile."""
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+    affected_ids = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=False)
+    changes = [{
+        'type': 'RELATION_REMOVE',
+        'relation': 'profile.albums',
+        'parentId': profile_id,
+        'ids': affected_ids
+    }]
+    return jsonify({"success": True, "changes": changes})
+
 # ==============================================================================
-# VI. FILE SERVING & DOWNLOADS
+# VII. FILE SERVING & DOWNLOADS
 # ==============================================================================
 
 @app.route('/api/events/<event_id>/file/<file_type>/<file_id>.webp')

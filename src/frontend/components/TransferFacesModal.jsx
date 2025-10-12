@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { toggleSortOrder } from '../utils/sorting';
@@ -20,10 +19,11 @@ export default function TransferFacesModal({
   currentGroup,
   selectedFaces,
   onTransferComplete,
-  sourceGroupId
+  sourceGroupId,
+  urlHelpers: injectedUrlHelpers
 }) {
   const { showToast } = useToast();
-  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
   const groups = useDataStore(state => storeSelectors.groupsAll(state));
   const MODAL_ID = 'transfer-faces-modal';
@@ -310,32 +310,20 @@ export default function TransferFacesModal({
           </button>
         </div>
 
-        {/* Error handling for URL issues */}
-        {urlError && (
-          <div className="mx-6 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <p className="text-red-800 text-sm">
-                {urlError}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Content */}
         <div className="p-6">
           {/* Loading state */}
-          {(urlLoading || isLoadingGroups) && (
+          {isLoadingGroups && (
             <div className="text-center py-8">
               <div className="inline-flex items-center space-x-2 text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
-                <span>{urlLoading ? 'Loading...' : 'Loading groups...'}</span>
+                <span>Loading groups...</span>
               </div>
             </div>
           )}
           
           {/* Search and Sort Controls */}
-          {!urlLoading && !isLoadingGroups && (
+          {!isLoadingGroups && (
             <>
             <div className="mb-4 flex flex-col sm:flex-row gap-3">
             {/* Search */}

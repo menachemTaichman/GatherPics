@@ -4,7 +4,6 @@ import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock, AlertTria
 import { sortMoments } from '../utils/sorting';
 import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 import { useApplyScopes } from '../utils/storeUtils';
@@ -30,8 +29,8 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
+  const urlHelpers = injectedUrlHelpers;
   
   const MODAL_ID = 'edit-moments-modal';
   
@@ -723,6 +722,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       {editingImagesForMoment && (
         <EditMomentImagesModal
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           moment={editingImagesForMoment}
           momentImagesMap={momentImagesMap}
           onRefreshImages={onRefreshImages}

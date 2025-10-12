@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useApplyScopes } from '../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
@@ -10,8 +9,8 @@ import { setPreference, getImageCount } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors, useGroupsList } from '../utils/dataManager';
 
-export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
+  const urlHelpers = injectedUrlHelpers;
   useApplyScopes([{ entity: 'all', id: 'groups' }]);
   const [searchTerm, setSearchTerm] = useState('');
   const sortBy = usePreference('GroupsGallery.sortBy', 'name');

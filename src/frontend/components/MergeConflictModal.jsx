@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, AlertTriangle, Check, ArrowRight } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useDataStore } from '../utils/dataManager';
 import { useModalManager } from '../utils/modalManager';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -21,9 +20,10 @@ export default function MergeConflictModal({
   onMerge, 
   onCancel,
   onNavigateToGroup,
-  onTransferComplete
+  onTransferComplete,
+  urlHelpers: injectedUrlHelpers
 }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore.getState;
   const { registerModal, unregisterModal } = useModalManager();

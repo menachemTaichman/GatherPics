@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown, Image as ImageIcon, Minus, Plus, Check, X, AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useApplyScopes } from '../utils/storeUtils';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
@@ -13,8 +12,8 @@ import { useToast } from '../utils/ToastContext';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
 
-export default function AlbumsGallery({ eventUrl }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers }) {
+  const urlHelpers = injectedUrlHelpers;
   useApplyScopes([{ entity: 'all', id: 'albums' }]);
   const navigate = useNavigate();
   const { showToast } = useToast();

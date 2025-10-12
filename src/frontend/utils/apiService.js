@@ -574,11 +574,115 @@ export const downloadAPI = {
 };
 
 // Profile API
-export const profileAPI = {
-  // Get profile permissions
-  getPermissions: async (eventUrl) => {
+export const profilesAPI = {
+  // Get all profiles
+  getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/profile/permissions`);
+    const response = await api.get(`/api/events/${eventId}/profiles`);
+    return response.data;
+  },
+  
+  // Get profile by ID
+  getById: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/profiles/${profileId}`);
+    return response.data;
+  },
+  
+  // Check if profile name exists
+  checkName: async (label, excludeProfileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles/check-name`, {
+      label,
+      exclude_profile_id: excludeProfileId
+    });
+    return response.data;
+  },
+  
+  // Create profile
+  create: async (profileData, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles`, profileData);
+    return response.data;
+  },
+  
+  // Update profile
+  update: async (profileId, updates, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}`, updates);
+    return response.data;
+  },
+  
+  // Delete profile
+  delete: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}`);
+    return response.data;
+  },
+  
+  // Get profile password
+  getPassword: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/profiles/${profileId}/password`);
+    return response.data;
+  },
+  
+  // Update profile password
+  updatePassword: async (profileId, password, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/password`, {
+      password
+    });
+    return response.data;
+  },
+  
+  // Add images to profile
+  addImages: async (profileId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/images`, {
+      image_ids: imageIds
+    });
+    return response.data;
+  },
+  
+  // Remove images from profile
+  removeImages: async (profileId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/images`, {
+      data: { image_ids: imageIds }
+    });
+    return response.data;
+  },
+  
+  // Add albums to profile
+  addAlbums: async (profileId, albumIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/albums`, {
+      album_ids: albumIds
+    });
+    return response.data;
+  },
+  
+  // Remove albums from profile
+  removeAlbums: async (profileId, albumIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/albums`, {
+      data: { album_ids: albumIds }
+    });
+    return response.data;
+  },
+  
+  // Get archived access for current profile
+  getArchivedAccess: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/profiles/current/archived-access`);
+    return response.data;
+  },
+  
+  // Get favorites access for current profile
+  getFavoritesAccess: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/profiles/current/favorites-access`);
     return response.data;
   }
 };

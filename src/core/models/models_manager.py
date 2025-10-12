@@ -666,43 +666,53 @@ class ModelsManager:
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     # -------- Profiles helpers --------
-    ######## TODO: check if edit_childs replaces these
-    def add_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
-        if not image_ids:
-            return []
-        to_insert = [
-            {'profile_id': profile_id, 'image_id': image_id, 'accessible': 1}
-            for image_id in image_ids
-        ]
-        inserted_pairs = self.db.insert('editable_profile_images', to_insert)
-        return [pair[1] for pair in inserted_pairs]
+    def get_profile_password(self, profile_id: str) -> str | None:
+        """Get the password for a profile."""
+        return self.db.execute_query('SELECT password FROM accessible_profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.VALUE)
 
-    def remove_accessible_images(self, profile_id: str, image_ids: List[str]) -> List[str]:
-        if not image_ids:
-            return []
-        
-        deleted_pairs = self.db.delete(
-            'editable_profile_images',
-            {'profile_id': profile_id, 'image_id': image_ids}
-        )
-        return [pair[1] for pair in deleted_pairs]
+    def get_editable_fields(self, profile_id: str) -> List[str]:
+        """Get the editable fields for a profile."""
+        cur_profile_context = self.db.get_profile_context()
+        h_rank = cur_profile_context['hierarchy_rank']
+        is_manager = h_rank > 0
+        p_id = cur_profile_context['profile_id']
+        profile = self.get_entities('profiles', profile_id)
 
-    def add_accessible_albums(self, profile_id: str, album_ids: List[str]) -> List[str]:
-        if not album_ids:
-            return []
-        to_insert = [
-            {'profile_id': profile_id, 'album_id': album_id, 'accessible': 1}
-            for album_id in album_ids
-        ]
-        inserted_pairs = self.db.insert('editable_profile_albums', to_insert)
-        return [pair[1] for pair in inserted_pairs]
+        editable_fields = set()
+        if p_id == profile_id and is_manager:
+            editable_fields.add('label')
+            editable_fields.add('password')
 
-    def remove_accessible_albums(self, profile_id: str, album_ids: List[str]) -> List[str]:
-        if not album_ids:
+        if h_rank > profile['hierarchy_rank'] and is_manager:
+            editable_fields.add('password')
+            editable_fields.add('label')
+            editable_fields.add('hierarchy_rank')
+            editable_fields.add('can_upload_and_delete_images')
+            editable_fields.add('can_edit')
+            editable_fields.add('all_images')
+            editable_fields.add('all_albums')
+            editable_fields.add('save_preferences')
+
+        return list(editable_fields)
+
+    def toggle_accessible(self, profile_id: str, entity: str, ids: List[str], add: bool = True) -> List[str]:
+        """Toggle entities accessibility for a profile.
+        Args:
+            profile_id: profile id
+            entity: entity type
+            ids: list of ids
+            add: if True, set entities accessible to profile, if False, set entities inaccessible to profile
+        Returns:
+            list of affected ids
+        """
+        if entity not in ['images', 'albums']:
+            raise ValueError(f"Invalid entity: {entity}")
+        profile = self.get_entities('profiles', profile_id)
+        if not profile:
             return []
-        
-        deleted_pairs = self.db.delete(
-            'editable_profile_albums',
-            {'profile_id': profile_id, 'album_id': album_ids}
-        )
-        return [pair[1] for pair in deleted_pairs]
+
+        if bool(profile[f'all_{entity}']):
+            add = not add
+
+        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, add=add)
+        return valid_ids

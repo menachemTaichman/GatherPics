@@ -1,11 +1,20 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Upload, Archive, User, Info, MessageSquare, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Settings, X, Upload, Archive, User, Info, MessageSquare, Loader2, Check, AlertCircle, AlertTriangle, Edit2, Plus, Save, RotateCcw, LogOut, Lock, Trash2 } from 'lucide-react';
 import { useModalFocus } from '../utils/useModalFocus';
+import { useModalManager } from '../utils/modalManager';
 import { getPreference, setPreference } from '../utils/settings';
-import { imagesAPI } from '../utils/apiService';
+import { imagesAPI, profilesAPI } from '../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../utils/ToastContext';
+import { getCurrentProfile, setCurrentProfile } from '../utils/profileService';
+import { useProfilesList } from '../utils/dataManager';
+import { useApplyScopes } from '../utils/storeUtils';
+import { useEventUrls } from '../utils/useEventUrls';
+import jwtService from '../utils/jwtService';
+import ChangePasswordModal from './ChangePasswordModal';
+import EditProfileModal from './EditProfileModal';
+import ConfirmDelete from './ConfirmDelete';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,11 +28,85 @@ export default function SettingsManager() {
   const fileInputRef = useRef(null);
   const { eventUrl } = useParams();
   const { showToast } = useToast();
+  const { urlHelpers } = useEventUrls(eventUrl);
   
+  // Profile management state
+  const currentProfile = getCurrentProfile();
+  const allProfiles = useProfilesList();
+  const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
+  const [currentProfileLabel, setCurrentProfileLabel] = useState('');
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [profileToDelete, setProfileToDelete] = useState(null);
+  const [profileNameConflict, setProfileNameConflict] = useState(false);
+  const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
+  
+  const { registerModal, unregisterModal } = useModalManager();
+  const modalId = 'settings-manager';
+
+  // Register modal when opened, unregister when closed
+  useEffect(() => {
+    if (isOpen) {
+      // Apply scopes based on active tab
+      const scopes = activeTab === 'profiles' ? [{ entity: 'all', id: 'profiles' }] : [];
+      
+      registerModal({ 
+        id: modalId, 
+        type: 'popup',
+        allowOutsideScroll: true,
+        scopes
+      });
+      return () => {
+        unregisterModal(modalId);
+      };
+    }
+  }, [isOpen, activeTab, registerModal, unregisterModal]);
+
+  // Apply scopes for profiles tab
+  useApplyScopes(isOpen && activeTab === 'profiles' ? [{ entity: 'all', id: 'profiles' }] : []);
+
+  // Fetch profiles when profiles tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === 'profiles' && eventUrl) {
+      fetchProfiles();
+    }
+  }, [isOpen, activeTab, eventUrl]);
+
+  const fetchProfiles = async () => {
+    try {
+      await profilesAPI.getAll(eventUrl);
+      // Changes are automatically applied by apiService interceptor
+    } catch (error) {
+      console.error('Failed to fetch profiles:', error);
+    }
+  };
+
+  // Custom keyboard handler to prevent ESC from closing modal when editing
+  const handleSettingsKeys = useCallback((e) => {
+    // If a child modal is open (like ChangePasswordModal or EditProfileModal), let events pass through
+    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal) {
+      return true; // Return true to prevent this modal from stopping propagation to child modal
+    }
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    const targetTagName = e.target.tagName?.toLowerCase();
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      // Return true to signal that we're handling this, preventing useModalFocus from stopping it
+      return true;
+    }
+    
+    return false; // Let default modal behavior handle it (ESC to close)
+  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal]);
+
   const { modalRef } = useModalFocus(isOpen, () => setIsOpen(false), {
+    modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
-    enableFocusTrapping: true
+    // Disable focus trapping when child modal is open so child can receive focus
+    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal,
+    customKeyHandler: handleSettingsKeys
   });
 
   const tabs = [
@@ -53,6 +136,122 @@ export default function SettingsManager() {
     setIncludeArchived(checked);
     setPreference('general.includeArchived', checked);
   };
+
+  // Profile management functions
+  const handleCurrentProfileSave = async () => {
+    if (!currentProfileLabel.trim() || profileNameConflict) {
+      if (!currentProfileLabel.trim()) {
+        showToast('Profile name cannot be empty', 'error');
+      }
+      return;
+    }
+
+    try {
+      await profilesAPI.update(currentProfile.id, { label: currentProfileLabel.trim() }, eventUrl);
+      // Update local storage
+      setCurrentProfile({ ...currentProfile, label: currentProfileLabel.trim() });
+      showToast('Profile name updated', 'success');
+      setEditingCurrentProfile(false);
+      setProfileNameConflict(false);
+    } catch (error) {
+      console.error('Failed to update profile name:', error);
+      showToast('Failed to update profile name', 'error');
+    }
+  };
+
+  const handleCurrentProfileCancel = () => {
+    setEditingCurrentProfile(false);
+    setCurrentProfileLabel(currentProfile?.label || '');
+    setProfileNameConflict(false);
+  };
+
+  const checkCurrentProfileNameConflict = async (label) => {
+    if (!label || !label.trim()) {
+      setProfileNameConflict(false);
+      return;
+    }
+
+    // Debounce the check
+    if (checkCurrentProfileNameConflict._timeout) {
+      clearTimeout(checkCurrentProfileNameConflict._timeout);
+    }
+    
+    checkCurrentProfileNameConflict._timeout = setTimeout(async () => {
+      try {
+        const result = await profilesAPI.checkName(label.trim(), currentProfile.id, eventUrl);
+        setProfileNameConflict(result.conflict || false);
+      } catch (error) {
+        console.error('Error checking name conflict:', error);
+        setProfileNameConflict(false);
+      }
+    }, 300);
+  };
+
+  const handleEditProfile = (profile) => {
+    setSelectedProfile(profile);
+    setShowEditProfileModal(true);
+  };
+
+  const handleCreateProfile = () => {
+    // Create a blank profile template for the modal
+    const newProfileTemplate = {
+      id: null, // null signals creation mode
+      label: 'New Profile',
+      hierarchy_rank: 0,
+      can_upload_and_delete_images: 0,
+      can_edit: 0,
+      all_images: 0,
+      all_albums: 0,
+      save_preferences: 0
+    };
+    
+    setSelectedProfile(newProfileTemplate);
+    setIsCreatingNewProfile(true);
+    setShowEditProfileModal(true);
+  };
+
+  const handleDeleteProfile = (profile) => {
+    setProfileToDelete(profile);
+    setShowDeleteConfirmModal(true);
+  };
+
+  const handleConfirmDeleteProfile = async () => {
+    if (!profileToDelete) return;
+
+    try {
+      await profilesAPI.delete(profileToDelete.id, eventUrl);
+      // Changes are automatically applied by apiService interceptor
+      showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
+    } catch (error) {
+      console.error('Failed to delete profile:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete profile';
+      showToast(errorMsg, 'error');
+    } finally {
+      setProfileToDelete(null);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await jwtService.logout();
+      window.location.reload();
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Reload anyway
+      window.location.reload();
+    }
+  };
+
+  // Get other profiles (exclude current) and sort by rank desc, then label asc
+  const otherProfiles = allProfiles
+    .filter(p => p.id !== currentProfile?.id)
+    .sort((a, b) => {
+      // First by rank descending
+      const rankDiff = (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0);
+      if (rankDiff !== 0) return rankDiff;
+      // Then by label ascending
+      return (a.label || '').localeCompare(b.label || '');
+    });
 
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files || []);
@@ -168,28 +367,19 @@ export default function SettingsManager() {
 
       <AnimatePresence>
         {isOpen && (
-          <>
-            {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsOpen(false)}>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50"
-            />
-
-            {/* Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                ref={modalRef}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ 
-                  opacity: 1, 
-                  scale: 1
-                }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
-              >
+              ref={modalRef}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1
+              }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
@@ -420,6 +610,24 @@ export default function SettingsManager() {
                               )}
                             </AnimatePresence>
                           </div>
+
+                          {/* Current Profile & Sign Out */}
+                          <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Account</h4>
+                            <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg mb-3">
+                              <div>
+                                <p className="font-medium text-gray-900">Current Profile</p>
+                                <p className="text-sm text-gray-500">{currentProfile?.label || 'Not signed in'}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={handleSignOut}
+                              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                            >
+                              <LogOut className="w-4 h-4" />
+                              <span>Sign Out</span>
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -431,13 +639,156 @@ export default function SettingsManager() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
+                        className="space-y-6"
                       >
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Profiles</h3>
-                          <div className="bg-gray-50 rounded-lg p-8 text-center">
-                            <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                            <p className="text-gray-600">Profile settings will be available soon.</p>
+                        {/* Current Profile Section - Compact */}
+                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile: Rank {currentProfile?.hierarchy_rank || 0}</h3>
+                          
+                          <div className="flex items-center space-x-3">
+                            {/* Profile Name */}
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                              {editingCurrentProfile ? (
+                                <div className="flex items-center space-x-2">
+                                  <div className="relative flex-1">
+                                    <input
+                                      type="text"
+                                      value={currentProfileLabel}
+                                      onChange={(e) => {
+                                        setCurrentProfileLabel(e.target.value);
+                                        checkCurrentProfileNameConflict(e.target.value);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleCurrentProfileSave();
+                                        }
+                                        if (e.key === 'Escape') {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleCurrentProfileCancel();
+                                        }
+                                      }}
+                                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                        profileNameConflict ? 'border-red-500' : 'border-gray-300'
+                                      }`}
+                                      autoFocus
+                                    />
+                                    {profileNameConflict && (
+                                      <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        <span>Name exists</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={handleCurrentProfileSave}
+                                    disabled={profileNameConflict}
+                                    className="p-1.5 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Save"
+                                  >
+                                    <Check className="w-4 h-4 text-green-600" />
+                                  </button>
+                                  <button
+                                    onClick={handleCurrentProfileCancel}
+                                    className="p-1.5 hover:bg-red-100 rounded-lg transition-colors"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-4 h-4 text-red-600" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2">
+                                  <div
+                                    className="px-3 py-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors flex-1 text-sm"
+                                    onClick={() => {
+                                      setEditingCurrentProfile(true);
+                                      setCurrentProfileLabel(currentProfile?.label || '');
+                                    }}
+                                  >
+                                    {currentProfile?.label || 'Not set'}
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setEditingCurrentProfile(true);
+                                      setCurrentProfileLabel(currentProfile?.label || '');
+                                    }}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                                    title="Edit name"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-gray-600" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Change Password Button */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
+                              <button
+                                onClick={() => setShowChangePasswordModal(true)}
+                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 whitespace-nowrap"
+                              >
+                                <Lock className="w-4 h-4" />
+                                <span>Change Password</span>
+                              </button>
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Other Profiles Section */}
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">Other Profiles</h3>
+                            <button
+                              onClick={handleCreateProfile}
+                              className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                              title="Create new profile"
+                            >
+                              <Plus className="w-5 h-5 text-green-600" />
+                            </button>
+                          </div>
+
+                          {otherProfiles.length === 0 ? (
+                            <p className="text-gray-500 text-sm text-center py-4">No other profiles</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {otherProfiles.map((profile) => (
+                                <div
+                                  key={profile.id}
+                                  className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                      <User className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-gray-900">{profile.label}</p>
+                                      <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <button
+                                      onClick={() => handleEditProfile(profile)}
+                                      className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                      title="Edit profile"
+                                    >
+                                      <Edit2 className="w-4 h-4 text-blue-600" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteProfile(profile)}
+                                      className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                      title="Delete profile"
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -525,9 +876,57 @@ export default function SettingsManager() {
                 </div>
               </motion.div>
             </div>
-          </>
         )}
       </AnimatePresence>
+
+      {/* Change Password Modal for Current Profile */}
+      {showChangePasswordModal && currentProfile && (
+        <ChangePasswordModal
+          isOpen={showChangePasswordModal}
+          onClose={() => setShowChangePasswordModal(false)}
+          profileId={currentProfile.id}
+          profileLabel={currentProfile.label}
+          eventUrl={eventUrl}
+        />
+      )}
+
+      {/* Edit Profile Modal for Other Profiles */}
+      {showEditProfileModal && selectedProfile && (
+        <EditProfileModal
+          isOpen={showEditProfileModal}
+          onClose={() => {
+            setShowEditProfileModal(false);
+            setSelectedProfile(null);
+            setIsCreatingNewProfile(false);
+          }}
+          profile={selectedProfile}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          isCreating={isCreatingNewProfile}
+          onSave={() => {
+            fetchProfiles();
+            setIsCreatingNewProfile(false);
+          }}
+        />
+      )}
+
+      {/* Delete Profile Confirmation Modal */}
+      {showDeleteConfirmModal && profileToDelete && (
+        <ConfirmDelete
+          isOpen={showDeleteConfirmModal}
+          onClose={() => {
+            setShowDeleteConfirmModal(false);
+            setProfileToDelete(null);
+          }}
+          onConfirm={handleConfirmDeleteProfile}
+          title="Delete Profile"
+          message="Are you sure you want to delete profile"
+          itemName={profileToDelete.label}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
+        />
+      )}
     </>
   );
 }

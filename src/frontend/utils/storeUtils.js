@@ -92,6 +92,40 @@ export function useAlbumsForImage(imageId) {
   return albums;
 }
 
+// Stable images list for a profile id
+export function useImagesForProfile(profileId) {
+  const imagesSet = useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId]?.images || null : null));
+  const imagesMapSub = useDataStore((state) => state.entities?.images || {});
+
+  const images = useMemo(() => {
+    if (!imagesSet) return [];
+    const ids = Array.from(imagesSet);
+    const imagesMap = (useDataStore.getState().entities?.images || {});
+    const list = ids.map((iid) => imagesMap[iid]).filter(Boolean);
+    const sorted = sortImages(list, 'date', 'asc');
+    return sorted;
+  }, [profileId, imagesSet, imagesMapSub]);
+
+  return images;
+}
+
+// Stable albums list for a profile id
+export function useAlbumsForProfile(profileId) {
+  const albumsSet = useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId]?.albums || null : null));
+  const albumsMapSub = useDataStore((state) => state.entities?.albums || {});
+
+  const albums = useMemo(() => {
+    if (!albumsSet) return [];
+    const ids = Array.from(albumsSet);
+    const albumsMap = (useDataStore.getState().entities?.albums || {});
+    const list = ids.map((aid) => albumsMap[aid]).filter(Boolean);
+    const sorted = sortGroups(list, 'name', 'asc');
+    return sorted;
+  }, [profileId, albumsSet, albumsMapSub]);
+
+  return albums;
+}
+
 // Representative URL helper with debug
 export function getRepresentativeUrl(urlHelpers, entity, id) {
   const url = urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl(entity, id) : null;

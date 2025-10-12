@@ -5,7 +5,6 @@ import { sortImagesWithDatePriority, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
 import { setPreference } from '../utils/settings';
 import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useApplyScopes } from '../utils/storeUtils';
@@ -31,8 +30,8 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose }) {
-  const { urlHelpers } = useEventUrls(eventUrl);
+function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose, urlHelpers: injectedUrlHelpers }) {
+  const urlHelpers = injectedUrlHelpers;
   const { updateMoment } = useDataStore();
   
   const MODAL_ID = 'edit-moment-images-modal';

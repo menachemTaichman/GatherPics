@@ -56,7 +56,6 @@ import { selectors as storeSelectors, useGroupsList, useGroupById } from '../uti
 import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../utils/apiService';
 import useImageActions from './ImageActions';
-import { useEventUrls } from '../utils/useEventUrls';
 import { clearTransferredImagesFromCache } from '../utils/selection';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
@@ -67,7 +66,7 @@ import { useImageHighlight } from '../utils/useImageHighlight';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
-export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) {
+export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
   // Render counter to spot potential render loops
   const __renderCountRef = useRef(0);
   __renderCountRef.current += 1;
@@ -76,7 +75,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
   const { group_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  // Use injected urlHelpers from App to avoid creating duplicate instances on refresh
+  const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
   const [group, setGroup] = useState(null);
   
@@ -1149,6 +1149,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
           {filterVisible && (
             <GroupsFilter
               group={group}
+              urlHelpers={urlHelpers}
               relatedGroups={memoizedRelatedGroups}
               filterMode={filterMode}
               onlySelected={onlySelected}
@@ -1282,6 +1283,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
         <MergeConflictModal
           isOpen={showMergeModal}
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           onClose={() => setShowMergeModal(false)}
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}
@@ -1306,6 +1308,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups }) 
          <TransferFacesModal
            isOpen={showTransferModal}
            eventUrl={eventUrl}
+           urlHelpers={urlHelpers}
            onClose={() => setShowTransferModal(false)}
            groups={currentGroups}
            currentGroup={group}

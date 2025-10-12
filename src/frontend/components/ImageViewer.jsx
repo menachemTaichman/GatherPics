@@ -92,6 +92,9 @@ function ImageViewerActions({
           <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
         </button>
 
+        {/* Separator */}
+        <span className="text-gray-300">|</span>
+
         {/* Delete image */}
         <button
           onClick={imageActions.deleteImages}
@@ -1405,6 +1408,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           key="transfer-faces-modal"
           isOpen={showTransferModal}
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           onClose={() => {
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
@@ -1426,6 +1430,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           key="move-to-moment-modal"
           isOpen={showMoveToMomentModal}
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           onClose={() => setShowMoveToMomentModal(false)}
           selectedImages={imageId ? new Set([imageId]) : new Set()}
           onMoveComplete={handleMoveToMomentComplete}

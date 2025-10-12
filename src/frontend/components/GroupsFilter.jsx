@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useEventUrls } from '../utils/useEventUrls';
 import { groupsAPI } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 import { useModalManager } from '../utils/modalManager';
@@ -34,12 +33,13 @@ export default function GroupsFilter({
   onRelatedGroupsUpdate,
   currentGroupId,
   onSelectedGroupsChange,
-  initialSelectedGroups = []
+  initialSelectedGroups = [],
+  urlHelpers: injectedUrlHelpers
 }) {
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
-  const { urlHelpers } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   const [selectedGroups, setSelectedGroups] = useState(initialSelectedGroups || []); // excludes currentGroupId
   const groups = useDataStore(state => state.entities?.groups || {});
   const { registerModal, unregisterModal } = useModalManager();

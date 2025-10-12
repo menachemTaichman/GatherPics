@@ -26,7 +26,6 @@ import useImageSelection from '../utils/useImageSelection';
 import { useDataStore, useAlbumsList } from '../utils/dataManager';
 import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { albumsAPI } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
 import SingleImageTile from './SingleImageTile';
 import { useImageComponent } from '../utils/useImage.jsx';
 import ConfirmDelete from './ConfirmDelete';
@@ -34,10 +33,10 @@ import { useImageHighlight } from '../utils/useImageHighlight';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
-export default function AlbumDetail() {
+export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const { album_name, eventUrl } = useParams();
   const navigate = useNavigate();
-  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
   const [album, setAlbum] = useState(null);
   

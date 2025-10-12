@@ -16,7 +16,6 @@ import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { shallow } from 'zustand/shallow';
 import { momentsAPI } from '../utils/apiService';
 import useImageActions from './ImageActions';
-import { useEventUrls } from '../utils/useEventUrls';
 import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
@@ -56,10 +55,10 @@ function formatDate(dateString) {
   }
 }
 
-export default function Moments({ eventUrl }) {
+export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { urlHelpers, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
+  const urlHelpers = injectedUrlHelpers;
   
   // Apply scope for all moments
   useApplyScopes([{ entity: 'all', id: 'moments' }]);
@@ -523,8 +522,6 @@ export default function Moments({ eventUrl }) {
 
   if (storeLoading) return <div className="p-8 text-center">Loading moments...</div>;
   if (storeError) return <div className="p-8 text-center text-red-500">{storeError}</div>;
-  if (urlError) return <div className="p-8 text-center text-red-500">Error loading event: {urlError}</div>;
-  if (urlLoading) return <div className="p-8 text-center">Loading event...</div>;
 
   // Calculate if all current images are selected for the select all button
   const allCurrentImages = new Set(allKeys);
@@ -830,6 +827,7 @@ export default function Moments({ eventUrl }) {
       {showEditMomentsModal && (
         <EditMomentsModal
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           moments={moments}
           images={allImages.map(item => item.image)}
           onSave={handleSaveMoments}
@@ -844,6 +842,7 @@ export default function Moments({ eventUrl }) {
         <MoveToMomentModal
           isOpen={showMoveModal}
           eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
           onClose={() => setShowMoveModal(false)}
           selectedImages={new Set(getSelectedImageIds())}
           onMoveComplete={handleMoveComplete}

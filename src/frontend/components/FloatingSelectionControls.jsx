@@ -160,6 +160,8 @@ export default function FloatingSelectionControls({
             </button>
           )}
 
+          <span className="text-gray-300">|</span>
+
           {/* Delete Images */}
           <button
             onClick={selectedImageActions.deleteImages}

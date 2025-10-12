@@ -4,6 +4,8 @@ import { X, Trash2, Check, Upload, Download, Image as ImageIcon } from 'lucide-r
 import { useParams } from 'react-router-dom';
 import useBucketStore from '../utils/bucketStore';
 import { urlHelpers, downloadAPI, imagesAPI } from '../utils/apiService';
+import { useModalFocus } from '../utils/useModalFocus';
+import { useModalManager } from '../utils/modalManager';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
@@ -33,6 +35,31 @@ export default function BucketDrawer() {
     markUploaded,
     removeManyFromQueue
   } = useBucketStore();
+
+  const { registerModal, unregisterModal } = useModalManager();
+  const modalId = 'bucket-drawer';
+
+  // Register modal when opened, unregister when closed
+  useEffect(() => {
+    if (isOpen) {
+      registerModal({ 
+        id: modalId, 
+        type: 'panel',
+        allowOutsideScroll: true,
+        scopes: []
+      });
+      return () => {
+        unregisterModal(modalId);
+      };
+    }
+  }, [isOpen, registerModal, unregisterModal]);
+
+  const { modalRef } = useModalFocus(isOpen, close, {
+    modalId: modalId,
+    modalType: 'panel',
+    allowOutsideScroll: true,
+    enableFocusTrapping: true
+  });
 
   const alreadyList = mode === 'download' ? downloaded : uploaded;
 
@@ -82,6 +109,7 @@ export default function BucketDrawer() {
     <AnimatePresence>
       {isOpen && (
         <motion.aside
+          ref={modalRef}
           key="bucket-drawer"
           initial={{ x: '100%' }}
           animate={{ x: 0 }}

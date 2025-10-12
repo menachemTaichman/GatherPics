@@ -100,6 +100,7 @@ function normalizeEntityKey(entity) {
     case 'moment': return 'moments';
     case 'album': return 'albums';
     case 'face': return 'faces';
+    case 'profile': return 'profiles';
     default: return entity;
   }
 }
@@ -113,8 +114,8 @@ function coerceToSet(val) {
 
 function persistEntitiesSession(entities) {
   try {
-    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
-    ['images','groups','moments','albums','faces'].forEach((k) => {
+    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
+    ['images','groups','moments','albums','faces','profiles'].forEach((k) => {
       const src = entities[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -143,11 +144,11 @@ function hydrateEntitiesSession() {
 
   try {
     const raw = sessionStorage.getItem('entities');
-    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
+    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
     if (!raw) return base;
     const parsed = JSON.parse(raw);
     const revived = { ...base };
-    ['images','groups','moments','albums','faces'].forEach((k) => {
+    ['images','groups','moments','albums','faces','profiles'].forEach((k) => {
       const src = parsed?.[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -161,7 +162,7 @@ function hydrateEntitiesSession() {
     });
     return revived;
   } catch {
-    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
+    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
   }
 }
 
@@ -209,11 +210,19 @@ export const useDataStore = create((set, get) => {
       const before = prevMap[id];
       const mergedCandidate = { ...(before || { id }), ...normalized };
       // Preserve Set references when contents didn’t change
-      ['images','faces','albums'].forEach((rk) => {
-        if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-          if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
-        }
-      });
+            ['images','faces','albums'].forEach((rk) => {
+              if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
+              }
+            });
+            // Handle profile relations preservation
+            if (childTypeKey === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
+                }
+              });
+            }
       // Preserve faces_mapping (plain object) when contents are equal
       if (childTypeKey === 'groups' && before && before.faces_mapping && mergedCandidate.faces_mapping) {
         if (shallowEqualPlainObject(before.faces_mapping, mergedCandidate.faces_mapping)) {
@@ -269,15 +278,20 @@ export const useDataStore = create((set, get) => {
     if (hasDirect) return true;
 
     // Relationship-derived allowances
-    // images are allowed under group/album/moment/image scopes
+    // images are allowed under group/album/moment/image/profile scopes
     if (entityKey === 'images') {
-      const hasParent = scopesList.some((sc) => sc && (sc.entity === 'group' || sc.entity === 'album' || sc.entity === 'moment' || sc.entity === 'image'));
+      const hasParent = scopesList.some((sc) => sc && (sc.entity === 'group' || sc.entity === 'album' || sc.entity === 'moment' || sc.entity === 'image' || sc.entity === 'profile'));
       if (hasParent) return true;
     }
     // groups/albums/faces are allowed under image scope (e.g., image.groups, image.albums, image.faces)
     if (entityKey === 'groups' || entityKey === 'albums' || entityKey === 'faces') {
       const hasImage = scopesList.some((sc) => sc && sc.entity === 'image');
       if (hasImage) return true;
+    }
+    // albums/images are allowed under profile scope (e.g., profile.images, profile.albums)
+    if (entityKey === 'images' || entityKey === 'albums') {
+      const hasProfile = scopesList.some((sc) => sc && sc.entity === 'profile');
+      if (hasProfile) return true;
     }
 
     return false;
@@ -462,12 +476,26 @@ export const useDataStore = create((set, get) => {
             ['images', 'faces', 'albums'].forEach((rk) => {
               if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
             });
+            // Handle profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
+              });
+            }
             // Preserve set refs when contents equal
             ['images','faces','albums'].forEach((rk) => {
               if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                 if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
               }
             });
+            // Preserve profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
             // Preserve faces_mapping (plain object) when contents are equal
             if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
               if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
@@ -499,7 +527,7 @@ export const useDataStore = create((set, get) => {
           let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
-            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id;
             if (!id) return;
             if (!prevMap[id]) return; // update-only
             const prev = prevMap[id];
@@ -507,11 +535,25 @@ export const useDataStore = create((set, get) => {
             ['images', 'faces', 'albums'].forEach((rk) => {
               if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
             });
+            // Handle profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
+              });
+            }
             ['images','faces','albums'].forEach((rk) => {
               if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                 if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
               }
             });
+            // Preserve profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
             // Preserve faces_mapping (plain object) when contents are equal
             if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
               if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
@@ -542,13 +584,19 @@ export const useDataStore = create((set, get) => {
           const map = { ...(nextEntities[key] || {}) };
           items.forEach((it) => {
             if (!it) return;
-            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id;
             if (!id) return;
             if (map[id]) return; // insert-only
             const merged = { id, ...it };
             ['images', 'faces', 'albums'].forEach((rk) => {
               if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
             });
+            // Handle profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+              });
+            }
             map[id] = merged;
           });
           nextEntities[key] = map;
@@ -654,7 +702,7 @@ export const useDataStore = create((set, get) => {
     setSelectedImages: (selectedImages) => set({ selectedImages }),
     setImageViewer: (imageViewer) => set({ imageViewer }),
     clearData: () => {
-      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {} };
+      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
       persistEntitiesSession(empty);
       set({
         selectedImages: new Set(),
@@ -753,6 +801,17 @@ export const selectors = {
       return lastArr;
     };
   })(),
+  profilesAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.profiles || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
   groupImages: (state, groupId) => {
     const group = state.entities?.groups?.[groupId];
     const ids = Array.from(group?.images || []);
@@ -836,6 +895,14 @@ export function useFacesList() {
 
 export function useFaceById(faceId) {
   return useDataStore((state) => (faceId ? state.entities?.faces?.[faceId] || null : null));
+}
+
+export function useProfilesList() {
+  return useDataStore((state) => selectors.profilesAll(state));
+}
+
+export function useProfileById(profileId) {
+  return useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId] || null : null));
 }
 
  

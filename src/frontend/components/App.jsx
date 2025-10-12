@@ -11,11 +11,12 @@ import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
 import Toast from './Toast';
 import { useDataStore } from '../utils/dataManager';
-import { groupsAPI, authAPI } from '../utils/apiService';
+import { groupsAPI, authAPI, profilesAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { initializePreferences } from '../utils/settings';
 import { ToastProvider, useToast } from '../utils/ToastContext';
+import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
 
 // Cache for events list to prevent duplicate requests
 let eventsCache = null;
@@ -205,11 +206,45 @@ function AppContent({ eventUrl }) {
   const [loading, setLocalLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
 
-  // Initialize JWT authentication
+  // Initialize JWT authentication and fetch current profile
   useEffect(() => {
     async function initializeAuth() {
       try {
+        // Get JWT token
         await jwtService.getToken();
+        
+        // Fetch current profile and store it
+        if (eventUrl) {
+          try {
+            // Temporarily add scope to allow profile inserts
+            const store = useDataStore.getState();
+            store.addScope({ entity: 'all', id: 'profiles' });
+            
+            const response = await profilesAPI.getAll(eventUrl);
+            
+            // Small delay to ensure interceptor processed changes
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Get profiles from the store
+            const storeProfiles = useDataStore.getState().entities?.profiles || {};
+            
+            if (Object.keys(storeProfiles).length > 0) {
+              const profilesList = Object.values(storeProfiles);
+              // Sort by hierarchy_rank descending and pick first
+              const sortedProfiles = profilesList.sort((a, b) => (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0));
+              const currentProf = sortedProfiles[0];
+              if (currentProf) {
+                setCurrentProfile(currentProf);
+              }
+            }
+            
+            // Remove the profiles scope after loading to avoid interfering with other scopes
+            store.removeScope({ entity: 'all', id: 'profiles' });
+          } catch (error) {
+            console.error('Failed to fetch current profile:', error);
+          }
+        }
+        
         setAuthInitialized(true);
       } catch (error) {
         console.error('Failed to initialize JWT authentication:', error);
@@ -218,8 +253,10 @@ function AppContent({ eventUrl }) {
       }
     }
 
-    initializeAuth();
-  }, []);
+    if (eventUrl) {
+      initializeAuth();
+    }
+  }, [eventUrl]);
 
   // Get event name from eventData (resolved by useEventUrls)
   const eventName = eventData?.name || '';
@@ -365,6 +402,7 @@ function AppContent({ eventUrl }) {
               >
                 <GroupDetail 
                   eventUrl={eventUrl}
+                  urlHelpers={urlHelpers}
                   groups={groups}
                   onUpdateGroup={updateGroupHandler}
                   onDeleteGroup={deleteGroupHandler}
@@ -384,6 +422,7 @@ function AppContent({ eventUrl }) {
               >
                 <Gallery 
                   eventUrl={eventUrl}
+                  urlHelpers={urlHelpers}
                   groups={groups}
                   onUpdateGroup={updateGroupHandler}
                   onDeleteGroup={deleteGroupHandler}
@@ -401,7 +440,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <AlbumDetail />
+                <AlbumDetail urlHelpers={urlHelpers} />
               </motion.div>
             }
           />
@@ -414,7 +453,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <AlbumsGallery eventUrl={eventUrl} />
+                <AlbumsGallery eventUrl={eventUrl} urlHelpers={urlHelpers} />
               </motion.div>
             }
           />
@@ -427,7 +466,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <Moments eventUrl={eventUrl} />
+                <Moments eventUrl={eventUrl} urlHelpers={urlHelpers} />
               </motion.div>
             }
           />

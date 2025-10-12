@@ -160,7 +160,7 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       e.stopPropagation();
       return;
     }
-    if (e.metaKey || e.ctrlKey || e.altKey || e.key.startsWith('F')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.key && e.key.startsWith('F'))) return;
     if (allowOutsideScroll && isMouseOutsideModal.current) {
       const scrollKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
       if (scrollKeys.includes(e.key)) return;

@@ -11,9 +11,10 @@ useDataStore state
     groups:  { [groupId]: Group & { images?: Set<imageId>, faces_mapping?: { [imageId]: faceId }, images_count?: number } }
     moments: { [momentId]: Moment & { images?: Set<imageId>, images_count?: number } }
     albums:  { [albumId]: Album  & { images?: Set<imageId>, images_count?: number } }
+    profiles: { [profileId]: Profile & { images?: Set<imageId>, albums?: Set<albumId> } }
 
   // Per-tab scopes: which parents/collections are considered "main" for this session
-  scope:   { entity: 'group'|'album'|'moment'|'image'|'all', id?: string }
+  scope:   { entity: 'group'|'album'|'moment'|'image'|'profile'|'all', id?: string }
   scopes:  { [key: string]: { entity: string, id?: string } } // ref-counted
   scopeCounts: { [key: string]: number }
 
@@ -74,8 +75,10 @@ applyChanges(changes: Change[], options?: { ignoreScope?: boolean, broadcast?: b
 - Moments: `id`
 - Albums: `id`
 - Faces (nested in Images): `id`, `groupId`
+- Profiles: `id`, `label`, `hierarchy_rank`, `can_upload_and_delete_images`, `can_edit`, `all_images`, `all_albums`, `save_preferences`
 - Counts: `images_count` on groups, albums, moments
 - Group face selection: `groups[groupId].faces_mapping: { [imageId]: faceId }`
+- Profile access control: `profiles[profileId].images` (Set), `profiles[profileId].albums` (Set)
 
 ### Rendering Pattern
 1) Components register scopes on mount (e.g., `group:<id>`, `image:<id>`, `all:groups`), and unregister on unmount.
