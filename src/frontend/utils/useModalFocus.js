@@ -244,6 +244,14 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // Only handle click outside if this modal is the topmost modal
     if (!isTopmostModal()) return;
     if (!modalRef.current.contains(e.target)) {
+      // Check if the click is on the toggle button (for BucketDrawer)
+      let target = e.target;
+      while (target && target !== document.body) {
+        if (target.dataset && target.dataset.bucketToggle === 'true') {
+          return; // Don't close if clicking the toggle button
+        }
+        target = target.parentElement;
+      }
       onClose();
     }
   }, [isOpen, onClose, modalId, isTopmostModal]);
@@ -252,10 +260,16 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   useEffect(() => {
     if (!isOpen) return;
     document.addEventListener('keydown', handleKeyDown, true);
-    document.addEventListener('click', handleClick, true);
     document.addEventListener('mousemove', updateMousePosition);
     document.addEventListener('wheel', handleWheel, { passive: false, capture: false });
+    
+    // Delay click handler registration to prevent catching the opening click
+    const clickTimeout = setTimeout(() => {
+      document.addEventListener('click', handleClick, true);
+    }, 100);
+    
     return () => {
+      clearTimeout(clickTimeout);
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('click', handleClick, true);
       document.removeEventListener('mousemove', updateMousePosition);

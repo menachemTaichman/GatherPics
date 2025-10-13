@@ -90,12 +90,16 @@ export default function Header() {
             </Link>
 
             <motion.button
-              onClick={toggle}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
               className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
               title="Bucket"
               animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
               transition={{ duration: 0.4 }}
               key={lastPulseTs}
+              data-bucket-toggle="true"
             >
               <div className="relative">
                 <ShoppingBag className="w-4 h-4" />

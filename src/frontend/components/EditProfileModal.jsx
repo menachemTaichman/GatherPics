@@ -9,7 +9,7 @@ import { getCurrentProfile } from '../utils/profileService';
 import { useApplyScopes, useImagesForProfile, useAlbumsForProfile } from '../utils/storeUtils';
 import { useDataStore } from '../utils/dataManager';
 import ChangePasswordModal from './ChangePasswordModal';
-import { ImageComponent } from '../utils/useImage.jsx';
+import RemovableThumbnail from './RemovableThumbnail';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false }) {
   const { showToast } = useToast();
@@ -102,8 +102,23 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     }
   }, [isOpen, profile]);
 
-  // Note: We don't fetch individual profile details since getAll already loaded everything
-  // The profile.images and profile.albums will be loaded when needed via the hooks
+  // Fetch profile with scopes (images and albums relations) when modal opens
+  useEffect(() => {
+    const fetchProfileWithScopes = async () => {
+      if (!isOpen || !profile || isCreating) return;
+      
+      try {
+        // Fetch profile with scopes - this will load the profile and its related images/albums
+        // The changes will be automatically applied by the apiService interceptor
+        await profilesAPI.getById(profile.id, eventUrl);
+      } catch (error) {
+        console.error('Failed to fetch profile with scopes:', error);
+        showToast('Failed to load profile details', 'error');
+      }
+    };
+
+    fetchProfileWithScopes();
+  }, [isOpen, profile?.id, eventUrl, isCreating, showToast]);
 
   const checkNameConflict = async (label) => {
     if (!label || !label.trim()) {
@@ -183,9 +198,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
 
   const handleRemoveImage = async (imageId) => {
     try {
-      await profilesAPI.removeImages(editingProfile.id, [imageId], eventUrl);
+      await profilesAPI.removeImagesFromProfile(editingProfile.id, [imageId], eventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Image removed from profile access', 'success');
+      showToast('Image removed from profile', 'success');
     } catch (error) {
       console.error('Failed to remove image:', error);
       showToast('Failed to remove image', 'error');
@@ -194,9 +209,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
 
   const handleRemoveAlbum = async (albumId) => {
     try {
-      await profilesAPI.removeAlbums(editingProfile.id, [albumId], eventUrl);
+      await profilesAPI.removeAlbumsFromProfile(editingProfile.id, [albumId], eventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Album removed from profile access', 'success');
+      showToast('Album removed from profile', 'success');
     } catch (error) {
       console.error('Failed to remove album:', error);
       showToast('Failed to remove album', 'error');
@@ -208,9 +223,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     
     try {
       const imageIds = profileImages.map(img => img.id);
-      await profilesAPI.removeImages(editingProfile.id, imageIds, eventUrl);
+      await profilesAPI.removeImagesFromProfile(editingProfile.id, imageIds, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${imageIds.length} images cleared from profile access`, 'success');
+      showToast(`${imageIds.length} images cleared from profile`, 'success');
     } catch (error) {
       console.error('Failed to clear images:', error);
       showToast('Failed to clear images', 'error');
@@ -222,9 +237,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     
     try {
       const albumIds = profileAlbums.map(album => album.id);
-      await profilesAPI.removeAlbums(editingProfile.id, albumIds, eventUrl);
+      await profilesAPI.removeAlbumsFromProfile(editingProfile.id, albumIds, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${albumIds.length} albums cleared from profile access`, 'success');
+      showToast(`${albumIds.length} albums cleared from profile`, 'success');
     } catch (error) {
       console.error('Failed to clear albums:', error);
       showToast('Failed to clear albums', 'error');
@@ -467,7 +482,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                     No specific images configured
                   </p>
                 ) : (
-                  <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                     {profileImages.map((image) => (
                       <ProfileImageThumb
                         key={image.id}
@@ -510,7 +525,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                     No specific albums configured
                   </p>
                 ) : (
-                  <div className="grid grid-cols-6 gap-2 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                     {profileAlbums.map((album) => (
                       <ProfileAlbumThumb
                         key={album.id}
@@ -586,24 +601,13 @@ function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove }) {
   };
 
   return (
-    <div className="relative w-12 h-12 rounded overflow-hidden bg-gray-100 border border-gray-200">
-      {ImageComponent(getUrl(), {
-        width: 48,
-        height: 48,
-        className: 'w-full h-full object-cover',
-        alt: imageId
-      })}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center"
-        title="Remove"
-      >
-        ×
-      </button>
-    </div>
+    <RemovableThumbnail
+      imageUrl={getUrl()}
+      alt={imageId}
+      onRemove={onRemove}
+      size="medium"
+      title="Click to remove"
+    />
   );
 }
 
@@ -615,28 +619,16 @@ function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove }) {
   };
 
   return (
-    <div className="relative w-16 h-16 rounded overflow-hidden bg-gray-100 border border-gray-200">
-      {ImageComponent(getUrl(), {
-        width: 64,
-        height: 64,
-        className: 'w-full h-full object-cover',
-        alt: album.label,
-        iconType: 'image'
-      })}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center"
-        title="Remove"
-      >
-        ×
-      </button>
-      <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[8px] px-1 py-0.5 truncate">
-        {album.label}
-      </div>
-    </div>
+    <RemovableThumbnail
+      imageUrl={getUrl()}
+      alt={album.label}
+      onRemove={onRemove}
+      text={album.label}
+      size="medium"
+      withGradient={true}
+      iconType="image"
+      title="Click to remove"
+    />
   );
 }
 

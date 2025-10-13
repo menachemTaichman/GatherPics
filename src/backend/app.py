@@ -1152,6 +1152,33 @@ def get_event_profiles(event_id):
     }]
     return jsonify({"changes": changes})
 
+@app.route("/api/events/<event_id>/profiles/<profile_id>", methods=["GET"])
+@require_auth
+def get_event_profile(event_id, profile_id):
+    event = get_event(event_id)
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': event.models_manager.get_entities('profiles', [profile_id])
+    },
+    {
+        'type': 'RELATION_ADD',
+        'relation': 'profile.images',
+        'parentId': profile_id,
+        'entities': event.models_manager.get_childs('profiles', profile_id, 'images')
+    },
+    {
+        'type': 'RELATION_ADD',
+        'relation': 'profile.albums',
+        'parentId': profile_id,
+        'entities': event.models_manager.get_childs('profiles', profile_id, 'albums')
+    }
+    ]
+    return jsonify({"changes": changes})
+
 @app.route("/api/events/<event_id>/profiles/current/archived-access", methods=["GET"])
 @require_auth
 def get_archived_access(event_id):
@@ -1302,83 +1329,131 @@ def delete_profile(event_id, profile_id):
     except Exception as e:
         return bad_request(e)
 
+# set profile access
+def _edit_profile_childs(event, profile_id, child: str, child_ids, add: bool):
+    """Add or remove multiple childs from a profile."""
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    
+    if child not in ['images', 'albums']:
+        return bad_request(f"Invalid child: {child}")
+
+    affected_ids, _ = event.models_manager.edit_childs('profiles', profile_id, child, child_ids, add=add)
+    if add:
+        changes = [{
+            'type': 'RELATION_ADD',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'entities': event.models_manager.get_childs('profiles', profile_id, child, child_ids)
+        }]
+    else:
+        changes = [{
+            'type': 'RELATION_REMOVE',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'ids': affected_ids
+        }]
+
+    return jsonify({"success": True, "changes": changes})
+
 @app.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["PUT"])
 @require_auth
 def add_images_to_profile(event_id, profile_id):
     """Add multiple images to a profile."""
     event = get_event(event_id)
-    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
-        return forbidden(f"Access denied")
-
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=True)
-    changes = [{
-        'type': 'RELATION_REMOVE' if have_all else 'RELATION_ADD',
-        'relation': 'profile.images',
-        'parentId': profile_id,
-        'ids': affected_ids
-    }]
-    return jsonify({"success": True, "changes": changes})
+    return _edit_profile_childs(event, profile_id, 'images', image_ids, add=True)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["DELETE"])
 @require_auth
 def remove_images_from_profile(event_id, profile_id):
     """Remove multiple images from a profile."""
     event = get_event(event_id)
-    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
-        return forbidden(f"Access denied")
-
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    print(f"image_ids: {image_ids}")
-    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'images', image_ids, add=False)
-    changes = [{
-        'type': 'RELATION_ADD' if have_all else 'RELATION_REMOVE',
-        'relation': 'profile.images',
-        'parentId': profile_id,
-        'ids': affected_ids
-    }]
-    return jsonify({"success": True, "changes": changes})
+    return _edit_profile_childs(event, profile_id, 'images', image_ids, add=False)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["PUT"])
 @require_auth
 def add_albums_to_profile(event_id, profile_id):
     """Add multiple albums to a profile."""
     event = get_event(event_id)
-    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
-        return forbidden(f"Access denied")
-
     data = request.json or {}
     album_ids = data.get('album_ids', [])
-
-    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=True)
-    changes = [{
-        'type': 'RELATION_REMOVE' if have_all else 'RELATION_ADD',
-        'relation': 'profile.albums',
-        'parentId': profile_id,
-        'ids': affected_ids
-    }]
-    return jsonify({"success": True, "changes": changes})
+    return _edit_profile_childs(event, profile_id, 'albums', album_ids, add=True)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["DELETE"])
 @require_auth
 def remove_albums_from_profile(event_id, profile_id):
     """Remove multiple albums from a profile."""
     event = get_event(event_id)
-    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
-        return forbidden(f"Access denied")
-
     data = request.json or {}
     album_ids = data.get('album_ids', [])
-    affected_ids, have_all = event.models_manager.toggle_accessible(profile_id, 'albums', album_ids, add=False)
-    changes = [{
-        'type': 'RELATION_ADD' if have_all else 'RELATION_REMOVE',
-        'relation': 'profile.albums',
-        'parentId': profile_id,
-        'ids': affected_ids
-    }]
+    return _edit_profile_childs(event, profile_id, 'albums', album_ids, add=False)
+
+def _set_profile_accessibility(event, profile_id, child: str, child_ids, set_accessible: bool):
+    """Set multiple childs as accessible or inaccessible to a profile."""
+    if not (event.db.is_profile_manager() and event.models_manager.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    
+    if child not in ['images', 'albums']:
+        return bad_request(f"Invalid child: {child}")
+    
+    affected_ids, added = event.models_manager.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
+    if added:
+        changes = [{
+            'type': 'RELATION_ADD',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'entities': event.models_manager.get_childs('profiles', profile_id, child, child_ids)
+        }]
+    else:
+        changes = [{
+            'type': 'RELATION_REMOVE',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'ids': affected_ids
+        }]
+
     return jsonify({"success": True, "changes": changes})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-images", methods=["PUT"])
+@require_auth
+def set_images_as_accessible(event_id, profile_id):
+    """Set multiple images as accessible to a profile."""
+    event = get_event(event_id)
+
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'images', image_ids, set_accessible=True)
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-images", methods=["DELETE"])
+@require_auth
+def set_images_as_inaccessible(event_id, profile_id):
+    """Set multiple images as inaccessible to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'images', image_ids, set_accessible=False)
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-albums", methods=["PUT"])
+@require_auth
+def set_albums_as_accessible(event_id, profile_id):
+    """Set multiple albums as accessible to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'albums', album_ids, set_accessible=True)
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-albums", methods=["DELETE"])
+@require_auth
+def set_albums_as_inaccessible(event_id, profile_id):
+    """Set multiple albums as inaccessible to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'albums', album_ids, set_accessible=False)
 
 # ==============================================================================
 # VII. FILE SERVING & DOWNLOADS

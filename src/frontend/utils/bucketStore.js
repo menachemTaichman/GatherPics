@@ -18,7 +18,7 @@ export const useBucketStore = create((set, get) => ({
   // UI helpers
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
-  toggle: () => set({ isOpen: !get().isOpen }),
+  toggle: () => set((state) => ({ isOpen: !state.isOpen })),
 
   setMode: (mode) => {
     setPreference('BucketDrawer.mode', mode);

@@ -639,9 +639,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               </div>
             )}
 
-            {/* Group 4: Delete Album & Manage Access - only for custom albums */}
-            {!isDefaultAlbum && (
-              <div className="flex items-center space-x-3 px-4">
+            {/* Group 4: Delete Album (custom only) & Manage Access (all albums) */}
+            <div className="flex items-center space-x-3 px-4">
+              {!isDefaultAlbum && (
                 <button
                   onClick={() => setShowDeleteModal(true)}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-red-100 text-red-700 flex items-center justify-center"
@@ -649,15 +649,15 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => setShowManageAccessModal(true)}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
-                  title="Manage profile access"
-                >
-                  <Key className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                onClick={() => setShowManageAccessModal(true)}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
+                title="Manage profile access"
+              >
+                <Key className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

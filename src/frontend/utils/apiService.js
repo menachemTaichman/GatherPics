@@ -582,11 +582,14 @@ export const profilesAPI = {
     return response.data;
   },
   
-  // Get profile by ID
-  getById: async (profileId, eventUrl) => {
+  // Get profile by ID (with scopes for relations)
+  getById: async (profileId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/profiles/${profileId}`);
-    return response.data;
+    const key = `PROFILE_GET_BY_ID:${eventId}:${profileId}:${JSON.stringify(params||{})}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/profiles/${profileId}`, { params });
+      return response.data;
+    });
   },
   
   // Check if profile name exists
@@ -636,8 +639,50 @@ export const profilesAPI = {
     return response.data;
   },
   
-  // Add images to profile
-  addImages: async (profileId, imageIds, eventUrl) => {
+  // === Accessibility Management (for ManageAccessModal) ===
+  // These handle whitelist/blacklist logic based on all_images/all_albums flags
+  
+  // Set images as accessible to profile
+  setImagesAccessible: async (profileId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-images`, {
+      image_ids: imageIds
+    });
+    return response.data;
+  },
+  
+  // Set images as inaccessible to profile
+  setImagesInaccessible: async (profileId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-images`, {
+      data: { image_ids: imageIds }
+    });
+    return response.data;
+  },
+  
+  // Set albums as accessible to profile
+  setAlbumsAccessible: async (profileId, albumIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-albums`, {
+      album_ids: albumIds
+    });
+    return response.data;
+  },
+  
+  // Set albums as inaccessible to profile
+  setAlbumsInaccessible: async (profileId, albumIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-albums`, {
+      data: { album_ids: albumIds }
+    });
+    return response.data;
+  },
+  
+  // === Direct Child Manipulation (for EditProfileModal) ===
+  // These directly add/remove from profile relations, ignoring accessibility logic
+  
+  // Add images to profile (direct relation)
+  addImagesToProfile: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/images`, {
       image_ids: imageIds
@@ -645,8 +690,8 @@ export const profilesAPI = {
     return response.data;
   },
   
-  // Remove images from profile
-  removeImages: async (profileId, imageIds, eventUrl) => {
+  // Remove images from profile (direct relation)
+  removeImagesFromProfile: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/images`, {
       data: { image_ids: imageIds }
@@ -654,8 +699,8 @@ export const profilesAPI = {
     return response.data;
   },
   
-  // Add albums to profile
-  addAlbums: async (profileId, albumIds, eventUrl) => {
+  // Add albums to profile (direct relation)
+  addAlbumsToProfile: async (profileId, albumIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/albums`, {
       album_ids: albumIds
@@ -663,8 +708,8 @@ export const profilesAPI = {
     return response.data;
   },
   
-  // Remove albums from profile
-  removeAlbums: async (profileId, albumIds, eventUrl) => {
+  // Remove albums from profile (direct relation)
+  removeAlbumsFromProfile: async (profileId, albumIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/albums`, {
       data: { album_ids: albumIds }
@@ -675,19 +720,25 @@ export const profilesAPI = {
   // Check image access for profile
   checkImageAccess: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/images/check`, {
-      image_ids: imageIds
+    const key = `CHECK_IMAGE_ACCESS:${eventId}:${profileId}:${imageIds.join(',')}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/images/check`, {
+        image_ids: imageIds
+      });
+      return response.data;
     });
-    return response.data;
   },
   
   // Check album access for profile
   checkAlbumAccess: async (profileId, albumIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/albums/check`, {
-      album_ids: albumIds
+    const key = `CHECK_ALBUM_ACCESS:${eventId}:${profileId}:${albumIds.join(',')}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/albums/check`, {
+        album_ids: albumIds
+      });
+      return response.data;
     });
-    return response.data;
   },
   
   // Get archived access for current profile

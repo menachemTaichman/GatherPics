@@ -6,6 +6,7 @@ import useBucketStore from '../utils/bucketStore';
 import { urlHelpers, downloadAPI, imagesAPI } from '../utils/apiService';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
+import RemovableThumbnail from './RemovableThumbnail';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
@@ -115,7 +116,7 @@ export default function BucketDrawer() {
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          className="fixed top-16 right-0 h-[calc(100vh-4rem)] w-[360px] bg-white border-l border-gray-200 shadow-xl z-40 flex flex-col"
+          className="fixed top-16 right-0 h-[calc(100vh-4rem)] w-[360px] bg-white border-l border-gray-200 shadow-xl z-30 flex flex-col"
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -197,7 +198,7 @@ export default function BucketDrawer() {
             ) : (
               <div className="grid grid-cols-6 gap-2">
                 {queue.map((id) => (
-                  <BucketThumb key={id} eventUrl={eventUrl} imageId={id} withRemove removeFrom="queue" />
+                  <BucketThumb key={id} eventUrl={eventUrl} imageId={id} size="medium" removeFrom="queue" />
                 ))}
               </div>
             )}
@@ -219,9 +220,9 @@ export default function BucketDrawer() {
             {alreadyList.length === 0 ? (
               <p className="text-xs text-gray-400">Nothing yet.</p>
             ) : (
-              <div className="grid grid-cols-8 gap-1">
+              <div className="grid grid-cols-6 gap-2">
                 {compactList.map((id) => (
-                  <BucketThumb key={`done-${id}`} eventUrl={eventUrl} imageId={id} tiny withRemove removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
+                  <BucketThumb key={`done-${id}`} eventUrl={eventUrl} imageId={id} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
                 ))}
               </div>
             )}
@@ -247,99 +248,79 @@ export default function BucketDrawer() {
   );
 }
 
-function BucketThumb({ eventUrl, imageId, tiny = false, withRemove = false, removeFrom = 'queue' }) {
-  const sizeClass = tiny ? 'w-7 h-7' : 'w-12 h-12';
-  const getUrl = async () => {
-    try {
-      return await urlHelpers.getRelativeThumbnailUrl(eventUrl, imageId);
-    } catch {
-      return '';
-    }
-  };
-  // Resolve a human-readable label for hover title
-  const getLabel = async () => {
-    try {
-      const response = await imagesAPI.getImage(imageId, eventUrl);
-      
-      // Changes are automatically applied by apiService interceptor
-      
-      if (response.image) {
-        return response.image?.label || imageId;
+function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' }) {
+  const [imageUrl, setImageUrl] = useState('');
+
+  useEffect(() => {
+    const loadUrl = async () => {
+      try {
+        const url = await urlHelpers.getRelativeThumbnailUrl(eventUrl, imageId);
+        setImageUrl(url);
+      } catch (error) {
+        console.error('Failed to load thumbnail URL:', error);
+        setImageUrl('');
       }
-      return imageId;
-    } catch {
-      return imageId;
+    };
+    loadUrl();
+  }, [eventUrl, imageId]);
+
+  const { removeFromQueue, removeDownloaded, removeUploaded, addToQueue } = useBucketStore.getState();
+  
+  const handleRemove = () => {
+    if (removeFrom === 'queue') {
+      removeFromQueue(imageId);
+    } else if (removeFrom === 'downloaded') {
+      removeDownloaded(imageId);
+    } else if (removeFrom === 'uploaded') {
+      removeUploaded(imageId);
     }
   };
 
-  const { removeFromQueue, removeDownloaded, removeUploaded, addToQueue } = useBucketStore.getState();
-  const handleQueueRemove = (e) => {
-    e.stopPropagation();
-    removeFromQueue(imageId);
-  };
   const handleAddBack = (e) => {
     e.stopPropagation();
     addToQueue([imageId]);
   };
-  const handleRemoveFromAlready = (e) => {
-    e.stopPropagation();
-    if (removeFrom === 'downloaded') removeDownloaded(imageId);
-    if (removeFrom === 'uploaded') removeUploaded(imageId);
-  };
-  // Using a simple <img> with async src resolution via attribute
-  return (
-    <div className={`relative rounded overflow-hidden bg-gray-100 border border-gray-200 ${sizeClass}`}
-      ref={async (el) => {
-        if (!el) return;
-        const label = await getLabel();
-        el.setAttribute('title', label);
-      }}
-    >
-      <img
-        src={''}
-        data-image-id={imageId}
-        className="w-full h-full object-cover"
-        onLoad={(e) => {
-          // nothing
-        }}
-        onError={(e) => {
-          e.currentTarget.replaceWith(placeholder());
-        }}
-        ref={async (el) => {
-          if (!el) return;
-          const url = await getUrl();
-          if (url) el.src = url;
-        }}
-        alt="thumb"
+
+  // For queue items, use the RemovableThumbnail component
+  if (removeFrom === 'queue') {
+    return (
+      <RemovableThumbnail
+        imageUrl={imageUrl}
+        alt={imageId}
+        onRemove={handleRemove}
+        size={size}
+        title="Click to remove from queue"
       />
-      {withRemove && (
-        removeFrom === 'queue' ? (
-          <button
-            onClick={handleQueueRemove}
-            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center`}
-            title="Remove from queue"
-          >
-            ×
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={handleAddBack}
-              className={`absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 text-white text-[10px] leading-[14px] hover:bg-green-600 flex items-center justify-center`}
-              title="Add back to queue"
-            >
-              +
-            </button>
-            <button
-              onClick={handleRemoveFromAlready}
-              className={`absolute -top-1 -left-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center`}
-              title={removeFrom === 'downloaded' ? 'Remove from downloaded list' : 'Remove from uploaded list'}
-            >
-              ×
-            </button>
-          </>
-        )
-      )}
+    );
+  }
+
+  // For already downloaded/uploaded items, show special dual-button layout
+  return (
+    <div className="group relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 hover:border-blue-300 transition-all">
+      <img
+        src={imageUrl}
+        className="w-full h-full object-cover"
+        alt={imageId}
+      />
+      {/* Add back to queue button (top-right) */}
+      <button
+        onClick={handleAddBack}
+        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 text-white text-[10px] leading-[14px] hover:bg-green-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        title="Add back to queue"
+      >
+        +
+      </button>
+      {/* Remove from list button (top-left) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleRemove();
+        }}
+        className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        title={removeFrom === 'downloaded' ? 'Remove from downloaded list' : 'Remove from uploaded list'}
+      >
+        ×
+      </button>
     </div>
   );
 }

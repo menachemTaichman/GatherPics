@@ -74,7 +74,7 @@ export default function FloatingSelectionControls({
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-40">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-30">
         <span className="text-sm text-gray-700">{selectedCount} selected</span>
       
       {/* Select all button - only visible when not all are selected */}

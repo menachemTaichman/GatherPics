@@ -61,11 +61,11 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
 
     try {
       // Backend handles whitelist/blacklist logic internally
-      // PUT = grant access (add=True in backend)
+      // PUT = grant access
       if (entityType === 'image') {
-        await profilesAPI.addImages(profile.id, entityIds, eventUrl);
+        await profilesAPI.setImagesAccessible(profile.id, entityIds, eventUrl);
       } else if (entityType === 'album') {
-        await profilesAPI.addAlbums(profile.id, entityIds, eventUrl);
+        await profilesAPI.setAlbumsAccessible(profile.id, entityIds, eventUrl);
       }
 
       showToast(`Access granted for ${profile.label}`, 'success');
@@ -107,11 +107,11 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
 
     try {
       // Backend handles whitelist/blacklist logic internally
-      // DELETE = deny access (add=False in backend)
+      // DELETE = deny access
       if (entityType === 'image') {
-        await profilesAPI.removeImages(profile.id, entityIds, eventUrl);
+        await profilesAPI.setImagesInaccessible(profile.id, entityIds, eventUrl);
       } else if (entityType === 'album') {
-        await profilesAPI.removeAlbums(profile.id, entityIds, eventUrl);
+        await profilesAPI.setAlbumsInaccessible(profile.id, entityIds, eventUrl);
       }
 
       showToast(`Access denied for ${profile.label}`, 'success');
@@ -305,21 +305,6 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
-          </div>
-
-          {/* Info Banner */}
-          <div className="px-6 pt-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">
-              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium">How it works:</p>
-                <p className="mt-1">
-                  <strong>Allow</strong> grants access to the selected {entityLabel}
-                  {entityCount !== 1 ? 's' : ''} for the profile.
-                  <strong className="ml-2">Deny</strong> removes access.
-                </p>
-              </div>
-            </div>
           </div>
 
           {/* Content */}

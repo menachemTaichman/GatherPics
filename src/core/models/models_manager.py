@@ -695,15 +695,15 @@ class ModelsManager:
 
         return list(editable_fields)
 
-    def toggle_accessible(self, profile_id: str, entity: str, ids: List[str], add: bool = True) -> tuple[List[str], bool]:
-        """Toggle entities accessibility for a profile.
+    def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
+        """Edit entities accessibility for a profile.
         Args:
             profile_id: profile id
             entity: entity type
             ids: list of ids
-            add: if True, set entities accessible to profile, if False, set entities inaccessible to profile
+            set_accessible: if True, set entities accessible to profile, if False, set entities inaccessible to profile
         Returns:
-            list of affected ids, if have all entities
+            list of affected ids, if added or removed
         """
         if entity not in ['images', 'albums']:
             raise ValueError(f"Invalid entity: {entity}")
@@ -711,9 +711,8 @@ class ModelsManager:
         if not profile:
             return []
 
-        have_all = bool(profile[f'all_{entity}'])
-        if have_all:
-            add = not add
+        if bool(profile[f'all_{entity}']):
+            set_accessible = not set_accessible
 
-        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, add=add)
-        return valid_ids, have_all
+        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, add=set_accessible)
+        return valid_ids, set_accessible
