@@ -55,16 +55,16 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
 
   // Fetch current password when modal opens
   useEffect(() => {
-    if (isOpen && profileId && eventUrl) {
+    if (isOpen && profileId) {
       fetchPassword();
     }
-  }, [isOpen, profileId, eventUrl]);
+  }, [isOpen, profileId]);
 
   const fetchPassword = async () => {
     setLoadingPassword(true);
     setError('');
     try {
-      const response = await profilesAPI.getPassword(profileId, eventUrl);
+      const response = await profilesAPI.getPassword(profileId);
       setPassword(response.password || '');
     } catch (error) {
       console.error('Failed to fetch password:', error);
@@ -80,7 +80,7 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
     setError('');
     
     try {
-      await profilesAPI.updatePassword(profileId, password, eventUrl);
+      await profilesAPI.updatePassword(profileId, password);
       showToast('Password updated successfully', 'success');
       onClose();
     } catch (error) {

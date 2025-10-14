@@ -313,9 +313,10 @@ export const useDataStore = create((set, get) => {
       // Send via BroadcastChannel when available
       if (channel) {
         channel.postMessage({ tabId: CHANNEL_ID, changes });
+      } else {
+        // Only use localStorage fallback when BroadcastChannel is not available
+        fallbackBroadcast(changes);
       }
-      // Always send storage fallback to maximize delivery reliability
-      fallbackBroadcast(changes);
     } catch {
       // If BroadcastChannel fails at runtime, fall back
       fallbackBroadcast(changes);
@@ -332,7 +333,7 @@ export const useDataStore = create((set, get) => {
       };
     } catch {}
   }
-  // Always register storage listener as a secondary path (covers cases where BroadcastChannel isn’t available)
+  // Always register storage listener as a secondary path (covers cases where BroadcastChannel isn't available)
   try {
     window.addEventListener('storage', (e) => {
       if (!e.key || !e.key.startsWith(storageBroadcastPrefix) || !e.newValue) return;
@@ -400,7 +401,9 @@ export const useDataStore = create((set, get) => {
     // Core change applier (supports new relation entities dict)
     applyChanges: (changes, options = {}) => {
       const applyId = Math.random().toString(36).slice(2, 7);
-      if (!Array.isArray(changes) || changes.length === 0) return;
+      if (!Array.isArray(changes) || changes.length === 0) {
+        return;
+      }
       const prevEntities = get().entities;
       const prevGroupsRef = prevEntities?.groups;
       const typeCounts = {};
@@ -691,10 +694,13 @@ export const useDataStore = create((set, get) => {
       });
 
       set({ entities: nextEntities });
+      
       const nextGroupsRef = nextEntities?.groups;
       const prevGroupsSize = prevGroupsRef ? Object.keys(prevGroupsRef).length : 0;
       const nextGroupsSize = nextGroupsRef ? Object.keys(nextGroupsRef).length : 0;
+      
       persistEntitiesSession(nextEntities);
+      
       // Receiver-side will have already received the early broadcast
     },
 

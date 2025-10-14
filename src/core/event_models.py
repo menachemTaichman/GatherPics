@@ -1,97 +1,20 @@
-from typing import List, Dict, Union, Any
-from ..db import AppDB, STRUCTURE, ReturnFormat
-import uuid
+from typing import List, Dict, Any
+from .base_db import ReturnFormat
+from .base_models import BaseModels
+from .event_db import EventDB
+import os
 
-class ModelsManager:
+DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
 
-    def __init__(self, db: AppDB) -> None:
-        self.db = db
+class EventModels(BaseModels):
 
-    @staticmethod
-    def generate_id() -> str:
-        """Generate a new UUID for the entity."""
-        return str(uuid.uuid4())
+    def __init__(self, event_id: str, profile_id: str):
+        db_path = os.path.join(DATA_ROOT, event_id, f'{event_id}.db')
+        self.db = EventDB(db_path, profile_id)
 
-    def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
-        """Check if a record exists and return its id for conflict checking."""
-
-        where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
-        where_params = tuple(fields.values())
-        if exclude_id:
-            where_clause += f' AND {AppDB.get_id_field(table)} != ?'
-            where_params += (exclude_id,)
-        id_field = AppDB.get_id_field(table)
-        query = f"""
-            SELECT {id_field}
-            FROM {table}
-            WHERE {where_clause}
-        """
-        results = self.db.execute_query(query, where_params)
-        return results[0][0] if results else None
-
-    def is_empty(self, table: str, entity_id: str, *, child: str | None = None, only_accessible: bool = False) -> bool:
-        """Check if a table is empty.
-        Args:
-            table: table name
-            entity_id: entity id
-            child: child table to check or None to check all childs
-            only_accessible: if True, check only accessible childs
-        Returns:
-            True if the entity has no childs, False otherwise
-        """
-        childs = AppDB.get_relation(table, child)
-        if child:
-            childs = [childs]
-        id_field = AppDB.get_id_field(table)
-        for child in childs:
-            relation_table = child[0]
-            if only_accessible:
-                relation_table = STRUCTURE[relation_table]['accessible_table']
-            query = f'SELECT EXISTS(SELECT 1 FROM {relation_table} WHERE {id_field} = ?)'
-            results = self.db.execute_query(query, (entity_id,))
-            if results[0][0]:
-                return False
-        
-        return True
-
-    def is_accessible(self, table: str, entity_id: str) -> bool:
-        accessible_table = STRUCTURE[table]['accessible_table']
-        id_field = AppDB.get_id_field(table)
-        query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = ?)'
-        results = self.db.execute_query(query, (entity_id,))
-        return bool(results[0][0])
-
-    def get_entities(self, table: str, entity_ids: List[str] | str | None = None) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
-        """Get entities from a table.
-        Args:
-            table: table name
-            entity_ids: list of entity ids or single entity id or None to get all entities
-        Returns:
-            dict of entities with entity ids as keys and entity data as values
-        """
-        accessible_table = STRUCTURE[table]['accessible_table']
-        fields = AppDB.get_view_fields(table)
-        where_clause = ''
-        single_item = False
-
-        if isinstance(entity_ids, str):
-            entity_ids = [entity_ids]
-            single_item = True
-        
-        if entity_ids:
-            where_clause += f'WHERE {AppDB.get_id_field(table)} IN ({','.join(['?'] * len(entity_ids))})'
-        else:
-            entity_ids = []
-
-        query = f"""
-            SELECT {fields}
-            FROM {accessible_table}
-            {where_clause}
-        """
-        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.DICT_DICTS)
-        if results and single_item:
-            return results[entity_ids[0]]
-        return results
+    def is_profile_manager(self) -> bool:
+        """Check if the current profile is a profile manager."""
+        return self.db.profile_context['hierarchy_rank'] > 0
 
     def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
         """Get representative of an entity.
@@ -101,143 +24,13 @@ class ModelsManager:
         Returns:
             representative table, representative id
         """
-        representative_metadata = STRUCTURE[entity].get('representative', {})
+        representative_metadata = self.db.STRUCTURE()[entity].get('representative', {})
         if not representative_metadata:
             raise ValueError(f"Representative not found for {entity}")
         representative_table = representative_metadata['table']
         representative_field = representative_metadata['field']
-        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {AppDB.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
+        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {self.db.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
         return representative_table, representative_id
-
-    def get_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, *, within: bool = True, return_ids: bool = False) -> list[str] | dict[str, dict]:
-        """Get childs of a parent.
-        Args:
-            parent: parent entity
-            entity_id: parent id
-            child: child entity
-            child_ids: list of child ids or None to get all childs
-            within: if True, get childs within the parent, if False, get childs outside the parent
-            return_ids: if True, return list of child ids, if False, return dict of childs data with child ids as keys and child data as values
-        Returns:
-            list of child ids or dict of childs data with child ids as keys and child data as values
-
-        Note:
-            if within is True, child_ids will be filtered to only childs within the parent
-            if child_ids is None, all childs will be returned
-            if within is False, child_ids will be filtered to only childs outside the parent
-            if child_ids is None, all non childs will be returned
-        """
-        relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
-        exclusive = relation == child
-        accessible_relation = STRUCTURE[relation]['accessible_table']
-        accessible_child = STRUCTURE[child]['accessible_table']
-        id_field = AppDB.get_id_field(parent)
-
-        if return_ids:
-            fields = f'c.{child_id_field}'
-            return_format = ReturnFormat.LIST_VALUES
-        else:
-            fields = view_fields
-            return_format = ReturnFormat.DICT_DICTS
-
-        join_clause = ''        
-        if exclusive:
-            if within:
-                where_clause = f'c.{id_field} = ?'
-            else:
-                where_clause = f'(c.{id_field} <> ? OR c.{id_field} IS NULL)'
-        else:
-            join_clause = f' LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = ?'
-            if within:
-                where_clause = f'r.{child_id_field} IS NOT NULL'
-            else:
-                where_clause = f'r.{child_id_field} IS NULL'
-
-        if child_ids is not None:
-            where_clause += f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
-        else:
-            child_ids = []
-
-        query = f"""SELECT {fields}
-        FROM {accessible_child} c
-        {join_clause}
-        WHERE {where_clause}
-        """
-        
-        valid_child_ids = self.db.execute_query(query, (entity_id, *child_ids), return_format=return_format)
-
-        return valid_child_ids
-
-    def get_parents(self, child: str, entity_id: str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
-        """Get parents of a child.
-        Args:
-            child: child entity
-            entity_id: child id
-            parents: list of parent ids or single parent id or None to get all parents
-        Returns:
-            dict of parents with parent entities as keys and list of parent ids as values
-            if single parent entity is provided, return the list of parent ids
-        """
-        single_item = False
-        if isinstance(parents, str):
-            parents = [parents]
-            single_item = True
-        elif parents is None:
-            parents = [
-                parent
-                for parent in STRUCTURE.keys()
-                if STRUCTURE[parent].get('relations', {}).get(child, {})
-            ]
-        parents = dict.fromkeys(parents, [])
-
-        parents_to_remove = []
-        for parent in parents.keys():
-            relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
-            accessible_relation = STRUCTURE[relation]['accessible_table']
-            id_field = AppDB.get_id_field(parent)
-            params = [entity_id]
-            query = f"""
-                SELECT DISTINCT r.{id_field}
-                FROM {accessible_relation} r
-                WHERE r.{child_id_field} = ?
-                AND r.{id_field} IS NOT NULL
-            """
-            parent_ids = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
-            if parent_ids:
-                parents[parent] = parent_ids
-            elif not single_item:
-                parents_to_remove.append(parent)
-
-        for parent in parents_to_remove:
-            parents.pop(parent)
-
-        if single_item:
-            return parents[list(parents.keys())[0]]
-        
-        return parents
-
-    def add(self, table: str, data: Union[Dict, List[Dict]]) -> List[str] | str | None:
-        """Insert one or many records. If a single dict is provided, return the new id.
-        If a list is provided, return the inserted records list.
-        """
-        is_single_item = isinstance(data, dict)
-        data_list = [data] if is_single_item else data
-        
-        for row in data_list:
-            if AppDB.get_id_field(table) not in row:
-                row[AppDB.get_id_field(table)] = ModelsManager.generate_id()
-        
-        inserted_ids = self.db.insert(table, data_list)
-        
-        if is_single_item:
-            return inserted_ids[0] if inserted_ids else None
-        return inserted_ids
-
-    def delete(self, table: str, entity_ids: List[str] | str):
-        return self.db.delete(table, {AppDB.get_id_field(table): entity_ids})
-
-    def edit(self, table: str, entity_ids: List[str] | str, fields: Dict) -> list[str]:
-        return self.db.update(table, {AppDB.get_id_field(table): entity_ids}, fields)
 
     def ensure_representative(self, table: str, entity_id: str) -> str | None:
         """Ensure representative of a table.
@@ -250,15 +43,15 @@ class ModelsManager:
         if table == 'groups' and entity_id == self.get_unassociated_group():
             return None
         
-        representative = STRUCTURE[table].get('representative','')
+        representative = self.db.STRUCTURE()[table].get('representative','')
         if not representative:
             raise ValueError(f"Representative not found")
 
         representative_field = representative['field']
         representative_table = representative['table']
 
-        id_field = AppDB.get_id_field(table)
-        relation, child, child_id_field, view_fields = AppDB.get_relation(table, representative_table)
+        id_field = self.db.get_id_field(table)
+        relation, child, child_id_field, view_fields = self.db.get_relation(table, representative_table)
 
         query = f"""SELECT r.{child_id_field}
         FROM {relation} r
@@ -271,8 +64,8 @@ class ModelsManager:
         if representative_id:
             return representative_id
         
-        accessible_child = STRUCTURE[child]['accessible_table']
-        accessible_relation = STRUCTURE[relation]['accessible_table']
+        accessible_child = self.db.STRUCTURE()[child]['accessible_table']
+        accessible_relation = self.db.STRUCTURE()[relation]['accessible_table']
         join_clause = ''
         parent = 'c'
         if relation != child:
@@ -303,42 +96,8 @@ class ModelsManager:
             list of affected child ids, dict of detached parents with parent ids as keys and list of detached child ids as values
         """
 
-        relation, child, child_id_field, view_fields = AppDB.get_relation(parent, child)
-        exclusive = relation == child
-        accessible_relation = STRUCTURE[relation]['accessible_table']
-        id_field = AppDB.get_id_field(parent)
-
-        valid_child_ids = self.get_childs(parent, entity_id, child, child_ids, within=not add, return_ids=True)
-        if not valid_child_ids:
-            return [], {}
-
-        detached_parents = {}
-        if add and exclusive:
-            for child_id in valid_child_ids:
-                parent_ids = self.get_parents(child, child_id, parent)
-                for parent_id in parent_ids:
-                    detached_parents.setdefault(parent_id, []).append(child_id)
-
-        placeholders = ','.join(['?'] * len(valid_child_ids))
-        if exclusive:
-            if add:
-                query = f'UPDATE {accessible_relation} SET {id_field} = ? WHERE {child_id_field} IN ({placeholders})'
-            else:
-                query = f'UPDATE {accessible_relation} SET {id_field} = NULL WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
-            self.db.execute_query(query, (entity_id, *valid_child_ids))
-        else:
-            if add:
-                values_clause = ','.join(['(?, ?)'] * len(valid_child_ids))
-                params = []
-                for cid in valid_child_ids:
-                    params.extend([entity_id, cid])
-                query = f'INSERT OR IGNORE INTO {accessible_relation} ({id_field}, {child_id_field}) VALUES {values_clause}'
-                self.db.execute_query(query, tuple(params))
-            else:
-                query = f'DELETE FROM {accessible_relation} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
-                self.db.execute_query(query, (entity_id, *valid_child_ids))
-
-        if STRUCTURE[parent].get('representative',''):
+        valid_child_ids, detached_parents = super().edit_childs(parent, entity_id, child, child_ids, add=add)
+        if self.db.STRUCTURE()[parent].get('representative',''):
             for parent_id in set(detached_parents.keys()).union([entity_id]):
                 self.ensure_representative(parent, parent_id)
 
@@ -350,7 +109,7 @@ class ModelsManager:
         Returns:
             dict of all images with image ids as keys and images data (date_taken, moment_id, is_archived) as values
         """
-        accessible_images = STRUCTURE['images']['accessible_table']
+        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
         query = f"""
             SELECT i.image_id, i.date_taken, i.moment_id, i.is_archived
             FROM {accessible_images} i
@@ -367,8 +126,8 @@ class ModelsManager:
         if not image_ids:
             return {}
 
-        accessible_moments = STRUCTURE['moments']['accessible_table']
-        accessible_images = STRUCTURE['images']['accessible_table']
+        accessible_moments = self.db.STRUCTURE()['moments']['accessible_table']
+        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
 
         placeholders = ','.join('?' for _ in image_ids)
         query = f"""
@@ -409,12 +168,16 @@ class ModelsManager:
         """Remove images from a moment."""
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
-        accessible_images = STRUCTURE['images']['accessible_table']
+        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
         query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['?'] * len(valid_image_ids))})'
         self.db.execute_query(query, valid_image_ids)
         return detached_moments
 
     # -------- Images helpers --------
+    def get_images_count(self) -> int:
+        """Get the number of images in the event."""
+        return self.db.execute_query('SELECT COUNT(*) FROM images', return_format=ReturnFormat.VALUE)
+
     def is_image_deletable(self, image_id: str) -> bool:
         """Check if an image is deletable.
         Args:
@@ -437,6 +200,17 @@ class ModelsManager:
         return faces ==  accessible_faces
 
     # -------- Groups helpers --------
+    def get_last_group_num(self) -> int:
+        """Get the last group number."""
+        query = f"""
+            SELECT MAX(CAST(SUBSTR(label, 8) AS INTEGER)) AS last_group_num
+            FROM groups
+            WHERE label LIKE 'Person %'
+            AND SUBSTR(label, 8) GLOB '[0-9]*'
+        """
+
+        return self.db.execute_query(query, return_format=ReturnFormat.VALUE)
+
     def get_unassociated_group(self) -> str | None:
         """Get the unassociated group id."""
         return self.db.execute_query('SELECT group_id FROM accessible_groups WHERE LOWER(label) = "unassociated"', return_format=ReturnFormat.VALUE)
@@ -448,8 +222,8 @@ class ModelsManager:
         Returns:
             dict of faces mapping with image ids as keys and face id as value
         """
-        accessible_groups_images = STRUCTURE['groups_images']['accessible_table']
-        accessible_faces = STRUCTURE['faces']['accessible_table']
+        accessible_groups_images = self.db.STRUCTURE()['groups_images']['accessible_table']
+        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
         query = f"""
             SELECT agi.image_id,
             (
@@ -490,7 +264,7 @@ class ModelsManager:
         Returns:
             list of face ids if found, None if not found
         """
-        accessible_faces = STRUCTURE['faces']['accessible_table']
+        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
         query = f"""
             SELECT f.face_id FROM {accessible_faces} f WHERE f.image_id = ? AND f.group_id = ?"""
         return self.db.execute_query(query, (image_id, group_id), return_format=ReturnFormat.LIST_VALUES) or None
@@ -510,8 +284,8 @@ class ModelsManager:
 
         group_id_placeholders = ','.join(['?'] * len(group_ids))
         image_placeholders = ','.join(['?'] * len(base_image_ids))
-        accessible_groups = STRUCTURE['groups']['accessible_table']
-        accessible_faces = STRUCTURE['faces']['accessible_table']
+        accessible_groups = self.db.STRUCTURE()['groups']['accessible_table']
+        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
 
         query = f'''
             SELECT g.group_id, g.label, g.images_count, g.active_images_count
@@ -539,8 +313,8 @@ class ModelsManager:
         if not group_ids:
             return []
 
-        accessible_faces = STRUCTURE['faces']['accessible_table']
-        accessible_images = STRUCTURE['images']['accessible_table']
+        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
+        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
 
         N = len(group_ids)
         M = min(N, 8)
@@ -666,34 +440,20 @@ class ModelsManager:
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     # -------- Profiles helpers --------
-    def get_profile_password(self, profile_id: str) -> str | None:
-        """Get the password for a profile."""
-        return self.db.execute_query('SELECT password FROM accessible_profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.VALUE)
-
-    def get_editable_fields(self, profile_id: str) -> List[str]:
-        """Get the editable fields for a profile."""
-        cur_profile_context = self.db.get_profile_context()
-        h_rank = cur_profile_context['hierarchy_rank']
-        is_manager = h_rank > 0
-        p_id = cur_profile_context['profile_id']
-        profile = self.get_entities('profiles', profile_id)
-
-        editable_fields = set()
-        if p_id == profile_id and is_manager:
-            editable_fields.add('label')
-            editable_fields.add('password')
-
-        if h_rank > profile['hierarchy_rank'] and is_manager:
-            editable_fields.add('password')
-            editable_fields.add('label')
-            editable_fields.add('hierarchy_rank')
-            editable_fields.add('can_upload_and_delete_images')
-            editable_fields.add('can_edit')
-            editable_fields.add('all_images')
-            editable_fields.add('all_albums')
-            editable_fields.add('save_preferences')
-
-        return list(editable_fields)
+    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0) -> None:
+        """Sync profile to event db."""
+        if upsert:
+            query = f"""
+                INSERT INTO profiles (profile_id, hierarchy_rank) VALUES (?, ?)
+                ON CONFLICT (profile_id) DO UPDATE SET hierarchy_rank = ?
+            """
+            self.db.execute_query(query, (profile_id, hierarchy_rank, hierarchy_rank))
+        else:
+            query = f"""
+                DELETE FROM profiles WHERE profile_id = ?
+            """
+            self.db.execute_query(query, (profile_id,))
+            self.delete('profiles', profile_id)
 
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
         """Edit entities accessibility for a profile.

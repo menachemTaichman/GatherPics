@@ -69,7 +69,8 @@ export function useEventUrls(eventUrl) {
   }, [eventUrl, location.state]);
 
   // Extract eventId from eventData
-  const eventId = eventData?.id || null;
+  // Support both 'id' and 'event_id' for flexibility
+  const eventId = eventData?.id || eventData?.event_id || null;
 
   // Synchronous URL helpers that work with the resolved eventId
   const urlHelpers = useMemo(() => ({

@@ -1,163 +1,77 @@
 import os
-from ..db import AppDB, ReturnFormat
-from ..face_utils import FaceUtils
-from .json_model import JsonModel
-from .models_manager import ModelsManager
+import shutil
+from .face_utils import FaceUtils
+from .event_db import EventDB
+from .event_models import EventModels
 
-DATA_ROOT = os.path.join(os.path.dirname(__file__), '../../data')
+DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
 
-class Event(JsonModel):
-    DATA_FILE = os.path.join(os.path.dirname(__file__), '../../data/events.json')
-    ID_FIELD = 'id'
+class Event():
+    """Event model for managing event data and operations."""
 
-    # event utils
-    def __init__(self, event_id: str, load: bool = True, profile_id: str | None = None):
-        super().__init__(event_id, load=load)
-        self.event_dir = os.path.join(DATA_ROOT, self.id)
-        self.DB_PATH = os.path.join(self.event_dir, f'{self.id}.db')
-        self.db = AppDB(self.DB_PATH, self.id)
+    @staticmethod
+    def create_event(event_id: str):
+        event_dir = os.path.join(DATA_ROOT, event_id)
+        os.makedirs(event_dir, exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'display'), exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'original'), exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'thumb'), exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'to_process'), exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'faces'), exist_ok=True)
+        os.makedirs(os.path.join(event_dir, 'high_quality'), exist_ok=True)
         
-        # Set profile id for access control
-        if profile_id:
-            self.db.set_profile_id(profile_id)
+        # Create event DB
+        event_db_path = os.path.join(event_dir, f'{event_id}.db')
+        _ = EventDB.create_db(event_db_path)
         
-        self.models_manager = ModelsManager(self.db)
+    @staticmethod
+    def delete_event(event_id: str):
+        face_utils = FaceUtils(event_id)
+        face_utils.rek_helper.delete_collection()
+        event_dir = os.path.join(DATA_ROOT, event_id)
+        shutil.rmtree(event_dir)
+   
+    def __init__(self, event_id: str, profile_id: str):
+        event_dir = os.path.join(DATA_ROOT, event_id)
+        
+        self.event_id = event_id
+        self.models = EventModels(event_id, profile_id)
         self.face_utils = None
-        self.display_dir = os.path.join(self.event_dir, 'display')
-        self.original_dir = os.path.join(self.event_dir, 'original')
-        self.thumb_dir = os.path.join(self.event_dir, 'thumb')
-        self.to_process_dir = os.path.join(self.event_dir, 'to_process')
-        self.faces_dir = os.path.join(self.event_dir, 'faces')
-        self.high_quality_dir = os.path.join(self.event_dir, 'high_quality')
-        self._ensure_event_dirs()
+        self.display_dir = os.path.join(event_dir, 'display')
+        self.original_dir = os.path.join(event_dir, 'original')
+        self.thumb_dir = os.path.join(event_dir, 'thumb')
+        self.to_process_dir = os.path.join(event_dir, 'to_process')
+        self.faces_dir = os.path.join(event_dir, 'faces')
+        self.high_quality_dir = os.path.join(event_dir, 'high_quality')
 
-    def _init_fields(self):
-        self.name = ''
-        self.date = ''
-        self.events_manager = ''
-        self.url = ''
-        self.last_group_id = ''
-        self.images_count_limit = 0
-        self.image_size_limit_bytes = 0
-
-    def _load_fields(self, data: dict):
-        self.name = data.get('name', '')
-        self.date = data.get('date', '')
-        self.events_manager = data.get('events_manager', '')
-        self.url = data.get('url', '')
-        self.last_group_id = data.get('last_group_id', '')
-        self.images_count_limit = data.get('images_count_limit', 0)
-        self.image_size_limit_bytes = data.get('image_size_limit_bytes', 0)
-
-    def _ensure_event_dirs(self):
-        os.makedirs(self.event_dir, exist_ok=True)
-        os.makedirs(self.display_dir, exist_ok=True)
-        os.makedirs(self.original_dir, exist_ok=True)
-        os.makedirs(self.thumb_dir, exist_ok=True)
-        os.makedirs(self.to_process_dir, exist_ok=True)
-        os.makedirs(self.faces_dir, exist_ok=True)
-        os.makedirs(self.high_quality_dir, exist_ok=True)
-        # Ensure {event_id}.db exists as an SQLite DB
-        if not os.path.exists(self.DB_PATH):
-            AppDB.create_new_db_in_dir(self.event_dir, f'{self.id}.db')
-            self._initialize_default_profiles()
-            self._initialize_default_albums()
-            self._initialize_default_groups()
-
-    def _initialize_default_profiles(self, default_profiles: dict = {}):
-        """Initialize default profiles for the event: Main Manager and Event Manager"""
-        for default_profile, hierarchy_rank in {'developer': 3, 'event_manager': 2, 'main_manager': 1}:
-            profile = default_profiles.get(default_profile, {})
-            profile['profile_id'] = profile.get('profile_id', self.models_manager.generate_id())
-            profile['label'] = profile.get('label', default_profile)
-            profile['password'] = profile.get('password', '')
-            profile['hierarchy_rank'] = profile.get('hierarchy_rank', hierarchy_rank)
-
-        values = tuple(profile.values() for profile in default_profiles.values())
-
-        self.db.execute_query(f'''
-            INSERT INTO profiles (profile_id, label, password, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_albums, save_preferences)
-            VALUES (?, ?, ?, ?, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1),
-                   (?, ?, ?, ?, 1, 1, 1, 1, 1)
-        ''', values)
-
-    def _initialize_default_groups(self):
-        """Initialize default groups for the event: Unassociated"""
-        Unassociated_group_id = self.models_manager.get_unassociated_group()
-        if not Unassociated_group_id:
-            self.models_manager.add('groups', {'label': 'Unassociated'})
-
-    def _initialize_default_albums(self):
-        """Initialize default albums for the event: Main Album and Event Album"""
-        archive_album_id = self.models_manager.get_archive_album()
-        favorites_album_id = self.models_manager.get_favorites_album()
-        if not archive_album_id:
-            self.models_manager.add('albums', {'label': 'Archive'})
-        
-        if not favorites_album_id:
-            self.models_manager.add('albums', {'label': 'Favorites'})
-
-    def add(self, **fields) -> 'Event':
-        super().add(**fields)
-        self.last_group_id = 0
-        return self
-
-    def set_profile_id(self, profile_id: str | None = None):
-        """Set the profile id for access control across all models."""
-        self.db.set_profile_id(profile_id)
-
-    def get_profile_context(self) -> dict | None:
+    @property
+    def profile_context(self) -> dict | None:
         """Get the current profile context."""
-        return self.db.get_profile_context()
+        return self.models.db.profile_context
 
-    def get_last_group_id(self) -> int:
-        """Get the last group id."""
-        return self.last_group_id
-
-    def set_last_group_id(self, last_group_id: int):
-        """Set the last group id."""
-        self.last_group_id = last_group_id
-        self.save()
-
-    def get_info(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'date': self.date,
-            'events_manager': self.events_manager,
-            'last_group_id': self.last_group_id,
-            'images_count_limit': self.images_count_limit,
-            'image_size_limit_bytes': self.image_size_limit_bytes,
-            'url': self.url,
-            'DB_PATH': self.DB_PATH
-        }
-
-    def get_images_count(self) -> int:
-        """Get the number of images in the event."""
-        return self.db.execute_query('SELECT COUNT(*) FROM images', return_format=ReturnFormat.VALUE)
+    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0):
+        self.models.sync_profile_to_event_db(profile_id, upsert=upsert, hierarchy_rank=hierarchy_rank)
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
-        cur_profile_context = self.get_profile_context()
-        if not cur_profile_context['can_upload_and_delete_images']:
+        if not self.profile_context['can_upload_and_delete_images']:
             raise Exception("Profile not allowed to delete images")
 
         for image_id in image_ids:
-            if not self.models_manager.is_image_deletable(image_id):
+            if not self.models.is_image_deletable(image_id):
                 raise Exception(f"Profile not allowed to delete {image_id}")
 
         parents = {}
         deleted_groups = set()
         for image_id in image_ids:
-            image_parents = self.models_manager.get_parents('images', image_id)
+            image_parents = self.models.get_parents('images', image_id)
 
-            face_ids = self.models_manager.get_childs('images', image_id, 'faces', return_ids=True)
+            face_ids = self.models.get_childs('images', image_id, 'faces', return_ids=True)
             if not self.face_utils:
-                self.face_utils = FaceUtils(self.id)
+                self.face_utils = FaceUtils(self.event_id)
             
-            self.models_manager.delete('faces', face_ids)
-            self.models_manager.delete('images', image_id)
+            self.models.delete('faces', face_ids)
+            self.models.delete('images', image_id)
             self.face_utils.rek_helper.delete_faces(face_ids)
             for face_id in face_ids:
                 try:
@@ -174,14 +88,14 @@ class Event(JsonModel):
                 pass
             
             for group_id in image_parents.get('groups', set()):
-                if self.models_manager.is_empty('groups', group_id):
-                    self.models_manager.delete('groups', group_id)
+                if self.models.is_empty('groups', group_id):
+                    self.models.delete('groups', group_id)
                     deleted_groups.add(group_id)
-                    image_parents.get('groups', set()).discard(group_id)
-                elif self.models_manager.is_empty('groups', group_id, only_accessible=True):
-                    self.models_manager.ensure_representative('groups', group_id)
+                    set(image_parents.get('groups', set())).discard(group_id)
+                elif self.models.is_empty('groups', group_id, only_accessible=True):
+                    self.models.ensure_representative('groups', group_id)
                     deleted_groups.add(group_id)
-                    image_parents.get('groups', set()).discard(group_id)
+                    set(image_parents.get('groups', set())).discard(group_id)
 
             for entity, entity_ids in image_parents.items():
                 parents.setdefault(entity, set()).update(entity_ids)
@@ -189,7 +103,7 @@ class Event(JsonModel):
         for entity, entity_ids in parents.items():
             parents[entity] = list(entity_ids)
             for entity_id in entity_ids:
-                self.models_manager.ensure_representative(entity, entity_id)
+                self.models.ensure_representative(entity, entity_id)
                 
         return list(deleted_groups), parents
 
@@ -201,7 +115,9 @@ class Event(JsonModel):
         max_matches_faces: int = 100,
         verbose: bool = True,
         assign_moments: bool = False,
-        progress_callback=None
+        progress_callback=None,
+        images_count_limit: int = 0,
+        image_size_limit_bytes: int = 0
     ) -> dict:
         """
         Process new images from to_process folder.
@@ -213,10 +129,12 @@ class Event(JsonModel):
             verbose: Whether to print progress messages
             assign_moments: Whether to assign images to moments by time
             progress_callback: Optional callback function to report progress (receives dict with step info)
+            images_count_limit: Limit of the event images count
+            image_size_limit_bytes: Limit of the event image size
         Returns:
             dict: Summary of processing results
         """
-        from ..image_utils import resize_image, crop_image, extract_all_metadata, save_image
+        from .image_utils import resize_image, crop_image, extract_all_metadata, save_image
         import os
         import shutil
         from PIL import Image as PILImage
@@ -252,10 +170,10 @@ class Event(JsonModel):
             }
 
         def _get_valid_group_label_number() -> str:
-            group_num = self.last_group_id + 1
+            group_num = self.models.get_last_group_num() + 1
             for _ in range(1000):
                 label = f"Person {group_num}"
-                if self.models_manager.is_exists('groups', {'label': label}):
+                if self.models.is_exists('groups', {'label': label}):
                     group_num += 1
                 else:
                     return group_num
@@ -268,18 +186,17 @@ class Event(JsonModel):
             for cluster_identifier, new_faces in clusters:
                 if cluster_identifier != 'new':
                     existing_face_id = cluster_identifier
-                    existing_group_id = self.models_manager.get_entities('faces', existing_face_id).get('group_id', None)
+                    existing_group_id = self.models.get_entities('faces', existing_face_id).get('group_id', None)
                     if existing_group_id:
                         # Add new faces to the existing group
-                        self.models_manager.edit_childs('groups', existing_group_id, 'faces', new_faces, add=True)
+                        self.models.edit_childs('groups', existing_group_id, 'faces', new_faces, add=True)
                         continue
 
                     new_faces += [existing_face_id]
 
                 group_num = _get_valid_group_label_number()
-                group_id = self.models_manager.add('groups', [{'label': f"Person {group_num}"}])[0]
-                self.set_last_group_id(group_num)
-                self.models_manager.edit_childs('groups', group_id, 'faces', new_faces, add=True)
+                group_id = self.models.add('groups', [{'label': f"Person {group_num}"}])[0]
+                self.models.edit_childs('groups', group_id, 'faces', new_faces, add=True)
                 groups_created += 1
 
             return groups_created
@@ -294,7 +211,7 @@ class Event(JsonModel):
                 metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
-                image_id = self.models_manager.add(
+                image_id = self.models.add(
                     'images',
                     {
                         'label': image_file,
@@ -337,14 +254,17 @@ class Event(JsonModel):
             except Exception as e:
                 return None, None, [], e
 
+        if not self.profile_context['can_upload_and_delete_images']:
+            raise Exception("Profile not allowed to process new images")
+
         # Check limitations before starting
         _send_progress('validation', 0, 1, 'Checking upload limits...')
         
         if verbose:
-            print(f"Starting image processing for event: {self.name}")
+            print(f"Starting image processing")
         
         # Get current image count
-        current_count = self.get_images_count()
+        current_count = self.models.get_images_count()
         
         image_files = _get_images_to_process()
         if not image_files:
@@ -359,8 +279,8 @@ class Event(JsonModel):
             }
         
         # Check count limit
-        if current_count + len(image_files) > self.images_count_limit:
-            error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {self.images_count_limit}, Attempting to add: {len(image_files)}"
+        if current_count + len(image_files) > images_count_limit:
+            error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {images_count_limit}, Attempting to add: {len(image_files)}"
             if verbose:
                 print(error_msg)
             _send_progress('error', 0, 0, error_msg)
@@ -372,12 +292,12 @@ class Event(JsonModel):
         for image_file in image_files:
             file_path = os.path.join(self.to_process_dir, image_file)
             file_size = os.path.getsize(file_path)
-            if self.image_size_limit_bytes > 0 and file_size > self.image_size_limit_bytes:
+            if image_size_limit_bytes > 0 and file_size > image_size_limit_bytes:
                 files_exceeding_limit.append((image_file, file_size))
             total_size += file_size
         
         if files_exceeding_limit:
-            error_msg = f"{len(files_exceeding_limit)} file(s) exceed size limit of {self.image_size_limit_bytes} bytes: " + ", ".join([f"{name} ({size} bytes)" for name, size in files_exceeding_limit[:3]])
+            error_msg = f"{len(files_exceeding_limit)} file(s) exceed size limit of {image_size_limit_bytes} bytes: " + ", ".join([f"{name} ({size} bytes)" for name, size in files_exceeding_limit[:3]])
             if verbose:
                 print(error_msg)
             _send_progress('error', 0, 0, error_msg)
@@ -389,12 +309,12 @@ class Event(JsonModel):
         _send_progress('validation', 1, 1, f'Validation complete. Processing {len(image_files)} images...')
         
         if not self.face_utils:
-            self.face_utils = FaceUtils(self.id)
+            self.face_utils = FaceUtils(self.event_id)
         all_faces = []
         processed_images = []
         errors = []
         
-        unassociated_group_id = self.models_manager.get_unassociated_group()
+        unassociated_group_id = self.models.get_unassociated_group()
         for i, image_file in enumerate(image_files, 1):
             _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
             if verbose:
@@ -418,7 +338,7 @@ class Event(JsonModel):
         if all_faces:
             if verbose:
                 print("Adding faces to database...")
-            self.models_manager.add('faces', all_faces)
+            self.models.add('faces', all_faces)
             _send_progress('clustering', 0, 1, 'Clustering faces...')
             if verbose:
                 print("Clustering faces...")
@@ -432,7 +352,7 @@ class Event(JsonModel):
             _send_progress('moments', 0, 1, 'Assigning images to moments by time...')
             if verbose:
                 print("Assigning images to moments by time...")
-            assigned_moments = self.models_manager.assign_moments_by_time(processed_images)
+            assigned_moments = self.models.assign_moments_by_time(processed_images)
             if verbose:
                 print(f"  Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments")
         
@@ -455,21 +375,3 @@ class Event(JsonModel):
             if assign_moments:
                 print(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
         return summary
-
-# Convenience functions for compatibility
-add_event = Event.add
-def delete_event(event_id: str) -> None:
-    # Remove from JSON
-    event = Event(event_id)
-    if not event.face_utils:
-        event.face_utils = FaceUtils(event_id)
-
-    event.face_utils.rek_helper.delete_collection()
-    Event.delete(event_id)
-    # Remove the event directory and its contents
-    event_dir = os.path.join(DATA_ROOT, event_id)
-    if os.path.exists(event_dir):
-        import shutil
-        shutil.rmtree(event_dir)
-get_event = lambda event_id, profile_id=None: Event(event_id, profile_id=profile_id)
-list_events = Event.list_all 

@@ -24,7 +24,7 @@ let eventsFetchPromise = null;
 
 // Component to display home page with event selection
 function HomePage() {
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -107,7 +107,7 @@ function HomePage() {
     );
   }
 
-  if (events.length === 0) {
+  if (Object.keys(events).length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -136,11 +136,11 @@ function HomePage() {
             Select an Event
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {events.map((event) => (
+            {Object.entries(events).map(([event_id, event]) => (
               <Link
-                key={event.id}
+                key={event_id}
                 to={`/${event.url}`}
-                state={{ eventData: event }}
+                state={{ eventData: { ...event, id: event_id, event_id } }}
                 className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group"
               >
                 <div className="p-6">

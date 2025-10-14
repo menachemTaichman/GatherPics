@@ -586,16 +586,16 @@ export const profilesAPI = {
   getById: async (profileId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `PROFILE_GET_BY_ID:${eventId}:${profileId}:${JSON.stringify(params||{})}`;
-    return await withDedupe(key, async () => {
+    const result = await withDedupe(key, async () => {
       const response = await api.get(`/api/events/${eventId}/profiles/${profileId}`, { params });
       return response.data;
     });
+    return result;
   },
   
   // Check if profile name exists
-  checkName: async (label, excludeProfileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles/check-name`, {
+  checkName: async (label, excludeProfileId) => {
+    const response = await api.post(`/api/events/profiles/check-name`, {
       label,
       exclude_profile_id: excludeProfileId
     });
@@ -624,16 +624,14 @@ export const profilesAPI = {
   },
   
   // Get profile password
-  getPassword: async (profileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/profiles/${profileId}/password`);
+  getPassword: async (profileId) => {
+    const response = await api.get(`/api/profiles/${profileId}/password`);
     return response.data;
   },
   
   // Update profile password
-  updatePassword: async (profileId, password, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/password`, {
+  updatePassword: async (profileId, password) => {
+    const response = await api.put(`/api/profiles/${profileId}/password`, {
       password
     });
     return response.data;

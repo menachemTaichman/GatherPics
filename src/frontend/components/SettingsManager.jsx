@@ -178,7 +178,7 @@ export default function SettingsManager() {
     
     checkCurrentProfileNameConflict._timeout = setTimeout(async () => {
       try {
-        const result = await profilesAPI.checkName(label.trim(), currentProfile.id, eventUrl);
+        const result = await profilesAPI.checkName(label.trim(), currentProfile.id);
         setProfileNameConflict(result.conflict || false);
       } catch (error) {
         console.error('Error checking name conflict:', error);
@@ -904,7 +904,7 @@ export default function SettingsManager() {
           urlHelpers={urlHelpers}
           isCreating={isCreatingNewProfile}
           onSave={() => {
-            fetchProfiles();
+            // Changes are automatically applied by apiService interceptor
             setIsCreatingNewProfile(false);
           }}
         />

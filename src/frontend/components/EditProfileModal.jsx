@@ -30,6 +30,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   
   // Get profile images and albums from store
   const profileImages = useImagesForProfile(profile?.id);
+  
   const profileAlbums = useAlbumsForProfile(profile?.id);
 
   // Custom keyboard handler to allow child modal to work
@@ -108,8 +109,6 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       if (!isOpen || !profile || isCreating) return;
       
       try {
-        // Fetch profile with scopes - this will load the profile and its related images/albums
-        // The changes will be automatically applied by the apiService interceptor
         await profilesAPI.getById(profile.id, eventUrl);
       } catch (error) {
         console.error('Failed to fetch profile with scopes:', error);
@@ -127,7 +126,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     }
 
     try {
-      const result = await profilesAPI.checkName(label.trim(), editingProfile.id, eventUrl);
+      const result = await profilesAPI.checkName(label.trim(), editingProfile.id);
       setNameConflict(result.conflict || false);
     } catch (error) {
       console.error('Error checking name conflict:', error);

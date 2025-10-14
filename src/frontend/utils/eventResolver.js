@@ -28,7 +28,8 @@ async function fetchEventByUrl(eventUrl) {
         }
         throw new Error('Failed to resolve event URL');
       }
-      return await response.json();
+      const data = await response.json();
+      return data.event;
     } catch (error) {
       console.error('Error fetching event:', error);
       return null;
@@ -56,7 +57,7 @@ export async function resolveEventId(eventUrl) {
   
   if (cachedTimestamp && (now - cachedTimestamp) < CACHE_DURATION) {
     const cachedEvent = eventCache.get(eventUrl);
-    return cachedEvent ? cachedEvent.id : null;
+    return cachedEvent ? (cachedEvent.id || cachedEvent.event_id) : null;
   }
 
   // Fetch fresh data
@@ -66,7 +67,7 @@ export async function resolveEventId(eventUrl) {
     if (event) {
       eventCache.set(eventUrl, event);
       eventCacheTimestamp.set(eventUrl, now);
-      return event.id;
+      return event.id || event.event_id;
     }
     
     return null;
