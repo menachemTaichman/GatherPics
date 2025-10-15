@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useParams, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User } from 'lucide-react';
 import Header from './Header';
@@ -10,12 +10,14 @@ import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
 import Toast from './Toast';
+import LoginModal from './LoginModal';
 import { useDataStore } from '../utils/dataManager';
-import { groupsAPI, authAPI, profilesAPI } from '../utils/apiService';
+import { groupsAPI, profilesAPI } from '../utils/apiService';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { initializePreferences } from '../utils/settings';
 import { ToastProvider, useToast } from '../utils/ToastContext';
+import { AuthProvider, useAuth } from '../utils/authContext';
 import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
 
 // Cache for events list to prevent duplicate requests
@@ -27,6 +29,8 @@ function HomePage() {
   const [events, setEvents] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const { requireAuth, isAuthenticated } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -91,6 +95,24 @@ function HomePage() {
     return () => { isMounted = false; };
   }, []);
 
+  const handleEventClick = (e, eventUrl, eventData) => {
+    e.preventDefault();
+    
+    if (isAuthenticated) {
+      // User is authenticated, navigate immediately
+      navigate(`/${eventUrl}`, { 
+        state: { eventData } 
+      });
+    } else {
+      // Not authenticated, show login modal and set pending navigation
+      requireAuth(() => {
+        navigate(`/${eventUrl}`, { 
+          state: { eventData } 
+        });
+      });
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -137,11 +159,11 @@ function HomePage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {Object.entries(events).map(([event_id, event]) => (
-              <Link
+              <a
                 key={event_id}
-                to={`/${event.url}`}
-                state={{ eventData: { ...event, id: event_id, event_id } }}
-                className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group"
+                href={`/${event.url}`}
+                onClick={(e) => handleEventClick(e, event.url, { ...event, id: event_id, event_id })}
+                className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer"
               >
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-3">
@@ -170,7 +192,7 @@ function HomePage() {
                     Browse Persons
                   </div>
                 </div>
-              </Link>
+              </a>
             ))}
           </div>
         </div>
@@ -204,59 +226,55 @@ function AppContent({ eventUrl }) {
   
   const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
-  const [authInitialized, setAuthInitialized] = useState(false);
+  const { isAuthenticated, isLoading: authLoading, openLoginModal, showLoginModal, loginError, login, closeLoginModal } = useAuth();
 
-  // Initialize JWT authentication and fetch current profile
+  // Listen for auth:required events from API interceptor
   useEffect(() => {
-    async function initializeAuth() {
+    const handleAuthRequired = () => {
+      openLoginModal();
+    };
+
+    window.addEventListener('auth:required', handleAuthRequired);
+    return () => window.removeEventListener('auth:required', handleAuthRequired);
+  }, [openLoginModal]);
+
+  // Fetch current profile when authenticated
+  useEffect(() => {
+    async function fetchCurrentProfile() {
+      if (!isAuthenticated || !eventUrl) return;
+      
       try {
-        // Get JWT token
-        await jwtService.getToken();
+        // Temporarily add scope to allow profile inserts
+        const store = useDataStore.getState();
+        store.addScope({ entity: 'all', id: 'profiles' });
         
-        // Fetch current profile and store it
-        if (eventUrl) {
-          try {
-            // Temporarily add scope to allow profile inserts
-            const store = useDataStore.getState();
-            store.addScope({ entity: 'all', id: 'profiles' });
-            
-            const response = await profilesAPI.getAll(eventUrl);
-            
-            // Small delay to ensure interceptor processed changes
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            // Get profiles from the store
-            const storeProfiles = useDataStore.getState().entities?.profiles || {};
-            
-            if (Object.keys(storeProfiles).length > 0) {
-              const profilesList = Object.values(storeProfiles);
-              // Sort by hierarchy_rank descending and pick first
-              const sortedProfiles = profilesList.sort((a, b) => (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0));
-              const currentProf = sortedProfiles[0];
-              if (currentProf) {
-                setCurrentProfile(currentProf);
-              }
-            }
-            
-            // Remove the profiles scope after loading to avoid interfering with other scopes
-            store.removeScope({ entity: 'all', id: 'profiles' });
-          } catch (error) {
-            console.error('Failed to fetch current profile:', error);
+        const response = await profilesAPI.getAll(eventUrl);
+        
+        // Small delay to ensure interceptor processed changes
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Get profiles from the store
+        const storeProfiles = useDataStore.getState().entities?.profiles || {};
+        
+        if (Object.keys(storeProfiles).length > 0) {
+          const profilesList = Object.values(storeProfiles);
+          // Sort by hierarchy_rank descending and pick first
+          const sortedProfiles = profilesList.sort((a, b) => (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0));
+          const currentProf = sortedProfiles[0];
+          if (currentProf) {
+            setCurrentProfile(currentProf);
           }
         }
         
-        setAuthInitialized(true);
+        // Remove the profiles scope after loading to avoid interfering with other scopes
+        store.removeScope({ entity: 'all', id: 'profiles' });
       } catch (error) {
-        console.error('Failed to initialize JWT authentication:', error);
-        // Still set as initialized to prevent infinite loading
-        setAuthInitialized(true);
+        console.error('Failed to fetch current profile:', error);
       }
     }
 
-    if (eventUrl) {
-      initializeAuth();
-    }
-  }, [eventUrl]);
+    fetchCurrentProfile();
+  }, [isAuthenticated, eventUrl]);
 
   // Get event name from eventData (resolved by useEventUrls)
   const eventName = eventData?.name || '';
@@ -352,7 +370,7 @@ function AppContent({ eventUrl }) {
   // The API service interceptor automatically handles transfer updates
   // No need for manual updateGroupsAfterTransfer function
 
-  if (urlLoading || !authInitialized) {
+  if (urlLoading || authLoading) {
     return <LoadingSpinner />;
   }
 
@@ -498,6 +516,14 @@ function AppContent({ eventUrl }) {
         </Routes>
       </AnimatePresence>
 
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
+
       {/* Toast Notification */}
       <Toast toast={toast} />
     </>
@@ -511,15 +537,17 @@ export default function App() {
   }, []);
 
   return (
-    <ToastProvider>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <div className="min-h-screen bg-gray-50">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
-          </Routes>
-        </div>
-      </Router>
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
+            </Routes>
+          </div>
+        </Router>
+      </ToastProvider>
+    </AuthProvider>
   );
 }

@@ -117,6 +117,9 @@ class GeneralModels(BaseModels):
         
         self.edit('profiles', profile_id, data)
 
+        if password:
+            self.revoke_all_refresh_tokens(profile_id)
+
     def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
         """Update the hierarchy rank for a profile."""
         if not self.is_managable_profile(profile_id) or profile_id == self.profile_context['profile_id']:
@@ -291,3 +294,16 @@ class GeneralModels(BaseModels):
         '''
         self.db.execute_query(query, (token,))
 
+    def revoke_all_refresh_tokens(self, profile_id: str | None = None):
+        """Revoke all refresh tokens for a profile."""
+        query = '''
+            UPDATE refresh_tokens
+            SET revoked = 1, revoked_at = datetime('now')
+            WHERE 1=1
+        '''
+        params = ()
+        if profile_id:
+            query += ' AND profile_id = ?'
+            params = (profile_id,)
+
+        self.db.execute_query(query, params)

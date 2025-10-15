@@ -4,16 +4,20 @@ from flask_jwt_extended import (
     JWTManager,
     jwt_required,
     create_access_token,
+    create_refresh_token,
     get_jwt_identity,
     get_jwt,
     set_access_cookies,
+    set_refresh_cookies,
     unset_jwt_cookies,
 )
 from functools import wraps
+from datetime import timedelta, datetime, timezone
 import traceback
 import os
 import io
 import zipfile
+import secrets
 from werkzeug.utils import secure_filename
 
 from src.core.event import Event
@@ -25,15 +29,13 @@ CORS(app, origins="*", supports_credentials=True)
 
 # JWT Configuration
 app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'  # Change this in production
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for now
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
 app.config['JWT_COOKIE_SAMESITE'] = 'Lax'
 app.config['JWT_COOKIE_SECURE'] = False  # True in production over HTTPS
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Simplify for now
 jwt = JWTManager(app)
-
-# --- Placeholder values for now ---
-FIXED_PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"
 
 # --- Utility Functions ---
 def _parse_bool(val: str | None, default: bool) -> bool:
@@ -44,20 +46,15 @@ def _parse_bool(val: str | None, default: bool) -> bool:
 
 def get_general_models(profile_id=None):
     """Get general models instance with profile context."""
-
-    # TODO: Remove this once we have a proper authentication system
-    # TODO: Use the profile_id from the JWT token only when necessary (it not always necessary)
     if profile_id is None:
-        profile_id = getattr(g, 'profile_id', FIXED_PROFILE_ID)
-
+        profile_id = getattr(g, 'profile_id', None)
+    
     return GeneralModels(profile_id=profile_id)
 
 def get_event(event_id, profile_id=None):
     """Get event instance with profile context."""
-
-    # TODO: Remove this once we have a proper authentication system
     if profile_id is None:
-        profile_id = getattr(g, 'profile_id', FIXED_PROFILE_ID)
+        profile_id = getattr(g, 'profile_id', None)
     
     return Event(event_id, profile_id=profile_id)
 
@@ -125,28 +122,138 @@ def resolve_event_url():
     except Exception as e:
         return bad_request(e)
 
-@app.route("/login", methods=["POST"])
+@app.route("/api/auth/login", methods=["POST"])
 def login():
-    """Placeholder login endpoint that returns a JWT token."""
-    # For now, always authenticate with the fixed profile ID
-    # In production, this would validate credentials
-    access_token = create_access_token(identity=FIXED_PROFILE_ID)
+    """Authenticate user and issue access + refresh tokens."""
+    data = request.json or {}
+    label = data.get('label', '').strip()
+    password = data.get('password', '')
     
-    response = make_response(jsonify({
-        "access_token": access_token,
-        "profile_id": FIXED_PROFILE_ID
-    }))
+    if not label:
+        return jsonify({"error": "Profile label is required"}), 400
     
-    # Set the JWT cookie
-    set_access_cookies(response, access_token)
+    try:
+        general_models = GeneralModels()
+        
+        # Authenticate profile
+        profile_id = general_models.authenticate_profile(label, password)
+        
+        if not profile_id:
+            return jsonify({"error": "Invalid credentials"}), 401
+        
+        # Get profile details
+        profile = general_models.get_entities('profiles', profile_id)
+        
+        # Create tokens
+        access_token = create_access_token(identity=profile_id)
+        refresh_token_jwt = create_refresh_token(identity=profile_id)
+        
+        # Generate secure random token for database
+        refresh_token_db = secrets.token_urlsafe(32)
+        
+        # Store refresh token in database
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        
+        # Get request metadata
+        user_agent = request.headers.get('User-Agent', '')
+        ip_address = request.remote_addr
+        
+        general_models.create_refresh_token(
+            profile_id=profile_id,
+            token=refresh_token_db,
+            expires_at=expires_at,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+        
+        # Create response
+        response = make_response(jsonify({
+            "access_token": access_token,
+            "profile": profile
+        }))
+        
+        # Set access token as cookie for image requests
+        set_access_cookies(response, access_token)
+        
+        # Set refresh token as httpOnly cookie
+        response.set_cookie(
+            'refresh_token',
+            refresh_token_db,
+            httponly=True,
+            secure=False,  # True in production
+            samesite='Lax',
+            max_age=30 * 24 * 60 * 60  # 30 days in seconds
+        )
+        
+        return response
+        
+    except Exception as e:
+        print(f"Login error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Authentication failed"}), 500
+
+@app.route("/api/auth/refresh", methods=["POST"])
+def refresh():
+    """Exchange refresh token for new access token."""
+    refresh_token = request.cookies.get('refresh_token')
+    
+    if not refresh_token:
+        return jsonify({"error": "Refresh token not found"}), 401
+    
+    try:
+        general_models = GeneralModels()
+        
+        # Validate refresh token
+        profile_id = general_models.validate_refresh_token(refresh_token)
+        
+        if not profile_id:
+            return jsonify({"error": "Invalid or expired refresh token"}), 401
+        
+        # Create new access token
+        access_token = create_access_token(identity=profile_id)
+        
+        # Create response and set access token cookie
+        response = make_response(jsonify({
+            "access_token": access_token
+        }))
+        
+        set_access_cookies(response, access_token)
+        
+        return response
+        
+    except Exception as e:
+        print(f"Refresh error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Token refresh failed"}), 500
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    """Logout user and revoke refresh token."""
+    refresh_token = request.cookies.get('refresh_token')
+    
+    if refresh_token:
+        try:
+            general_models = GeneralModels()
+            general_models.revoke_refresh_token(refresh_token)
+        except Exception as e:
+            print(f"Logout error: {e}")
+    
+    response = make_response(jsonify({"message": "Logout successful"}))
+    
+    # Clear JWT cookies (access token)
+    unset_jwt_cookies(response)
+    
+    # Clear refresh token cookie
+    response.set_cookie(
+        'refresh_token',
+        '',
+        httponly=True,
+        secure=False,
+        samesite='Lax',
+        max_age=0
+    )
     
     return response
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    resp = jsonify({"msg": "logout successful"})
-    unset_jwt_cookies(resp)
-    return resp
 
 # ==============================================================================
 # II. GENERAL EVENT ENDPOINTS

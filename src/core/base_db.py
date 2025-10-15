@@ -65,6 +65,12 @@ class BaseDB(ABC):
             return ', '.join(id_field)
         return id_field
 
+    @classmethod
+    def is_auto_increment(cls, table: str) -> bool:
+        """Check if the table has an auto increment field."""
+
+        return 'AUTOINCREMENT' in cls.TABLES()[table]
+
     @staticmethod
     def _get_fields(fields: list[str] | None, table: str | None = None) -> str:
         """Format fields for SQL query."""

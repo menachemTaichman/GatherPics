@@ -203,9 +203,8 @@ class EventDB(BaseDB):
                     FROM profiles p
                     LEFT JOIN profile_albums pa
                     ON p.profile_id = pa.profile_id
-                    AND p.profile_id = cur_profile('profile_id')
                     AND pa.album_id = a.album_id
-                    WHERE (
+                    WHERE p.profile_id = cur_profile('profile_id') AND (
                         (p.all_albums = 1 AND pa.album_id IS NULL)
                         OR (p.all_albums = 0 AND pa.accessible = 1)
                     )

@@ -251,9 +251,10 @@ class BaseModels(ABC):
         is_single = isinstance(data, dict)
         data_list = [data] if is_single else data
 
-        id_field = self.db.get_id_field(table)
-        for row in data_list:
-            row.setdefault(id_field, self.generate_id())
+        if not self.db.is_auto_increment(table):
+            id_field = self.db.get_id_field(table)
+            for row in data_list:
+                row.setdefault(id_field, self.generate_id())
 
         inserted_ids = self.db.insert(table, data_list)
 

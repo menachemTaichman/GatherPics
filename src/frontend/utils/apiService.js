@@ -33,10 +33,20 @@ function withDedupe(key, factory) {
   return promise;
 }
 
-// Request interceptor
+// Request interceptor - Add Authorization header with access token
 api.interceptors.request.use(
   async (config) => {
-    // All requests rely on JWT cookies now; no Authorization header injection
+    // Skip auth header for public endpoints
+    const publicEndpoints = ['/api/events', '/api/events/resolve', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
+    const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
+    
+    if (!isPublicEndpoint) {
+      const token = jwtService.getTokenSync();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    
     return config;
   },
   (error) => {
@@ -44,8 +54,10 @@ api.interceptors.request.use(
   }
 );
 
+// Response interceptor - Handle changes and 401 errors
 api.interceptors.response.use(
   (response) => {
+    // Apply changes to store if present
     if (response.data && response.data.changes) {
       const store = useDataStore.getState();
       const changes = response.data.changes;
@@ -57,7 +69,47 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Handle 401 Unauthorized errors
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Try to refresh the token
+        await jwtService.refresh();
+        
+        // Update the authorization header with new token
+        const newToken = jwtService.getTokenSync();
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        }
+        
+        // Retry the original request
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed - token is invalid
+        // Clear token and let the auth context handle login modal
+        jwtService.clearToken();
+        
+        // Dispatch custom event to trigger login modal
+        window.dispatchEvent(new CustomEvent('auth:required'));
+        
+        // In production, suppress the error logging since this is expected behavior
+        if (import.meta.env.MODE === 'production') {
+          // Return a rejected promise without logging
+          return Promise.reject({ 
+            ...refreshError, 
+            silent: true,
+            message: 'Authentication required' 
+          });
+        }
+        
+        return Promise.reject(refreshError);
+      }
+    }
+    
     return Promise.reject(error);
   }
 );

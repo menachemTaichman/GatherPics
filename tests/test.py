@@ -239,3 +239,10 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+
+profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
+event = Event(event_id, profile_id=profile_id)
+entities = event.models.db.execute_query('SELECT * FROM accessible_albums;', return_format=ReturnFormat.LIST_DICTS)
+for entity in entities:
+    print(entity)
+    print('--------------------------------')
