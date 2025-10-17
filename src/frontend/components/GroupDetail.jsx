@@ -62,6 +62,7 @@ import useBucketStore from '../utils/bucketStore';
 import SingleImageTile from './SingleImageTile';
 import GroupsFilter from './GroupsFilter';
 import { useImageComponent } from '../utils/useImage.jsx';
+import { formatErrorMessage } from '../utils/errorHandler';
 import { useImageHighlight } from '../utils/useImageHighlight';
 
 const EMPTY_ARRAY = Object.freeze([]);
@@ -850,7 +851,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       showToast('Person name updated', 'success');
     } catch (error) {
       console.error('Error updating group name:', error);
-      showToast('Failed to update person name', 'error');
+      showToast(formatErrorMessage('update person name', error), 'error');
       setIsEditingTitle(false);
     }
   }, [group, editingTitle, eventUrl, navigate, showToast, showMergeConflictModal]);
@@ -905,7 +906,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                         await groupsAPI.update(group.id, { representative_face: null }, eventUrl);
                         showToast('Representative removed', 'success');
                       } catch (error) {
-                        showToast('Failed to remove representative', 'error');
+                        showToast(formatErrorMessage('remove representative', error), 'error');
                       }
                     }}
                     className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"

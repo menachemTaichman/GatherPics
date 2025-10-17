@@ -9,6 +9,7 @@ import { useModalFocus } from '../utils/useModalFocus';
 import { useDataStore, selectors as storeSelectors } from '../utils/dataManager';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useModalStore } from '../utils/modalManager';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
@@ -30,7 +31,7 @@ function formatDateTime(dateString) {
   }
 }
 
-function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose, urlHelpers: injectedUrlHelpers }) {
+function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose, onToast, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   const { updateMoment } = useDataStore();
   
@@ -120,8 +121,9 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       // storeImages will update reactively via the subscription
     } catch (error) {
       console.error('Error fetching images for editing:', error);
-      const errorInfo = handleAPIError(error, 'Failed to fetch images');
-      setError(errorInfo.message);
+      if (onToast) {
+        onToast(formatErrorMessage('fetch images', error), 'error');
+      }
     }
   };
 
@@ -163,8 +165,9 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       handleClose();
     } catch (error) {
       console.error('Error saving images:', error);
-      const errorInfo = handleAPIError(error, 'Failed to save images');
-      setError(errorInfo.message);
+      if (onToast) {
+        onToast(formatErrorMessage('save images', error), 'error');
+      }
     }
   };
 

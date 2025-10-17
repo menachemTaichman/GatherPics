@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import os
 from enum import Enum
 from abc import ABC, abstractmethod
+from .errors import Forbidden, DatabaseError
 
 class ReturnFormat(Enum):
     VALUE = 'value'
@@ -179,15 +180,25 @@ class BaseDB(ABC):
         results = None
         row_count = None
 
-        with self.get_connection() as conn:
-            cursor = conn.execute(query, params)
-            has_resultset = cursor.description is not None
-            if has_resultset:
-                rows = cursor.fetchall()
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute(query, params)
+                has_resultset = cursor.description is not None
+                if has_resultset:
+                    rows = cursor.fetchall()
+                else:
+                    row_count = cursor.rowcount
+                conn.commit()
+        
+        except sqlite3.IntegrityError as e:
+            if "Permission denied" in str(e):
+                raise Forbidden(f"Permission denied: {e}") from e
             else:
-                row_count = cursor.rowcount
-            conn.commit()
+                raise DatabaseError(f"Integrity error: {str(e)}") from e
 
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Database error: {str(e)}") from e
+        
         if has_resultset:
             columns = [desc[0] for desc in cursor.description]
 

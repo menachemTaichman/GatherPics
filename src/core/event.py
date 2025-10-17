@@ -1,5 +1,7 @@
 import os
 import shutil
+
+from .errors import Forbidden
 from .face_utils import FaceUtils
 from .event_db import EventDB
 from .event_models import EventModels
@@ -55,11 +57,11 @@ class Event():
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
         if not self.profile_context['can_upload_and_delete_images']:
-            raise Exception("Profile not allowed to delete images")
+            raise Forbidden("Profile not allowed to delete images")
 
         for image_id in image_ids:
             if not self.models.is_image_deletable(image_id):
-                raise Exception(f"Profile not allowed to delete {image_id}")
+                raise Forbidden(f"Profile not allowed to delete {image_id}")
 
         parents = {}
         deleted_groups = set()
@@ -255,7 +257,7 @@ class Event():
                 return None, None, [], e
 
         if not self.profile_context['can_upload_and_delete_images']:
-            raise Exception("Profile not allowed to process new images")
+            raise Forbidden("Profile not allowed to process new images")
 
         # Check limitations before starting
         _send_progress('validation', 0, 1, 'Checking upload limits...')

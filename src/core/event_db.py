@@ -338,7 +338,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 UPDATE faces
@@ -352,7 +352,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 DELETE FROM faces
@@ -365,7 +365,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
                 END;
 
                 INSERT INTO faces (face_id, image_id, group_id, width, height, left, top)
@@ -380,7 +380,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 UPDATE images
@@ -394,7 +394,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to delete images')
                 END;
 
                 DELETE FROM images
@@ -407,7 +407,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
                 END;
 
                 INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id)
@@ -422,7 +422,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 UPDATE groups
@@ -437,7 +437,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 DELETE FROM groups
@@ -450,7 +450,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 INSERT INTO groups (group_id, label, representative_face)
@@ -465,7 +465,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 UPDATE moments
@@ -483,7 +483,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 DELETE FROM moments
@@ -496,7 +496,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 INSERT INTO moments (moment_id, label, description, start, end, representative_image)
@@ -511,7 +511,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 UPDATE albums
@@ -527,7 +527,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 DELETE FROM albums
@@ -540,7 +540,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
                 INSERT INTO albums (album_id, label, description, representative_image)
                 VALUES (NEW.album_id, NEW.label, NEW.description, NEW.representative_image);
@@ -554,7 +554,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 INSERT OR IGNORE INTO albums_images (album_id, image_id)
@@ -571,7 +571,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied')
+                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
                 END;
 
                 DELETE FROM albums_images

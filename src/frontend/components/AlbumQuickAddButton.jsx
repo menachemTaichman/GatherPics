@@ -7,6 +7,7 @@ import { useDataStore } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
+import { formatErrorMessage } from '../utils/errorHandler';
 import { ImageComponent } from '../utils/useImage.jsx';
 
 export default function AlbumQuickAddButton({ 
@@ -139,7 +140,7 @@ export default function AlbumQuickAddButton({
       }
       setOpen(false);
     } catch (e) {
-      showToast('Failed to add to album', 'error');
+      showToast(formatErrorMessage('add to album', e), 'error');
     }
   };
 
@@ -196,7 +197,7 @@ export default function AlbumQuickAddButton({
         setOpen(false);
       }
     } catch (e) {
-      showToast('Failed to create album', 'error');
+      showToast(formatErrorMessage('create album', e), 'error');
     } finally {
       setIsCreatingAlbum(false);
       setNewAlbumName('');

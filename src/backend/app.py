@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 
 from src.core.event import Event
 from src.core.general_models import GeneralModels
-from src.core.base_models import Forbidden
+from src.core.errors import Forbidden, DatabaseError
 
 app = Flask(__name__)
 CORS(app, origins="*", supports_credentials=True)
@@ -373,6 +373,10 @@ def delete_image(event_id):
                 'items': event.models.get_entities(entity, entity_ids)
             })
         return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -490,6 +494,10 @@ def upload_images(event_id):
     except ValueError as e:
         # Validation errors (limits exceeded, etc.)
         return jsonify({"error": str(e)}), 400
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -628,6 +636,10 @@ def update_group(event_id, group_id):
             })
 
         return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -724,6 +736,10 @@ def transfer_faces(event_id):
             'changes': changes
         }
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -805,6 +821,10 @@ def create_moment(event_id):
         else:
             response = {"success": False}
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -832,6 +852,10 @@ def update_moment(event_id, moment_id):
         else:
             response = {"success": False}
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -853,6 +877,10 @@ def delete_moment(event_id, moment_id):
             'ids': [moment_id]
         }]
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -927,6 +955,10 @@ def add_images_to_moment(event_id, moment_id):
         response = _edit_moment_images(event, moment_id, image_ids, add=True)
 
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -940,6 +972,10 @@ def remove_images_from_moment(event_id, moment_id):
     try:
         response = _edit_moment_images(event, moment_id, image_ids, add=False)
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -950,26 +986,33 @@ def remove_images_from_moments(event_id):
     event = get_event(event_id)
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    detached_moments = event.models.remove_images_from_moments(image_ids)
-    changes = []
-    for moment_id, image_ids in detached_moments.items():
-        changes.append({
-            'type': 'RELATION_REMOVE',
-            'relation': 'moment.images',
-            'parentId': moment_id,
-            'ids': image_ids
-        })
-        changes.append({
-            'type': 'UPSERT',
-            'entity': 'moment',
-            'items': event.models.get_entities('moments', list(detached_moments.keys()))
-        })
-        changes.append({
-            'type': 'UPSERT',
-            'entity': 'image',
-            'items': event.models.get_entities('images', image_ids)
-        })
-    return jsonify({"success": True, "changes": changes})
+    try:
+        detached_moments = event.models.remove_images_from_moments(image_ids)
+        changes = []
+        for moment_id, image_ids in detached_moments.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'moment.images',
+                'parentId': moment_id,
+                'ids': image_ids
+            })
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'moment',
+                'items': event.models.get_entities('moments', list(detached_moments.keys()))
+            })
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'image',
+                'items': event.models.get_entities('images', image_ids)
+            })
+            return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 # ==============================================================================
 # V. ALBUMS ENDPOINTS
@@ -1050,6 +1093,10 @@ def create_album(event_id):
         else:
             response = {"success": False}
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1082,6 +1129,10 @@ def update_album(event_id, album_id):
         else:
             response = {"success": False}
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1108,6 +1159,10 @@ def delete_album(event_id, album_id):
             'ids': [album_id]
         }]
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1192,6 +1247,10 @@ def add_images_to_album(event_id, album_id):
     try:
         response = _edit_album_images(event, album_id, image_ids, add=True)
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1205,6 +1264,10 @@ def remove_images_from_album(event_id, album_id):
     try:
         response = _edit_album_images(event, album_id, image_ids, add=False)
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1226,6 +1289,10 @@ def toggle_favorites_images(event_id):
         favorites_album_id = event.models.get_favorites_album()
         response = _edit_album_images(event, favorites_album_id, image_ids, add=is_favorite)
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1246,6 +1313,10 @@ def toggle_archive_images(event_id):
         archive_album_id = event.models.get_archive_album()
         response = _edit_album_images(event, archive_album_id, image_ids, add=is_archived)
         return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
     except Exception as e:
         return bad_request(e)
 
@@ -1334,6 +1405,10 @@ def update_profile_password(profile_id):
         return jsonify({"success": True})
     except Forbidden as e:
         return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/images/check", methods=["POST"])
 @require_auth
@@ -1422,14 +1497,22 @@ def _create_profile(data: dict, event_id: str | None = None):
 @require_auth
 def create_profile():
     data = request.json or {}
-    profile_id = _create_profile(data)
-    general_models = get_general_models()
-    changes = [{
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': general_models.get_entities('profiles', [profile_id])
-    }]
-    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    try:
+        profile_id = _create_profile(data)
+        general_models = get_general_models()
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id])
+        }]
+        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles", methods=["POST"])
 @require_auth
@@ -1440,18 +1523,26 @@ def create_event_profile(event_id):
         return forbidden(f"Access denied")
 
     data = request.json or {}
-    profile_id = _create_profile(data, event_id)
-    changes = [{
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': general_models.get_entities('profiles', [profile_id])
-    },
-    {
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': event.models.get_entities('profiles', [profile_id])
-    }]
-    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    try:
+        profile_id = _create_profile(data, event_id)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id])
+        },
+        {
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': event.models.get_entities('profiles', [profile_id])
+        }]
+        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
     general_models = get_general_models()
@@ -1490,14 +1581,22 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
 @require_auth
 def update_profile(profile_id):
     data = request.json or {}
-    profile_id = _update_profile(profile_id, data)
-    general_models = get_general_models()
-    changes = [{
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': general_models.get_entities('profiles', [profile_id])
-    }]
-    return jsonify({"success": True, "changes": changes})
+    try:
+        profile_id = _update_profile(profile_id, data)
+        general_models = get_general_models()
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id])
+        }]
+        return jsonify({"success": True, "changes": changes})
+    
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>", methods=["PUT"])
 @require_auth
@@ -1508,18 +1607,26 @@ def update_event_profile(event_id, profile_id):
         return forbidden(f"Access denied")
 
     data = request.json or {}
-    _update_profile(profile_id, data, event_id)
-    changes = [{
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': event.models.get_entities('profiles', [profile_id])
-    },
-    {
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': general_models.get_entities('profiles', [profile_id])
-    }]
-    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    try:
+        _update_profile(profile_id, data, event_id)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': event.models.get_entities('profiles', [profile_id])
+        },
+        {
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id])
+        }]
+        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
+    
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
@@ -1536,6 +1643,10 @@ def delete_profile(profile_id):
         return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
     except Forbidden as e:
         return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
@@ -1552,6 +1663,10 @@ def delete_event_profile(event_id, profile_id):
         return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
     except Forbidden as e:
         return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 # set profile access
 def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bool):
@@ -1562,23 +1677,31 @@ def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bo
     if child not in ['images', 'albums']:
         return bad_request(f"Invalid child: {child}")
 
-    affected_ids, _ = event.models.edit_childs('profiles', profile_id, child, child_ids, add=add)
-    if add:
-        changes = [{
-            'type': 'RELATION_ADD',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
-        }]
-    else:
-        changes = [{
-            'type': 'RELATION_REMOVE',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'ids': affected_ids
-        }]
+    try:
+        affected_ids, _ = event.models.edit_childs('profiles', profile_id, child, child_ids, add=add)
+        if add:
+            changes = [{
+                'type': 'RELATION_ADD',
+                'relation': f'profile.{child}',
+                'parentId': profile_id,
+                'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
+            }]
+        else:
+            changes = [{
+                'type': 'RELATION_REMOVE',
+                'relation': f'profile.{child}',
+                'parentId': profile_id,
+                'ids': affected_ids
+            }]
 
-    return jsonify({"success": True, "changes": changes})
+        return jsonify({"success": True, "changes": changes})
+    
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["PUT"])
 @require_auth
@@ -1624,23 +1747,30 @@ def _set_profile_accessibility(event, profile_id, child: str, child_ids, set_acc
     if child not in ['images', 'albums']:
         return bad_request(f"Invalid child: {child}")
     
-    affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
-    if added:
-        changes = [{
-            'type': 'RELATION_ADD',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
-        }]
-    else:
-        changes = [{
-            'type': 'RELATION_REMOVE',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'ids': affected_ids
-        }]
+    try:
+        affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
+        if added:
+            changes = [{
+                'type': 'RELATION_ADD',
+                'relation': f'profile.{child}',
+                'parentId': profile_id,
+                'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
+            }]
+        else:
+            changes = [{
+                'type': 'RELATION_REMOVE',
+                'relation': f'profile.{child}',
+                'parentId': profile_id,
+                'ids': affected_ids
+            }]
 
-    return jsonify({"success": True, "changes": changes})
+        return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
 
 @app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-images", methods=["PUT"])
 @require_auth

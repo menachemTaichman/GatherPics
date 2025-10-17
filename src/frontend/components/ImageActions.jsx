@@ -3,6 +3,7 @@ import { albumsAPI, groupsAPI, momentsAPI, imagesAPI } from '../utils/apiService
 import useBucketStore from '../utils/bucketStore';
 import { useDataStore, selectors } from '../utils/dataManager';
 import { useToast } from '../utils/ToastContext';
+import { formatErrorMessage } from '../utils/errorHandler';
 import { useState } from 'react';
 
 /**
@@ -89,7 +90,7 @@ export default function useImageActions({
         );
       }
     } catch (e) {
-      showToast('Failed to update favorites', 'error');
+      showToast(formatErrorMessage('update favorites', e), 'error');
     }
   };
 
@@ -125,7 +126,7 @@ export default function useImageActions({
         );
       }
     } catch (e) {
-      showToast('Failed to update archive', 'error');
+      showToast(formatErrorMessage('update archive', e), 'error');
     }
   };
 
@@ -211,7 +212,7 @@ export default function useImageActions({
       }
     } catch (error) {
       console.error('Error setting representative:', error);
-      showToast('Failed to set representative', 'error');
+      showToast(formatErrorMessage('set representative', error), 'error');
     }
   };
 
@@ -254,7 +255,7 @@ export default function useImageActions({
       }
     } catch (error) {
       console.error('Error deleting images:', error);
-      showToast('Failed to delete photos', 'error');
+      showToast(formatErrorMessage('delete photos', error), 'error');
     }
   };
 

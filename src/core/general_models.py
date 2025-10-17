@@ -1,8 +1,9 @@
 from typing import Dict, Any
 from .base_db import ReturnFormat
-from .base_models import BaseModels, Forbidden
+from .base_models import BaseModels
 from .general_db import GeneralDB
 from .event import Event
+from .errors import Forbidden
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""

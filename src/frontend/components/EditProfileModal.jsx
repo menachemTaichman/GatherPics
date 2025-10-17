@@ -8,6 +8,7 @@ import { useToast } from '../utils/ToastContext';
 import { getCurrentProfile } from '../utils/profileService';
 import { useApplyScopes, useImagesForProfile, useAlbumsForProfile } from '../utils/storeUtils';
 import { useDataStore } from '../utils/dataManager';
+import { formatErrorMessage } from '../utils/errorHandler';
 import ChangePasswordModal from './ChangePasswordModal';
 import RemovableThumbnail from './RemovableThumbnail';
 
@@ -112,7 +113,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         await profilesAPI.getById(profile.id, eventUrl);
       } catch (error) {
         console.error('Failed to fetch profile with scopes:', error);
-        showToast('Failed to load profile details', 'error');
+        showToast(formatErrorMessage('load profile details', error), 'error');
       }
     };
 
@@ -202,7 +203,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       showToast('Image removed from profile', 'success');
     } catch (error) {
       console.error('Failed to remove image:', error);
-      showToast('Failed to remove image', 'error');
+      showToast(formatErrorMessage('remove image', error), 'error');
     }
   };
 
@@ -213,7 +214,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       showToast('Album removed from profile', 'success');
     } catch (error) {
       console.error('Failed to remove album:', error);
-      showToast('Failed to remove album', 'error');
+      showToast(formatErrorMessage('remove album', error), 'error');
     }
   };
 
@@ -227,7 +228,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       showToast(`${imageIds.length} images cleared from profile`, 'success');
     } catch (error) {
       console.error('Failed to clear images:', error);
-      showToast('Failed to clear images', 'error');
+      showToast(formatErrorMessage('clear images', error), 'error');
     }
   };
 
@@ -241,7 +242,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       showToast(`${albumIds.length} albums cleared from profile`, 'success');
     } catch (error) {
       console.error('Failed to clear albums:', error);
-      showToast('Failed to clear albums', 'error');
+      showToast(formatErrorMessage('clear albums', error), 'error');
     }
   };
 

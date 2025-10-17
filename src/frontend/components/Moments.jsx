@@ -20,6 +20,7 @@ import MomentCard from './MomentCard';
 import timelineManager from '../utils/timeline';
 import useBucketStore from '../utils/bucketStore';
 import { useToast } from '../utils/ToastContext';
+import { formatErrorMessage } from '../utils/errorHandler';
 import { sortMoments } from '../utils/sorting';
 import { getImageCount } from '../utils/settings';
 import { ImageComponent } from '../utils/useImage.jsx';
@@ -294,7 +295,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       return response;
     } catch (error) {
       console.error('Error updating moment:', error);
-      showToast('Failed to update moment', 'error');
+      showToast(formatErrorMessage('update moment', error), 'error');
     }
   };
 

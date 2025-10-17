@@ -18,6 +18,7 @@ import { useModalFocus } from '../utils/useModalFocus';
 import { sortImages, sortGroups, sortByField } from '../utils/sorting';
 import { useModalStore } from '../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -464,7 +465,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         'success'
       );
     } catch (e) {
-      showToast('Failed to remove from album', 'error');
+      showToast(formatErrorMessage('remove from album', e), 'error');
     }
   };
 

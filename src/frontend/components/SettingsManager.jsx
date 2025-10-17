@@ -12,6 +12,7 @@ import { useProfilesList } from '../utils/dataManager';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
+import { formatErrorMessage } from '../utils/errorHandler';
 import ChangePasswordModal from './ChangePasswordModal';
 import EditProfileModal from './EditProfileModal';
 import ConfirmDelete from './ConfirmDelete';
@@ -155,7 +156,7 @@ export default function SettingsManager() {
       setProfileNameConflict(false);
     } catch (error) {
       console.error('Failed to update profile name:', error);
-      showToast('Failed to update profile name', 'error');
+      showToast(formatErrorMessage('update profile name', error), 'error');
     }
   };
 

@@ -28,6 +28,7 @@ import useImageSelection from '../utils/useImageSelection';
 import { useDataStore, useAlbumsList } from '../utils/dataManager';
 import { useApplyScopes, useImagesForParent } from '../utils/storeUtils';
 import { albumsAPI } from '../utils/apiService';
+import { formatErrorMessage } from '../utils/errorHandler';
 import SingleImageTile from './SingleImageTile';
 import { useImageComponent } from '../utils/useImage.jsx';
 import ConfirmDelete from './ConfirmDelete';
@@ -213,7 +214,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
         await albumsAPI.getById(album.id, eventUrl);
       } catch (error) {
         console.error('Error fetching album details:', error);
-        showToast('Failed to load album details', 'error');
+        showToast(formatErrorMessage('load album details', error), 'error');
       } finally {
         setLoading(false);
       }
@@ -334,7 +335,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       showToast(`${selectedImages.size} removed from album`, 'success');
     } catch (error) {
       console.error('Error removing from album:', error);
-      showToast('Failed to remove from album', 'error');
+      showToast(formatErrorMessage('remove from album', error), 'error');
     }
   };
 
@@ -349,7 +350,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       navigate(`/${eventUrl}/albums`);
     } catch (error) {
       console.error('Error deleting album:', error);
-      showToast('Failed to delete album', 'error');
+      showToast(formatErrorMessage('delete album', error), 'error');
     }
   };
 
@@ -405,7 +406,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       showToast('Album name updated', 'success');
     } catch (error) {
       console.error('Error updating album name:', error);
-      showToast('Failed to update album name', 'error');
+      showToast(formatErrorMessage('update album name', error), 'error');
       setIsEditingTitle(false);
     }
   };
@@ -465,7 +466,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                         await albumsAPI.update(album.id, { representative_image: null }, eventUrl);
                         showToast('Representative removed', 'success');
                       } catch (error) {
-                        showToast('Failed to remove representative', 'error');
+                        showToast(formatErrorMessage('remove representative', error), 'error');
                       }
                     }}
                     className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"

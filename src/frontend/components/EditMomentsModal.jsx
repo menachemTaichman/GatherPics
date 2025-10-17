@@ -8,6 +8,7 @@ import { useDataStore, selectors as storeSelectors } from '../utils/dataManager'
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useModalStore } from '../utils/modalManager';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 import EditMomentImagesModal from './EditMomentImagesModal';
 import ConfirmDelete from './ConfirmDelete';
@@ -283,8 +284,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       return savedMoment;
     } catch (error) {
       console.error('Error saving moment:', error);
-      const errorInfo = handleAPIError(error, 'Failed to save moment');
-      alert(errorInfo.message);
+      if (onToast) {
+        onToast(formatErrorMessage('save moment', error), 'error');
+      }
       throw error;
     }
   };
@@ -319,11 +321,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       }
     } catch (error) {
       console.error('Error deleting moment:', error);
-      const errorInfo = handleAPIError(error, 'Failed to delete moment');
       if (onToast) {
-        onToast(errorInfo.message, 'error');
-      } else {
-        alert(errorInfo.message);
+        onToast(formatErrorMessage('delete moment', error), 'error');
       }
     }
   };
@@ -518,7 +517,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                               }
                             } catch (error) {
                               if (onToast) {
-                                onToast('Failed to remove representative', 'error');
+                                onToast(formatErrorMessage('remove representative', error), 'error');
                               }
                             }
                           }}
@@ -728,6 +727,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           onRefreshImages={onRefreshImages}
           onSave={onSave}
           moments={internalMoments}
+          onToast={onToast}
           onClose={() => setEditingImagesForMoment(null)}
         />
       )}
