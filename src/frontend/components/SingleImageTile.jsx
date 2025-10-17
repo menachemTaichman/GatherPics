@@ -1,6 +1,8 @@
 import React, { forwardRef } from 'react';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../utils/useImage.jsx';
+import PermissionGate from './PermissionGate';
+import { usePermissions } from '../utils/usePermissions';
 
 const SingleImageTile = forwardRef(function SingleImageTile({
   image,
@@ -33,6 +35,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
 
   // Use the state from the hook
   const { isFavorite, isArchived, toggleFavorite, toggleArchive } = imageActions;
+  
+  // Get permissions
+  const permissions = usePermissions();
   
   // Apply highlight styles
   const highlightStyle = isHighlighted ? {
@@ -78,89 +83,99 @@ const SingleImageTile = forwardRef(function SingleImageTile({
 
         {/* Action buttons - bottom-left */}
         {isArchived ? (
-          <button
-            type="button"
-            aria-label="Remove from archive"
-            aria-pressed={isArchived}
-            className="absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100"
-            title="Remove from Archive"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleArchive();
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="white"
-              strokeWidth="2"
-              role="img"
-              focusable="false"
+          <PermissionGate requires={["hasArchiveAlbum", "canEdit"]}>
+            <button
+              type="button"
+              aria-label="Remove from archive"
+              aria-pressed={isArchived}
+              className="absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100"
+              title="Remove from Archive"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleArchive();
+              }}
             >
-              <title>Archive</title>
-              <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="white"
+                strokeWidth="2"
+                role="img"
+                focusable="false"
+              >
+                <title>Archive</title>
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
+              </svg>
+            </button>
+          </PermissionGate>
         ) : (
-          <button
-            type="button"
-            aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            aria-pressed={isFavorite}
-            className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-              selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite();
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className={`w-5 h-5 ${isFavorite ? 'text-red-500' : 'text-white'}`}
-              fill={isFavorite ? 'currentColor' : 'none'}
-              stroke={isFavorite ? 'currentColor' : 'white'}
-              strokeWidth="2"
-              role="img"
-              focusable="false"
-              style={{ color: isFavorite ? '#ef4444' : '#ffffff' }}
-            >
-              <title>Favorite</title>
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-            </svg>
-          </button>
+          (permissions.canEdit || isFavorite) && (
+            <PermissionGate requires="hasFavoritesAlbum">
+              <button
+                type="button"
+                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-pressed={isFavorite}
+                className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                  selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+                title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite();
+                }}
+                disabled={!permissions.canEdit}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`w-5 h-5 ${isFavorite ? 'text-red-500' : 'text-white'}`}
+                  fill={isFavorite ? 'currentColor' : 'none'}
+                  stroke={isFavorite ? 'currentColor' : 'white'}
+                  strokeWidth="2"
+                  role="img"
+                  focusable="false"
+                  style={{ color: isFavorite ? '#ef4444' : '#ffffff' }}
+                >
+                  <title>Favorite</title>
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </button>
+            </PermissionGate>
+          )
         )}
 
         {/* Heart icon appears second when image is archived */}
-        {isArchived && (
-          <button
-            type="button"
-            aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            aria-pressed={isFavorite}
-            className={`absolute bottom-2 left-10 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-              selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite();
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className={`w-5 h-5 ${isFavorite ? 'text-red-500' : 'text-white'}`}
-              fill={isFavorite ? 'currentColor' : 'none'}
-              stroke={isFavorite ? 'currentColor' : 'white'}
-              strokeWidth="2"
-              role="img"
-              focusable="false"
-              style={{ color: isFavorite ? '#ef4444' : '#ffffff' }}
+        {isArchived && (permissions.canEdit || isFavorite) && (
+          <PermissionGate requires="hasFavoritesAlbum">
+            <button
+              type="button"
+              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={isFavorite}
+              className={`absolute bottom-2 left-10 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite();
+              }}
+              disabled={!permissions.canEdit}
             >
-              <title>Favorite</title>
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                className={`w-5 h-5 ${isFavorite ? 'text-red-500' : 'text-white'}`}
+                fill={isFavorite ? 'currentColor' : 'none'}
+                stroke={isFavorite ? 'currentColor' : 'white'}
+                strokeWidth="2"
+                role="img"
+                focusable="false"
+                style={{ color: isFavorite ? '#ef4444' : '#ffffff' }}
+              >
+                <title>Favorite</title>
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+          </PermissionGate>
         )}
       </div>
 

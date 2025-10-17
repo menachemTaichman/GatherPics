@@ -19,6 +19,8 @@ import { sortImages, sortGroups, sortByField } from '../utils/sorting';
 import { useModalStore } from '../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 import { formatErrorMessage } from '../utils/errorHandler';
+import PermissionGate from './PermissionGate';
+import { usePermissions } from '../utils/usePermissions';
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -33,6 +35,7 @@ function ImageViewerActions({
   entityId
 }) {
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+  const permissions = usePermissions();
 
   const imageActions = useImageActions({
     imageIds: imageId,
@@ -54,38 +57,79 @@ function ImageViewerActions({
     ? (useDataStore.getState().entities?.groups?.[entityId]?.label || 'person')
     : (useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment');
 
+  // Check if action buttons group has any visible buttons
+  const hasActionButtons = (
+    (permissions.hasFavoritesAlbum && (permissions.canEdit || imageActions.isFavorite)) ||
+    (permissions.hasArchiveAlbum && (permissions.canEdit || imageActions.isArchived)) ||
+    permissions.canEdit // for album button
+  );
+
+  // Check if management buttons exist
+  const hasManagementButtons = (
+    permissions.canUploadAndDeleteImages ||
+    permissions.isProfilesManager
+  );
+
   return (
     <>
       <div className="flex items-center space-x-2">
         {/* Favorites */}
-        <button
-          onClick={imageActions.toggleFavorite}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
-          title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          aria-pressed={imageActions.isFavorite}
-        >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-          </svg>
-        </button>
+        <PermissionGate requires="hasFavoritesAlbum">
+          {permissions.canEdit ? (
+            <button
+              onClick={imageActions.toggleFavorite}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
+              title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={imageActions.isFavorite}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+          ) : imageActions.isFavorite ? (
+            <div
+              className={`w-8 h-8 border border-transparent rounded-md flex items-center justify-center text-red-600`}
+              title="In favorites"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" stroke="currentColor" strokeWidth="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </div>
+          ) : null}
+        </PermissionGate>
 
         {/* Archive toggle */}
-        <button
-          onClick={imageActions.toggleArchive}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
-          title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
-          aria-pressed={imageActions.isArchived}
-        >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
-            <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
-          </svg>
-        </button>
+        <PermissionGate requires="hasArchiveAlbum">
+          {permissions.canEdit ? (
+            <button
+              onClick={imageActions.toggleArchive}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+              title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
+              aria-pressed={imageActions.isArchived}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+              </svg>
+            </button>
+          ) : imageActions.isArchived ? (
+            <div
+              className={`w-8 h-8 border border-transparent rounded-md flex items-center justify-center text-gray-700`}
+              title="In archive"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="#d1d5db" stroke="currentColor" strokeWidth="2">
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+              </svg>
+            </div>
+          ) : null}
+        </PermissionGate>
 
         {/* Add to album */}
-        <AlbumQuickAddButton 
-          {...imageActions.albumQuickAddProps}
-          dropdownDirection="down"
-        />
+        <PermissionGate requires="canEdit">
+          <AlbumQuickAddButton 
+            {...imageActions.albumQuickAddProps}
+            dropdownDirection="down"
+          />
+        </PermissionGate>
 
         {/* Add to bucket / Remove from bucket */}
         <button
@@ -96,45 +140,51 @@ function ImageViewerActions({
           <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
         </button>
 
-        {/* Separator */}
-        <span className="text-gray-300">|</span>
+        {/* Separator before management buttons - only if action buttons exist AND management buttons exist */}
+        {hasActionButtons && hasManagementButtons && <span className="text-gray-300">|</span>}
 
         {/* Delete image */}
-        <button
-          onClick={imageActions.deleteImages}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
-          title="Delete photo"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <PermissionGate requires="canUploadAndDeleteImages">
+          <button
+            onClick={imageActions.deleteImages}
+            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
+            title="Delete photo"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </PermissionGate>
 
         {/* Manage Access */}
-        <button
-          onClick={() => setShowManageAccessModal(true)}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
-          title="Manage profile access"
-        >
-          <Key className="w-4 h-4" />
-        </button>
+        <PermissionGate requires="isProfilesManager">
+          <button
+            onClick={() => setShowManageAccessModal(true)}
+            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
+            title="Manage profile access"
+          >
+            <Key className="w-4 h-4" />
+          </button>
+        </PermissionGate>
 
-        {/* Separator */}
-        {imageActions.canSetRepresentative && (
+        {/* Separator before representative button - only if management buttons exist AND can set representative */}
+        {hasManagementButtons && imageActions.canSetRepresentative && permissions.canEdit && (
           <span className="text-gray-300">|</span>
         )}
 
         {/* Set as representative */}
         {imageActions.canSetRepresentative && (
-          <button
-            onClick={() => imageActions.setRepresentative()}
-            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
-              imageActions.isRepresentative
-                ? 'text-orange-600'
-                : 'text-yellow-600'
-            }`}
-            title={imageActions.representativeTooltip}
-          >
-            <Star className={`w-4 h-4 ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
-          </button>
+          <PermissionGate requires="canEdit">
+            <button
+              onClick={() => imageActions.setRepresentative()}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
+                imageActions.isRepresentative
+                  ? 'text-orange-600'
+                  : 'text-yellow-600'
+              }`}
+              title={imageActions.representativeTooltip}
+            >
+              <Star className={`w-4 h-4 ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
+            </button>
+          </PermissionGate>
         )}
       </div>
 
@@ -1045,16 +1095,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
                             {getGroupLabel(face)}
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTransferFace(face);
-                            }}
-                            className={`absolute -bottom-4 -left-1 ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
-                            title="Transfer face to another group"
-                          >
-                            <Edit className="w-2.5 h-2.5" />
-                          </button>
+                          <PermissionGate requires="canEdit">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTransferFace(face);
+                              }}
+                              className={`absolute -bottom-4 -left-1 ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                              title="Transfer face to another group"
+                            >
+                              <Edit className="w-2.5 h-2.5" />
+                            </button>
+                          </PermissionGate>
                         </div>
                       );
                     })}
@@ -1268,13 +1320,15 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <span className="ml-1 text-gray-400">None</span>
                         )}
                       </div>
-                      <button
-                        onClick={() => setShowMoveToMomentModal(true)}
-                        className="w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ml-2"
-                        title="Edit moment"
-                      >
-                        <Edit2 className="w-3 h-3 text-gray-600" />
-                      </button>
+                      <PermissionGate requires="canEdit">
+                        <button
+                          onClick={() => setShowMoveToMomentModal(true)}
+                          className="w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ml-2"
+                          title="Edit moment"
+                        >
+                          <Edit2 className="w-3 h-3 text-gray-600" />
+                        </button>
+                      </PermissionGate>
                     </div>
                   </div>
                 </div>
@@ -1323,13 +1377,15 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 )}
                                 <span className="font-medium text-gray-900 truncate">{album.label}</span>
                               </a>
-                              <button
-                                onClick={() => handleRemoveFromAlbum(album)}
-                                className="ml-3 p-1.5 hover:bg-red-100 rounded-lg transition-colors"
-                                title={`Remove from ${album.label}`}
-                              >
-                                <Minus className="w-4 h-4 text-red-600" />
-                              </button>
+                              <PermissionGate requires="canEdit">
+                                <button
+                                  onClick={() => handleRemoveFromAlbum(album)}
+                                  className="ml-3 p-1.5 hover:bg-red-100 rounded-lg transition-colors"
+                                  title={`Remove from ${album.label}`}
+                                >
+                                  <Minus className="w-4 h-4 text-red-600" />
+                                </button>
+                              </PermissionGate>
                             </div>
                           ))}
                         </div>

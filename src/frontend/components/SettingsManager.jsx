@@ -13,9 +13,12 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { formatErrorMessage } from '../utils/errorHandler';
+import { sortByField } from '../utils/sorting';
 import ChangePasswordModal from './ChangePasswordModal';
 import EditProfileModal from './EditProfileModal';
 import ConfirmDelete from './ConfirmDelete';
+import PermissionGate from './PermissionGate';
+import { usePermissions } from '../utils/usePermissions';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -30,6 +33,7 @@ export default function SettingsManager() {
   const { eventUrl } = useParams();
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
+  const permissions = usePermissions();
   
   // Profile management state
   const currentProfile = getCurrentProfile();
@@ -51,7 +55,12 @@ export default function SettingsManager() {
   useEffect(() => {
     if (isOpen) {
       // Apply scopes based on active tab
-      const scopes = activeTab === 'profiles' ? [{ entity: 'all', id: 'profiles' }] : [];
+      let scopes = [];
+      if (activeTab === 'profiles') {
+        scopes = [{ entity: 'all', id: 'profiles' }];
+      } else if (activeTab === 'account' && currentProfile?.id) {
+        scopes = [{ entity: 'profile', id: String(currentProfile.id) }];
+      }
       
       registerModal({ 
         id: modalId, 
@@ -63,10 +72,16 @@ export default function SettingsManager() {
         unregisterModal(modalId);
       };
     }
-  }, [isOpen, activeTab, registerModal, unregisterModal]);
+  }, [isOpen, activeTab, registerModal, unregisterModal, currentProfile?.id]);
 
-  // Apply scopes for profiles tab
-  useApplyScopes(isOpen && activeTab === 'profiles' ? [{ entity: 'all', id: 'profiles' }] : []);
+  // Apply scopes based on active tab
+  useApplyScopes(
+    isOpen && activeTab === 'profiles' 
+      ? [{ entity: 'all', id: 'profiles' }] 
+      : isOpen && activeTab === 'account' && currentProfile?.id
+      ? [{ entity: 'profile', id: String(currentProfile.id) }]
+      : []
+  );
 
   // Fetch profiles when profiles tab is opened
   useEffect(() => {
@@ -74,6 +89,22 @@ export default function SettingsManager() {
       fetchProfiles();
     }
   }, [isOpen, activeTab, eventUrl]);
+
+  // Fetch current profile when account tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.id) {
+      fetchCurrentProfile();
+    }
+  }, [isOpen, activeTab, eventUrl, currentProfile?.id]);
+
+  const fetchCurrentProfile = async () => {
+    try {
+      await profilesAPI.getById(currentProfile.id, eventUrl);
+      // Changes are automatically applied by apiService interceptor
+    } catch (error) {
+      console.error('Failed to fetch current profile:', error);
+    }
+  };
 
   const fetchProfiles = async () => {
     try {
@@ -110,12 +141,36 @@ export default function SettingsManager() {
     customKeyHandler: handleSettingsKeys
   });
 
-  const tabs = [
+  // Filter tabs based on permissions
+  const allTabs = [
     { id: 'general', label: 'General', icon: Settings },
+    { id: 'account', label: 'Account', icon: User },
     { id: 'profiles', label: 'Profiles', icon: User },
     { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
   ];
+  
+  const tabs = allTabs.filter(tab => {
+    // Hide profiles tab if not a profiles manager
+    if (tab.id === 'profiles' && !permissions.isProfilesManager) {
+      return false;
+    }
+    // Hide general tab if can't upload AND has no archive access (nothing to show)
+    if (tab.id === 'general' && !permissions.canUploadAndDeleteImages && !permissions.hasArchiveAlbum) {
+      return false;
+    }
+    return true;
+  });
+
+  // Ensure active tab is valid when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const activeTabExists = tabs.some(tab => tab.id === activeTab);
+      if (!activeTabExists && tabs.length > 0) {
+        setActiveTab(tabs[0].id);
+      }
+    }
+  }, [isOpen, tabs, activeTab]);
 
   // Fetch upload limits when opening settings
   useEffect(() => {
@@ -247,11 +302,13 @@ export default function SettingsManager() {
   const otherProfiles = allProfiles
     .filter(p => p.id !== currentProfile?.id)
     .sort((a, b) => {
-      // First by rank descending
-      const rankDiff = (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0);
-      if (rankDiff !== 0) return rankDiff;
-      // Then by label ascending
-      return (a.label || '').localeCompare(b.label || '');
+      // Sort by rank descending, then by label ascending
+      const rankA = a.hierarchy_rank || 0;
+      const rankB = b.hierarchy_rank || 0;
+      if (rankA !== rankB) {
+        return rankB - rankA; // descending
+      }
+      return (a.label || '').localeCompare(b.label || ''); // ascending
     });
 
   const handleFileSelect = (event) => {
@@ -442,29 +499,32 @@ export default function SettingsManager() {
                           <h3 className="text-lg font-semibold text-gray-900 mb-4">General Settings</h3>
                           
                           {/* Include Archived */}
-                          <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mb-3">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                <Archive className="w-5 h-5 text-gray-600" />
+                          <PermissionGate requires="hasArchiveAlbum">
+                            <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mb-3">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                  <Archive className="w-5 h-5 text-gray-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">Include Archived</p>
+                                  <p className="text-sm text-gray-500">Show archived images in galleries</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-medium text-gray-900">Include Archived</p>
-                                <p className="text-sm text-gray-500">Show archived images in galleries</p>
-                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={includeArchived}
+                                  onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                              </label>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={includeArchived}
-                                onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
-                                className="sr-only peer"
-                              />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                            </label>
-                          </div>
+                          </PermissionGate>
 
                           {/* Upload Photos */}
-                          <div className="bg-gray-50 rounded-lg p-4">
+                          <PermissionGate requires="canUploadAndDeleteImages">
+                            <div className="bg-gray-50 rounded-lg p-4">
                             <div className="flex items-center space-x-3 mb-3">
                               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
                                 <Upload className="w-5 h-5 text-gray-600" />
@@ -610,25 +670,83 @@ export default function SettingsManager() {
                                 </motion.div>
                               )}
                             </AnimatePresence>
-                          </div>
+                            </div>
+                          </PermissionGate>
+                        </div>
+                      </motion.div>
+                    )}
 
-                          {/* Current Profile & Sign Out */}
-                          <div className="mt-6 pt-6 border-t border-gray-200">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Account</h4>
-                            <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg mb-3">
+                    {activeTab === 'account' && (
+                      <motion.div
+                        key="account"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ 
+                          opacity: 1, 
+                          y: 0
+                        }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        {/* Current Profile Section */}
+                        {permissions.isProfilesManager ? (
+                          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
+                            <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile</h3>
+                            
+                            <div className="flex items-center space-x-3">
+                              {/* Profile Name - Read Only */}
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                                <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
+                                  {currentProfile?.label || 'Not set'}
+                                </div>
+                              </div>
+
+                              {/* Hierarchy Rank - Read Only */}
                               <div>
-                                <p className="font-medium text-gray-900">Current Profile</p>
-                                <p className="text-sm text-gray-500">{currentProfile?.label || 'Not signed in'}</p>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Rank</label>
+                                <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
+                                  {currentProfile?.hierarchy_rank || 0}
+                                </div>
+                              </div>
+
+                              {/* Change Password Button */}
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
+                                <button
+                                  onClick={() => setShowChangePasswordModal(true)}
+                                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 whitespace-nowrap"
+                                >
+                                  <Lock className="w-4 h-4" />
+                                  <span>Change Password</span>
+                                </button>
                               </div>
                             </div>
-                            <button
-                              onClick={handleSignOut}
-                              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center space-x-2"
-                            >
-                              <LogOut className="w-4 h-4" />
-                              <span>Sign Out</span>
-                            </button>
                           </div>
+                        ) : (
+                          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-100">
+                            <div className="flex items-center space-x-4">
+                              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                <User className="w-8 h-8 text-white" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-600 mb-1">Current Profile</p>
+                                <h3 className="text-2xl font-bold text-gray-900">{currentProfile?.label || 'Not set'}</h3>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Sign Out */}
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Sign Out</h4>
+                          <button
+                            onClick={handleSignOut}
+                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            <span>Sign Out</span>
+                          </button>
                         </div>
                       </motion.div>
                     )}
@@ -642,115 +760,17 @@ export default function SettingsManager() {
                         transition={{ duration: 0.2 }}
                         className="space-y-6"
                       >
-                        {/* Current Profile Section - Compact */}
-                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile: Rank {currentProfile?.hierarchy_rank || 0}</h3>
-                          
-                          <div className="flex items-center space-x-3">
-                            {/* Profile Name */}
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                              {editingCurrentProfile ? (
-                                <div className="flex items-center space-x-2">
-                                  <div className="relative flex-1">
-                                    <input
-                                      type="text"
-                                      value={currentProfileLabel}
-                                      onChange={(e) => {
-                                        setCurrentProfileLabel(e.target.value);
-                                        checkCurrentProfileNameConflict(e.target.value);
-                                      }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          handleCurrentProfileSave();
-                                        }
-                                        if (e.key === 'Escape') {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          handleCurrentProfileCancel();
-                                        }
-                                      }}
-                                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                        profileNameConflict ? 'border-red-500' : 'border-gray-300'
-                                      }`}
-                                      autoFocus
-                                    />
-                                    {profileNameConflict && (
-                                      <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
-                                        <AlertTriangle className="w-3 h-3" />
-                                        <span>Name exists</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <button
-                                    onClick={handleCurrentProfileSave}
-                                    disabled={profileNameConflict}
-                                    className="p-1.5 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
-                                    title="Save"
-                                  >
-                                    <Check className="w-4 h-4 text-green-600" />
-                                  </button>
-                                  <button
-                                    onClick={handleCurrentProfileCancel}
-                                    className="p-1.5 hover:bg-red-100 rounded-lg transition-colors"
-                                    title="Cancel"
-                                  >
-                                    <X className="w-4 h-4 text-red-600" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center space-x-2">
-                                  <div
-                                    className="px-3 py-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors flex-1 text-sm"
-                                    onClick={() => {
-                                      setEditingCurrentProfile(true);
-                                      setCurrentProfileLabel(currentProfile?.label || '');
-                                    }}
-                                  >
-                                    {currentProfile?.label || 'Not set'}
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      setEditingCurrentProfile(true);
-                                      setCurrentProfileLabel(currentProfile?.label || '');
-                                    }}
-                                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title="Edit name"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5 text-gray-600" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Change Password Button */}
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
-                              <button
-                                onClick={() => setShowChangePasswordModal(true)}
-                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 whitespace-nowrap"
-                              >
-                                <Lock className="w-4 h-4" />
-                                <span>Change Password</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Other Profiles Section */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900">Other Profiles</h3>
-                            <button
-                              onClick={handleCreateProfile}
-                              className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                              title="Create new profile"
-                            >
-                              <Plus className="w-5 h-5 text-green-600" />
-                            </button>
-                          </div>
+                        <PermissionGate requires="isProfilesManager">
+                          {/* Other Profiles Section */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                          {/* Create Profile Button */}
+                          <button
+                            onClick={handleCreateProfile}
+                            className="w-full mb-4 px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors flex items-center justify-center space-x-2 text-gray-600 hover:text-green-600 font-medium"
+                          >
+                            <Plus className="w-5 h-5" />
+                            <span>Create New Profile</span>
+                          </button>
 
                           {otherProfiles.length === 0 ? (
                             <p className="text-gray-500 text-sm text-center py-4">No other profiles</p>
@@ -765,7 +785,7 @@ export default function SettingsManager() {
                                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                                       <User className="w-5 h-5 text-purple-600" />
                                     </div>
-                        <div>
+                                    <div>
                                       <p className="font-medium text-gray-900">{profile.label}</p>
                                       <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank}</p>
                                     </div>
@@ -785,12 +805,13 @@ export default function SettingsManager() {
                                     >
                                       <Trash2 className="w-4 h-4 text-red-600" />
                                     </button>
-                          </div>
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           )}
-                        </div>
+                          </div>
+                        </PermissionGate>
                       </motion.div>
                     )}
 

@@ -26,6 +26,8 @@ import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
+import PermissionGate from './PermissionGate';
+import { usePermissions } from '../utils/usePermissions';
 
 // Simple sessionStorage hook for filtered results only
 const useSessionStorage = (key, defaultValue) => {
@@ -80,6 +82,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
   const [group, setGroup] = useState(null);
+  const permissions = usePermissions();
   
   // Use the hook at component level to avoid conditional hook calls
   const groupRepresentativeComponent = useImageComponent(
@@ -899,21 +902,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   {groupRepresentativeComponent}
                 </div>
                 {group?.representative_face && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        await groupsAPI.update(group.id, { representative_face: null }, eventUrl);
-                        showToast('Representative removed', 'success');
-                      } catch (error) {
-                        showToast(formatErrorMessage('remove representative', error), 'error');
-                      }
-                    }}
-                    className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
-                    title="Remove representative"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
+                  <PermissionGate requires="canEdit">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await groupsAPI.update(group.id, { representative_face: null }, eventUrl);
+                          showToast('Representative removed', 'success');
+                        } catch (error) {
+                          showToast(formatErrorMessage('remove representative', error), 'error');
+                        }
+                      }}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                      title="Remove representative"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                  </PermissionGate>
                 )}
               </div>
               <div className="flex items-center space-x-3">
@@ -969,8 +974,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 ) : (
                   <div className="flex items-center space-x-2">
                     <h1 
-                      className="text-3xl font-bold text-gray-900 cursor-pointer hover:text-primary-600 transition-colors w-[200px]"
-                      onClick={handleTitleEdit}
+                      className={`text-3xl font-bold text-gray-900 w-[200px] ${
+                        permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
+                      }`}
+                      onClick={permissions.canEdit ? handleTitleEdit : undefined}
                     >
                       {group.label || `Person ${group.id}`}
                     </h1>

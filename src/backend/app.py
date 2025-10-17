@@ -1325,6 +1325,13 @@ def toggle_archive_images(event_id):
 # ==============================================================================
 
 # get profiles
+@app.route("/api/profiles/current", methods=["GET"])
+@require_auth
+def get_current_profile():
+    general_models = get_general_models()
+    profile = general_models.get_entities('profiles', [get_jwt_identity()])
+    return jsonify({"profile": profile})
+
 @app.route("/api/events/<event_id>/profiles", methods=["GET"])
 @require_auth
 def get_event_profiles(event_id):
@@ -1348,9 +1355,6 @@ def get_event_profiles(event_id):
 @require_auth
 def get_event_profile(event_id, profile_id):
     event = get_event(event_id)
-    if not (event.models.is_profile_manager() and event.models.is_accessible('profiles', profile_id)):
-        return forbidden(f"Access denied")
-
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',

@@ -64,7 +64,7 @@ class EventDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'save_preferences'],
+                'fields': ['is_profiles_manager', 'hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'has_archive_album', 'has_favorites_album', 'save_preferences'],
                 'relations': {
                     'images': {'relation_table': 'profile_images', 'fields_needed': ['date_taken']},
                     'albums': {'relation_table': 'profile_albums', 'fields_needed': ['label']},
@@ -305,16 +305,25 @@ class EventDB(BaseDB):
                 SELECT aa.* FROM accessible_albums aa
                 WHERE LOWER(aa.label) != 'archive' and LOWER(aa.label) != 'favorites'
             ''',
-            'accessible_profiles': '''
+            'profiles_details': '''
                 SELECT
                     profile_id,
+                    CASE WHEN hierarchy_rank = 0 THEN 0 ELSE 1 END as is_profiles_manager,
                     hierarchy_rank,
                     can_upload_and_delete_images,
                     can_edit,
                     all_images,
                     all_albums,
+                    CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
+                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
                     save_preferences
                 FROM profiles p
+                LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
+                LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
+            ''',
+            'accessible_profiles': '''
+                SELECT p.*
+                FROM profiles_details p
                 WHERE
                     cur_profile('profile_id') = p.profile_id OR p.hierarchy_rank < cur_profile('hierarchy_rank')
             ''',

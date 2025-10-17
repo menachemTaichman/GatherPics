@@ -33,6 +33,8 @@ import SingleImageTile from './SingleImageTile';
 import { useImageComponent } from '../utils/useImage.jsx';
 import ConfirmDelete from './ConfirmDelete';
 import { useImageHighlight } from '../utils/useImageHighlight';
+import PermissionGate from './PermissionGate';
+import { usePermissions } from '../utils/usePermissions';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -42,6 +44,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
   const [album, setAlbum] = useState(null);
+  const permissions = usePermissions();
   
   // Use the hook at component level to avoid conditional hook calls
   const albumRepresentativeComponent = useImageComponent(
@@ -459,21 +462,23 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   {albumRepresentativeComponent}
                 </div>
                 {album?.representative_image && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        await albumsAPI.update(album.id, { representative_image: null }, eventUrl);
-                        showToast('Representative removed', 'success');
-                      } catch (error) {
-                        showToast(formatErrorMessage('remove representative', error), 'error');
-                      }
-                    }}
-                    className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
-                    title="Remove representative"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
+                  <PermissionGate requires="canEdit">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await albumsAPI.update(album.id, { representative_image: null }, eventUrl);
+                          showToast('Representative removed', 'success');
+                        } catch (error) {
+                          showToast(formatErrorMessage('remove representative', error), 'error');
+                        }
+                      }}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                      title="Remove representative"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                  </PermissionGate>
                 )}
               </div>
               <div className="flex items-center space-x-3">
@@ -529,9 +534,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   <div className="flex items-center space-x-2">
                     <h1 
                       className={`text-3xl font-bold text-gray-900 w-[200px] ${
-                        isDefaultAlbum ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
+                        (isDefaultAlbum || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
-                      onClick={isDefaultAlbum ? undefined : handleTitleEdit}
+                      onClick={(isDefaultAlbum || !permissions.canEdit) ? undefined : handleTitleEdit}
                     >
                       {album.label || `Album ${album.id}`}
                     </h1>
@@ -643,21 +648,25 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             {/* Group 4: Delete Album (custom only) & Manage Access (all albums) */}
             <div className="flex items-center space-x-3 px-4">
               {!isDefaultAlbum && (
-                <button
-                  onClick={() => setShowDeleteModal(true)}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-red-100 text-red-700 flex items-center justify-center"
-                  title="Delete album"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <PermissionGate requires="canEdit">
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-red-100 text-red-700 flex items-center justify-center"
+                    title="Delete album"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </PermissionGate>
               )}
-              <button
-                onClick={() => setShowManageAccessModal(true)}
-                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
-                title="Manage profile access"
-              >
-                <Key className="w-4 h-4" />
-              </button>
+              <PermissionGate requires="isProfilesManager">
+                <button
+                  onClick={() => setShowManageAccessModal(true)}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
+                  title="Manage profile access"
+                >
+                  <Key className="w-4 h-4" />
+                </button>
+              </PermissionGate>
             </div>
           </div>
         </div>

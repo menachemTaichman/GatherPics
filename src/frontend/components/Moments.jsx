@@ -25,6 +25,7 @@ import { sortMoments } from '../utils/sorting';
 import { getImageCount } from '../utils/settings';
 import { ImageComponent } from '../utils/useImage.jsx';
 import { useImageHighlight } from '../utils/useImageHighlight';
+import PermissionGate from './PermissionGate';
 
 
 function formatTimeOnly(dateString) {
@@ -546,13 +547,15 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowEditMomentsModal(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Edit moments"
-            >
-              <Pencil className="w-5 h-5 text_gray-600" />
-            </button>
+            <PermissionGate requires="canEdit">
+              <button
+                onClick={() => setShowEditMomentsModal(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Edit moments"
+              >
+                <Pencil className="w-5 h-5 text_gray-600" />
+              </button>
+            </PermissionGate>
           </div>
         </div>
 
