@@ -803,6 +803,22 @@ export const profilesAPI = {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.get(`/api/events/${eventId}/profiles/current/favorites-access`);
     return response.data;
+  },
+  
+  // Get current profile preferences
+  getPreferences: async () => {
+    const response = await api.get('/api/profiles/current/preferences');
+    return response.data;
+  },
+  
+  // Update a single preference
+  updatePreference: async (preferenceGroup, preferenceKey, preferenceValue) => {
+    const response = await api.put('/api/profiles/current/preferences', {
+      preference_group: preferenceGroup,
+      preference_key: preferenceKey,
+      preference_value: preferenceValue
+    });
+    return response.data;
   }
 };
 

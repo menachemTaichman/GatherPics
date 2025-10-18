@@ -30,7 +30,7 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { requireAuth, isAuthenticated } = useAuth();
+  const { requireAuth, isAuthenticated, showLoginModal, loginError, login, closeLoginModal } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -142,62 +142,72 @@ function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            📸 Face Gallery
-          </h1>
-          <p className="text-xl text-gray-600">
-            AI-Powered Face Recognition System
-          </p>
-        </div>
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="container mx-auto px-4 py-16">
+          <div className="text-center mb-12">
+            <h1 className="text-5xl font-bold text-gray-900 mb-4">
+              📸 Face Gallery
+            </h1>
+            <p className="text-xl text-gray-600">
+              AI-Powered Face Recognition System
+            </p>
+          </div>
 
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
-            Select an Event
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Object.entries(events).map(([event_id, event]) => (
-              <a
-                key={event_id}
-                href={`/${event.url}`}
-                onClick={(e) => handleEventClick(e, event.url, { ...event, id: event_id, event_id })}
-                className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                      {event.name}
-                    </h3>
-                    <svg 
-                      className="w-6 h-6 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                  {event.date && (
-                    <p className="text-gray-500 text-sm mb-4 flex items-center">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
+              Select an Event
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(events).map(([event_id, event]) => (
+                <a
+                  key={event_id}
+                  href={`/${event.url}`}
+                  onClick={(e) => handleEventClick(e, event.url, { ...event, id: event_id, event_id })}
+                  className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer"
+                >
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                        {event.name}
+                      </h3>
+                      <svg 
+                        className="w-6 h-6 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                      {event.date}
-                    </p>
-                  )}
-                  <div className="flex items-center text-primary-600 font-medium text-sm group-hover:gap-2 transition-all">
-                    <User className="w-4 h-4 mr-1" />
-                    Browse Persons
+                    </div>
+                    {event.date && (
+                      <p className="text-gray-500 text-sm mb-4 flex items-center">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {event.date}
+                      </p>
+                    )}
+                    <div className="flex items-center text-primary-600 font-medium text-sm group-hover:gap-2 transition-all">
+                      <User className="w-4 h-4 mr-1" />
+                      Browse Persons
+                    </div>
                   </div>
-                </div>
-              </a>
-            ))}
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
+    </>
   );
 }
 
@@ -226,17 +236,7 @@ function AppContent({ eventUrl }) {
   
   const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
-  const { isAuthenticated, isLoading: authLoading, openLoginModal, showLoginModal, loginError, login, closeLoginModal } = useAuth();
-
-  // Listen for auth:required events from API interceptor
-  useEffect(() => {
-    const handleAuthRequired = () => {
-      openLoginModal();
-    };
-
-    window.addEventListener('auth:required', handleAuthRequired);
-    return () => window.removeEventListener('auth:required', handleAuthRequired);
-  }, [openLoginModal]);
+  const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal } = useAuth();
 
   // Fetch current profile when authenticated
   useEffect(() => {
@@ -371,36 +371,62 @@ function AppContent({ eventUrl }) {
   // No need for manual updateGroupsAfterTransfer function
 
   if (urlLoading || authLoading) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        <LoadingSpinner />
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={closeLoginModal}
+          onLogin={login}
+          error={loginError}
+        />
+      </>
+    );
   }
 
   if (urlError) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Error</h1>
-          <p className="text-gray-600 mb-4">{urlError}</p>
+      <>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Error</h1>
+            <p className="text-gray-600 mb-4">{urlError}</p>
+          </div>
         </div>
-      </div>
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={closeLoginModal}
+          onLogin={login}
+          error={loginError}
+        />
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button 
-            onClick={fetchGroups}
-            className="btn-primary"
-          >
-            Try Again
-          </button>
+      <>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h1>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <button 
+              onClick={fetchGroups}
+              className="btn-primary"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
-      </div>
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={closeLoginModal}
+          onLogin={login}
+          error={loginError}
+        />
+      </>
     );
   }
 

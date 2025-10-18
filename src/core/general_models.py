@@ -79,6 +79,16 @@ class GeneralModels(BaseModels):
         if event_id:
             self.add_profile_to_event(profile_id, event_id, can_delete)
 
+        preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+        for preference_group, keys_dict in preferences.items():
+            values = []
+            for preference_key, (value_type, default_value) in keys_dict.items():
+                # Serialize the default value before storing
+                serialized_value = self.db.serialize_value(value_type, default_value)
+                values.append([profile_id, preference_group, preference_key, serialized_value])
+
+            self.db.insert_many('profiles_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
+
         return profile_id
 
     def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None):
@@ -99,7 +109,6 @@ class GeneralModels(BaseModels):
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
         if not self.is_managable_profile(profile_id):
-            # raise forbidden instead of exception
             raise Forbidden(f'Profile does not have permission to get this profile password')
         
         query = 'SELECT password FROM profiles WHERE profile_id = ?'
@@ -134,15 +143,63 @@ class GeneralModels(BaseModels):
         for event_id in event_ids:
             self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
 
+    def get_profile_preferences(self, profile_id: str) -> dict:
+        """Get the preferences for a profile."""
+        # Start with defaults from CONSTANTS
+        preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
+        preferences = {}
+        
+        # Initialize with default values
+        for group, keys_dict in preferences_constants.items():
+            preferences[group] = {}
+            for key, (value_type, default_value) in keys_dict.items():
+                preferences[group][key] = default_value
+        
+        # Query database for stored values
+        query = 'SELECT preference_group, preference_key, preference_value FROM profiles_preferences WHERE profile_id = ?'
+        result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.LIST_TUPLES)
+        
+        # Update defaults with stored values
+        for group, key, value_str in result:
+            if group in preferences and key in preferences[group]:
+                value_type, _ = preferences_constants[group][key]
+                # Deserialize from string to proper type and update
+                preferences[group][key] = self.db.deserialize_value(value_type, value_str)
+
+        return preferences
+
+    def update_profile_preferences(self, profile_id: str, preference_group: str, preference_key: str, preference_value):
+        """Update the preferences for a profile."""
+        # check if the profile have save_preferences permission
+        if not self.is_managable_profile(profile_id) and profile_id != self.profile_context['profile_id']:
+            raise Forbidden('Profile does not have permissions to update this profile preferences')
+
+        if not self.profile_context['save_preferences']:
+            raise Forbidden('Profile does not have permission to save preferences')
+
+        preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
+        
+        if preference_group not in preferences_constants:
+            raise Exception(f'Preference group {preference_group} not found')
+        
+        if preference_key not in preferences_constants[preference_group]:
+            raise Exception(f'Preference key {preference_key} not found in preference group {preference_group}')
+        
+        # Get the type for this preference and serialize the value
+        value_type, _ = preferences_constants[preference_group][preference_key]
+        serialized_value = self.db.serialize_value(value_type, preference_value)
+        
+        self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
+
     # Profile-Event management
     def add_profile_to_event(self, profile_id: str, event_id: str, can_delete: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
         print(self.get_childs('profiles', profile_id, 'events', return_ids=True))
         if not event_id in self.get_childs('profiles', self.profile_context['profile_id'], 'events', return_ids=True):
-            raise Exception('Profile does not have permissions in this event')
+            raise Forbidden('Profile does not have permissions in this event')
 
         if not self.is_managable_profile(profile_id):
-            raise Exception('Profile does not have permissions in this profile')
+            raise Forbidden('Profile does not have permissions in this profile')
         
         self.edit_childs('profiles', profile_id, 'events', [event_id], add=True, data={'can_delete': can_delete})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
@@ -150,10 +207,10 @@ class GeneralModels(BaseModels):
     def remove_profile_from_event(self, profile_id: str, event_id: str):
         """Remove a profile from an event in the general DB and sync to event DB."""
         if not self.profile_context['profile_id'] in self.get_childs('profiles', profile_id, 'events', return_ids=True):
-            raise Exception('Profile does not have permissions in this event')
+            raise Forbidden('Profile does not have permissions in this event')
         
         if not self.is_managable_profile(profile_id):
-            raise Exception('Profile does not have permissions in this profile')
+            raise Forbidden('Profile does not have permissions in this profile')
         
         self.sync_profile_to_event_db(profile_id, event_id, upsert=False)
         self.edit_childs('profiles', profile_id, 'events', [event_id], add=False)
@@ -186,13 +243,13 @@ class GeneralModels(BaseModels):
             event_id: str
         """
         if not self.profile_context['can_create_events']:
-            raise Exception('Profile does not have permission to create events')
+            raise Forbidden('Profile does not have permission to create events')
         
         settings = self.get_settings()
         developer_id = settings.get('developer_id')
 
         if self.profile_context['profile_id'] not in (developer_id, event_manager):
-            raise Exception('Profile does not have permission to create this event')
+            raise Forbidden('Profile does not have permission to create this event')
                 
         # Create event record
         event_id = self.add('events', {
@@ -213,7 +270,7 @@ class GeneralModels(BaseModels):
         query = 'SELECT can_delete FROM profiles_events WHERE profile_id = ? AND event_id = ?'
         can_delete = self.db.execute_query(query, (profile_id, event_id), return_format=ReturnFormat.VALUE)
         if not can_delete:
-            raise Exception('Profile does not have permission to delete this event')
+            raise Forbidden('Profile does not have permission to delete this event')
 
         Event.delete_event(event_id)         
         self.delete('events', event_id)

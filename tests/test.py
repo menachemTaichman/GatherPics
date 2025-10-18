@@ -239,6 +239,30 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+# preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+profiles = ['89cb4967-0eba-48af-99cc-5e87407fb639', '10d60cb9-6aec-4540-b15e-6df187f19b3c', '162f6184-00a8-47f7-9895-f1fd8cbc93c5']
+# for profile_id2 in profiles:
+#     for preference_group, keys_dict in preferences.items():
+#         for preference_key, preference_value in keys_dict.items():
+#             general_models.update_profile_preferences(profile_id2, preference_group, preference_key, preference_value)
+
+general_models.db.execute_query('DELETE FROM profiles_preferences')
+
+preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+for profile_id1 in profiles:
+    for preference_group, keys_dict in preferences.items():
+        values = []
+        for preference_key, (value_type, default_value) in keys_dict.items():
+            # Serialize the default value before storing
+            serialized_value = general_models.db.serialize_value(value_type, default_value)
+            values.append([profile_id1, preference_group, preference_key, serialized_value])
+
+        general_models.db.insert_many('profiles_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
+
+
+print(general_models.get_profile_preferences(profile_id))
+general_models.update_profile_preferences(profile_id, 'general', 'select', True)
+print(general_models.get_profile_preferences(profile_id))
 
 profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
 event = Event(event_id, profile_id=profile_id)

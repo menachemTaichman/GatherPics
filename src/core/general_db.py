@@ -10,6 +10,54 @@ class GeneralDB(BaseDB):
     """General database for cross-event data (events, profiles, authentication, settings)."""
 
     @classmethod
+    def CONSTANTS(self) -> dict:
+        return {
+            'profiles_preferences': {
+                'general': {
+                    'select': (bool, False),
+                    'size': (float, 1.0),
+                    'includeArchived': (bool, False)
+                },
+                'ImageViewer': {
+                    'albumsHeight': (int, 200),
+                    'albumsOpen': (bool, False),
+                    'facesOpen': (bool, False),
+                    'sidebarOpen': (bool, False)
+                },
+                'GroupDetail': {
+                    'sortDir': (str, 'asc')
+                },
+                'Moments': {
+                    'sortDir': (str, 'asc'),
+                    'carouselExpanded': (bool, True)
+                },
+                'EditMomentImagesModal': {
+                    'filter': (str, 'all'),
+                    'sortDir': (str, 'asc')
+                },
+                'GroupsGallery': {
+                    'sortDir': (str, 'desc'),
+                    'sortBy': (str, 'name')
+                },
+                'AlbumsGallery': {
+                    'sortBy': (str, 'name'),
+                    'sortDir': (str, 'asc')
+                },
+                'AlbumsDetail': {
+                    'sortDir': (str, 'asc')
+                },
+                'BucketDrawer': {
+                    'mode': (str, 'download'),
+                    'quality': (str, 'high'),
+                    'excludeAlready': (bool, True),
+                    'alreadyDownloaded': (list, []),
+                    'alreadyUploaded': (list, []),
+                    'queue': (list, [])
+                }
+            }
+        }
+
+    @classmethod
     def STRUCTURE(self) -> dict:
         return {
             'events': {
@@ -23,7 +71,7 @@ class GeneralDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'profiles',
-                'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
+                'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'save_preferences'],
                 'relations': {
                     'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
                 },
@@ -32,6 +80,11 @@ class GeneralDB(BaseDB):
                 'primary_key': ['profile_id', 'event_id'],
                 'accessible_table': 'profiles_events',
                 'fields': ['can_delete'],
+            },
+            'profiles_preferences': {
+                'primary_key': ['profile_id', 'preference_group', 'preference_key'],
+                'accessible_table': 'profiles_preferences',
+                'fields': ['preference_value'],
             },
             'refresh_tokens': {
                 'primary_key': 'token_id',
@@ -63,6 +116,7 @@ class GeneralDB(BaseDB):
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
                 can_create_events INTEGER DEFAULT 0,
                 restricted_to_event TEXT DEFAULT NULL,
+                save_preferences INTEGER DEFAULT 0,
                 UNIQUE (label, restricted_to_event)
             ''',
             'profiles_events': '''
@@ -72,6 +126,14 @@ class GeneralDB(BaseDB):
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, event_id)
+            ''',
+            'profiles_preferences': '''
+                profile_id TEXT,
+                preference_group TEXT NOT NULL,
+                preference_key TEXT NOT NULL,
+                preference_value TEXT,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+                PRIMARY KEY (profile_id, preference_group, preference_key)
             ''',
             'refresh_tokens': '''
                 token_id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -225,42 +225,27 @@ class BaseModels(ABC):
         
         return parents
 
-    def upsert(self, table: str, entities: dict | list[dict]) -> list[str] | str | None:
+    def upsert(self, table: str, data: dict) -> str | None:
         """
-        Insert or update one or many records.
-        If a single dict is provided, return the new id.
+        Insert or update one entity.
+        Args:
+            table: table name
+            data: dictionary of entity data
+        Returns:
+            new entity id
         """
-        is_single = isinstance(entities, dict)
-        data_list = [entities] if is_single else entities
+        return self.db.upsert(table, data)
 
-        id_field = self.db.get_id_field(table)
-        for row in data_list:
-            row.setdefault(id_field, self.generate_id())
-
-        inserted_ids = self.db.upsert(table, data_list)
-
-        if is_single:
-            return inserted_ids[0] if inserted_ids else None
-        return inserted_ids
-
-    def add(self, table: str, data: dict | list[dict]) -> list[str] | str | None:
+    def add(self, table: str, data: dict) -> str | None:
         """
-        Insert one or many records.
-        If a single dict is provided, return the new id.
+        Insert one entity.
+        Args:
+            table: table name
+            data: dictionary of entity data
+        Returns:
+            new entity id
         """
-        is_single = isinstance(data, dict)
-        data_list = [data] if is_single else data
-
-        if not self.db.is_auto_increment(table):
-            id_field = self.db.get_id_field(table)
-            for row in data_list:
-                row.setdefault(id_field, self.generate_id())
-
-        inserted_ids = self.db.insert(table, data_list)
-
-        if is_single:
-            return inserted_ids[0] if inserted_ids else None
-        return inserted_ids
+        return self.db.insert(table, data)
 
     def edit(self, table: str, entity_ids: str | list[str], fields: dict) -> list[str]:
         """

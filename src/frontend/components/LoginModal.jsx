@@ -7,6 +7,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAutofilled, setIsAutofilled] = useState(false);
   const labelInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,36 +32,51 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
       const labelInput = document.getElementById('label');
       const passwordInput = document.getElementById('password');
       
-      if (labelInput?.value && !label) {
-        setLabel(labelInput.value);
+      const labelIsAutofilled = labelInput?.matches(':autofill') || labelInput?.matches(':-webkit-autofill');
+      const passwordIsAutofilled = passwordInput?.matches(':autofill') || passwordInput?.matches(':-webkit-autofill');
+      
+      if (labelIsAutofilled && passwordIsAutofilled) {
+        setIsAutofilled(true);
       }
-      if (passwordInput?.value && !password) {
-        setPassword(passwordInput.value);
-      }
+      
+      if (labelInput?.value) setLabel(labelInput.value);
+      if (passwordInput?.value) setPassword(passwordInput.value);
     };
 
-    // Check immediately and after a delay (browsers autofill at different times)
-    const timers = [
-      setTimeout(checkAutofill, 100),
-      setTimeout(checkAutofill, 300),
-      setTimeout(checkAutofill, 500)
-    ];
-
-    // Also listen for input events (some browsers fire this on autofill)
+    // Listen for input events
     const handleInput = (e) => {
-      if (e.target.id === 'label') setLabel(e.target.value);
-      if (e.target.id === 'password') setPassword(e.target.value);
+      if (e.target.id === 'label') {
+        setLabel(e.target.value);
+        if (e.target.value) setIsAutofilled(false);
+      }
+      if (e.target.id === 'password') {
+        setPassword(e.target.value);
+        if (e.target.value) setIsAutofilled(false);
+      }
     };
 
-    document.getElementById('label')?.addEventListener('input', handleInput);
-    document.getElementById('password')?.addEventListener('input', handleInput);
+    // Listen for animationstart (browser fires this when autofilling)
+    const handleAnimationStart = (e) => {
+      if (e.animationName === 'onAutoFillStart') {
+        checkAutofill();
+      }
+    };
+
+    const labelInput = document.getElementById('label');
+    const passwordInput = document.getElementById('password');
+
+    labelInput?.addEventListener('input', handleInput);
+    passwordInput?.addEventListener('input', handleInput);
+    labelInput?.addEventListener('animationstart', handleAnimationStart);
+    passwordInput?.addEventListener('animationstart', handleAnimationStart);
 
     return () => {
-      timers.forEach(timer => clearTimeout(timer));
-      document.getElementById('label')?.removeEventListener('input', handleInput);
-      document.getElementById('password')?.removeEventListener('input', handleInput);
+      labelInput?.removeEventListener('input', handleInput);
+      passwordInput?.removeEventListener('input', handleInput);
+      labelInput?.removeEventListener('animationstart', handleAnimationStart);
+      passwordInput?.removeEventListener('animationstart', handleAnimationStart);
     };
-  }, [isOpen, label, password]);
+  }, [isOpen]);
 
   // Handle escape key - only allow closing if not on protected page
   useEffect(() => {
@@ -82,6 +98,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
     
     setLabel('');
     setPassword('');
+    setIsAutofilled(false);
     setIsLoading(false);
     onClose();
   };
@@ -89,19 +106,30 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!label.trim()) {
+    // If autofilled, get values from DOM (they may not be in React state yet)
+    let submitLabel = label;
+    let submitPassword = password;
+    
+    if (isAutofilled) {
+      const labelInput = document.getElementById('label');
+      const passwordInput = document.getElementById('password');
+      submitLabel = labelInput?.value || label;
+      submitPassword = passwordInput?.value || password;
+    }
+    
+    if (!submitLabel.trim()) {
       return;
     }
 
     setIsLoading(true);
     
     try {
-      const result = await onLogin(label.trim(), password);
+      const result = await onLogin(submitLabel.trim(), submitPassword);
       
       if (result.success) {
-        // Success - modal will close via auth context
         setLabel('');
         setPassword('');
+        setIsAutofilled(false);
       }
     } catch (err) {
       // Error is handled by auth context
@@ -215,7 +243,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={isLoading || !label.trim()}
+                  disabled={isLoading || (!label.trim() && !isAutofilled)}
                   className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   {isLoading ? (

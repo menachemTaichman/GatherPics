@@ -374,7 +374,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       try {
         const res = await groupsAPI.checkName(decodedGroupName, '', eventUrl);
         if (res && res.conflict) {
-          // Changes (UPSERT) are applied by interceptor; pick from store
+          // Changes are applied by interceptor; pick from store
           const after = storeSelectors.groupsAll(useDataStore.getState()) || [];
           const match = after.find(g => g.id === res.conflicting_group || g.label === decodedGroupName);
           if (match) {

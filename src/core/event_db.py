@@ -64,7 +64,7 @@ class EventDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['is_profiles_manager', 'hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'has_archive_album', 'has_favorites_album', 'save_preferences'],
+                'fields': ['is_profiles_manager', 'hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'has_archive_album', 'has_favorites_album'],
                 'relations': {
                     'images': {'relation_table': 'profile_images', 'fields_needed': ['date_taken']},
                     'albums': {'relation_table': 'profile_albums', 'fields_needed': ['label']},
@@ -148,7 +148,6 @@ class EventDB(BaseDB):
                 can_edit BOOLEAN DEFAULT 0,
                 all_images BOOLEAN,
                 all_albums BOOLEAN,
-                save_preferences BOOLEAN
             ''',
             'profile_images': '''
                 profile_id TEXT,
@@ -315,8 +314,7 @@ class EventDB(BaseDB):
                     all_images,
                     all_albums,
                     CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
-                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
-                    save_preferences
+                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album
                 FROM profiles p
                 LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
                 LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
@@ -605,8 +603,8 @@ class EventDB(BaseDB):
                         RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
                 END;
 
-                INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_albums, save_preferences)
-                VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_albums, NEW.save_preferences);
+                INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_albums)
+                VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_albums);
 
                 -- Create the profile_images and profile_albums tables
                 INSERT INTO profile_images (profile_id, image_id, accessible)
@@ -638,8 +636,7 @@ class EventDB(BaseDB):
                 END;
 
                 UPDATE profiles
-                SET save_preferences = NEW.save_preferences,
-                    hierarchy_rank = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.hierarchy_rank ELSE NEW.hierarchy_rank END,
+                SET hierarchy_rank = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.hierarchy_rank ELSE NEW.hierarchy_rank END,
                     can_upload_and_delete_images = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.can_upload_and_delete_images ELSE NEW.can_upload_and_delete_images END,
                     can_edit = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.can_edit ELSE NEW.can_edit END,
                     all_images = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.all_images ELSE NEW.all_images END,

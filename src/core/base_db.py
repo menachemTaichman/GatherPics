@@ -1,5 +1,6 @@
 import sqlite3
 from typing import Any
+import json
 from contextlib import contextmanager
 import os
 from enum import Enum
@@ -20,6 +21,11 @@ class ReturnFormat(Enum):
 class BaseDB(ABC):
     """Abstract base class for database operations."""
     
+    @classmethod
+    def CONSTANTS(self) -> dict:
+        """Database constants."""
+        return {}
+
     @classmethod
     @abstractmethod
     def STRUCTURE(self) -> dict:
@@ -49,7 +55,36 @@ class BaseDB(ABC):
     def TRIGGERS(self) -> dict:
         """Trigger definitions."""
         pass
+
+    @staticmethod
+    def serialize_value(value_type: type, value: Any) -> str:
+        """Convert a Python value to a string for database storage."""
+        
+        if value_type == bool:
+            return 1 if value else 0
+        elif value_type == int:
+            return str(int(value))
+        elif value_type == float:
+            return str(float(value))
+        elif value_type in (list, dict):
+            return json.dumps(value)
+        else:  # str
+            return str(value)
     
+    @staticmethod
+    def deserialize_value(value_type: type, value_str: str) -> bool | int | float | list | dict | str:
+        """Convert a database string to a Python value."""
+        if value_type == bool:
+            return value_str.lower() in ('true', '1', 'yes') or int(value_str) == 1
+        elif value_type == int:
+            return int(value_str)
+        elif value_type == float:
+            return float(value_str)
+        elif value_type in (list, dict):
+            return json.loads(value_str)
+        else:  # str
+            return value_str
+
     @classmethod
     def get_id_field(cls, table: str, remove_parent: str | None = None) -> str:
         """Get the ID field(s) for a table."""
@@ -257,26 +292,59 @@ class BaseDB(ABC):
                 values.append(v)
         return " AND ".join(clauses), values
 
-    def insert(self, table: str, data_list: list[dict]) -> list:
-        """Insert one or more rows and return their primary keys (if defined)."""
-        if not data_list:
+    def insert_many(self, table: str, fields: list, values: list[list]) -> list:
+        """
+        Insert multiple rows and return their primary keys.
+        Args:
+            table: table name
+            fields: list of field names
+            values: list of lists, each list is a row to insert
+        Returns:
+            list of primary keys
+        """
+        if not values:
+            return []
+
+        target = self.STRUCTURE()[table].get("accessible_table", table)
+        p_keys = self.STRUCTURE()[table].get("primary_key")
+        returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
+        return_format = ReturnFormat.LIST_TUPLES if isinstance(p_keys, list) else ReturnFormat.LIST_VALUES
+
+        keys = list(fields)
+        row_placeholders = f"({", ".join(["?"] * len(keys))})"
+        value_placeholders = ", ".join([row_placeholders] * len(values))
+        sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES {value_placeholders}"
+        sql += f" RETURNING {returning}"
+
+        all_values = []
+        for value in values:
+            for v in value:
+                all_values.append(v)
+
+        return self.execute_query(sql, all_values, return_format)
+
+    def insert(self, table: str, data: dict) -> str | None:
+        """
+        Insert one entity and return its primary key.
+        Args:
+            table: table name
+            data: dictionary of entity data
+        Returns:
+            new entity id
+        """
+        if not data:
             return []
 
         target = self.STRUCTURE()[table].get("accessible_table", table)
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 
-        keys = list(data_list[0].keys())
+        keys = list(data.keys())
         placeholders = ", ".join(["?"] * len(keys))
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES ({placeholders})"
         sql += f" RETURNING {returning}"
 
-        inserted_ids = []
-        for row in data_list:
-            res = self.execute_query(sql, [row[k] for k in keys], ReturnFormat.LIST_VALUES)
-            if isinstance(res, list):
-                inserted_ids += res
-        return inserted_ids
+        return self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
 
     def update(self, table: str, where: dict, fields: dict) -> list:
         """Update rows matching WHERE clause and return their primary keys (if defined)."""
@@ -307,15 +375,15 @@ class BaseDB(ABC):
 
         return self.execute_query(sql, where_values, ReturnFormat.LIST_VALUES)
 
-    def upsert(self, table: str, data_list: list[dict]) -> list:
-        """Insert or update records by primary key (ON CONFLICT DO UPDATE)."""
-        if not data_list:
+    def upsert(self, table: str, data: dict) -> list:
+        """Insert or update a record by primary key (ON CONFLICT DO UPDATE)."""
+        if not data:
             return []
 
         target = self.STRUCTURE()[table].get("accessible_table", table)
         p_keys = self.STRUCTURE()[table]["primary_key"]
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
-        keys = list(data_list[0].keys())
+        keys = list(data.keys())
 
         insert_cols = ", ".join(keys)
         placeholders = ", ".join(["?"] * len(keys))
@@ -329,9 +397,4 @@ class BaseDB(ABC):
             RETURNING {returning}
         """
 
-        upserted_ids = []
-        for row in data_list:
-            res = self.execute_query(sql, [row[k] for k in keys], ReturnFormat.LIST_VALUES)
-            if isinstance(res, list):
-                upserted_ids += res
-        return upserted_ids
+        return self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)

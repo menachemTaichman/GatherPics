@@ -1332,6 +1332,44 @@ def get_current_profile():
     profile = general_models.get_entities('profiles', [get_jwt_identity()])
     return jsonify({"profile": profile})
 
+@app.route("/api/profiles/current/preferences", methods=["GET"])
+@require_auth
+def get_current_profile_preferences():
+    """Get preferences for the current profile."""
+    general_models = get_general_models()
+    profile_id = get_jwt_identity()
+    
+    try:
+        preferences = general_models.get_profile_preferences(profile_id)
+        return jsonify({"preferences": preferences})
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/profiles/current/preferences", methods=["PUT"])
+@require_auth
+def update_current_profile_preferences():
+    """Update a single preference for the current profile."""
+    general_models = get_general_models()
+    profile_id = get_jwt_identity()
+    
+    data = request.json or {}
+    preference_group = data.get('preference_group')
+    preference_key = data.get('preference_key')
+    preference_value = data.get('preference_value')
+    
+    if not preference_group or not preference_key or preference_value is None:
+        return jsonify({"error": "preference_group, preference_key, and preference_value are required"}), 400
+    
+    try:
+        general_models.update_profile_preferences(profile_id, preference_group, preference_key, preference_value)
+        return jsonify({"success": True})
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
+
 @app.route("/api/events/<event_id>/profiles", methods=["GET"])
 @require_auth
 def get_event_profiles(event_id):

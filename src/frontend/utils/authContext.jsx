@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import jwtService from './jwtService';
 import { setCurrentProfile, getCurrentProfile } from './profileService';
+import { initializePreferences } from './settings';
 
 const AuthContext = createContext(null);
 
@@ -21,6 +22,9 @@ export function AuthProvider({ children }) {
         try {
           await jwtService.refresh();
           setIsAuthenticated(true);
+          
+          // Load preferences from API after successful authentication
+          await initializePreferences(true);
         } catch (error) {
           // Token is invalid, clear it
           jwtService.clearToken();
@@ -28,12 +32,28 @@ export function AuthProvider({ children }) {
         }
       } else {
         setIsAuthenticated(false);
+        // Initialize with defaults when not authenticated
+        await initializePreferences(false);
       }
       
       setIsLoading(false);
     };
 
     checkAuth();
+  }, []);
+
+  // Listen for auth:required events (triggered when API calls fail due to 401)
+  useEffect(() => {
+    const handleAuthRequired = () => {
+      setIsAuthenticated(false);
+      setShowLoginModal(true);
+    };
+
+    window.addEventListener('auth:required', handleAuthRequired);
+    
+    return () => {
+      window.removeEventListener('auth:required', handleAuthRequired);
+    };
   }, []);
 
   const login = useCallback(async (label, password) => {
@@ -49,6 +69,9 @@ export function AuthProvider({ children }) {
       
       setIsAuthenticated(true);
       setShowLoginModal(false);
+      
+      // Load preferences from API before page reload
+      await initializePreferences(true);
       
       // Execute pending navigation if any
       if (pendingNavigation) {

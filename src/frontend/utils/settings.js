@@ -2,6 +2,8 @@
  * Settings cache utility for user preferences
  */
 
+import { profilesAPI } from './apiService';
+
 const PREFERENCES = 'preferences';
 
 // Default values for all settings
@@ -95,7 +97,7 @@ export const setPreferences = (preferences) => {
  * @param {string} path - Dot notation path to the preference
  * @param {any} value - Value to set
  */
-export const setPreference = (path, value) => {
+export const setPreference = async (path, value) => {
   const preferences = getPreferences();
   setNestedValue(preferences, path, value);
   setPreferences(preferences);
@@ -104,13 +106,51 @@ export const setPreference = (path, value) => {
   window.dispatchEvent(new CustomEvent('preferenceChanged', {
     detail: { path, value, preferences }
   }));
+  
+  // Sync to backend if user has save_preferences permission
+  try {
+    const pathParts = path.split('.');
+    if (pathParts.length >= 2) {
+      const preferenceGroup = pathParts[0];
+      const preferenceKey = pathParts.slice(1).join('.');
+      
+      await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
+    }
+  } catch (error) {
+    // Silently fail - profile might not have save_preferences permission or not logged in
+    // The preference is still saved locally, which is fine
+    if (error.response?.status !== 403) {
+      console.warn('Failed to sync preference to backend:', error);
+    }
+  }
 };
 
 /**
  * Initialize preferences at startup - ensures preferences exist in localStorage
+ * Optionally loads from API if user has save_preferences permission
+ * @param {boolean} loadFromAPI - Whether to attempt loading from API
  */
-export const initializePreferences = () => {
+export const initializePreferences = async (loadFromAPI = false) => {
   try {
+    if (loadFromAPI) {
+      // Try to load preferences from API
+      try {
+        const result = await profilesAPI.getPreferences();
+        if (result.preferences) {
+          // Merge API preferences with defaults to ensure all keys exist
+          const merged = mergePreferences(DEFAULT_PREFERENCES, result.preferences);
+          setPreferences(merged);
+          return;
+        }
+      } catch (error) {
+        // If API fails (no permission, not logged in, etc.), fall back to local
+        if (error.response?.status !== 403) {
+          console.warn('Failed to load preferences from API:', error);
+        }
+      }
+    }
+    
+    // Fallback: use existing localStorage or defaults
     const existingPreferences = localStorage.getItem(PREFERENCES);
     if (!existingPreferences) {
       // No preferences exist, create them with defaults
