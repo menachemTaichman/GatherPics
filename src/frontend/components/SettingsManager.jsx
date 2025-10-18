@@ -150,8 +150,8 @@ export default function SettingsManager() {
 
   // Filter tabs based on permissions
   const allTabs = [
-    { id: 'general', label: 'General', icon: Settings },
     { id: 'account', label: 'Account', icon: User },
+    { id: 'uploads', label: 'Upload Photos', icon: Upload },
     { id: 'profiles', label: 'Profiles', icon: User },
     { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
@@ -162,8 +162,8 @@ export default function SettingsManager() {
     if (tab.id === 'profiles' && !permissions.isProfilesManager) {
       return false;
     }
-    // Hide general tab if can't upload AND has no archive access (nothing to show)
-    if (tab.id === 'general' && !permissions.canUploadAndDeleteImages && !permissions.hasArchiveAlbum) {
+    // Hide uploads tab if can't upload
+    if (tab.id === 'uploads' && !permissions.canUploadAndDeleteImages) {
       return false;
     }
     return true;
@@ -387,69 +387,6 @@ export default function SettingsManager() {
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
                   <AnimatePresence mode="wait">
-                    {activeTab === 'general' && (
-                      <motion.div
-                        key="general"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ 
-                          opacity: 1, 
-                          y: 0
-                        }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                      >
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">General Settings</h3>
-                          
-                          {/* Include Archived */}
-                          <PermissionGate requires="hasArchiveAlbum">
-                            <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mb-3">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                  <Archive className="w-5 h-5 text-gray-600" />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-gray-900">Include Archived</p>
-                                  <p className="text-sm text-gray-500">Show archived images in galleries</p>
-                                </div>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={includeArchived}
-                                  onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                              </label>
-                            </div>
-                          </PermissionGate>
-
-                          {/* Upload Photos */}
-                          <PermissionGate requires="canUploadAndDeleteImages">
-                            <button
-                              onClick={() => setShowUploadModal(true)}
-                              className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full"
-                            >
-                              <div className="flex items-center space-x-3">
-                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                  <Upload className="w-5 h-5 text-gray-600" />
-                                </div>
-                                <div className="text-left">
-                                  <p className="font-medium text-gray-900">Upload Photos</p>
-                                  <p className="text-sm text-gray-500">Add new photos to the gallery</p>
-                                </div>
-                              </div>
-                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </PermissionGate>
-                        </div>
-                      </motion.div>
-                    )}
-
                     {activeTab === 'account' && (
                       <motion.div
                         key="account"
@@ -511,15 +448,97 @@ export default function SettingsManager() {
                           </div>
                         )}
 
+                        {/* Include Archived */}
+                        <PermissionGate requires="hasArchiveAlbum">
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Gallery Preferences</h4>
+                            <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                                  <Archive className="w-5 h-5 text-gray-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">Include Archived</p>
+                                  <p className="text-sm text-gray-500">Show archived images in galleries</p>
+                                </div>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={includeArchived}
+                                  onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                              </label>
+                            </div>
+                          </div>
+                        </PermissionGate>
+
                         {/* Sign Out */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Sign Out</h4>
+                        <div className="pt-4 border-t border-gray-200">
                           <button
                             onClick={handleSignOut}
-                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                            className="w-full px-4 py-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium flex items-center justify-center space-x-2 border border-red-200"
                           >
                             <LogOut className="w-4 h-4" />
                             <span>Sign Out</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'uploads' && (
+                      <motion.div
+                        key="uploads"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ 
+                          opacity: 1, 
+                          y: 0
+                        }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Photos</h3>
+                          
+                          {/* Upload Photos */}
+                          <button
+                            onClick={() => setShowUploadModal(true)}
+                            className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full mb-3"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                <Upload className="w-5 h-5 text-gray-600" />
+                              </div>
+                              <div className="text-left">
+                                <p className="font-medium text-gray-900">Upload Photos</p>
+                                <p className="text-sm text-gray-500">Add new photos to the gallery</p>
+                              </div>
+                            </div>
+                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+
+                          {/* Uploads History */}
+                          <button
+                            onClick={() => showToast('Uploads history coming soon', 'info')}
+                            className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                <Archive className="w-5 h-5 text-gray-600" />
+                              </div>
+                              <div className="text-left">
+                                <p className="font-medium text-gray-900">Uploads History</p>
+                                <p className="text-sm text-gray-500">View your past uploads</p>
+                              </div>
+                            </div>
+                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                           </button>
                         </div>
                       </motion.div>
