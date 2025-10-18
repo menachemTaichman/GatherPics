@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown, Image as ImageIcon, Minus, Plus, Check, X, AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,10 +11,13 @@ import { ImageComponent } from '../utils/useImage.jsx';
 import { useToast } from '../utils/ToastContext';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 
 export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   useApplyScopes([{ entity: 'all', id: 'albums' }]);
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +41,16 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
 
   // Use the data store for albums
   const storeAlbums = useAlbumsList();
+  
+  // Create placeholder albums when not authenticated
+  const placeholderAlbums = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      images: new Set(),
+      isPlaceholder: true
+    }));
+  }, []);
   
   // Custom keyboard handler for create album
   const handleCreateAlbumKeys = (e) => {
@@ -75,21 +88,25 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
     }
   }, [isCreatingAlbum]);
 
-  useEffect(() => {
-    async function loadAlbums() {
-      try {
-        await albumsAPI.getAll(eventUrl);
-      } catch (e) {
-        console.error('Failed to load albums', e);
-      }
+  // Fetch albums data with auto-refresh on auth changes
+  const loadAlbums = useCallback(async () => {
+    if (!eventUrl) return;
+    try {
+      await albumsAPI.getAll(eventUrl);
+    } catch (e) {
+      console.error('Failed to load albums', e);
     }
-    if (eventUrl) loadAlbums();
   }, [eventUrl]);
+  
+  useAuthRefresh(loadAlbums, [eventUrl]);
 
-  // Use albums from store
-  const currentAlbums = storeAlbums;
+  // Use albums from store or placeholders when not authenticated
+  const currentAlbums = isAuthenticated ? storeAlbums : placeholderAlbums;
 
   const filteredAndSortedAlbums = useMemo(() => {
+    // Skip filtering for placeholders
+    if (!isAuthenticated) return currentAlbums;
+    
     let filtered = currentAlbums.filter(album => {
       // Filter by search term
       const matchesSearch = album.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -110,7 +127,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
 
     // Default albums always come first
     return [...defaultAlbums, ...customAlbums];
-  }, [currentAlbums, searchTerm, sortOrder]);
+  }, [currentAlbums, searchTerm, sortOrder, isAuthenticated]);
 
   const handleImageLoad = (albumId, e) => {
     const img = e.target;

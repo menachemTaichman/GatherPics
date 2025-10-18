@@ -28,6 +28,8 @@ import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 
 // Simple sessionStorage hook for filtered results only
 const useSessionStorage = (key, defaultValue) => {
@@ -83,6 +85,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const { showToast } = useToast();
   const [group, setGroup] = useState(null);
   const permissions = usePermissions();
+  const { isAuthenticated } = useAuth();
   
   // Use the hook at component level to avoid conditional hook calls
   const groupRepresentativeComponent = useImageComponent(
@@ -341,12 +344,24 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   const facesMapping = filteredFacesMapping || group?.faces_mapping || {};
 
+  // Create placeholder images for unauthenticated state
+  const placeholderImages = useMemo(() => {
+    if (!group?.isPlaceholder) return EMPTY_ARRAY;
+    return Array.from({ length: 24 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      isPlaceholder: true
+    }));
+  }, [group?.isPlaceholder]);
+
   const sortedImages = useMemo(() => {
     if (!group?.id) return EMPTY_ARRAY;
+    // Use placeholders if group is a placeholder
+    if (group.isPlaceholder) return placeholderImages;
     const out = sortImages(relatedImages, 'date', sortOrder);
     
     return out;
-  }, [group?.id, relatedImages, sortOrder]);
+  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages]);
 
   useEffect(() => {
     
@@ -370,6 +385,17 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   useEffect(() => {
     if (!eventUrl || !decodedGroupName) return;
     
+    // If not authenticated, immediately set placeholder and skip all logic
+    if (!isAuthenticated) {
+      setGroup({
+        id: 'placeholder',
+        label: decodedGroupName,
+        images: new Set(),
+        isPlaceholder: true
+      });
+      return;
+    }
+    
     const resolveByLabel = async () => {
       try {
         const res = await groupsAPI.checkName(decodedGroupName, '', eventUrl);
@@ -384,8 +410,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           }
         }
       } catch {}
-      // Not found -> back to persons list
-      
+      // Not found -> redirect back to persons list
       navigate(`/${eventUrl}/persons`);
     };
 
@@ -401,7 +426,30 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       attemptedLookupRef.current = true;
       resolveByLabel();
     }
-  }, [decodedGroupName, currentGroups, navigate, eventUrl]);
+    
+    // Refetch data after login
+    const handleAuthLogin = () => {
+      attemptedLookupRef.current = false; // Reset to allow refetch
+      resolveByLabel();
+    };
+    
+    // Reset to placeholder on logout
+    const handleAuthLogout = () => {
+      setGroup({
+        id: 'placeholder',
+        label: decodedGroupName,
+        images: new Set(),
+        isPlaceholder: true
+      });
+    };
+    
+    window.addEventListener('auth:login', handleAuthLogin);
+    window.addEventListener('auth:logout', handleAuthLogout);
+    return () => {
+      window.removeEventListener('auth:login', handleAuthLogin);
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [decodedGroupName, currentGroups, navigate, eventUrl, isAuthenticated]);
 
   // Keep local `group` in sync by id when the store object changes (e.g., rename)
   useEffect(() => {
@@ -427,7 +475,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   }, [group?.id]); // Fire when the group has actually changed
 
   const fetchGroupData = useCallback(async (currentOffset, resetImages = false) => {
-    if (!group?.id) {
+    if (!group?.id || group.isPlaceholder) {
       return;
     }
     
@@ -488,11 +536,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
+    // Skip for placeholder groups
+    if (!group?.id || group.isPlaceholder) return;
+    
     // Scope to the specific group for relation updates
     if (group?.id) {
       try { useDataStore.getState().setScope({ entity: 'group', id: String(group.id) }); } catch {}
     }
-    if (!group?.id) return;
 
     if (smoothNextGroupLoad.current) {
       smoothNextGroupLoad.current = false;
@@ -1227,7 +1277,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     image={image}
                     aspectClass={imageClasses[image.id] || 'square'}
                     imageFit={'cover'}
-                    thumbSrc={showCrops && facesMapping?.[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(facesMapping[image.id]) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
+                    thumbSrc={image.isPlaceholder ? null : (showCrops && facesMapping?.[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(facesMapping[image.id]) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null))}
                     selectionMode={selectionMode}
                     isSelected={selectedImages.has(image.id)}
                     onToggleSelect={(e) => toggleImageSelection(image.id, e)}

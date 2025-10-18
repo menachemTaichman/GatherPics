@@ -58,10 +58,17 @@ function ConfirmDelete({
       });
     } catch {}
     
+    // Listen for logout to auto-close modal
+    const handleAuthLogout = () => {
+      onClose();
+    };
+    window.addEventListener('auth:logout', handleAuthLogout);
+    
     return () => {
       try { 
         unregisterModal(MODAL_ID); 
       } catch {}
+      window.removeEventListener('auth:logout', handleAuthLogout);
     };
   }, [isOpen, MODAL_ID]);
 

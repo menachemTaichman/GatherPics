@@ -239,7 +239,7 @@ const MomentCard = forwardRef(({
                       ref={(el) => registerImageRef?.(image.id, el)}
                       image={image}
                       aspectClass={imageClasses[image.id] || 'square'}
-                      thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
+                      thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                       selectionMode={selectionMode}
                       isSelected={globalSelection.has(`${moment.id}:${image.id}`)}
                       onToggleSelect={(e) => onImageSelect(image.id, moment.id, e)}

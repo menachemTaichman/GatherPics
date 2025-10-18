@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Lock, User, AlertCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useModalFocus } from '../utils/useModalFocus';
+import { useModalManager } from '../utils/modalManager';
 
 export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const [label, setLabel] = useState('');
@@ -11,9 +13,72 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const labelInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { registerModal, unregisterModal } = useModalManager();
+  const MODAL_ID = 'login-modal';
 
   // Check if user is on a protected page (not homepage)
   const isOnProtectedPage = location.pathname !== '/';
+
+  // Register modal when opened
+  useEffect(() => {
+    if (isOpen) {
+      registerModal({ 
+        id: MODAL_ID, 
+        type: 'popup',
+        allowOutsideScroll: true,
+        scopes: []
+      });
+      return () => {
+        unregisterModal(MODAL_ID);
+      };
+    }
+  }, [isOpen, registerModal, unregisterModal]);
+
+  // Custom keyboard handler - prevent closing on protected pages
+  const handleModalKeys = useCallback((e) => {
+    // Allow all normal input behavior for input elements
+    const targetTagName = e.target.tagName?.toLowerCase();
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      // For ESC key on protected pages, prevent closing
+      if (e.key === 'Escape' && isOnProtectedPage) {
+        e.preventDefault();
+        e.stopPropagation();
+        return true; // Signal that we handled it
+      }
+      // For ESC on non-protected pages, allow useModalFocus to handle closing
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // Allow all other input behavior
+      return true;
+    }
+    // For ESC key on protected pages, prevent closing
+    if (e.key === 'Escape' && isOnProtectedPage) {
+      e.preventDefault();
+      e.stopPropagation();
+      return true;
+    }
+    return false;
+  }, [isOnProtectedPage]);
+
+  // Handle modal close - prevent closing on protected pages
+  const handleModalClose = useCallback(() => {
+    if (isOnProtectedPage) {
+      return; // Don't allow closing on protected pages
+    }
+    setLabel('');
+    setPassword('');
+    setIsAutofilled(false);
+    setIsLoading(false);
+    onClose();
+  }, [isOnProtectedPage, onClose]);
+
+  // Use modal focus management
+  const { modalRef } = useModalFocus(isOpen, handleModalClose, {
+    modalId: MODAL_ID,
+    modalType: 'popup',
+    customKeyHandler: handleModalKeys
+  });
 
   // Auto-focus label input when modal opens
   useEffect(() => {
@@ -78,24 +143,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
     };
   }, [isOpen]);
 
-  // Handle escape key - only allow closing if not on protected page
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen && !isOnProtectedPage) {
-        handleClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, isOnProtectedPage]);
-
   const handleClose = () => {
-    // If on a protected page, redirect to homepage instead of just closing
-    if (isOnProtectedPage) {
-      navigate('/');
-    }
-    
     setLabel('');
     setPassword('');
     setIsAutofilled(false);
@@ -148,17 +196,19 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-            onClick={!isOnProtectedPage ? handleClose : undefined}
+            onClick={handleModalClose}
           />
 
           {/* Modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <motion.div
+              ref={modalRef}
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', duration: 0.3 }}
               className="bg-white rounded-2xl shadow-2xl max-w-md w-full pointer-events-auto"
+              tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

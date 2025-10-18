@@ -122,8 +122,16 @@ export default function TransferFacesModal({
       setError('');
       setNameConflict(false);
       setSearchTerm('');
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         try { unregisterModal(MODAL_ID); } catch {}
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     } else {
       // Clean up timeout when modal closes

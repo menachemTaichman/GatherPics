@@ -249,7 +249,17 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
   useEffect(() => {
     if (isOpen) {
       registerModal(MODAL_ID, { priority: 60 });
-      return () => unregisterModal(MODAL_ID);
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
+      return () => {
+        unregisterModal(MODAL_ID);
+        window.removeEventListener('auth:logout', handleAuthLogout);
+      };
     }
   }, [isOpen, registerModal, unregisterModal]);
 

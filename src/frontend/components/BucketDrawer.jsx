@@ -49,8 +49,16 @@ export default function BucketDrawer() {
         allowOutsideScroll: true,
         scopes: []
       });
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        close();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         unregisterModal(modalId);
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [isOpen, registerModal, unregisterModal]);

@@ -5,6 +5,7 @@ import { useModalManager } from '../utils/modalManager';
 import { useApplyScopes, getRepresentativeUrl } from '../utils/storeUtils';
 import { getImageCount } from '../utils/settings';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../utils/authContext';
 import { 
   Filter, 
   X, 
@@ -36,6 +37,7 @@ export default function GroupsFilter({
   initialSelectedGroups = [],
   urlHelpers: injectedUrlHelpers
 }) {
+  const { isAuthenticated } = useAuth();
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
@@ -44,8 +46,19 @@ export default function GroupsFilter({
   const groups = useDataStore(state => state.entities?.groups || {});
   const { registerModal, unregisterModal } = useModalManager();
   const PANEL_ID = 'groups-filter-panel';
+  
+  // Create placeholder groups when not authenticated
+  const placeholderRelatedGroups = useMemo(() => {
+    if (isAuthenticated) return [];
+    return Array.from({ length: 4 }, (_, i) => ({
+      id: `placeholder-related-${i}`,
+      label: '',
+      isPlaceholder: true
+    }));
+  }, [isAuthenticated]);
 
   const fetchRelatedGroups = async () => {
+    if (!isAuthenticated) return; // skip when not authenticated
     if (!isVisible) return; // fetch only when panel is open
     if (!imageIds.length) return;
     
@@ -159,6 +172,9 @@ export default function GroupsFilter({
 
   // Build display list: selected first (in order), then related groups from session storage (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
+    // Return placeholders when not authenticated
+    if (!isAuthenticated) return placeholderRelatedGroups;
+    
     const seen = new Set((selectedGroups || []).map(v => String(v)));
     const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.group_id), g]));
     
@@ -197,7 +213,7 @@ export default function GroupsFilter({
       });
     
     return [...selectedObjs, ...tail];
-  }, [selectedGroups, currentGroupId, groups]);
+  }, [selectedGroups, currentGroupId, groups, isAuthenticated, placeholderRelatedGroups]);
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';
@@ -299,13 +315,13 @@ export default function GroupsFilter({
             <div 
             key={`main-${group.id || group.group_id}`}
             className="flex-shrink-0 relative group"
-            onMouseEnter={(event) => handleMouseEnter(group.id || group.group_id, event)}
-            onMouseLeave={handleMouseLeave}
-            onMouseMove={handleMouseMove}
+            onMouseEnter={group.isPlaceholder ? undefined : (event) => handleMouseEnter(group.id || group.group_id, event)}
+            onMouseLeave={group.isPlaceholder ? undefined : handleMouseLeave}
+            onMouseMove={group.isPlaceholder ? undefined : handleMouseMove}
           >
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-500 bg-primary-100 flex items-center justify-center">
               {ImageComponent(
-                `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`,
+                group.isPlaceholder ? null : `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`,
                 {
                   width: 32,
                   height: 32,
@@ -321,25 +337,28 @@ export default function GroupsFilter({
           {/* Related Groups */}
           {displayGroups.map((relatedGroup, index) => {
             const groupId = relatedGroup.id || relatedGroup.group_id;
+            const isPlaceholder = relatedGroup.isPlaceholder;
             return (
               <div
                 key={groupId || `related-${index}`}
                 className="flex-shrink-0 relative group"
-                onMouseEnter={(event) => handleMouseEnter(groupId, event)}
-                onMouseLeave={handleMouseLeave}
-                onMouseMove={handleMouseMove}
+                onMouseEnter={isPlaceholder ? undefined : (event) => handleMouseEnter(groupId, event)}
+                onMouseLeave={isPlaceholder ? undefined : handleMouseLeave}
+                onMouseMove={isPlaceholder ? undefined : handleMouseMove}
               >
                 <div 
-                  className="cursor-pointer"
-                  onClick={() => handleGroupClick(groupId)}
+                  className={isPlaceholder ? '' : 'cursor-pointer'}
+                  onClick={isPlaceholder ? undefined : () => handleGroupClick(groupId)}
                 >
                   <div className={`w-8 h-8 rounded-full overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${
-                    selectedGroups.includes(groupId)
+                    isPlaceholder 
+                      ? 'border-gray-300 bg-gray-100'
+                      : selectedGroups.includes(groupId)
                       ? 'border-primary-500 bg-primary-100 ring-2 ring-primary-500 ring-offset-2'
                       : 'border-gray-300 bg-gray-100 group-hover:ring-2 group-hover:ring-gray-300 group-hover:ring-offset-2'
                   }`}>
                     {ImageComponent(
-                      `${getRepresentativeUrl(urlHelpers, 'groups', groupId)}?v=${relatedGroup.representative_face || 'none'}`,
+                      isPlaceholder ? null : `${getRepresentativeUrl(urlHelpers, 'groups', groupId)}?v=${relatedGroup.representative_face || 'none'}`,
                       {
                         width: 32,
                         height: 32,
@@ -350,16 +369,18 @@ export default function GroupsFilter({
                     )}
                   </div>
                   
-                  {/* Add/Remove Icon on Hover */}
-                  <div 
-                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
-                  >
-                    {selectedGroups.includes(groupId) ? (
-                      <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
-                    ) : (
-                      <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
-                    )}
-                  </div>
+                  {/* Add/Remove Icon on Hover - hide for placeholders */}
+                  {!isPlaceholder && (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity duration-200 pointer-events-none"
+                    >
+                      {selectedGroups.includes(groupId) ? (
+                        <Minus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                      ) : (
+                        <Plus className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Enhanced Group Name Tooltip - Removed since we have floating tooltip */}

@@ -13,6 +13,7 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventUrls } from '../utils/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { formatErrorMessage } from '../utils/errorHandler';
+import { useAuth } from '../utils/authContext';
 import { sortByField } from '../utils/sorting';
 import ChangePasswordModal from './ChangePasswordModal';
 import EditProfileModal from './EditProfileModal';
@@ -31,6 +32,7 @@ export default function SettingsManager() {
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
   const permissions = usePermissions();
+  const { logout } = useAuth();
   
   // Profile management state
   const currentProfile = getCurrentProfile();
@@ -65,8 +67,16 @@ export default function SettingsManager() {
         allowOutsideScroll: true,
         scopes
       });
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        setIsOpen(false);
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         unregisterModal(modalId);
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [isOpen, activeTab, registerModal, unregisterModal, currentProfile?.id]);
@@ -285,14 +295,8 @@ export default function SettingsManager() {
   };
 
   const handleSignOut = async () => {
-    try {
-      await jwtService.logout();
-      window.location.reload();
-    } catch (error) {
-      console.error('Sign out error:', error);
-      // Reload anyway
-      window.location.reload();
-    }
+    await logout();
+    setIsOpen(false); // Close settings modal
   };
 
   // Get other profiles (exclude current) and sort by rank desc, then label asc

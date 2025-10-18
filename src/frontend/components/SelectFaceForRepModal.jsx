@@ -101,10 +101,18 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
     try {
       registerModal({ id: modalId, type: 'popup', scopes: [], allowOutsideScroll: true });
     } catch {}
+    
+    // Listen for logout to auto-close modal
+    const handleAuthLogout = () => {
+      onClose();
+    };
+    window.addEventListener('auth:logout', handleAuthLogout);
+    
     return () => {
       try {
         unregisterModal(modalId);
       } catch {}
+      window.removeEventListener('auth:logout', handleAuthLogout);
     };
   }, [isOpen, modalId]);
 

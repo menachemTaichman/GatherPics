@@ -25,8 +25,16 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
         allowOutsideScroll: true,
         scopes: []
       });
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         unregisterModal(MODAL_ID);
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [isOpen, registerModal, unregisterModal]);

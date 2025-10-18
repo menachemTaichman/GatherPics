@@ -33,8 +33,16 @@ export default function UploadImagesModal({
         type: 'popup',
         allowOutsideScroll: true
       });
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         unregisterModal(modalId);
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [isOpen, registerModal, unregisterModal]);

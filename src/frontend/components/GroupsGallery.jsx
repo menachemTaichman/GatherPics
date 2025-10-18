@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import FaceCard from './FaceCard';
@@ -8,10 +8,14 @@ import { usePreference } from '../utils/useSettings';
 import { setPreference, getImageCount } from '../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../utils/apiService';
 import { useDataStore, selectors as storeSelectors, useGroupsList } from '../utils/dataManager';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
+import { ImageIconPlaceholder } from '../utils/useImage.jsx';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   useApplyScopes([{ entity: 'all', id: 'groups' }]);
+  const { isAuthenticated } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const sortBy = usePreference('GroupsGallery.sortBy', 'name');
   const setSortBy = (value) => setPreference('GroupsGallery.sortBy', value);
@@ -23,30 +27,47 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
   // Use the data store for groups
   const storeGroups = useGroupsList();
+  
+  // Create placeholder groups when not authenticated
+  const placeholderGroups = useMemo(() => {
+    return Array.from({ length: 36 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      images: new Set(),
+      isPlaceholder: true
+    }));
+  }, []);
 
-  useEffect(() => {
-    async function loadGroups() {
-      try {
-        await groupsAPI.getAll(eventUrl);
-      } catch (e) {
-        console.error('Failed to load groups', e);
-      }
+  // Fetch groups data with auto-refresh on auth changes
+  const loadGroups = useCallback(async () => {
+    if (!eventUrl) return;
+    try {
+      await groupsAPI.getAll(eventUrl);
+    } catch (e) {
+      console.error('Failed to load groups', e);
     }
-    if (eventUrl) loadGroups();
   }, [eventUrl]);
+  
+  useAuthRefresh(loadGroups, [eventUrl]);
 
-  // Use groups from store
-  const currentGroups = storeGroups;
+  // Use groups from store or placeholders when not authenticated
+  const currentGroups = isAuthenticated ? storeGroups : placeholderGroups;
 
   // First filter to only groups with images (baseline for counts)
   const groupsWithImages = useMemo(() => {
+    // Show all placeholders without filtering
+    if (!isAuthenticated) return currentGroups;
+    
     return currentGroups.filter(group => {
       const imageCount = getImageCount(group);
       return imageCount > 0;
     });
-  }, [currentGroups]);
+  }, [currentGroups, isAuthenticated]);
 
   const filteredAndSortedGroups = useMemo(() => {
+    // Skip filtering for placeholders
+    if (!isAuthenticated) return groupsWithImages;
+    
     let filtered = groupsWithImages.filter(group => {
       // Filter by search term
       const matchesSearch = group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,7 +78,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);
-  }, [groupsWithImages, searchTerm, sortBy, sortOrder]);
+  }, [groupsWithImages, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
   return (
     <div className="w-full">

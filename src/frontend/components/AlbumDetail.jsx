@@ -33,6 +33,8 @@ import SingleImageTile from './SingleImageTile';
 import { useImageComponent } from '../utils/useImage.jsx';
 import ConfirmDelete from './ConfirmDelete';
 import { useImageHighlight } from '../utils/useImageHighlight';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
 
@@ -45,6 +47,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const { showToast } = useToast();
   const [album, setAlbum] = useState(null);
   const permissions = usePermissions();
+  const { isAuthenticated } = useAuth();
   
   // Use the hook at component level to avoid conditional hook calls
   const albumRepresentativeComponent = useImageComponent(
@@ -110,10 +113,22 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     sortOrder 
   });
 
+  // Create placeholder images for unauthenticated state
+  const placeholderImages = useMemo(() => {
+    if (!album?.isPlaceholder) return EMPTY_ARRAY;
+    return Array.from({ length: 24 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      isPlaceholder: true
+    }));
+  }, [album?.isPlaceholder]);
+
   const sortedImages = useMemo(() => {
     if (!album?.id) return EMPTY_ARRAY;
+    // Use placeholders if album is a placeholder
+    if (album.isPlaceholder) return placeholderImages;
     return sortImages(relatedImages, 'date', sortOrder);
-  }, [album?.id, relatedImages, sortOrder]);
+  }, [album?.id, album?.isPlaceholder, relatedImages, sortOrder, placeholderImages]);
 
   const {
     selectedKeys: selectedImages,
@@ -150,8 +165,20 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       return;
     }
     
+    // If not authenticated, immediately set placeholder and skip all logic
+    if (!isAuthenticated) {
+      setAlbum({
+        id: 'placeholder',
+        label: decodedAlbumName,
+        images: new Set(),
+        isPlaceholder: true
+      });
+      return;
+    }
+    
     const resolveByLabel = async () => {
       const searchingForLabel = decodedAlbumName; // Capture the label we're searching for
+      
       try {
         // Load all albums to populate the store
         await albumsAPI.getAll(eventUrl);
@@ -175,7 +202,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       } catch (e) {
         console.error('Failed to resolve album:', e);
       }
-      // Not found -> back to albums list
+      // Not found -> redirect back to albums list
       navigate(`/${eventUrl}/albums`);
     };
 
@@ -192,7 +219,30 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       attemptedLookupRef.current = true;
       resolveByLabel();
     }
-  }, [decodedAlbumName, currentAlbums, navigate, eventUrl]);
+    
+    // Refetch data after login
+    const handleAuthLogin = () => {
+      attemptedLookupRef.current = false; // Reset to allow refetch
+      resolveByLabel();
+    };
+    
+    // Reset to placeholder on logout
+    const handleAuthLogout = () => {
+      setAlbum({
+        id: 'placeholder',
+        label: decodedAlbumName,
+        images: new Set(),
+        isPlaceholder: true
+      });
+    };
+    
+    window.addEventListener('auth:login', handleAuthLogin);
+    window.addEventListener('auth:logout', handleAuthLogout);
+    return () => {
+      window.removeEventListener('auth:login', handleAuthLogin);
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [decodedAlbumName, currentAlbums, navigate, eventUrl, isAuthenticated]);
 
   // Keep local `album` in sync by id when the store object changes
   useEffect(() => {
@@ -206,7 +256,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   // Load album data
   useEffect(() => {
     async function loadAlbumData() {
-      if (!album?.id) return;
+      if (!album?.id || album.isPlaceholder) return;
       
       setLoading(true);
       try {
@@ -223,7 +273,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       }
     }
     
-    if (album?.id) loadAlbumData();
+    if (album?.id && !album.isPlaceholder) loadAlbumData();
   }, [album?.id, eventUrl]);
 
   const handleToggleSortOrder = () => {
@@ -719,7 +769,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   image={image}
                   aspectClass={imageClasses[image.id] || 'square'}
                   imageFit={'cover'}
-                  thumbSrc={urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null}
+                  thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
                   selectionMode={selectionMode}
                   isSelected={selectedImages.has(image.id)}
                   onToggleSelect={(e) => toggleImageSelection(image.id, e)}

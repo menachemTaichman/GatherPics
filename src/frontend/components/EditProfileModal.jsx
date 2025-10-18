@@ -81,8 +81,16 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
           allowOutsideScroll: true 
         });
       } catch {}
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         try { unregisterModal(MODAL_ID); } catch {}
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [isOpen, profile?.id]);

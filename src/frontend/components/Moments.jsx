@@ -26,7 +26,10 @@ import { getImageCount } from '../utils/settings';
 import { ImageComponent } from '../utils/useImage.jsx';
 import { useImageHighlight } from '../utils/useImageHighlight';
 import PermissionGate from './PermissionGate';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 
+const EMPTY_ARRAY = Object.freeze([]);
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -61,16 +64,32 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const location = useLocation();
   const navigate = useNavigate();
   const urlHelpers = injectedUrlHelpers;
+  const { isAuthenticated } = useAuth();
   
   // Apply scope for all moments
   useApplyScopes([{ entity: 'all', id: 'moments' }]);
   
-  const allMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  
+  // Create placeholder moments when not authenticated
+  const placeholderMoments = useMemo(() => {
+    return Array.from({ length: 6 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      images: new Set(),
+      isPlaceholder: true
+    }));
+  }, []);
+  
+  const allMoments = isAuthenticated ? storeMoments : placeholderMoments;
   
   // Subscribe to entities changes to make the component reactive
   const entities = useDataStore(state => state.entities, shallow);
   const includeArchived = usePreference('general.includeArchived', false);
   const moments = useMemo(() => {
+    // Return placeholders as-is without filtering
+    if (!isAuthenticated) return allMoments;
+    
     let filteredMoments = allMoments.filter(moment => {
       const imageCount = getImageCount(moment);
       return imageCount > 0;
@@ -82,7 +101,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     }
     
     return sortMoments(filteredMoments, 'asc');
-  }, [allMoments, includeArchived]);
+  }, [allMoments, includeArchived, isAuthenticated]);
   
   const storeLoading = useDataStore(state => state.loading);
   const storeError = useDataStore(state => state.error);
@@ -227,9 +246,23 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMoments();
+  // Define fetchMoments before using it in useAuthRefresh
+  const fetchMoments = useCallback(async () => {
+    if (!eventUrl) return;
+    try {
+      setStoreLoading(true);
+      const response = await momentsAPI.getAll(eventUrl);
+      // Changes are automatically applied by apiService interceptor
+      setStoreError(null);
+    } catch (err) {
+      setStoreError('Failed to load moments.');
+    } finally {
+      setStoreLoading(false);
+    }
   }, [eventUrl]);
+
+  // Fetch moments data with auto-refresh on auth changes
+  useAuthRefresh(fetchMoments, [eventUrl]);
 
   // Note: Timeline elements are automatically registered/unregistered through setMomentRef callback
   // No need to call refreshElements() as it clears all registered elements unnecessarily
@@ -271,21 +304,6 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   }, [carouselVisible]);
 
   // The timeline manager now handles all scroll detection and URL updates automatically
-
-
-  const fetchMoments = async () => {
-    try {
-      setStoreLoading(true);
-      const response = await momentsAPI.getAll(eventUrl);
-      // Changes are automatically applied by apiService interceptor
-      setStoreError(null);
-    } catch (err) {
-      setStoreError('Failed to load moments.');
-    } finally {
-      setStoreLoading(false);
-    }
-  };
-
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
@@ -468,8 +486,17 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
   // Helper function to get images for a moment (filtered for display)
   const getMomentImages = (momentId) => {
+    // Return placeholder images for placeholder moments
+    if (momentId?.startsWith('placeholder-')) {
+      return Array.from({ length: 8 }, (_, i) => ({
+        id: `placeholder-img-${momentId}-${i}`,
+        label: '',
+        isPlaceholder: true
+      }));
+    }
+    
     const momentImages = entities?.moments?.[momentId]?.images;
-    if (!momentImages || !(momentImages instanceof Set)) return [];
+    if (!momentImages || !(momentImages instanceof Set)) return EMPTY_ARRAY;
     
     return Array.from(momentImages)
       .map(imageId => entities?.images?.[imageId])
@@ -479,6 +506,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
   // Helper function to get total image count for a moment (from store, no filtering)
   const getMomentTotalImageCount = (momentId) => {
+    // Return placeholder count for placeholder moments
+    if (momentId?.startsWith('placeholder-')) return 8;
+    
     const momentImages = entities?.moments?.[momentId]?.images;
     if (!momentImages || !(momentImages instanceof Set)) return 0;
     

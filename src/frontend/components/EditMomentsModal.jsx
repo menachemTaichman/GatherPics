@@ -105,8 +105,17 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setEditingMoments(sortedStoreMoments);
     setChangedMoments(new Set());
     
-    return () => {
+    // Listen for logout to auto-close modal
+    const handleAuthLogout = () => {
+      if (onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('auth:logout', handleAuthLogout);
+    
+      return () => {
       try { unregisterModal(MODAL_ID); } catch {}
+      window.removeEventListener('auth:logout', handleAuthLogout);
       
       // Clear any pending name check timeouts
       if (updateMoment._timeouts) {

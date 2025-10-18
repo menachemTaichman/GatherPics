@@ -21,6 +21,9 @@ import { useImageComponent, ImageComponent } from '../utils/useImage.jsx';
 import { formatErrorMessage } from '../utils/errorHandler';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
+import { useAuth } from '../utils/authContext';
+
+const EMPTY_ARRAY = Object.freeze([]);
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
 function ImageViewerActions({
@@ -232,6 +235,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   // urlHelpers provided by parent, already memoized by eventId
   
   const includeArchived = usePreference('general.includeArchived', false);
@@ -359,6 +363,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [isEditingIndex, setIsEditingIndex] = useState(false);
   const imageRef = useRef(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -558,16 +563,39 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   // Avoid subscribing to entire moments map; read on demand
   
   const momentInfo = useMemo(() => {
+    if (!isAuthenticated) return null; // No moment info when not authenticated
     const mid = storeImageInfo?.moment_id;
     if (!mid) return null;
     const m = (useDataStore.getState().entities?.moments || {})[mid];
     if (m) return m;
     return { id: mid, label: storeImageInfo?.moment_label };
-  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label]);
+  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, isAuthenticated]);
 
 
-  const facesList = useFacesForImage(imageId);
-  const albumsList = useAlbumsForImage(imageId);
+  const storeFacesList = useFacesForImage(imageId);
+  const storeAlbumsList = useAlbumsForImage(imageId);
+  
+  // Create placeholder lists when not authenticated
+  const placeholderFaces = useMemo(() => {
+    if (isAuthenticated) return EMPTY_ARRAY;
+    return [
+      { id: 'placeholder-face-1', group_id: 'placeholder-1', groupId: 'placeholder-1', isPlaceholder: true },
+      { id: 'placeholder-face-2', group_id: 'placeholder-2', groupId: 'placeholder-2', isPlaceholder: true }
+    ];
+  }, [isAuthenticated]);
+  
+  const placeholderAlbums = useMemo(() => {
+    if (isAuthenticated) return EMPTY_ARRAY;
+    return [
+      { id: 'placeholder-album-1', label: '', isPlaceholder: true },
+      { id: 'placeholder-album-2', label: '', isPlaceholder: true }
+    ];
+  }, [isAuthenticated]);
+  
+  // Return stable arrays or placeholders
+  const facesList = isAuthenticated ? storeFacesList : placeholderFaces;
+  const albumsList = isAuthenticated ? storeAlbumsList : placeholderAlbums;
+  
   useEffect(() => {
   }, [facesList, albumsList]);
   // If albums list seems stale after an add/remove, refresh image info once
@@ -597,10 +625,28 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   // Fetch image info when image changes
   useEffect(() => {
     if (!imageId) return;
+    setImageError(false); // Reset error state on image change
+    setImageLoaded(false);
     fetchImageInfo();
+    
+    // Listen for logout to clear image data
+    const handleAuthLogout = () => {
+      setImageInfo(null);
+      setLoading(false);
+    };
+    
+    window.addEventListener('auth:logout', handleAuthLogout);
+    return () => window.removeEventListener('auth:logout', handleAuthLogout);
   }, [imageId]);
 
   const fetchImageInfo = async () => {
+    // Skip fetching if not authenticated
+    if (!isAuthenticated) {
+      setImageInfo(null);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(prev => (prev === true ? prev : true));
       if (imageId && eventUrl) {
@@ -942,6 +988,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   };
 
   const getImageSrc = () => {
+    if (!isAuthenticated) return null; // Show placeholder when not authenticated
     const id = storeImageInfo?.id;
     if (!id) return null;
     if (!urlHelpers) return null;
@@ -958,6 +1005,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   };
 
   const getGroupLabel = (face) => {
+    if (face?.isPlaceholder) return ''; // Placeholder faces have no label
     const gid = face?.groupId || face?.group_id;
     if (!gid) return '';
     return (useDataStore.getState().entities?.groups || {})[gid]?.label || '';
@@ -1026,7 +1074,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   }}
                 >
                   <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {mainImageSrc ? (
+                    {mainImageSrc && !imageError ? (
                       <img
                         ref={imageRef}
                         src={mainImageSrc}
@@ -1036,7 +1084,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         height={700}
                         draggable={false}
                         onLoad={(e) => {
-                          setImageLoaded(prev => (prev ? prev : true));
+                          setImageLoaded(true);
+                          setImageError(false);
                           if (imageRef.current) {
                             setImageDimensions({
                               width: imageRef.current.naturalWidth,
@@ -1045,16 +1094,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           }
                         }}
                         onError={() => {
-                          // Do not set state if already errored
-                          if (!imageLoaded) setImageLoaded(false);
+                          setImageError(true);
+                          setImageLoaded(false);
                         }}
                         style={{ display: 'block' }}
                       />
                     ) : (
-                      ImageComponent(null, {
-                        width: 1050,
-                        height: 700,
-                        className: 'max-w-full max-h-full object-contain select-none',
+                      ImageComponent(mainImageSrc, {
+                        width: 200,
+                        height: 200,
+                        className: 'w-full h-full object-contain select-none',
                         alt: imageId
                       })
                     )}
@@ -1358,34 +1407,48 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           {albumsList.map((album, index) => (
                             <div
                               key={album.id || `${album.label || 'album'}-${index}`}
-                              className="flex items-center p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors mb-1 last:mb-0"
+                              className={`flex items-center p-2 rounded-lg bg-gray-50 ${album.isPlaceholder ? '' : 'hover:bg-gray-100'} transition-colors mb-1 last:mb-0`}
                             >
-                              <a
-                                href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
-                                onClick={(e) => handleAlbumLinkClick(e, album)}
-                                className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                title={album.label}
-                              >
-                                {ImageComponent(
-                                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
-                                  {
+                              {album.isPlaceholder ? (
+                                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                  {ImageComponent(null, {
                                     width: 40,
                                     height: 40,
                                     className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
                                     alt: ''
-                                  }
-                                )}
-                                <span className="font-medium text-gray-900 truncate">{album.label}</span>
-                              </a>
-                              <PermissionGate requires="canEdit">
-                                <button
-                                  onClick={() => handleRemoveFromAlbum(album)}
-                                  className="ml-3 p-1.5 hover:bg-red-100 rounded-lg transition-colors"
-                                  title={`Remove from ${album.label}`}
-                                >
-                                  <Minus className="w-4 h-4 text-red-600" />
-                                </button>
-                              </PermissionGate>
+                                  })}
+                                  <span className="font-medium text-gray-900 truncate">\u00A0</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <a
+                                    href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+                                    onClick={(e) => handleAlbumLinkClick(e, album)}
+                                    className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    title={album.label}
+                                  >
+                                    {ImageComponent(
+                                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
+                                      {
+                                        width: 40,
+                                        height: 40,
+                                        className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                        alt: ''
+                                      }
+                                    )}
+                                    <span className="font-medium text-gray-900 truncate">{album.label}</span>
+                                  </a>
+                                  <PermissionGate requires="canEdit">
+                                    <button
+                                      onClick={() => handleRemoveFromAlbum(album)}
+                                      className="ml-3 p-1.5 hover:bg-red-100 rounded-lg transition-colors"
+                                      title={`Remove from ${album.label}`}
+                                    >
+                                      <Minus className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  </PermissionGate>
+                                </>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1439,11 +1502,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             {facesList.map((face, index) => (
                               <div
                                 key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
-                                className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                                onClick={() => handleFaceClick(index)}
+                                className={`flex items-center space-x-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
                               >
                                 {ImageComponent(
-                                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null,
+                                  face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
                                   {
                                     width: 40,
                                     height: 40,
@@ -1454,17 +1517,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 )}
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-gray-900 truncate">
-                                    {getGroupLabel(face)}
+                                    {getGroupLabel(face) || '\u00A0'}
                                   </p>
                                 </div>
-                                <a
-                                  href={`/${eventUrl}/persons/${encodeURIComponent(getGroupLabel(face))}`}
-                                  onClick={(e) => handlePersonLinkClick(e, face)}
-                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                  title="Go to person page"
-                                >
-                                  <User className="w-4 h-4 text-gray-600" />
-                                </a>
+                                {!face.isPlaceholder && (
+                                  <a
+                                    href={`/${eventUrl}/persons/${encodeURIComponent(getGroupLabel(face))}`}
+                                    onClick={(e) => handlePersonLinkClick(e, face)}
+                                    className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                                    title="Go to person page"
+                                  >
+                                    <User className="w-4 h-4 text-gray-600" />
+                                  </a>
+                                )}
                               </div>
                             ))}
                           </div>

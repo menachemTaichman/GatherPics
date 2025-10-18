@@ -107,8 +107,17 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       fetchImagesForEditing();
       setError('');
       
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        if (onClose) {
+          onClose();
+        }
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         try { unregisterModal(MODAL_ID); } catch {}
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [moment]);

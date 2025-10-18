@@ -80,8 +80,16 @@ export default function AlbumQuickAddButton({
   useEffect(() => {
     if (open) {
       registerModal({ id: MODAL_ID, type: 'popup' });
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        setOpen(false);
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
       return () => {
         unregisterModal(MODAL_ID);
+        window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
   }, [open, MODAL_ID, registerModal, unregisterModal]);

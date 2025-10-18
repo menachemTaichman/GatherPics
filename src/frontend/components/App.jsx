@@ -236,7 +236,15 @@ function AppContent({ eventUrl }) {
   
   const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
-  const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+
+  // Auto-show login modal when on protected route and not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      // We're on a protected route (inside AppContent) and not authenticated
+      openLoginModal();
+    }
+  }, [isAuthenticated, authLoading, openLoginModal]);
 
   // Fetch current profile when authenticated
   useEffect(() => {

@@ -52,7 +52,17 @@ export default function MergeConflictModal({
   useEffect(() => {
     if (isOpen) {
       try { registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
-      return () => { try { unregisterModal(MODAL_ID); } catch {} };
+      
+      // Listen for logout to auto-close modal
+      const handleAuthLogout = () => {
+        onClose();
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      
+      return () => { 
+        try { unregisterModal(MODAL_ID); } catch {}
+        window.removeEventListener('auth:logout', handleAuthLogout);
+      };
     }
   }, [isOpen, registerModal, unregisterModal]);
 
