@@ -45,6 +45,19 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   useEffect(() => {
     if (isOpen) {
       lastActiveElement.current = document.activeElement;
+      
+      // Add overscroll-contain to all scrollable elements within the modal to prevent scroll chaining
+      if (modalRef.current) {
+        // Apply to modal itself
+        modalRef.current.style.overscrollBehavior = 'contain';
+        
+        // Apply to all scrollable children
+        const scrollableElements = modalRef.current.querySelectorAll('[class*="overflow"]');
+        scrollableElements.forEach(el => {
+          el.style.overscrollBehavior = 'contain';
+        });
+      }
+      
       // After a delay to ensure the modal has rendered, set the initial focus.
       if (enableFocusTrapping && modalRef.current) {
         setTimeout(() => {

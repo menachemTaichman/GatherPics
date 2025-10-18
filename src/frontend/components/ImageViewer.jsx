@@ -986,7 +986,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden modal-overlay">
         <motion.div
           ref={modalRef}
-          className="bg-transparent border-2 border-white/30 rounded-lg shadow-xl w-full mx-4 my-4 overflow-hidden overscroll-contain min-h-0 image-viewer-modal"
+          className="bg-transparent border-2 border-white/30 rounded-lg shadow-xl w-full mx-4 my-4 overflow-hidden min-h-0 image-viewer-modal"
           style={{ 
             maxHeight: 'calc(100vh - 3rem)',
             height: 'calc(min(100vw - 2rem, 1024px) * 0.67)', // Always use base modal width for consistent image container
@@ -1351,7 +1351,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     </div>
                     {albumsOpen && (
                       <div
-                        className={`albums-list-container overflow-y-auto overscroll-contain ${facesOpen ? '' : 'flex-1 min-h-0'}`}
+                        className={`albums-list-container overflow-y-auto ${facesOpen ? '' : 'flex-1 min-h-0'}`}
                         style={facesOpen ? { height: albumsHeight } : {}}
                       >
                         <div className="px-4">
@@ -1430,7 +1430,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     </button>
                   </div>
                   {facesOpen && (
-                    <div className="faces-list-container overflow-y-auto overscroll-contain">
+                    <div className="faces-list-container overflow-y-auto">
                       <div className="px-4">
                         {facesList.length === 0 ? (
                           <p className="text-gray-500 text-sm">No faces detected in this photo.</p>

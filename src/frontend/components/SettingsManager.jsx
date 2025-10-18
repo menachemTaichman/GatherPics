@@ -19,17 +19,14 @@ import EditProfileModal from './EditProfileModal';
 import ConfirmDelete from './ConfirmDelete';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
+import UploadImagesModal from './UploadImagesModal';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(null);
-  const [lastUploadResult, setLastUploadResult] = useState(null);
-  const [assignMoments, setAssignMoments] = useState(true);
   const [uploadLimits, setUploadLimits] = useState(null);
-  const fileInputRef = useRef(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const { eventUrl } = useParams();
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -118,7 +115,7 @@ export default function SettingsManager() {
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
     // If a child modal is open (like ChangePasswordModal or EditProfileModal), let events pass through
-    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal) {
+    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal || showUploadModal) {
       return true; // Return true to prevent this modal from stopping propagation to child modal
     }
     
@@ -130,14 +127,14 @@ export default function SettingsManager() {
     }
     
     return false; // Let default modal behavior handle it (ESC to close)
-  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal]);
+  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal, showUploadModal]);
 
   const { modalRef } = useModalFocus(isOpen, () => setIsOpen(false), {
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
     // Disable focus trapping when child modal is open so child can receive focus
-    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal,
+    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal && !showUploadModal,
     customKeyHandler: handleSettingsKeys
   });
 
@@ -311,106 +308,9 @@ export default function SettingsManager() {
       return (a.label || '').localeCompare(b.label || ''); // ascending
     });
 
-  const handleFileSelect = (event) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      handleUpload(files);
-    }
-    // Reset input so the same files can be selected again
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleUpload = async (files) => {
-    // Validate files
-    const jpgFiles = files.filter(file => 
-      file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')
-    );
-
-    if (jpgFiles.length === 0) {
-      showToast('Please select JPG files only', 'error');
-      return;
-    }
-
-    if (jpgFiles.length !== files.length) {
-      showToast(`${files.length - jpgFiles.length} non-JPG file(s) were skipped`, 'warning');
-    }
-
-    // Check count limit
-    if (uploadLimits && uploadLimits.available_images_count !== -1 && jpgFiles.length > uploadLimits.available_images_count) {
-      showToast(`You can only upload ${uploadLimits.available_images_count} more image(s). Limit: ${uploadLimits.images_count_limit}`, 'error');
-      return;
-    }
-
-    // Check size limit
-    if (uploadLimits && uploadLimits.image_size_limit_bytes > 0) {
-      const oversizedFiles = jpgFiles.filter(file => file.size > uploadLimits.image_size_limit_bytes);
-      if (oversizedFiles.length > 0) {
-        const maxSizeMB = (uploadLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1);
-        showToast(`${oversizedFiles.length} file(s) exceed the ${maxSizeMB}MB size limit`, 'error');
-        return;
-      }
-    }
-
-    setUploading(true);
-    setLastUploadResult(null);
-    setUploadProgress({ step: 'uploading', current: jpgFiles.length, total: jpgFiles.length, message: `Uploading ${jpgFiles.length} image(s)...` });
-
-    try {
-      // Simulate upload progress
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      setUploadProgress({ step: 'processing', current: 0, total: 1, message: 'Processing images, detecting faces, and clustering...' });
-      
-      const result = await imagesAPI.upload(jpgFiles, assignMoments, eventUrl);
-      
-      const successMsg = `Successfully processed ${result.images_processed} image(s), detected ${result.faces_detected} face(s), created ${result.groups_created} group(s)`;
-      
-      setUploadProgress({ 
-        step: 'complete', 
-        current: 1, 
-        total: 1, 
-        message: successMsg
-      });
-
-      setLastUploadResult({
-        success: true,
-        message: successMsg,
-        details: result
-      });
-
-      showToast(successMsg, 'success');
-
-      if (result.errors && result.errors.length > 0) {
-        console.warn('Upload errors:', result.errors);
-        showToast(`${result.errors.length} image(s) failed to process`, 'warning');
-        setLastUploadResult(prev => ({
-          ...prev,
-          message: `${successMsg}\n${result.errors.length} image(s) failed to process`
-        }));
-      }
-
-      // Refresh limits
-      await fetchUploadLimits();
-
-      // Reset uploading state after a delay
-      setTimeout(() => {
-        setUploadProgress(null);
-        setUploading(false);
-      }, 2000);
-
-    } catch (error) {
-      console.error('Upload failed:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Upload failed';
-      showToast(errorMsg, 'error');
-      setUploadProgress({ step: 'error', current: 0, total: 0, message: errorMsg });
-      setLastUploadResult({
-        success: false,
-        message: errorMsg
-      });
-      setUploading(false);
-    }
+  const handleUploadComplete = async (result) => {
+    // Refresh upload limits after successful upload
+    await fetchUploadLimits();
   };
 
   return (
@@ -524,153 +424,23 @@ export default function SettingsManager() {
 
                           {/* Upload Photos */}
                           <PermissionGate requires="canUploadAndDeleteImages">
-                            <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                <Upload className="w-5 h-5 text-gray-600" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">Upload Photos</p>
-                                <p className="text-sm text-gray-500">Add new JPG photos to the gallery</p>
-                              </div>
-                            </div>
-
-                            {/* Upload limits info */}
-                            {uploadLimits && (
-                              <div className="mb-3 text-xs text-gray-600 bg-white px-3 py-2 rounded">
-                                <div className="flex justify-between">
-                                  <span>Images:</span>
-                                  <span className="font-medium">
-                                    {uploadLimits.current_images_count} / {uploadLimits.images_count_limit > 0 ? uploadLimits.images_count_limit : '∞'}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Max size per image:</span>
-                                  <span className="font-medium">
-                                    {uploadLimits.image_size_limit_bytes > 0 
-                                      ? `${(uploadLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1)}MB` 
-                                      : '∞'}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Assign moments toggle */}
-                            <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg mb-3">
-                              <div>
-                                <p className="font-medium text-gray-900 text-sm">Auto-assign to Moments</p>
-                                <p className="text-xs text-gray-500">Assign images to moments by capture time</p>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={assignMoments}
-                                  onChange={(e) => setAssignMoments(e.target.checked)}
-                                  disabled={uploading}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 peer-disabled:opacity-50"></div>
-                              </label>
-                            </div>
-
-                            {/* Upload button */}
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              accept=".jpg,.jpeg,image/jpeg"
-                              multiple
-                              onChange={handleFileSelect}
-                              className="hidden"
-                            />
                             <button
-                              onClick={() => fileInputRef.current?.click()}
-                              disabled={uploading}
-                              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => setShowUploadModal(true)}
+                              className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full"
                             >
-                              {uploading ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  <span>Processing...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-4 h-4" />
-                                  <span>Select Files</span>
-                                </>
-                              )}
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                                  <Upload className="w-5 h-5 text-gray-600" />
+                                </div>
+                                <div className="text-left">
+                                  <p className="font-medium text-gray-900">Upload Photos</p>
+                                  <p className="text-sm text-gray-500">Add new photos to the gallery</p>
+                                </div>
+                              </div>
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
                             </button>
-
-                            {/* Progress and status display */}
-                            <AnimatePresence>
-                              {(uploadProgress || lastUploadResult) && (
-                                <motion.div 
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: 'auto' }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.3 }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="mt-3 space-y-2">
-                                    {uploadProgress && (
-                                      <>
-                                        <div className="flex items-center space-x-2 text-sm">
-                                          {uploadProgress.step === 'complete' ? (
-                                            <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                          ) : uploadProgress.step === 'error' ? (
-                                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                                          ) : (
-                                            <Loader2 className="w-4 h-4 animate-spin text-primary-600 flex-shrink-0" />
-                                          )}
-                                          <span className={`${uploadProgress.step === 'complete' ? 'text-green-700' : uploadProgress.step === 'error' ? 'text-red-700' : 'text-gray-700'} font-medium`}>
-                                            {uploadProgress.message}
-                                          </span>
-                                        </div>
-                                        {uploadProgress.total > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
-                                          <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div
-                                              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                                              style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
-                                            />
-                                          </div>
-                                        )}
-                                      </>
-                                    )}
-                                    
-                                    {/* Persistent result message */}
-                                    {!uploading && lastUploadResult && (
-                                      <motion.div 
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.3, delay: 0.1 }}
-                                        className={`p-3 rounded-lg text-sm ${lastUploadResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
-                                      >
-                                        <div className="flex items-start space-x-2">
-                                          {lastUploadResult.success ? (
-                                            <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                                          ) : (
-                                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                                          )}
-                                          <div className={lastUploadResult.success ? 'text-green-800' : 'text-red-800'}>
-                                            <p className="font-medium whitespace-pre-line">{lastUploadResult.message}</p>
-                                            {lastUploadResult.success && lastUploadResult.details && (
-                                              <div className="mt-1 text-xs text-green-700 space-y-0.5">
-                                                <p>• Images: {lastUploadResult.details.images_processed}</p>
-                                                <p>• Faces detected: {lastUploadResult.details.faces_detected}</p>
-                                                <p>• Groups created: {lastUploadResult.details.groups_created}</p>
-                                                {lastUploadResult.details.errors && lastUploadResult.details.errors.length > 0 && (
-                                                  <p className="text-yellow-700">• Errors: {lastUploadResult.details.errors.length}</p>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </motion.div>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                            </div>
                           </PermissionGate>
                         </div>
                       </motion.div>
@@ -947,6 +717,17 @@ export default function SettingsManager() {
           confirmText="Delete"
           cancelText="Cancel"
           caption="This action cannot be undone."
+        />
+      )}
+
+      {/* Upload Images Modal */}
+      {showUploadModal && (
+        <UploadImagesModal
+          isOpen={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          eventUrl={eventUrl}
+          uploadLimits={uploadLimits}
+          onUploadComplete={handleUploadComplete}
         />
       )}
     </>
