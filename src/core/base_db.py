@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import os
 from enum import Enum
 from abc import ABC, abstractmethod
-from .errors import Forbidden, DatabaseError
+from .errors import Forbidden, DatabaseError, DBConstant
 
 class ReturnFormat(Enum):
     VALUE = 'value'
@@ -226,7 +226,9 @@ class BaseDB(ABC):
                 conn.commit()
         
         except sqlite3.IntegrityError as e:
-            if "Permission denied" in str(e):
+            if "Constant error" in str(e):
+                raise DBConstant(f"Database constant error: {str(e)}") from e
+            elif "Permission denied" in str(e):
                 raise Forbidden(f"Permission denied: {e}") from e
             else:
                 raise DatabaseError(f"Integrity error: {str(e)}") from e
@@ -374,27 +376,3 @@ class BaseDB(ABC):
         sql += f" RETURNING {returning}"
 
         return self.execute_query(sql, where_values, ReturnFormat.LIST_VALUES)
-
-    def upsert(self, table: str, data: dict) -> list:
-        """Insert or update a record by primary key (ON CONFLICT DO UPDATE)."""
-        if not data:
-            return []
-
-        target = self.STRUCTURE()[table].get("accessible_table", table)
-        p_keys = self.STRUCTURE()[table]["primary_key"]
-        returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
-        keys = list(data.keys())
-
-        insert_cols = ", ".join(keys)
-        placeholders = ", ".join(["?"] * len(keys))
-        update_cols = [k for k in keys if k not in p_keys]
-        set_clause = ", ".join([f"{k}=excluded.{k}" for k in update_cols])
-        conflict_cols = ", ".join(p_keys)
-
-        sql = f"""
-            INSERT INTO {target} ({insert_cols}) VALUES ({placeholders}) 
-            ON CONFLICT ({conflict_cols}) DO UPDATE SET {set_clause} 
-            RETURNING {returning}
-        """
-
-        return self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)

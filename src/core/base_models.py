@@ -225,17 +225,6 @@ class BaseModels(ABC):
         
         return parents
 
-    def upsert(self, table: str, data: dict) -> str | None:
-        """
-        Insert or update one entity.
-        Args:
-            table: table name
-            data: dictionary of entity data
-        Returns:
-            new entity id
-        """
-        return self.db.upsert(table, data)
-
     def add(self, table: str, data: dict) -> str | None:
         """
         Insert one entity.
@@ -245,7 +234,28 @@ class BaseModels(ABC):
         Returns:
             new entity id
         """
+        if not self.db.is_auto_increment(table):
+            if self.db.get_id_field(table) not in data:
+                data[self.db.get_id_field(table)] = self.generate_id()
+        
         return self.db.insert(table, data)
+
+    def add_many(self, table: str, fields: list[str], values: list[list[Any]]) -> list[str]:
+        """
+        Insert many entities.
+        Args:
+            table: table name
+            fields: list of field names
+            values: list of lists of entity data
+        Returns:
+            list of new entity ids
+        """
+        if not self.db.is_auto_increment(table):
+            if self.db.get_id_field(table) not in fields:
+                fields.append(self.db.get_id_field(table))
+                values = [[*row, self.generate_id()] for row in values]
+        
+        return self.db.insert_many(table, fields, values)
 
     def edit(self, table: str, entity_ids: str | list[str], fields: dict) -> list[str]:
         """

@@ -102,7 +102,7 @@ class GeneralDB(BaseDB):
     def TABLES(self) -> dict:
         return {
             'events': '''
-                event_id TEXT PRIMARY KEY,
+                event_id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
                 date TEXT,
                 url TEXT UNIQUE,
@@ -110,7 +110,7 @@ class GeneralDB(BaseDB):
                 image_size_limit_bytes INTEGER DEFAULT 0
             ''',
             'profiles': '''
-                profile_id TEXT PRIMARY KEY,
+                profile_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE NOT NULL,
                 password TEXT DEFAULT '',
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
@@ -120,15 +120,15 @@ class GeneralDB(BaseDB):
                 UNIQUE (label, restricted_to_event)
             ''',
             'profiles_events': '''
-                profile_id TEXT,
-                event_id TEXT,
+                profile_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
                 can_delete INTEGER DEFAULT 0,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, event_id)
             ''',
             'profiles_preferences': '''
-                profile_id TEXT,
+                profile_id TEXT NOT NULL,
                 preference_group TEXT NOT NULL,
                 preference_key TEXT NOT NULL,
                 preference_value TEXT,

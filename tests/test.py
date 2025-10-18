@@ -1,5 +1,7 @@
 from src.core.event import Event
 from src.core.face_utils import FaceUtils
+from src.core.base_db import BaseDB
+from src.core.event_db import EventDB
 from src.core.general_models import GeneralModels
 from src.core.general_db import GeneralDB
 from src.core.base_db import ReturnFormat
@@ -53,59 +55,71 @@ def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
     create_views_triggers_and_indexes()
 
-def recreate_tables_with_data():
-    from src.core.event_db import _EVENT_TABLES as TABLES
+def recreate_tables_with_data(db: BaseDB):
+    TABLES = db.TABLES()
 
-    # --- הגדרות כלליות שניתן לשנות ---
-    creation_order = [
-        'groups',
-        'faces',
-        'albums',
-        'profiles',
-        'images',
-        'moments',
-        'albums_images',
-        'profile_images',
-        'profile_albums'
-    ]
+    creation_order = []
+    cyclic_pairs = []
 
-    # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
-    cyclic_pairs = [
-        ('moments', 'images', 'representative_image'),
-        ('groups', 'faces', 'representative_face')
-    ]
+    if isinstance(db, GeneralDB):
+        creation_order = [
+            'events',
+            'profiles',
+            'profiles_events',
+            'profiles_preferences',
+            'refresh_tokens',
+            'settings'
+        ]
+    elif isinstance(db, EventDB):
+        creation_order = [
+            'groups',
+            'faces',
+            'albums',
+            'profiles',
+            'images',
+            'moments',
+            'albums_images',
+            'profile_images',
+            'profile_albums'
+        ]
+
+        # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
+        cyclic_pairs = [
+            ('moments', 'images', 'representative_image'),
+            ('groups', 'faces', 'representative_face')
+        ]
 
     # ------------------------------------------------------
 
     drop_views_triggers_and_indexes()
-    event.models.db.execute_query('PRAGMA foreign_keys = OFF;')
+    db.execute_query('PRAGMA foreign_keys = OFF;')
 
     # שלב 1️⃣ – גיבוי כל הטבלאות
     print("📦 גיבוי כל הטבלאות...")
     for table_name in creation_order:
         backup_table = f"{table_name}_backup"
-        event.models.db.execute_query(f"DROP TABLE IF EXISTS {backup_table}")
-        event.models.db.execute_query(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}")
+        db.execute_query(f"DROP TABLE IF EXISTS {backup_table}")
+        db.execute_query(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}")
         print(f"  ✅ גובהה {table_name} → {backup_table}")
 
     # שלב 2️⃣ – יצירה מחדש של כל הטבלאות
     print("\n🧱 יצירת טבלאות חדשות...")
     for table_name in creation_order:
         ddl = TABLES[table_name]
-        event.models.db.execute_query(f"DROP TABLE IF EXISTS {table_name}")
-        event.models.db.execute_query(f"CREATE TABLE {table_name} ({ddl})")
+        db.execute_query(f"DROP TABLE IF EXISTS {table_name}")
+        db.execute_query(f"CREATE TABLE {table_name} ({ddl})")
         print(f"  ✅ נוצרה טבלה חדשה {table_name}")
 
     # עוזר כללי להעתקת נתונים בין טבלאות לפי עמודות משותפות
     def copy_common_columns(src, dst):
-        old_cols = [r[1] for r in event.models.db.execute_query(f"PRAGMA table_info({src});", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[1] for r in event.models.db.execute_query(f"PRAGMA table_info({dst});", return_format=ReturnFormat.LIST_TUPLES)]
+        old_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({src});", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({dst});", return_format=ReturnFormat.LIST_TUPLES)]
         common = [c for c in old_cols if c in new_cols]
         if not common:
             print(f"  ⚠️ אין עמודות משותפות בין {src} ל-{dst}")
             return
         cols = ', '.join(common)
-        event.models.db.execute_query(f"INSERT INTO {dst}({cols}) SELECT {cols} FROM {src}")
+        db.execute_query(f"INSERT INTO {dst}({cols}) SELECT {cols} FROM {src}")
 
     # שלב 3️⃣ – שחזור נתונים (כולל טיפול בצמדים)
     print("\n📤 שחזור נתונים...")
@@ -115,12 +129,12 @@ def recreate_tables_with_data():
         print(f"  🔁 טיפול בצמד {a} ↔ {b} (שדה בעייתי: {problematic})")
 
         # העתקה של טבלה A בלי השדה הבעייתי
-        old_cols = [r[1] for r in event.models.db.execute_query(f"PRAGMA table_info({a}_backup);", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[1] for r in event.models.db.execute_query(f"PRAGMA table_info({a});", return_format=ReturnFormat.LIST_TUPLES)]
+        old_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({a}_backup);", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({a});", return_format=ReturnFormat.LIST_TUPLES)]
         common_cols = [c for c in old_cols if c in new_cols and c != problematic]
         if common_cols:
             cols = ', '.join(common_cols)
-            event.models.db.execute_query(f"INSERT INTO {a}({cols}) SELECT {cols} FROM {a}_backup")
+            db.execute_query(f"INSERT INTO {a}({cols}) SELECT {cols} FROM {a}_backup")
             print(f"    ✅ {a}: הועתקו כל השדות למעט {problematic}")
 
         # העתקה של טבלה B כרגיל
@@ -128,7 +142,7 @@ def recreate_tables_with_data():
         print(f"    ✅ {b}: הועתקו כל הנתונים")
 
         # עדכון שדה בעייתי אחרי שטבלת B קיימת
-        event.models.db.execute_query(f"""
+        db.execute_query(f"""
             UPDATE {a}
             SET {problematic} = (
                 SELECT {problematic}
@@ -150,8 +164,8 @@ def recreate_tables_with_data():
     # שלב 4️⃣ – מחיקת טבלאות הגיבוי
     print("\n🧹 מחיקת טבלאות הגיבוי...")
     for table_name in creation_order:
-        event.models.db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
-    event.models.db.execute_query('PRAGMA foreign_keys = ON;')
+        db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
+    db.execute_query('PRAGMA foreign_keys = ON;')
     create_views_triggers_and_indexes()
 
     print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
@@ -209,8 +223,10 @@ def test_faces_in_aws_and_db():
     faces_in_db = event.models.db.execute_query('SELECT face_id FROM faces;', return_format=ReturnFormat.LIST_VALUES)
     faces_in_aws_but_not_in_db = [face for face in faces_in_aws if face not in faces_in_db]
     faces_in_db_but_not_in_aws = [face for face in faces_in_db if face not in faces_in_aws]
-    print(faces_in_aws_but_not_in_db)
-    print(faces_in_db_but_not_in_aws)
+    return {
+        'faces_in_aws_but_not_in_db': faces_in_aws_but_not_in_db,
+        'faces_in_db_but_not_in_aws': faces_in_db_but_not_in_aws
+    }
 
 def find_incomplete_images():
     images = event.models.db.execute_query('SELECT image_id FROM images;', return_format=ReturnFormat.LIST_VALUES)
@@ -239,31 +255,9 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# preferences = GeneralDB.CONSTANTS()['profiles_preferences']
-profiles = ['89cb4967-0eba-48af-99cc-5e87407fb639', '10d60cb9-6aec-4540-b15e-6df187f19b3c', '162f6184-00a8-47f7-9895-f1fd8cbc93c5']
-# for profile_id2 in profiles:
-#     for preference_group, keys_dict in preferences.items():
-#         for preference_key, preference_value in keys_dict.items():
-#             general_models.update_profile_preferences(profile_id2, preference_group, preference_key, preference_value)
-
-general_models.db.execute_query('DELETE FROM profiles_preferences')
-
-preferences = GeneralDB.CONSTANTS()['profiles_preferences']
-for profile_id1 in profiles:
-    for preference_group, keys_dict in preferences.items():
-        values = []
-        for preference_key, (value_type, default_value) in keys_dict.items():
-            # Serialize the default value before storing
-            serialized_value = general_models.db.serialize_value(value_type, default_value)
-            values.append([profile_id1, preference_group, preference_key, serialized_value])
-
-        general_models.db.insert_many('profiles_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
-
-
-print(general_models.get_profile_preferences(profile_id))
-general_models.update_profile_preferences(profile_id, 'general', 'select', True)
-print(general_models.get_profile_preferences(profile_id))
-
-profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-event = Event(event_id, profile_id=profile_id)
-#event.delete_images(['778a6e66-04bd-4a36-b769-527ddb7da4bc'])
+result = test_faces_in_aws_and_db()
+print(result)
+print('--------------------------------')
+result = find_incomplete_images()
+print(result)
+print('--------------------------------')

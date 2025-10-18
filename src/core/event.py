@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from .errors import Forbidden
+from .errors import Forbidden, DBConstant
 from .face_utils import FaceUtils
 from .event_db import EventDB
 from .event_models import EventModels
@@ -91,11 +91,18 @@ class Event():
             
             for group_id in image_parents.get('groups', set()):
                 if self.models.is_empty('groups', group_id):
-                    self.models.delete('groups', group_id)
-                    deleted_groups.add(group_id)
+                    try:
+                        self.models.delete('groups', group_id)                    
+                        deleted_groups.add(group_id)
+                    except DBConstant as e:
+                        continue
+                    except Forbidden as e:
+                        continue
+                    
                     set(image_parents.get('groups', set())).discard(group_id)
                 elif self.models.is_empty('groups', group_id, only_accessible=True):
                     self.models.ensure_representative('groups', group_id)
+                    
                     deleted_groups.add(group_id)
                     set(image_parents.get('groups', set())).discard(group_id)
 
@@ -197,7 +204,7 @@ class Event():
                     new_faces += [existing_face_id]
 
                 group_num = _get_valid_group_label_number()
-                group_id = self.models.add('groups', [{'label': f"Person {group_num}"}])[0]
+                group_id = self.models.add('groups', {'label': f"Person {group_num}"})
                 self.models.edit_childs('groups', group_id, 'faces', new_faces, add=True)
                 groups_created += 1
 
@@ -340,11 +347,12 @@ class Event():
         if all_faces:
             if verbose:
                 print("Adding faces to database...")
-            self.models.add('faces', all_faces)
+            all_faces_values = [[face['face_id'], face['image_id'], face['width'], face['height'], face['left'], face['top'], face['group_id']] for face in all_faces]
+            self.models.add_many('faces', ['face_id', 'image_id', 'width', 'height', 'left', 'top', 'group_id'], all_faces_values)
             _send_progress('clustering', 0, 1, 'Clustering faces...')
             if verbose:
                 print("Clustering faces...")
-            groups_created = _cluster_and_group_faces([face['face_id'] for face in all_faces])
+            groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values])
         else:
             groups_created = 0
         
@@ -367,7 +375,7 @@ class Event():
             'errors': errors
         }
         
-        _send_progress('complete', 1, 1, f'Processing complete! Processed {len(processed_images)} images.')
+        _send_progress('finalizing', 1, 1, f'Processing complete! Processed {len(processed_images)} images.')
         
         if verbose:
             print(f"Processing complete!")

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, g, send_file, abort, make_response
+from flask import Flask, jsonify, request, g, send_file, abort, make_response, Response, stream_with_context
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -18,6 +18,9 @@ import os
 import io
 import zipfile
 import secrets
+import json
+import queue
+import threading
 from werkzeug.utils import secure_filename
 
 from src.core.event import Event
@@ -500,6 +503,187 @@ def upload_images(event_id):
         return internal_error(e)
     except Exception as e:
         return bad_request(e)
+
+@app.route("/api/events/<event_id>/images/upload", methods=["POST"])
+@require_auth
+def upload_files_only(event_id):
+    """Upload files to to_process directory without processing."""
+    event = get_event(event_id)
+    
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    files = request.files.getlist('files')
+    
+    if not files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    try:
+        saved_files = []
+        for file in files:
+            if file and file.filename:
+                if not file.filename.lower().endswith(('.jpg', '.jpeg')):
+                    continue
+                
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(event.to_process_dir, filename)
+                
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(filepath):
+                    filename = f"{base}_{counter}{ext}"
+                    filepath = os.path.join(event.to_process_dir, filename)
+                    counter += 1
+                
+                file.save(filepath)
+                saved_files.append(filename)
+        
+        if not saved_files:
+            return jsonify({"error": "No valid JPG files provided"}), 400
+        
+        return jsonify({
+            "success": True,
+            "files_saved": len(saved_files),
+            "filenames": saved_files
+        })
+        
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/images/process-stream", methods=["GET"])
+@require_auth
+def process_images_stream(event_id):
+    """Process images with SSE progress streaming."""
+    event = get_event(event_id)
+    general_models = get_general_models()
+    assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
+    
+    progress_queue = queue.Queue()
+    
+    def progress_callback(progress_data):
+        """Callback to push progress updates to queue."""
+        progress_queue.put(progress_data)
+    
+    def generate():
+        """SSE generator function."""
+        result_container = {}
+        error_container = {}
+        
+        def process_task():
+            """Task to run in background thread."""
+            try:
+                result = general_models.process_new_images(
+                    event_id,
+                    assign_moments=assign_moments,
+                    progress_callback=progress_callback
+                )
+                result_container['data'] = result
+                progress_queue.put({'_step': '_done_', 'result': result})
+            except Exception as e:
+                error_container['error'] = str(e)
+                progress_queue.put({'_step': '_error_', 'message': str(e)})
+        
+        # Start processing in background thread
+        thread = threading.Thread(target=process_task, daemon=True)
+        thread.start()
+        
+        # Stream progress updates
+        try:
+            while True:
+                try:
+                    progress = progress_queue.get(timeout=30)
+                    
+                    if progress.get('_step') == '_done_':
+                        # Build changes for frontend
+                        result = progress['result']
+                        changes = []
+                        
+                        processed_image_ids = result.get('processed_image_ids', [])
+                        if processed_image_ids:
+                            images = event.models.get_entities('images', processed_image_ids)
+                            
+                            all_parent_groups = set()
+                            for image_id in processed_image_ids:
+                                parent_groups = event.models.get_parents('images', image_id, 'groups')
+                                all_parent_groups.update(parent_groups)
+                            
+                            changes.append({
+                                'type': 'UPSERT',
+                                'entity': 'image',
+                                'items': images,
+                            })
+                            
+                            for group_id in all_parent_groups:
+                                group_images = event.models.get_childs('groups', group_id, 'images', processed_image_ids)
+                                if group_images:
+                                    changes.append({
+                                        'type': 'RELATION_ADD',
+                                        'relation': 'group.images',
+                                        'parentId': group_id,
+                                        'entities': group_images,
+                                    })
+                            
+                            if all_parent_groups:
+                                changes.append({
+                                    'type': 'UPSERT',
+                                    'entity': 'group',
+                                    'items': event.models.get_entities('groups', list(all_parent_groups)),
+                                })
+                            
+                            assigned_moments = result.get('assigned_moments', {})
+                            if assigned_moments:
+                                for moment_id, image_ids in assigned_moments.items():
+                                    changes.append({
+                                        'type': 'RELATION_ADD',
+                                        'relation': 'moment.images',
+                                        'parentId': moment_id,
+                                        'entities': event.models.get_childs('moments', moment_id, 'images', image_ids)
+                                    })
+                                
+                                changes.append({
+                                    'type': 'UPDATE',
+                                    'entity': 'moment',
+                                    'items': event.models.get_entities('moments', list(assigned_moments.keys()))
+                                })
+                        
+                        final_response = {
+                            'step': 'complete',
+                            'result': result,
+                            'changes': changes
+                        }
+                        yield f"data: {json.dumps(final_response)}\n\n"
+                        break
+                        
+                    elif progress.get('_step') == '_error_':
+                        error_response = {
+                            'step': 'error',
+                            'message': progress.get('message', 'Unknown error')
+                        }
+                        yield f"data: {json.dumps(error_response)}\n\n"
+                        break
+                        
+                    else:
+                        # Send progress update
+                        yield f"data: {json.dumps(progress)}\n\n"
+                        
+                except queue.Empty:
+                    # Send keepalive comment
+                    yield ": keepalive\n\n"
+                    
+        except GeneratorExit:
+            pass
+        finally:
+            thread.join(timeout=1)
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        }
+    )
 
 # ==============================================================================
 # III. GROUPS (PERSONS) ENDPOINTS

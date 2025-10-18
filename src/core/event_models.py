@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from .base_db import ReturnFormat
 from .base_models import BaseModels
 from .event_db import EventDB
+from .errors import DBConstant
 import os
 
 DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
@@ -80,7 +81,11 @@ class EventModels(BaseModels):
         LIMIT 1
         """
         biggest = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.VALUE)
-        self.edit(table, entity_id, {representative_field: biggest})
+        
+        try:
+            self.edit(table, entity_id, {representative_field: biggest})
+        except DBConstant as e:
+            return None
         
         return biggest
 

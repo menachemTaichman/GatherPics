@@ -519,6 +519,86 @@ export const imagesAPI = {
       },
     });
     return response.data;
+  },
+
+  uploadWithProgress: async (files, assignMoments, eventUrl, onProgress) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    
+    // Step 1: Upload files to server
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file);
+    }
+    
+    try {
+      await api.post(`/api/events/${eventId}/images/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    } catch (error) {
+      throw new Error(error.response?.data?.error || 'Failed to upload files');
+    }
+    
+    // Step 2: Process with SSE
+    return new Promise((resolve, reject) => {
+      const url = `${API_BASE}/api/events/${eventId}/images/process-stream?assign_moments=${assignMoments}`;
+      
+      // EventSource with credentials for cookie-based auth
+      const eventSource = new EventSource(url, { withCredentials: true });
+      
+      // Cleanup on timeout (5 minutes max)
+      const timeout = setTimeout(() => {
+        eventSource.close();
+        reject(new Error('Processing timeout'));
+      }, 5 * 60 * 1000);
+      
+      const cleanup = () => {
+        clearTimeout(timeout);
+        eventSource.close();
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.step === 'complete') {
+            cleanup();
+            
+            // Apply changes to store
+            if (data.changes) {
+              const store = useDataStore.getState();
+              store.applyChanges(Array.isArray(data.changes) ? data.changes : []);
+            }
+            
+            // Ensure result exists before resolving
+            if (!data.result) {
+              console.error('Complete event received but no result:', data);
+              reject(new Error('Processing completed but no result data received'));
+              return;
+            }
+            
+            resolve(data.result);
+          } else if (data.step === 'error') {
+            cleanup();
+            reject(new Error(data.message || 'Processing failed'));
+          } else {
+            // Progress update
+            if (onProgress) {
+              onProgress(data);
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse SSE data:', parseError, 'Raw event:', event.data);
+          cleanup();
+          reject(new Error('Failed to parse server response: ' + parseError.message));
+        }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        cleanup();
+        reject(new Error('Connection to server lost'));
+      };
+    });
   }
 };
 

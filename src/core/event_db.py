@@ -92,8 +92,8 @@ class EventDB(BaseDB):
     def TABLES(self) -> dict:
         return {
             'faces': '''
-                face_id TEXT PRIMARY KEY,
-                image_id TEXT,
+                face_id TEXT PRIMARY KEY NOT NULL,
+                image_id TEXT NOT NULL,
                 width REAL,
                 height REAL,
                 left REAL,
@@ -103,7 +103,7 @@ class EventDB(BaseDB):
                 FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE SET NULL
             ''',
             'images': '''
-                image_id TEXT PRIMARY KEY,
+                image_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT,
                 date_taken TEXT,
                 file_size INTEGER,
@@ -113,13 +113,13 @@ class EventDB(BaseDB):
                 FOREIGN KEY (moment_id) REFERENCES moments(moment_id) ON DELETE SET NULL
             ''',
             'groups': '''
-                group_id TEXT PRIMARY KEY,
+                group_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE UNIQUE,
                 representative_face TEXT,
                 FOREIGN KEY (representative_face) REFERENCES faces(face_id) ON DELETE SET NULL
             ''',
             'moments': '''
-                moment_id TEXT PRIMARY KEY,
+                moment_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE UNIQUE,
                 description TEXT,
                 start TEXT,
@@ -128,38 +128,38 @@ class EventDB(BaseDB):
                 FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL
             ''',
             'albums': '''
-                album_id TEXT PRIMARY KEY,
+                album_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE UNIQUE,
                 description TEXT,
                 representative_image TEXT,
                 FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL
             ''',
             'albums_images': '''
-                album_id TEXT,
-                image_id TEXT,
+                album_id TEXT NOT NULL,
+                image_id TEXT NOT NULL,
                 FOREIGN KEY (album_id) REFERENCES albums(album_id) ON DELETE CASCADE,
                 FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
                 PRIMARY KEY (album_id, image_id)
             ''',
             'profiles': '''
-                profile_id TEXT PRIMARY KEY,
+                profile_id TEXT PRIMARY KEY NOT NULL,
                 hierarchy_rank INTEGER DEFAULT 0,
                 can_upload_and_delete_images BOOLEAN DEFAULT 0,
                 can_edit BOOLEAN DEFAULT 0,
-                all_images BOOLEAN,
-                all_albums BOOLEAN,
+                all_images BOOLEAN DEFAULT 0,
+                all_albums BOOLEAN DEFAULT 0
             ''',
             'profile_images': '''
-                profile_id TEXT,
-                image_id TEXT,
+                profile_id TEXT NOT NULL,
+                image_id TEXT NOT NULL,
                 accessible BOOLEAN,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, image_id)
             ''',
             'profile_albums': '''
-                profile_id TEXT,
-                album_id TEXT,
+                profile_id TEXT NOT NULL,
+                album_id TEXT NOT NULL,
                 accessible BOOLEAN,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (album_id) REFERENCES albums(album_id) ON DELETE CASCADE,
@@ -792,7 +792,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites' THEN
-                        RAISE(ABORT, 'Permission denied: cannot delete default albums')
+                        RAISE(ABORT, 'Constant error: cannot delete default albums')
                 END;
             END;
             """,
@@ -804,7 +804,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN LOWER(OLD.label) = 'unassociated' THEN
-                        RAISE(ABORT, 'Permission denied: cannot delete default group')
+                        RAISE(ABORT, 'Constant error: cannot delete default group')
                 END;
             END;
             """,

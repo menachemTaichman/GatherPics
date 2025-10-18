@@ -281,14 +281,15 @@ class GeneralModels(BaseModels):
         query = f'SELECT {fields} FROM events WHERE url = ?'
         return self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
 
-    def process_new_images(self, event_id: str, assign_moments: bool = False) -> dict:
+    def process_new_images(self, event_id: str, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process new images for an event."""
         event = Event(event_id, self.profile_context['profile_id'])
         event_details = self.get_entities('events', event_id)
         return event.process_new_images(
             images_count_limit=event_details.get('images_count_limit', 0),
             image_size_limit_bytes=event_details.get('image_size_limit_bytes', 0),
-            assign_moments=assign_moments
+            assign_moments=assign_moments,
+            progress_callback=progress_callback
         )
 
     # Settings

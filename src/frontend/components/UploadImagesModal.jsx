@@ -165,6 +165,40 @@ export default function UploadImagesModal({
     }
   };
 
+  // Calculate overall progress percentage based on step and current/total
+  const calculateOverallProgress = (progress) => {
+    // Define weight for each step (total = 100%)
+    const stepWeights = {
+      'uploading': 10,      // 0-10%
+      'validation': 5,      // 10-15%
+      'processing': 15,     // 15-30% 
+      'faces': 30,           // 30-60%
+      'clustering': 35,     // 60-95%
+      'moments': 3,         // 95-98%
+      'finalizing': 2,      // 98-100%
+      'complete': 0         // 100%
+    };
+    
+    const stepOrder = ['uploading', 'validation', 'processing', 'faces', 'clustering', 'moments', 'finalizing', 'complete'];
+    const currentStepIndex = stepOrder.indexOf(progress.step);
+    
+    if (currentStepIndex === -1) return 0;
+    
+    // Calculate base progress (completed steps)
+    let baseProgress = 0;
+    for (let i = 0; i < currentStepIndex; i++) {
+      baseProgress += stepWeights[stepOrder[i]];
+    }
+    
+    // Calculate progress within current step
+    let stepProgress = 0;
+    if (progress.total > 0 && progress.current > 0) {
+      stepProgress = (progress.current / progress.total) * stepWeights[progress.step];
+    }
+    
+    return Math.min(100, baseProgress + stepProgress);
+  };
+
   const handleStartUpload = async () => {
     if (selectedFiles.length === 0) {
       showToast('Please select files to upload', 'error');
@@ -176,22 +210,30 @@ export default function UploadImagesModal({
       step: 'uploading', 
       current: selectedFiles.length, 
       total: selectedFiles.length, 
-      message: `Uploading ${selectedFiles.length} image(s)...` 
+      message: `Uploading ${selectedFiles.length} image(s)...`,
+      percentage: 10
     });
 
     try {
-      // Simulate upload progress
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      setUploadProgress({ 
-        step: 'processing', 
-        current: 0, 
-        total: 1, 
-        message: 'Processing images, detecting faces, and clustering...' 
-      });
-      
       const files = selectedFiles.map(f => f.file);
-      const result = await imagesAPI.upload(files, assignMoments, eventUrl);
+      
+      // Use SSE-based upload with real-time progress
+      const result = await imagesAPI.uploadWithProgress(
+        files, 
+        assignMoments, 
+        eventUrl,
+        (progress) => {
+          // Real-time progress updates from server with calculated percentage
+          const percentage = calculateOverallProgress(progress);
+          setUploadProgress({
+            step: progress.step,
+            current: progress.current,
+            total: progress.total,
+            message: progress.message,
+            percentage: percentage
+          });
+        }
+      );
       
       const successMsg = `Successfully processed ${result.images_processed} image(s), detected ${result.faces_detected} face(s), created ${result.groups_created} group(s)`;
       
@@ -199,7 +241,8 @@ export default function UploadImagesModal({
         step: 'complete', 
         current: 1, 
         total: 1, 
-        message: successMsg
+        message: successMsg,
+        percentage: 100
       });
 
       showToast(successMsg, 'success');
@@ -223,7 +266,7 @@ export default function UploadImagesModal({
       console.error('Upload failed:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Upload failed';
       showToast(errorMsg, 'error');
-      setUploadProgress({ step: 'error', current: 0, total: 0, message: errorMsg });
+      setUploadProgress({ step: 'error', current: 0, total: 0, message: errorMsg, percentage: 0 });
       setUploading(false);
     }
   };
@@ -425,20 +468,27 @@ export default function UploadImagesModal({
                           <Loader2 className="w-5 h-5 animate-spin text-blue-600 flex-shrink-0" />
                         )}
                         <div className="flex-1">
-                          <p className={`text-sm font-medium ${
-                            uploadProgress.step === 'complete' 
-                              ? 'text-green-700' 
-                              : uploadProgress.step === 'error'
-                              ? 'text-red-700'
-                              : 'text-blue-700'
-                          }`}>
-                            {uploadProgress.message}
-                          </p>
-                          {uploadProgress.total > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                          <div className="flex items-center justify-between">
+                            <p className={`text-sm font-medium ${
+                              uploadProgress.step === 'complete' 
+                                ? 'text-green-700' 
+                                : uploadProgress.step === 'error'
+                                ? 'text-red-700'
+                                : 'text-blue-700'
+                            }`}>
+                              {uploadProgress.message}
+                            </p>
+                            {uploadProgress.percentage !== undefined && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                              <span className="text-xs font-semibold text-blue-600 ml-2">
+                                {Math.round(uploadProgress.percentage)}%
+                              </span>
+                            )}
+                          </div>
+                          {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
                             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                               <div
                                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                                style={{ width: `${uploadProgress.percentage || 0}%` }}
                               />
                             </div>
                           )}
