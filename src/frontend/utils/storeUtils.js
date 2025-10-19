@@ -23,11 +23,11 @@ export function useApplyScopes(scopes = []) {
   }, [JSON.stringify(scopes)]);
 }
 
-// Stable list of images for a parent entity (group/album/moment) or filteredIds override
+// Stable list of images for a parent entity (group/album/moment/upload) or filteredIds override
 export function useImagesForParent({ entity, parentId, filteredIds = null, includeArchived = false, sortBy = 'date', sortOrder = 'asc' }) {
   const relationSet = useDataStore((state) => {
     if (!entity || !parentId) return null;
-    const key = entity === 'group' ? 'groups' : (entity === 'album' ? 'albums' : (entity === 'moment' ? 'moments' : null));
+    const key = entity === 'group' ? 'groups' : (entity === 'album' ? 'albums' : (entity === 'moment' ? 'moments' : (entity === 'upload' ? 'uploads' : null)));
     if (!key) return null;
     return state.entities?.[key]?.[parentId]?.images || null;
   });
@@ -124,6 +124,74 @@ export function useAlbumsForProfile(profileId) {
   }, [profileId, albumsSet, albumsMapSub]);
 
   return albums;
+}
+
+// Stable groups list for a profile id
+export function useGroupsForProfile(profileId) {
+  const groupsSet = useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId]?.groups || null : null));
+  const groupsMapSub = useDataStore((state) => state.entities?.groups || {});
+
+  const groups = useMemo(() => {
+    if (!groupsSet) return [];
+    const ids = Array.from(groupsSet);
+    const groupsMap = (useDataStore.getState().entities?.groups || {});
+    const list = ids.map((gid) => groupsMap[gid]).filter(Boolean);
+    const sorted = sortGroups(list, 'name', 'asc');
+    return sorted;
+  }, [profileId, groupsSet, groupsMapSub]);
+
+  return groups;
+}
+
+// Stable images list for an upload id
+export function useImagesForUpload(uploadId) {
+  const imagesSet = useDataStore((state) => (uploadId ? state.entities?.uploads?.[uploadId]?.images || null : null));
+  const imagesMapSub = useDataStore((state) => state.entities?.images || {});
+
+  const images = useMemo(() => {
+    if (!imagesSet) return [];
+    const ids = Array.from(imagesSet);
+    const imagesMap = (useDataStore.getState().entities?.images || {});
+    const list = ids.map((iid) => imagesMap[iid]).filter(Boolean);
+    const sorted = sortImages(list, 'date', 'asc');
+    return sorted;
+  }, [uploadId, imagesSet, imagesMapSub]);
+
+  return images;
+}
+
+// Stable groups list for an upload id
+export function useGroupsForUpload(uploadId) {
+  const groupsSet = useDataStore((state) => (uploadId ? state.entities?.uploads?.[uploadId]?.groups || null : null));
+  const groupsMapSub = useDataStore((state) => state.entities?.groups || {});
+
+  const groups = useMemo(() => {
+    if (!groupsSet) return [];
+    const ids = Array.from(groupsSet);
+    const groupsMap = (useDataStore.getState().entities?.groups || {});
+    const list = ids.map((gid) => groupsMap[gid]).filter(Boolean);
+    const sorted = sortGroups(list, 'name', 'asc');
+    return sorted;
+  }, [uploadId, groupsSet, groupsMapSub]);
+
+  return groups;
+}
+
+// Stable moments list for an upload id
+export function useMomentsForUpload(uploadId) {
+  const momentsSet = useDataStore((state) => (uploadId ? state.entities?.uploads?.[uploadId]?.moments || null : null));
+  const momentsMapSub = useDataStore((state) => state.entities?.moments || {});
+
+  const moments = useMemo(() => {
+    if (!momentsSet) return [];
+    const ids = Array.from(momentsSet);
+    const momentsMap = (useDataStore.getState().entities?.moments || {});
+    const list = ids.map((mid) => momentsMap[mid]).filter(Boolean);
+    const sorted = sortByField(list, 'label', 'asc');
+    return sorted;
+  }, [uploadId, momentsSet, momentsMapSub]);
+
+  return moments;
 }
 
 // Representative URL helper with debug

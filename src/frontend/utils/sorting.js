@@ -167,4 +167,42 @@ export const toggleSortOrder = (currentOrder) => {
  */
 export const getSortIcon = (sortOrder) => {
   return sortOrder === 'asc' ? 'ArrowUp' : 'ArrowDown';
+};
+
+/**
+ * Sort uploads by various criteria
+ * @param {Array} uploads - Array of upload objects
+ * @param {string} sortBy - 'started_at', 'profile_label', 'images_count', or 'status'
+ * @param {string} sortOrder - 'asc' or 'desc'
+ * @returns {Array} Sorted uploads array
+ */
+export const sortUploads = (uploads, sortBy = 'started_at', sortOrder = 'desc') => {
+  if (!uploads || !uploads.length) return [];
+  
+  return [...uploads].sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'started_at':
+      case 'completed_at':
+        comparison = new Date(a[sortBy] || 0) - new Date(b[sortBy] || 0);
+        break;
+      case 'profile_label':
+        comparison = (a.profile_label || '').localeCompare(b.profile_label || '');
+        break;
+      case 'images_count':
+      case 'faces_count':
+      case 'clusters_count':
+      case 'moments_count':
+        comparison = (a[sortBy] || 0) - (b[sortBy] || 0);
+        break;
+      case 'status':
+        comparison = (a.status || '').localeCompare(b.status || '');
+        break;
+      default:
+        comparison = 0;
+    }
+    
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
 }; 

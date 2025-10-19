@@ -98,6 +98,13 @@ class BaseModels(ABC):
             {where_clause}
         """
         results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.DICT_DICTS)
+
+        serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
+        if serialized_instructions:
+            for entity_id, entity_data in results.items():
+                for field, value_type in serialized_instructions.items():
+                    results[entity_id][field] = self.db.serialize_value(value_type, entity_data[field])
+        
         if results and single_item:
             return results[entity_ids[0]]
         return results
@@ -237,7 +244,13 @@ class BaseModels(ABC):
         if not self.db.is_auto_increment(table):
             if self.db.get_id_field(table) not in data:
                 data[self.db.get_id_field(table)] = self.generate_id()
-        
+
+        serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
+        if serialized_instructions:
+            for field, value_type in serialized_instructions.items():
+                if field in data:
+                    data[field] = self.db.serialize_value(value_type, data[field])
+
         return self.db.insert(table, data)
 
     def add_many(self, table: str, fields: list[str], values: list[list[Any]]) -> list[str]:
@@ -251,9 +264,22 @@ class BaseModels(ABC):
             list of new entity ids
         """
         if not self.db.is_auto_increment(table):
-            if self.db.get_id_field(table) not in fields:
-                fields.append(self.db.get_id_field(table))
-                values = [[*row, self.generate_id()] for row in values]
+            id_field = self.db.get_id_field(table)
+            if ", " in id_field:
+                id_fields = id_field.split(', ')
+            else:
+                id_fields = [id_field]
+            for id_field in id_fields:
+                if id_field not in fields:
+                    fields.append(id_field)
+                    values = [[*row, self.generate_id()] for row in values]
+
+        serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
+        if serialized_instructions:
+            for field, value_type in serialized_instructions.items():
+                if field in fields:
+                    idx = fields.index(field)
+                    values = [[*row[:idx], self.db.serialize_value(value_type, row[idx]), *row[idx+1:]] for row in values]
         
         return self.db.insert_many(table, fields, values)
 
@@ -263,6 +289,12 @@ class BaseModels(ABC):
         Returns the list of affected IDs.
         """
         condition = {self.db.get_id_field(table): entity_ids}
+        serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
+        if serialized_instructions:
+            for field, value_type in serialized_instructions.items():
+                if field in fields:
+                    fields[field] = self.db.serialize_value(value_type, fields[field])
+
         return self.db.update(table, condition, fields)
 
     def delete(self, table: str, entity_ids: str | list[str]) -> None:

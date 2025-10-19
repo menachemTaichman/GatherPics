@@ -114,29 +114,23 @@ class GeneralModels(BaseModels):
         query = 'SELECT password FROM profiles WHERE profile_id = ?'
         return self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
     
-    def update_profile(self, profile_id: str, *, password: str | None = None, label: str | None = None):
-        """Update the password for a profile."""
+    def update_profile(self, profile_id: str, data: dict):
+        """Update the profile data."""
         if not self.is_managable_profile(profile_id):
-            raise Exception('Profile does not have permission to update this profile password')
-        
-        data = {}
-        if password:
-            data['password'] = password
-        if label:
-            data['label'] = label
+            raise Forbidden('Profile does not have permission to update this profile')
         
         self.edit('profiles', profile_id, data)
 
-        if password:
+        if 'password' in data:
             self.revoke_all_refresh_tokens(profile_id)
 
     def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
         """Update the hierarchy rank for a profile."""
         if not self.is_managable_profile(profile_id) or profile_id == self.profile_context['profile_id']:
-            raise Exception('Profile does not have permission to update this profile hierarchy rank')
+            raise Forbidden('Profile does not have permission to update this profile hierarchy rank')
 
         if hierarchy_rank >= self.profile_context['hierarchy_rank']:
-            raise Exception('Profile hierarchy rank cannot be updated to a higher rank than the current profile')
+            raise Forbidden('Profile hierarchy rank cannot be updated to a higher rank than the current profile')
 
         self.edit('profiles', profile_id, {'hierarchy_rank': hierarchy_rank})
         event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
@@ -281,11 +275,12 @@ class GeneralModels(BaseModels):
         query = f'SELECT {fields} FROM events WHERE url = ?'
         return self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
 
-    def process_new_images(self, event_id: str, assign_moments: bool = False, progress_callback=None) -> dict:
-        """Process new images for an event."""
+    def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
+        """Process images for an event."""
         event = Event(event_id, self.profile_context['profile_id'])
         event_details = self.get_entities('events', event_id)
         return event.process_new_images(
+            file_names=file_names,
             images_count_limit=event_details.get('images_count_limit', 0),
             image_size_limit_bytes=event_details.get('image_size_limit_bytes', 0),
             assign_moments=assign_moments,

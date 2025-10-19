@@ -1,6 +1,6 @@
 import os
 import shutil
-
+from datetime import datetime
 from .errors import Forbidden, DBConstant
 from .face_utils import FaceUtils
 from .event_db import EventDB
@@ -118,6 +118,7 @@ class Event():
 
     def process_new_images(
         self,
+        file_names: list[str] | None = None,
         display_size: int = 2048,
         thumb_size: int = 512,
         cluster_threshold: int = 90,
@@ -129,8 +130,9 @@ class Event():
         image_size_limit_bytes: int = 0
     ) -> dict:
         """
-        Process new images from to_process folder.
+        Process images from to_process folder.
         Args:
+            file_names: List of specific file names to process. If None, processes all image files in to_process folder.
             display_size: Size for display images (width, height)
             thumb_size: Size for thumbnail images (width, height) 
             cluster_threshold: Similarity threshold for face clustering (0-100)
@@ -159,8 +161,19 @@ class Event():
                 })
 
         def _get_images_to_process():
-            return [f for f in os.listdir(self.to_process_dir) 
-                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+            if file_names is not None:
+                # Validate that specified files exist and have valid extensions
+                valid_files = []
+                for f in file_names:
+                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff")):
+                        file_path = os.path.join(self.to_process_dir, f)
+                        if os.path.exists(file_path):
+                            valid_files.append(f)
+                return valid_files
+            else:
+                # Process all image files in the directory
+                return [f for f in os.listdir(self.to_process_dir) 
+                        if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
 
         def _process_face(display_img, bbox, face_id, image_id, unassociated_group_id):
             crop_img = crop_image(display_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
@@ -210,7 +223,7 @@ class Event():
 
             return groups_created
 
-        def _process_image(image_file, unassociated_group_id):
+        def _process_image(image_file, unassociated_group_id, upload_id):
             image_path = os.path.join(self.to_process_dir, image_file)
             try:
                 original_img = PILImage.open(image_path)
@@ -227,7 +240,8 @@ class Event():
                         'date_taken': date_taken,
                         'file_size': file_size,
                         'width': width,
-                        'height': height
+                        'height': height,
+                        'upload_id': upload_id
                     }
                 )
                 # Save high quality (4096px, jpg, quality=95, with EXIF)
@@ -316,72 +330,109 @@ class Event():
             print(f"Found {len(image_files)} images to process")
         
         _send_progress('validation', 1, 1, f'Validation complete. Processing {len(image_files)} images...')
-        
-        if not self.face_utils:
-            self.face_utils = FaceUtils(self.event_id)
+
+        upload_id = self.models.add('uploads', {
+            'started_at': datetime.now().isoformat(),
+            'status': 'processing',
+            'images_count': len(image_files),
+            'faces_count': 0,
+            'clusters_count': 0,
+            'moments_count': 0,
+            'errors': [],
+            'profile_id': self.profile_context['profile_id'],
+        })
+
         all_faces = []
         processed_images = []
         errors = []
         
-        unassociated_group_id = self.models.get_unassociated_group()
-        for i, image_file in enumerate(image_files, 1):
-            _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
-            if verbose:
-                print(f"Processing image {i}/{len(image_files)}: {image_file}")
-            display_img, image_id, image_faces, error = _process_image(image_file, unassociated_group_id)
-            if error is not None or display_img is None or image_id is None:
-                error_msg = f"Error processing {image_file}: {str(error) if error else 'Invalid image or id'}"
+        try:
+            if not self.face_utils:
+                self.face_utils = FaceUtils(self.event_id)
+            
+            unassociated_group_id = self.models.get_unassociated_group()
+            for i, image_file in enumerate(image_files, 1):
+                _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
                 if verbose:
-                    print(f"  {error_msg}")
-                errors.append(error_msg)
-                continue
-            if verbose:
-                print(f"  Detected {len(image_faces)} faces")
-            all_faces.extend(image_faces)
-            processed_images.append(image_id)
+                    print(f"Processing image {i}/{len(image_files)}: {image_file}")
+                display_img, image_id, image_faces, error = _process_image(image_file, unassociated_group_id, upload_id)
+                if error is not None or display_img is None or image_id is None:
+                    error_msg = f"Error processing {image_file}: {str(error) if error else 'Invalid image or id'}"
+                    if verbose:
+                        print(f"  {error_msg}")
+                    errors.append(error_msg)
+                    continue
+                if verbose:
+                    print(f"  Detected {len(image_faces)} faces")
+                all_faces.extend(image_faces)
+                processed_images.append(image_id)
 
-        if verbose:
-            print(f"Completed image processing. Detected {len(all_faces)} total faces")
-        
-        _send_progress('faces', 0, 1, 'Adding faces to database...')
-        if all_faces:
             if verbose:
-                print("Adding faces to database...")
-            all_faces_values = [[face['face_id'], face['image_id'], face['width'], face['height'], face['left'], face['top'], face['group_id']] for face in all_faces]
-            self.models.add_many('faces', ['face_id', 'image_id', 'width', 'height', 'left', 'top', 'group_id'], all_faces_values)
-            _send_progress('clustering', 0, 1, 'Clustering faces...')
+                print(f"Completed image processing. Detected {len(all_faces)} total faces")
+            
+            _send_progress('faces', 0, 1, 'Adding faces to database...')
+            if all_faces:
+                if verbose:
+                    print("Adding faces to database...")
+                all_faces_values = [[face['face_id'], face['image_id'], face['width'], face['height'], face['left'], face['top'], face['group_id']] for face in all_faces]
+                self.models.add_many('faces', ['face_id', 'image_id', 'width', 'height', 'left', 'top', 'group_id'], all_faces_values)
+                _send_progress('clustering', 0, 1, 'Clustering faces...')
+                if verbose:
+                    print("Clustering faces...")
+                groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values])
+            else:
+                groups_created = 0
+            
+            # Assign moments by time if requested
+            assigned_moments = {}
+            if assign_moments and processed_images:
+                _send_progress('moments', 0, 1, 'Assigning images to moments by time...')
+                if verbose:
+                    print("Assigning images to moments by time...")
+                assigned_moments = self.models.assign_moments_by_time(processed_images)
+                if verbose:
+                    print(f"  Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments")
+            
+            self.models.edit('uploads', upload_id, {
+                'completed_at': datetime.now().isoformat(),
+                'status': 'completed',
+                'faces_count': len(all_faces),
+                'clusters_count': groups_created,
+                'moments_count': sum(len(imgs) for imgs in assigned_moments.values()),
+                'errors': errors,
+            })
+
+            summary = {
+                'upload_id': upload_id,
+                'images_processed': len(processed_images),
+                'faces_detected': len(all_faces),
+                'groups_created': groups_created,
+                'processed_image_ids': processed_images,
+                'assigned_moments': assigned_moments,
+                'errors': errors
+            }
+            
+            _send_progress('finalizing', 1, 1, f'Processing complete! Processed {len(processed_images)} images.')
+            
             if verbose:
-                print("Clustering faces...")
-            groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values])
-        else:
-            groups_created = 0
+                print(f"Processing complete!")
+                print(f"  - Images processed: {summary['images_processed']}")
+                print(f"  - Faces detected: {summary['faces_detected']}")
+                print(f"  - Groups created: {summary['groups_created']}")
+                if assign_moments:
+                    print(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
+            return summary
         
-        # Assign moments by time if requested
-        assigned_moments = {}
-        if assign_moments and processed_images:
-            _send_progress('moments', 0, 1, 'Assigning images to moments by time...')
+        except Exception as e:
+            # Update upload record with failure status
+            error_msg = f"Upload failed: {str(e)}"
+            errors.append(error_msg)
+            self.models.edit('uploads', upload_id, {
+                'completed_at': datetime.now().isoformat(),
+                'status': 'failed',
+                'errors': errors,
+            })
             if verbose:
-                print("Assigning images to moments by time...")
-            assigned_moments = self.models.assign_moments_by_time(processed_images)
-            if verbose:
-                print(f"  Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments")
-        
-        summary = {
-            'images_processed': len(processed_images),
-            'faces_detected': len(all_faces),
-            'groups_created': groups_created,
-            'processed_image_ids': processed_images,
-            'assigned_moments': assigned_moments,
-            'errors': errors
-        }
-        
-        _send_progress('finalizing', 1, 1, f'Processing complete! Processed {len(processed_images)} images.')
-        
-        if verbose:
-            print(f"Processing complete!")
-            print(f"  - Images processed: {summary['images_processed']}")
-            print(f"  - Faces detected: {summary['faces_detected']}")
-            print(f"  - Groups created: {summary['groups_created']}")
-            if assign_moments:
-                print(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
-        return summary
+                print(f"Processing failed: {error_msg}")
+            _send_progress('error', 0, 0, error_msg)
+            raise

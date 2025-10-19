@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Lock, Shield, Image as ImageIcon, FolderOpen, AlertTriangle, AlertCircle, Save, Trash2 } from 'lucide-react';
+import { X, User, Lock, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2 } from 'lucide-react';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalStore } from '../utils/modalManager';
 import { profilesAPI } from '../utils/apiService';
 import { useToast } from '../utils/ToastContext';
 import { getCurrentProfile } from '../utils/profileService';
-import { useApplyScopes, useImagesForProfile, useAlbumsForProfile } from '../utils/storeUtils';
+import { useApplyScopes, useImagesForProfile, useAlbumsForProfile, useGroupsForProfile } from '../utils/storeUtils';
 import { useDataStore } from '../utils/dataManager';
 import { formatErrorMessage } from '../utils/errorHandler';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -29,10 +29,10 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     { entity: 'profile', id: String(profile.id) }
   ] : []);
   
-  // Get profile images and albums from store
+  // Get profile images, albums, and groups from store
   const profileImages = useImagesForProfile(profile?.id);
-  
   const profileAlbums = useAlbumsForProfile(profile?.id);
+  const profileGroups = useGroupsForProfile(profile?.id);
 
   // Custom keyboard handler to allow child modal to work
   const handleEditProfileKeys = (e) => {
@@ -106,6 +106,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         can_edit: profile.can_edit || 0,
         all_images: profile.all_images || 0,
         all_albums: profile.all_albums || 0,
+        all_groups: profile.all_groups || 0,
         save_preferences: profile.save_preferences || 0
       });
       setNameConflict(false);
@@ -177,6 +178,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         can_edit: editingProfile.can_edit,
         all_images: editingProfile.all_images,
         all_albums: editingProfile.all_albums,
+        all_groups: editingProfile.all_groups,
         save_preferences: editingProfile.save_preferences
       };
 
@@ -251,6 +253,31 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     } catch (error) {
       console.error('Failed to clear albums:', error);
       showToast(formatErrorMessage('clear albums', error), 'error');
+    }
+  };
+
+  const handleRemoveGroup = async (groupId) => {
+    try {
+      await profilesAPI.removeGroupsFromProfile(editingProfile.id, [groupId], eventUrl);
+      // Changes are automatically applied by apiService interceptor
+      showToast('Group removed from profile', 'success');
+    } catch (error) {
+      console.error('Failed to remove group:', error);
+      showToast(formatErrorMessage('remove group', error), 'error');
+    }
+  };
+
+  const handleClearAllGroups = async () => {
+    if (profileGroups.length === 0) return;
+    
+    try {
+      const groupIds = profileGroups.map(group => group.id);
+      await profilesAPI.removeGroupsFromProfile(editingProfile.id, groupIds, eventUrl);
+      // Changes are automatically applied by apiService interceptor
+      showToast(`${groupIds.length} groups cleared from profile`, 'success');
+    } catch (error) {
+      console.error('Failed to clear groups:', error);
+      showToast(formatErrorMessage('clear groups', error), 'error');
     }
   };
 
@@ -443,6 +470,23 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                     </label>
                   </div>
 
+                  {/* All Groups */}
+                  <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">All Groups Access</p>
+                      <p className="text-sm text-gray-500">If ON: Access all groups except listed below. If OFF: Only access listed groups</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingProfile.all_groups === 1}
+                        onChange={(e) => handleFieldChange('all_groups', e.target.checked ? 1 : 0)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
                   {/* Save Preferences */}
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                     <div>
@@ -548,6 +592,49 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
               </div>
               )}
 
+              {/* Specific Access - Groups (only show for existing profiles) */}
+              {!isCreating && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                    <Users className="w-5 h-5" />
+                    <span>Specific Group Access ({profileGroups.length})</span>
+                  </h3>
+                  {profileGroups.length > 0 && (
+                    <button
+                      onClick={handleClearAllGroups}
+                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center space-x-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear All</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 mb-3">
+                  {editingProfile.all_groups === 1 
+                    ? '🚫 These groups are FORBIDDEN to this profile' 
+                    : '✓ These are the ONLY groups accessible to this profile'}
+                </p>
+                {profileGroups.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    No specific groups configured
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                    {profileGroups.map((group) => (
+                      <ProfileGroupThumb
+                        key={group.id}
+                        group={group}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        onRemove={() => handleRemoveGroup(group.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              )}
+
               {error && (
                 <div className="flex items-center space-x-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -632,6 +719,27 @@ function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove }) {
       alt={album.label}
       onRemove={onRemove}
       text={album.label}
+      size="medium"
+      withGradient={true}
+      iconType="image"
+      title="Click to remove"
+    />
+  );
+}
+
+// ProfileGroupThumb component for grid display
+function ProfileGroupThumb({ group, eventUrl, urlHelpers, onRemove }) {
+  const getUrl = () => {
+    if (!urlHelpers || !urlHelpers.getRepresentativeUrl) return null;
+    return `${urlHelpers.getRepresentativeUrl('groups', group.id)}?v=${group.representative_face || 'none'}`;
+  };
+
+  return (
+    <RemovableThumbnail
+      imageUrl={getUrl()}
+      alt={group.label}
+      onRemove={onRemove}
+      text={group.label}
       size="medium"
       withGradient={true}
       iconType="image"

@@ -11,7 +11,8 @@ export default function UploadImagesModal({
   onClose, 
   eventUrl, 
   uploadLimits,
-  onUploadComplete 
+  onUploadComplete,
+  onUploadSuccess 
 }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [assignMoments, setAssignMoments] = useState(true);
@@ -24,6 +25,16 @@ export default function UploadImagesModal({
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'upload-images-modal';
+
+  // Custom keyboard handler for Enter key
+  const handleUploadModalKeys = (e) => {
+    if (e.key === 'Enter' && !uploading && selectedFiles.length > 0) {
+      e.preventDefault();
+      handleStartUpload();
+      return true; // Mark as handled
+    }
+    return false; // Not handled
+  };
 
   // Register modal when opened
   useEffect(() => {
@@ -48,6 +59,7 @@ export default function UploadImagesModal({
   }, [isOpen, registerModal, unregisterModal]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
+    customKeyHandler: handleUploadModalKeys,
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true
@@ -257,8 +269,11 @@ export default function UploadImagesModal({
         onUploadComplete(result);
       }
 
-      // Close modal after a delay
+      // Open upload detail modal after a delay
       setTimeout(() => {
+        if (onUploadSuccess && result.upload_id) {
+          onUploadSuccess(result.upload_id);
+        }
         onClose();
       }, 2000);
 

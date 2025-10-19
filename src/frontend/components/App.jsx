@@ -247,37 +247,19 @@ function AppContent({ eventUrl }) {
   }, [isAuthenticated, authLoading, openLoginModal]);
 
   // Fetch current profile when authenticated
+  // Fetch and update current profile with event-specific data when entering an event
   useEffect(() => {
     async function fetchCurrentProfile() {
       if (!isAuthenticated || !eventUrl) return;
       
       try {
-        // Temporarily add scope to allow profile inserts
-        const store = useDataStore.getState();
-        store.addScope({ entity: 'all', id: 'profiles' });
-        
-        const response = await profilesAPI.getAll(eventUrl);
-        
-        // Small delay to ensure interceptor processed changes
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Get profiles from the store
-        const storeProfiles = useDataStore.getState().entities?.profiles || {};
-        
-        if (Object.keys(storeProfiles).length > 0) {
-          const profilesList = Object.values(storeProfiles);
-          // Sort by hierarchy_rank descending and pick first
-          const sortedProfiles = profilesList.sort((a, b) => (b.hierarchy_rank || 0) - (a.hierarchy_rank || 0));
-          const currentProf = sortedProfiles[0];
-          if (currentProf) {
-            setCurrentProfile(currentProf);
-          }
+        // Fetch current profile with event-specific data
+        const result = await profilesAPI.getCurrentProfile(eventUrl);
+        if (result.profile) {
+          setCurrentProfile(result.profile);
         }
-        
-        // Remove the profiles scope after loading to avoid interfering with other scopes
-        store.removeScope({ entity: 'all', id: 'profiles' });
       } catch (error) {
-        console.error('Failed to fetch current profile:', error);
+        console.error('Failed to fetch current profile for event:', error);
       }
     }
 

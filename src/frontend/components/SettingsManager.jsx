@@ -21,6 +21,8 @@ import ConfirmDelete from './ConfirmDelete';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
 import UploadImagesModal from './UploadImagesModal';
+import UploadsGallery from './UploadsGallery';
+import UploadDetail from './UploadDetail';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -28,6 +30,9 @@ export default function SettingsManager() {
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
   const [uploadLimits, setUploadLimits] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showUploadsGallery, setShowUploadsGallery] = useState(false);
+  const [showUploadDetail, setShowUploadDetail] = useState(false);
+  const [selectedUploadId, setSelectedUploadId] = useState(null);
   const { eventUrl } = useParams();
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -125,7 +130,7 @@ export default function SettingsManager() {
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
     // If a child modal is open (like ChangePasswordModal or EditProfileModal), let events pass through
-    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal || showUploadModal) {
+    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal || showUploadModal || showUploadsGallery || showUploadDetail) {
       return true; // Return true to prevent this modal from stopping propagation to child modal
     }
     
@@ -144,7 +149,7 @@ export default function SettingsManager() {
     modalType: 'popup',
     allowOutsideScroll: true,
     // Disable focus trapping when child modal is open so child can receive focus
-    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal && !showUploadModal,
+    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal && !showUploadModal && !showUploadsGallery && !showUploadDetail,
     customKeyHandler: handleSettingsKeys
   });
 
@@ -300,8 +305,12 @@ export default function SettingsManager() {
   };
 
   // Get other profiles (exclude current) and sort by rank desc, then label asc
+  const currentProfileIdToCompare = currentProfile?.id || currentProfile?.profile_id;
   const otherProfiles = allProfiles
-    .filter(p => p.id !== currentProfile?.id)
+    .filter(p => {
+      const profileIdToCheck = p.id || p.profile_id;
+      return profileIdToCheck !== currentProfileIdToCompare;
+    })
     .sort((a, b) => {
       // Sort by rank descending, then by label ascending
       const rankA = a.hierarchy_rank || 0;
@@ -315,6 +324,12 @@ export default function SettingsManager() {
   const handleUploadComplete = async (result) => {
     // Refresh upload limits after successful upload
     await fetchUploadLimits();
+  };
+
+  const handleUploadSuccess = (uploadId) => {
+    // Open upload detail modal for the new upload
+    setSelectedUploadId(uploadId);
+    setShowUploadDetail(true);
   };
 
   return (
@@ -524,7 +539,7 @@ export default function SettingsManager() {
 
                           {/* Uploads History */}
                           <button
-                            onClick={() => showToast('Uploads history coming soon', 'info')}
+                            onClick={() => setShowUploadsGallery(true)}
                             className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full"
                           >
                             <div className="flex items-center space-x-3">
@@ -751,6 +766,30 @@ export default function SettingsManager() {
           eventUrl={eventUrl}
           uploadLimits={uploadLimits}
           onUploadComplete={handleUploadComplete}
+          onUploadSuccess={handleUploadSuccess}
+        />
+      )}
+
+      {/* Uploads Gallery Modal */}
+      {showUploadsGallery && (
+        <UploadsGallery
+          isOpen={showUploadsGallery}
+          onClose={() => setShowUploadsGallery(false)}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+        />
+      )}
+
+      {/* Upload Detail Modal */}
+      {showUploadDetail && selectedUploadId && (
+        <UploadDetail
+          uploadId={selectedUploadId}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          onClose={() => {
+            setShowUploadDetail(false);
+            setSelectedUploadId(null);
+          }}
         />
       )}
     </>

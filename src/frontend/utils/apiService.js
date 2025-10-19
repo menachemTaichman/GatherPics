@@ -530,17 +530,22 @@ export const imagesAPI = {
       formData.append('files', file);
     }
     
+    let uploadedFilenames = [];
     try {
-      await api.post(`/api/events/${eventId}/images/upload`, formData, {
+      const uploadResponse = await api.post(`/api/events/${eventId}/images/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      uploadedFilenames = uploadResponse.data.filenames || [];
     } catch (error) {
       throw new Error(error.response?.data?.error || 'Failed to upload files');
     }
     
-    // Step 2: Process with SSE
+    // Step 2: Process with SSE, passing the uploaded filenames
     return new Promise((resolve, reject) => {
-      const url = `${API_BASE}/api/events/${eventId}/images/process-stream?assign_moments=${assignMoments}`;
+      const fileNamesParam = uploadedFilenames.length > 0 
+        ? `&file_names=${encodeURIComponent(uploadedFilenames.join(','))}` 
+        : '';
+      const url = `${API_BASE}/api/events/${eventId}/images/process-stream?assign_moments=${assignMoments}${fileNamesParam}`;
       
       // EventSource with credentials for cookie-based auth
       const eventSource = new EventSource(url, { withCredentials: true });
@@ -808,6 +813,24 @@ export const profilesAPI = {
     return response.data;
   },
   
+  // Set groups as accessible to profile
+  setGroupsAccessible: async (profileId, groupIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-groups`, {
+      group_ids: groupIds
+    });
+    return response.data;
+  },
+  
+  // Set groups as inaccessible to profile
+  setGroupsInaccessible: async (profileId, groupIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-groups`, {
+      data: { group_ids: groupIds }
+    });
+    return response.data;
+  },
+  
   // === Direct Child Manipulation (for EditProfileModal) ===
   // These directly add/remove from profile relations, ignoring accessibility logic
   
@@ -847,6 +870,24 @@ export const profilesAPI = {
     return response.data;
   },
   
+  // Add groups to profile (direct relation)
+  addGroupsToProfile: async (profileId, groupIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/groups`, {
+      group_ids: groupIds
+    });
+    return response.data;
+  },
+  
+  // Remove groups from profile (direct relation)
+  removeGroupsFromProfile: async (profileId, groupIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/groups`, {
+      data: { group_ids: groupIds }
+    });
+    return response.data;
+  },
+  
   // Check image access for profile
   checkImageAccess: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
@@ -869,6 +910,29 @@ export const profilesAPI = {
       });
       return response.data;
     });
+  },
+  
+  // Check group access for profile
+  checkGroupAccess: async (profileId, groupIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `CHECK_GROUP_ACCESS:${eventId}:${profileId}:${groupIds.join(',')}`;
+    return await withDedupe(key, async () => {
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/groups/check`, {
+        group_ids: groupIds
+      });
+      return response.data;
+    });
+  },
+  
+  // Get current profile data
+  getCurrentProfile: async (eventUrl = null) => {
+    const params = {};
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      params.event_id = eventId;
+    }
+    const response = await api.get('/api/profiles/current', { params });
+    return response.data;
   },
   
   // Get archived access for current profile
@@ -898,6 +962,62 @@ export const profilesAPI = {
       preference_key: preferenceKey,
       preference_value: preferenceValue
     });
+    return response.data;
+  }
+};
+
+// Uploads API
+export const uploadsAPI = {
+  // Get all uploads
+  getAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/uploads`);
+    return response.data;
+  },
+  
+  // Get upload by ID
+  getById: async (uploadId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `UPLOAD_GET_BY_ID:${eventId}:${uploadId}`;
+    const result = await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}`);
+      return response.data;
+    });
+    return result;
+  },
+  
+  // Update upload (notes only)
+  update: async (uploadId, data, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.patch(`/api/events/${eventId}/uploads/${uploadId}`, data);
+    return response.data;
+  },
+  
+  // Delete upload
+  delete: async (uploadId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/uploads/${uploadId}`);
+    return response.data;
+  },
+  
+  // Get faces in a group that are from this upload
+  getGroupFacesInUpload: async (uploadId, groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/groups/${groupId}/faces/in_upload`);
+    return response.data;
+  },
+  
+  // Get faces in a group that are NOT from this upload
+  getGroupFacesNotInUpload: async (uploadId, groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/groups/${groupId}/faces/not_in_upload`);
+    return response.data;
+  },
+  
+  // Get moment images for an upload (distinguishes uploaded vs other)
+  getMomentImages: async (uploadId, momentId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/moments/${momentId}/images`);
     return response.data;
   }
 };

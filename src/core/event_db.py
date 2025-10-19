@@ -61,14 +61,28 @@ class EventDB(BaseDB):
                 'primary_key': ['album_id', 'image_id'],
                 'accessible_table': 'accessible_albums_images_actual',
             },
+            'uploads': {
+                'primary_key': 'upload_id',
+                'accessible_table': 'accessible_uploads',
+                'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id'],
+                'relations': {
+                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
+                    'groups': {'relation_table': 'uploads_groups', 'fields_needed': ['label', 'representative_face']},
+                    'moments': {'relation_table': 'uploads_moments', 'fields_needed': ['label', 'representative_image']},
+                },
+                'serializable': {
+                    'errors': list,
+                }
+            },
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['is_profiles_manager', 'hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'has_archive_album', 'has_favorites_album'],
+                'fields': ['hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
                 'relations': {
                     'images': {'relation_table': 'profile_images', 'fields_needed': ['date_taken']},
+                    'groups': {'relation_table': 'profile_groups', 'fields_needed': ['label']},
                     'albums': {'relation_table': 'profile_albums', 'fields_needed': ['label']},
-                },
+                }
             },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
@@ -82,9 +96,21 @@ class EventDB(BaseDB):
                 'primary_key': ['profile_id', 'image_id'],
                 'accessible_table': 'accessible_profile_images',
             },
+            'profile_groups': {
+                'primary_key': ['profile_id', 'group_id'],
+                'accessible_table': 'accessible_profile_groups',
+            },
             'profile_albums': {
                 'primary_key': ['profile_id', 'album_id'],
                 'accessible_table': 'accessible_profile_albums',
+            },
+            'uploads_groups': {
+                'primary_key': ['upload_id', 'group_id'],
+                'accessible_table': 'accessible_uploads_groups',
+            },
+            'uploads_moments': {
+                'primary_key': ['upload_id', 'moment_id'],
+                'accessible_table': 'accessible_uploads_moments',
             },
         }
     
@@ -98,9 +124,9 @@ class EventDB(BaseDB):
                 height REAL,
                 left REAL,
                 top REAL,
-                group_id TEXT,
+                group_id TEXT NOT NULL,
                 FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE SET NULL,
-                FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE SET NULL
+                FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE RESTRICT
             ''',
             'images': '''
                 image_id TEXT PRIMARY KEY NOT NULL,
@@ -110,7 +136,9 @@ class EventDB(BaseDB):
                 width INTEGER,
                 height INTEGER,
                 moment_id TEXT,
-                FOREIGN KEY (moment_id) REFERENCES moments(moment_id) ON DELETE SET NULL
+                upload_id INTEGER,
+                FOREIGN KEY (moment_id) REFERENCES moments(moment_id) ON DELETE SET NULL,
+                FOREIGN KEY (upload_id) REFERENCES uploads(upload_id) ON DELETE SET NULL
             ''',
             'groups': '''
                 group_id TEXT PRIMARY KEY NOT NULL,
@@ -147,6 +175,7 @@ class EventDB(BaseDB):
                 can_upload_and_delete_images BOOLEAN DEFAULT 0,
                 can_edit BOOLEAN DEFAULT 0,
                 all_images BOOLEAN DEFAULT 0,
+                all_groups BOOLEAN DEFAULT 0,
                 all_albums BOOLEAN DEFAULT 0
             ''',
             'profile_images': '''
@@ -157,6 +186,14 @@ class EventDB(BaseDB):
                 FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, image_id)
             ''',
+            'profile_groups': '''
+                profile_id TEXT NOT NULL,
+                group_id TEXT NOT NULL,
+                accessible BOOLEAN,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+                FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE,
+                PRIMARY KEY (profile_id, group_id)
+            ''',
             'profile_albums': '''
                 profile_id TEXT NOT NULL,
                 album_id TEXT NOT NULL,
@@ -164,6 +201,20 @@ class EventDB(BaseDB):
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (album_id) REFERENCES albums(album_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, album_id)
+            ''',
+            'uploads': '''
+                upload_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                status TEXT,
+                images_count INTEGER,
+                faces_count INTEGER,
+                clusters_count INTEGER,
+                moments_count INTEGER,
+                errors TEXT,
+                notes TEXT,
+                profile_id TEXT,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE SET NULL
             '''
         }
     
@@ -172,14 +223,16 @@ class EventDB(BaseDB):
         return [
             'idx_faces_image_id ON faces(image_id)',
             'idx_faces_group_id ON faces(group_id)',
-            'idx_profile_images_profile_id_image_id ON profile_images(profile_id, image_id)',
-            'idx_profile_albums_profile_id_album_id ON profile_albums(profile_id, album_id)',
             'idx_images_moment_id ON images(moment_id)',
+            'idx_images_upload_id ON images(upload_id)',
             'idx_groups_representative_face ON groups(representative_face)',
             'idx_moments_representative_image ON moments(representative_image)',
             'idx_faces_group_id_image_id ON faces(group_id, image_id)',
             'idx_images_date_taken ON images(date_taken)',
             'idx_albums_representative_image ON albums(representative_image)',
+            'idx_uploads_profile_id ON uploads(profile_id)',
+            'idx_uploads_status ON uploads(status)',
+            'idx_uploads_started_at ON uploads(started_at)',
         ]
     
     @classmethod
@@ -226,12 +279,25 @@ class EventDB(BaseDB):
                 )
                 AND (a1.album_id IS NOT NULL OR i.is_archived = 0)
             ''',
+            'accessible_groups_helper': '''
+                SELECT g.* FROM groups g
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM profiles p
+                    LEFT JOIN profile_groups pg
+                    ON p.profile_id = pg.profile_id AND g.group_id = pg.group_id
+                    WHERE p.profile_id = cur_profile('profile_id') AND (
+                        (p.all_groups = 1 AND pg.group_id IS NULL)
+                        OR (p.all_groups = 0 AND pg.accessible = 1)
+                    )
+                )
+                AND (LOWER(g.label) != 'unassociated' OR cur_profile('can_edit') = 1)
+            ''',
             'accessible_faces': '''
                 SELECT f.*
                 FROM faces f 
                 INNER JOIN accessible_images i ON f.image_id = i.image_id
-                LEFT JOIN groups g ON f.group_id = g.group_id
-                WHERE cur_profile('can_edit') = 1 OR LOWER(g.label) != 'unassociated'
+                INNER JOIN accessible_groups_helper g ON f.group_id = g.group_id
             ''',
             'groups_images': '''
                 SELECT i.image_id as image_id, g.group_id as group_id
@@ -241,25 +307,25 @@ class EventDB(BaseDB):
                 GROUP BY i.image_id, g.group_id
             ''',
             'accessible_groups_images': '''
-                SELECT groups_images.*
-                FROM groups_images
-                INNER JOIN accessible_images ON groups_images.image_id = accessible_images.image_id
+                SELECT ai.image_id as image_id, af.group_id as group_id
+                FROM accessible_images ai
+                INNER JOIN accessible_faces af ON ai.image_id = af.image_id
+                INNER JOIN accessible_groups_helper g ON af.group_id = g.group_id
+                GROUP BY ai.image_id, af.group_id
             ''',
             'accessible_groups': '''
                 SELECT 
-                    g.*, af.image_id as representative_image,
+                    g.*, f.image_id as representative_image,
                     COUNT(agi.image_id) AS images_count,
                     COUNT(agi.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
-                FROM groups g
+                FROM accessible_groups_helper g
                 LEFT JOIN accessible_groups_images agi 
                     ON g.group_id = agi.group_id
                 LEFT JOIN accessible_images ai
                     ON agi.image_id = ai.image_id
-                LEFT JOIN accessible_faces af
-                    ON g.representative_face = af.face_id
+                LEFT JOIN faces f
+                    ON g.representative_face = f.face_id
                 GROUP BY g.group_id
-                HAVING images_count > 0
-                OR (SELECT COUNT(*) FROM faces WHERE group_id = g.group_id) = 0;
             ''',
             'accessible_moments': '''
                 SELECT m.*,
@@ -304,34 +370,99 @@ class EventDB(BaseDB):
                 SELECT aa.* FROM accessible_albums aa
                 WHERE LOWER(aa.label) != 'archive' and LOWER(aa.label) != 'favorites'
             ''',
-            'profiles_details': '''
-                SELECT
-                    profile_id,
-                    CASE WHEN hierarchy_rank = 0 THEN 0 ELSE 1 END as is_profiles_manager,
+            'current_profile': '''
+                SELECT profile_id,
                     hierarchy_rank,
                     can_upload_and_delete_images,
                     can_edit,
                     all_images,
+                    all_groups,
                     all_albums,
+                    CASE WHEN hierarchy_rank = 0 THEN 0 ELSE 1 END as is_profiles_manager,
                     CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
-                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album
+                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
+                    CASE WHEN COUNT(i.image_id) > 0 OR all_images = 1 THEN 1 ELSE 0 END as has_images,
+                    CASE WHEN COUNT(g.group_id) > 0 OR all_groups = 1 THEN 1 ELSE 0 END as has_groups,
+                    CASE WHEN COUNT(a.album_id) > 0 OR all_albums = 1 THEN 1 ELSE 0 END as has_albums
                 FROM profiles p
                 LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
                 LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
+                LEFT JOIN accessible_images i
+                LEFT JOIN accessible_groups g
+                LEFT JOIN accessible_albums a
+                WHERE p.profile_id = cur_profile('profile_id')
+                GROUP BY p.profile_id
+            ''',
+            'profiles_details': '''
+                SELECT
+                    profile_id,
+                    hierarchy_rank,
+                    can_upload_and_delete_images,
+                    can_edit,
+                    all_images,
+                    all_groups,
+                    all_albums
+                FROM profiles p
             ''',
             'accessible_profiles': '''
                 SELECT p.*
                 FROM profiles_details p
                 WHERE
-                    cur_profile('profile_id') = p.profile_id OR p.hierarchy_rank < cur_profile('hierarchy_rank')
+                    cur_profile('profile_id') = p.profile_id 
+                    OR p.hierarchy_rank < cur_profile('hierarchy_rank')
             ''',
             'accessible_profile_images': '''
                 SELECT profile_images.*
                 FROM profile_images
             ''',
+            'accessible_profile_groups': '''
+                SELECT profile_groups.*
+                FROM profile_groups
+                INNER JOIN accessible_groups_helper g ON profile_groups.group_id = g.group_id
+            ''',
             'accessible_profile_albums': '''
                 SELECT profile_albums.*
                 FROM profile_albums
+            ''',
+            'uploads_details': '''
+                SELECT
+                    u.*
+                FROM uploads u
+            ''',
+            'accessible_uploads': '''
+                SELECT u.*
+                FROM uploads_details u
+                WHERE cur_profile('can_upload_and_delete_images') = 1
+            ''',
+            'uploads_groups': '''
+                SELECT u.*, g.group_id as group_id
+                FROM uploads u
+                INNER JOIN images i ON u.upload_id = i.upload_id
+                INNER JOIN faces f ON i.image_id = f.image_id
+                INNER JOIN groups g ON f.group_id = g.group_id
+                GROUP BY u.upload_id, g.group_id
+            ''',
+            'accessible_uploads_groups': '''
+                SELECT u.*, g.group_id as group_id
+                FROM accessible_uploads u
+                INNER JOIN accessible_images i ON u.upload_id = i.upload_id
+                INNER JOIN accessible_faces f ON i.image_id = f.image_id
+                INNER JOIN accessible_groups g ON f.group_id = g.group_id
+                GROUP BY u.upload_id, g.group_id
+            ''',
+            'uploads_moments': '''
+                SELECT u.*, m.moment_id as moment_id
+                FROM uploads u
+                INNER JOIN images i ON u.upload_id = i.upload_id
+                INNER JOIN moments m ON i.moment_id = m.moment_id
+                GROUP BY u.upload_id, m.moment_id
+            ''',
+            'accessible_uploads_moments': '''
+                SELECT u.*, m.moment_id as moment_id
+                FROM accessible_uploads u
+                INNER JOIN accessible_images i ON u.upload_id = i.upload_id
+                INNER JOIN accessible_moments m ON i.moment_id = m.moment_id
+                GROUP BY u.upload_id, m.moment_id
             ''',
         }
     
@@ -417,8 +548,8 @@ class EventDB(BaseDB):
                         RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
                 END;
 
-                INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id)
-                VALUES (NEW.image_id, NEW.date_taken, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id);
+                INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id, upload_id)
+                VALUES (NEW.image_id, NEW.date_taken, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id, NEW.upload_id);
             END;
             """,
 
@@ -656,6 +787,19 @@ class EventDB(BaseDB):
                 AND NEW.all_images = 1 
                 AND NEW.all_images <> OLD.all_images;
 
+                DELETE FROM profile_groups 
+                WHERE profile_id = OLD.profile_id 
+                AND OLD.profile_id <> cur_profile('profile_id')
+                AND NEW.all_groups <> OLD.all_groups;
+
+                INSERT INTO profile_groups (profile_id, group_id, accessible)
+                SELECT OLD.profile_id, group_id, accessible
+                FROM profile_groups 
+                WHERE profile_id = cur_profile('profile_id')
+                AND OLD.profile_id <> cur_profile('profile_id')
+                AND NEW.all_groups = 1
+                AND NEW.all_groups <> OLD.all_groups;
+
                 DELETE FROM profile_albums 
                 WHERE profile_id = OLD.profile_id 
                 AND OLD.profile_id <> cur_profile('profile_id')
@@ -736,6 +880,55 @@ class EventDB(BaseDB):
             END;
             """,
 
+            # accessible_profile_groups
+            'trg_insert_accessible_profile_groups': """
+            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profile_groups
+            INSTEAD OF INSERT ON accessible_profile_groups
+            BEGIN
+                SELECT CASE
+                    WHEN cur_profile('hierarchy_rank') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: not a profiles manager')
+                    WHEN NEW.profile_id = cur_profile('profile_id') THEN
+                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                    WHEN EXISTS (
+                        SELECT 1 FROM profiles
+                        WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                    WHEN NOT EXISTS ( -- Check if group is accessible to current manager
+                        SELECT 1 FROM accessible_groups WHERE group_id = NEW.group_id
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible group')
+                END;
+
+                INSERT OR IGNORE INTO profile_groups (profile_id, group_id, accessible)
+                VALUES (NEW.profile_id, NEW.group_id, NEW.accessible);
+            END;
+            """,
+            'trg_delete_accessible_profile_groups': """
+            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_profile_groups
+            INSTEAD OF DELETE ON accessible_profile_groups
+            BEGIN
+                SELECT CASE
+                    WHEN cur_profile('hierarchy_rank') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: not a profiles manager')
+                    WHEN OLD.profile_id = cur_profile('profile_id') THEN
+                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                    WHEN EXISTS (
+                        SELECT 1 FROM profiles
+                        WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM accessible_groups WHERE group_id = OLD.group_id
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible group')
+                END;
+
+                DELETE FROM profile_groups WHERE profile_id = OLD.profile_id AND group_id = OLD.group_id;
+            END;
+            """,
+
             # accessible_profile_albums
             'trg_insert_accessible_profile_albums': """
             CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profile_albums
@@ -785,7 +978,85 @@ class EventDB(BaseDB):
             END;
             """,
 
+            # accessible_uploads
+            'trg_insert_accessible_uploads': """
+            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_uploads
+            INSTEAD OF INSERT ON accessible_uploads
+            BEGIN
+                SELECT CASE
+                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM profiles
+                        WHERE profile_id = NEW.profile_id
+                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot access this profile')
+                END;
+
+                INSERT OR IGNORE INTO uploads (profile_id, started_at, completed_at, status, images_count, faces_count, clusters_count, moments_count, errors, notes)
+                VALUES (NEW.profile_id, NEW.started_at, NEW.completed_at, NEW.status, NEW.images_count, NEW.faces_count, NEW.clusters_count, NEW.moments_count, NEW.errors, NEW.notes);
+                
+            END;
+            """,
+            'trg_delete_accessible_uploads': """
+            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_uploads
+            INSTEAD OF DELETE ON accessible_uploads
+            BEGIN
+                SELECT CASE
+                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM profiles
+                        WHERE profile_id = OLD.profile_id
+                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot access this profile')
+                END;
+
+                DELETE FROM uploads WHERE upload_id = OLD.upload_id;
+            END;
+            """,
+            'trg_update_accessible_uploads': """
+            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_uploads
+            INSTEAD OF UPDATE ON accessible_uploads
+            BEGIN
+                SELECT CASE
+                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM profiles
+                        WHERE profile_id = OLD.profile_id
+                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                    ) THEN
+                        RAISE(ABORT, 'Permission denied: cannot access this profile')
+                END;
+
+                UPDATE uploads
+                SET
+                    completed_at = NEW.completed_at,
+                    status = NEW.status,
+                    images_count = NEW.images_count,
+                    faces_count = NEW.faces_count,
+                    clusters_count = NEW.clusters_count,
+                    moments_count = NEW.moments_count,
+                    errors = NEW.errors,
+                    notes = NEW.notes
+                WHERE upload_id = OLD.upload_id;
+            END;
+            """,
+
             # ensure_default_albums
+            'trg_update_ensure_default_albums': """
+            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_default_albums
+            BEFORE UPDATE ON albums
+            BEGIN
+                SELECT CASE
+                    WHEN (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites') AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
+                        RAISE(ABORT, 'Constant error: cannot update default albums')
+                END;
+            END;
+            """,
             'trg_delete_ensure_default_albums': """
             CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_albums
             BEFORE DELETE ON albums
@@ -798,6 +1069,18 @@ class EventDB(BaseDB):
             """,
 
             # ensure_default_groups
+            'trg_update_ensure_default_groups': """
+            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_default_groups
+            BEFORE UPDATE ON groups
+            BEGIN
+                SELECT CASE
+                    WHEN LOWER(OLD.label) = 'unassociated' AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
+                        RAISE(ABORT, 'Constant error: cannot update default group label')
+                    WHEN LOWER(NEW.label) = 'unassociated' AND OLD.representative_face <> NEW.representative_face THEN
+                        RAISE(ABORT, 'Constant error: cannot update default group representative face')
+                END;
+            END;
+            """,
             'trg_delete_ensure_default_groups': """
             CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_groups
             BEFORE DELETE ON groups

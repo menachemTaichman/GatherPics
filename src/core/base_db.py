@@ -316,14 +316,17 @@ class BaseDB(ABC):
         row_placeholders = f"({", ".join(["?"] * len(keys))})"
         value_placeholders = ", ".join([row_placeholders] * len(values))
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES {value_placeholders}"
-        sql += f" RETURNING {returning}"
+        # sql += f" RETURNING {returning}"
 
         all_values = []
         for value in values:
             for v in value:
                 all_values.append(v)
 
-        return self.execute_query(sql, all_values, return_format)
+        _ = self.execute_query(sql, all_values, ReturnFormat.VALUE)
+        len_inserted = len(values)
+
+        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {table} ORDER BY rowid DESC LIMIT {len_inserted}', (), return_format)
 
     def insert(self, table: str, data: dict) -> str | None:
         """
@@ -346,7 +349,9 @@ class BaseDB(ABC):
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES ({placeholders})"
         sql += f" RETURNING {returning}"
 
-        return self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
+        self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
+
+        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {table} ORDER BY rowid DESC LIMIT 1', (), ReturnFormat.VALUE)
 
     def update(self, table: str, where: dict, fields: dict) -> list:
         """Update rows matching WHERE clause and return their primary keys (if defined)."""

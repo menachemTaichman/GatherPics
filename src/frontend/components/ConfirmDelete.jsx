@@ -37,8 +37,23 @@ function ConfirmDelete({
 }) {
   const MODAL_ID = useState(() => `confirm-delete-${Math.random().toString(36).substr(2, 9)}`)[0];
   
+  const handleConfirm = () => {
+    onConfirm();
+    onClose();
+  };
+  
+  // Custom keyboard handler for Enter key
+  const handleConfirmDeleteKeys = (e) => {
+    if (e.key === 'Enter') {
+      handleConfirm();
+      return true; // Mark as handled
+    }
+    return false; // Not handled
+  };
+  
   // Use modal focus hook with background scroll allowed
   const { modalRef } = useModalFocus(isOpen, onClose, {
+    customKeyHandler: handleConfirmDeleteKeys,
     allowOutsideScroll: true,
     modalType: 'popup',
     modalId: MODAL_ID
@@ -71,11 +86,6 @@ function ConfirmDelete({
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
   }, [isOpen, MODAL_ID]);
-
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
-  };
 
   if (!isOpen) return null;
 

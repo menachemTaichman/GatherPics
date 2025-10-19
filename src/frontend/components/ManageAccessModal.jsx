@@ -33,6 +33,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           result = await profilesAPI.checkImageAccess(profile.id, entityIds, eventUrl);
         } else if (entityType === 'album') {
           result = await profilesAPI.checkAlbumAccess(profile.id, entityIds, eventUrl);
+        } else if (entityType === 'group') {
+          result = await profilesAPI.checkGroupAccess(profile.id, entityIds, eventUrl);
         }
 
         if (result) {
@@ -66,6 +68,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         await profilesAPI.setImagesAccessible(profile.id, entityIds, eventUrl);
       } else if (entityType === 'album') {
         await profilesAPI.setAlbumsAccessible(profile.id, entityIds, eventUrl);
+      } else if (entityType === 'group') {
+        await profilesAPI.setGroupsAccessible(profile.id, entityIds, eventUrl);
       }
 
       showToast(`Access granted for ${profile.label}`, 'success');
@@ -77,6 +81,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           result = await profilesAPI.checkImageAccess(profile.id, entityIds, eventUrl);
         } else if (entityType === 'album') {
           result = await profilesAPI.checkAlbumAccess(profile.id, entityIds, eventUrl);
+        } else if (entityType === 'group') {
+          result = await profilesAPI.checkGroupAccess(profile.id, entityIds, eventUrl);
         }
         
         if (result) {
@@ -112,6 +118,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         await profilesAPI.setImagesInaccessible(profile.id, entityIds, eventUrl);
       } else if (entityType === 'album') {
         await profilesAPI.setAlbumsInaccessible(profile.id, entityIds, eventUrl);
+      } else if (entityType === 'group') {
+        await profilesAPI.setGroupsInaccessible(profile.id, entityIds, eventUrl);
       }
 
       showToast(`Access denied for ${profile.label}`, 'success');
@@ -123,6 +131,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           result = await profilesAPI.checkImageAccess(profile.id, entityIds, eventUrl);
         } else if (entityType === 'album') {
           result = await profilesAPI.checkAlbumAccess(profile.id, entityIds, eventUrl);
+        } else if (entityType === 'group') {
+          result = await profilesAPI.checkGroupAccess(profile.id, entityIds, eventUrl);
         }
         
         if (result) {
@@ -224,7 +234,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
  * Modal for managing entity access for profiles
  * @param {boolean} isOpen - Whether the modal is open
  * @param {function} onClose - Function to call when modal closes
- * @param {string} entityType - Type of entity: 'image' or 'album'
+ * @param {string} entityType - Type of entity: 'image', 'album', or 'group'
  * @param {string[]} entityIds - Array of entity IDs to manage access for
  * @param {string} eventUrl - Current event URL
  */
@@ -272,7 +282,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
 
   if (!isOpen) return null;
 
-  const entityLabel = entityType === 'image' ? 'image' : 'album';
+  const entityLabel = entityType === 'image' ? 'image' : entityType === 'album' ? 'album' : 'group';
   const entityCount = entityIds.length;
 
   return (

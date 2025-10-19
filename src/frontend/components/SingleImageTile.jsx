@@ -21,7 +21,10 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   placeholderDataUrl = null, // Use universal placeholder components instead
   eventUrl, // Required for useImageActions
   urlHelpers, // Required for useImageActions
-  isHighlighted = false // New prop for highlighting
+  isHighlighted = false, // New prop for highlighting
+  showFavoriteButton = true, // Control favorite button visibility
+  showArchiveButton = true, // Control archive button visibility
+  showCheckbox = true // Control checkbox visibility
 }, ref) {
   // Use the centralized ImageActions hook
   const imageActions = useImageActions({
@@ -57,20 +60,22 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         }
       }}
     >
-      <input
-        type="checkbox"
-        id={`image-checkbox-grid-${image.id}`}
-        name={`image-checkbox-grid-${image.id}`}
-        checked={isSelected}
-        onChange={() => {}}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSelect && onToggleSelect(e);
-        }}
-        className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
-          selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}
-      />
+      {showCheckbox && (
+        <input
+          type="checkbox"
+          id={`image-checkbox-grid-${image.id}`}
+          name={`image-checkbox-grid-${image.id}`}
+          checked={isSelected}
+          onChange={() => {}}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect && onToggleSelect(e);
+          }}
+          className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+            selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        />
+      )}
       <div className="relative w-full h-full">
         {useImageComponent(thumbSrc, {
           width: 200,
@@ -82,7 +87,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         })}
 
         {/* Action buttons - bottom-left */}
-        {isArchived ? (
+        {showArchiveButton && isArchived ? (
           <PermissionGate requires={["hasArchiveAlbum", "canEdit"]}>
             <button
               type="button"
@@ -110,7 +115,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
             </button>
           </PermissionGate>
         ) : (
-          (permissions.canEdit || isFavorite) && (
+          showFavoriteButton && (permissions.canEdit || isFavorite) && (
             <PermissionGate requires="hasFavoritesAlbum">
               <button
                 type="button"
@@ -145,7 +150,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         )}
 
         {/* Heart icon appears second when image is archived */}
-        {isArchived && (permissions.canEdit || isFavorite) && (
+        {showFavoriteButton && showArchiveButton && isArchived && (permissions.canEdit || isFavorite) && (
           <PermissionGate requires="hasFavoritesAlbum">
             <button
               type="button"

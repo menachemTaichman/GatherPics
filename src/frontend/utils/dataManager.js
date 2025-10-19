@@ -101,6 +101,7 @@ function normalizeEntityKey(entity) {
     case 'album': return 'albums';
     case 'face': return 'faces';
     case 'profile': return 'profiles';
+    case 'upload': return 'uploads';
     default: return entity;
   }
 }
@@ -114,8 +115,8 @@ function coerceToSet(val) {
 
 function persistEntitiesSession(entities) {
   try {
-    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
-    ['images','groups','moments','albums','faces','profiles'].forEach((k) => {
+    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {} };
+    ['images','groups','moments','albums','faces','profiles','uploads'].forEach((k) => {
       const src = entities[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -144,11 +145,11 @@ function hydrateEntitiesSession() {
 
   try {
     const raw = sessionStorage.getItem('entities');
-    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
+    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {} };
     if (!raw) return base;
     const parsed = JSON.parse(raw);
     const revived = { ...base };
-    ['images','groups','moments','albums','faces','profiles'].forEach((k) => {
+    ['images','groups','moments','albums','faces','profiles','uploads'].forEach((k) => {
       const src = parsed?.[k] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
@@ -162,7 +163,7 @@ function hydrateEntitiesSession() {
     });
     return revived;
   } catch {
-    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
+    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {} };
   }
 }
 
@@ -218,6 +219,14 @@ export const useDataStore = create((set, get) => {
             // Handle profile relations preservation
             if (childTypeKey === 'profiles') {
               ['images', 'albums'].forEach((rk) => {
+                if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
+                }
+              });
+            }
+            // Handle upload relations preservation
+            if (childTypeKey === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
                 if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                   if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
                 }
@@ -292,6 +301,11 @@ export const useDataStore = create((set, get) => {
     if (entityKey === 'images' || entityKey === 'albums') {
       const hasProfile = scopesList.some((sc) => sc && sc.entity === 'profile');
       if (hasProfile) return true;
+    }
+    // images/groups/moments are allowed under upload scope
+    if (entityKey === 'images' || entityKey === 'groups' || entityKey === 'moments') {
+      const hasUpload = scopesList.some((sc) => sc && sc.entity === 'upload');
+      if (hasUpload) return true;
     }
 
     return false;
@@ -485,6 +499,12 @@ export const useDataStore = create((set, get) => {
                 if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
               });
             }
+            // Handle upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
+              });
+            }
             // Preserve set refs when contents equal
             ['images','faces','albums'].forEach((rk) => {
               if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
@@ -494,6 +514,14 @@ export const useDataStore = create((set, get) => {
             // Preserve profile relations
             if (key === 'profiles') {
               ['images', 'albums'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
+            // Preserve upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
                 if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                   if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
                 }
@@ -530,7 +558,7 @@ export const useDataStore = create((set, get) => {
           let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
-            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id || it.upload_id;
             if (!id) return;
             if (!prevMap[id]) return; // update-only
             const prev = prevMap[id];
@@ -544,6 +572,12 @@ export const useDataStore = create((set, get) => {
                 if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
               });
             }
+            // Handle upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
+              });
+            }
             ['images','faces','albums'].forEach((rk) => {
               if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                 if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
@@ -552,6 +586,14 @@ export const useDataStore = create((set, get) => {
             // Preserve profile relations
             if (key === 'profiles') {
               ['images', 'albums'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
+            // Preserve upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
                 if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
                   if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
                 }
@@ -587,7 +629,7 @@ export const useDataStore = create((set, get) => {
           const map = { ...(nextEntities[key] || {}) };
           items.forEach((it) => {
             if (!it) return;
-            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id || it.upload_id;
             if (!id) return;
             if (map[id]) return; // insert-only
             const merged = { id, ...it };
@@ -597,6 +639,12 @@ export const useDataStore = create((set, get) => {
             // Handle profile relations
             if (key === 'profiles') {
               ['images', 'albums'].forEach((rk) => {
+                if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+              });
+            }
+            // Handle upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
                 if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
               });
             }
@@ -708,7 +756,7 @@ export const useDataStore = create((set, get) => {
     setSelectedImages: (selectedImages) => set({ selectedImages }),
     setImageViewer: (imageViewer) => set({ imageViewer }),
     clearData: () => {
-      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {} };
+      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {} };
       persistEntitiesSession(empty);
       set({
         selectedImages: new Set(),
@@ -818,6 +866,17 @@ export const selectors = {
       return lastArr;
     };
   })(),
+  uploadsAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.uploads || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
   groupImages: (state, groupId) => {
     const group = state.entities?.groups?.[groupId];
     const ids = Array.from(group?.images || []);
@@ -831,6 +890,11 @@ export const selectors = {
   momentImages: (state, momentId) => {
     const moment = state.entities?.moments?.[momentId];
     const ids = Array.from(moment?.images || []);
+    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
+  },
+  uploadImages: (state, uploadId) => {
+    const upload = state.entities?.uploads?.[uploadId];
+    const ids = Array.from(upload?.images || []);
     return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
   },
   imageById: (state, id) => state.entities?.images?.[id] || null,
@@ -909,6 +973,14 @@ export function useProfilesList() {
 
 export function useProfileById(profileId) {
   return useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId] || null : null));
+}
+
+export function useUploadsList() {
+  return useDataStore((state) => selectors.uploadsAll(state));
+}
+
+export function useUploadById(uploadId) {
+  return useDataStore((state) => (uploadId ? state.entities?.uploads?.[uploadId] || null : null));
 }
 
  

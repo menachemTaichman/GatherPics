@@ -13,9 +13,9 @@ class EventModels(BaseModels):
         db_path = os.path.join(DATA_ROOT, event_id, f'{event_id}.db')
         self.db = EventDB(db_path, profile_id)
 
-    def is_profile_manager(self) -> bool:
-        """Check if the current profile is a profile manager."""
-        return self.db.profile_context['hierarchy_rank'] > 0
+    def get_current_profile(self) -> dict[str, Any]:
+        """Get the current profile."""
+        return self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
 
     def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
         """Get representative of an entity.
@@ -41,9 +41,6 @@ class EventModels(BaseModels):
         Returns:
             representative id if found or set, None if not found
         """
-        if table == 'groups' and entity_id == self.get_unassociated_group():
-            return None
-        
         representative = self.db.STRUCTURE()[table].get('representative','')
         if not representative:
             raise ValueError(f"Representative not found")
@@ -444,6 +441,33 @@ class EventModels(BaseModels):
         """Get the favorites album id."""
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
+    # -------- Uploads helpers --------
+    def get_uploads_groups_faces(self, upload_id: str, group_id: str, within: bool = True) -> dict[str, Any]:
+        """Get faces in a group that are from this upload (within=True) or not from this upload (within=False)."""
+        where_clause = 'ai.upload_id = ?' if within else 'ai.upload_id <> ? OR ai.upload_id IS NULL'
+        query = f"""
+            SELECT
+                af.face_id,
+                af.image_id,
+                af.group_id
+            FROM accessible_faces af
+            INNER JOIN accessible_images ai ON af.image_id = ai.image_id
+            WHERE af.group_id = ? AND ({where_clause})
+        """
+        return self.db.execute_query(query, (group_id, upload_id), return_format=ReturnFormat.DICT_DICTS)
+
+    def get_uploads_moments_images(self, upload_id: str, moment_id: str) -> dict[str, Any]:
+        """Get uploads moments images (only images from this upload)."""
+        query = f"""
+            SELECT
+                ai.image_id,
+                ai.date_taken
+            FROM accessible_uploads_moments aum
+            INNER JOIN accessible_images ai ON aum.moment_id = ai.moment_id
+            WHERE aum.upload_id = ? AND aum.moment_id = ? AND ai.upload_id = ?
+        """
+        return self.db.execute_query(query, (upload_id, moment_id, upload_id), return_format=ReturnFormat.DICT_DICTS)
+
     # -------- Profiles helpers --------
     def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0) -> None:
         """Sync profile to event db."""
@@ -464,13 +488,13 @@ class EventModels(BaseModels):
         """Edit entities accessibility for a profile.
         Args:
             profile_id: profile id
-            entity: entity type
+            entity: 'images', 'albums', 'groups'
             ids: list of ids
             set_accessible: if True, set entities accessible to profile, if False, set entities inaccessible to profile
         Returns:
             list of affected ids, if added or removed
         """
-        if entity not in ['images', 'albums']:
+        if entity not in ['images', 'albums', 'groups']:
             raise ValueError(f"Invalid entity: {entity}")
         profile = self.get_entities('profiles', profile_id)
         if not profile:

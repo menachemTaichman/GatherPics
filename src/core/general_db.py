@@ -53,6 +53,16 @@ class GeneralDB(BaseDB):
                     'alreadyDownloaded': (list, []),
                     'alreadyUploaded': (list, []),
                     'queue': (list, [])
+                },
+                'UploadsGallery': {
+                    'sortDir': (str, 'desc'),
+                    'sortBy': (str, 'started_at')
+                },
+                'UploadsDetail': {
+                    'mode': (str, 'groups'),
+                    'sortDir': (str, 'asc'),
+                    'groups_expand_others': (bool, False),
+                    'groups_expand_in_upload': (bool, False),
                 }
             }
         }

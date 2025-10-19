@@ -5,6 +5,7 @@ from src.core.event_db import EventDB
 from src.core.general_models import GeneralModels
 from src.core.general_db import GeneralDB
 from src.core.base_db import ReturnFormat
+from src.core.errors import DatabaseError
 import os
 
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
@@ -237,6 +238,24 @@ def find_incomplete_images():
     
     return incomplete_images
 
+def upsert_profiles_preferences(profile_ids: list[str] | None = None, upsert: bool = True):
+    if profile_ids is None:
+        profile_ids = general_models.db.execute_query('SELECT profile_id FROM profiles;', return_format=ReturnFormat.LIST_VALUES)
+    
+    for profile_id in profile_ids:
+        if not upsert:
+            general_models.db.execute_query(f"DELETE FROM profiles_preferences WHERE profile_id = ?", [profile_id])
+
+        preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+        for preference_group, keys_dict in preferences.items():
+            for preference_key, (value_type, default_value) in keys_dict.items():
+                # Serialize the default value before storing
+                serialized_value = general_models.db.serialize_value(value_type, default_value)
+                try:
+                    general_models.db.execute_query(f"INSERT INTO profiles_preferences (profile_id, preference_group, preference_key, preference_value) VALUES (?, ?, ?, ?)", [profile_id, preference_group, preference_key, serialized_value])
+                except DatabaseError as e:
+                    print(f"Error inserting profile preference {preference_group}.{preference_key}: {e}")
+
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
     ('images', 'albums'),
@@ -255,9 +274,11 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = test_faces_in_aws_and_db()
+# which one is person 64 group? find in groups
+'de5cdbc7-772b-4a2b-8c53-e6d9a505a6ba'
+upload_id = 41
+id = event.models.db.execute_query('SELECT group_id FROM groups WHERE label = "Person 104";', return_format=ReturnFormat.VALUE)
+
+result = event.models.get_uploads_groups_faces(upload_id, id, within=False)
+
 print(result)
-print('--------------------------------')
-result = find_incomplete_images()
-print(result)
-print('--------------------------------')

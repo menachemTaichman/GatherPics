@@ -16,12 +16,14 @@ import {
   Square,
   CheckSquare,
   Trash2,
+  Key,
 } from 'lucide-react';
 import ImageViewer from './ImageViewer';
 import { useToast } from '../utils/ToastContext';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import MergeConflictModal from './MergeConflictModal';
 import TransferFacesModal from './TransferFacesModal';
+import ManageAccessModal from './ManageAccessModal';
 import FloatingSelectionControls from './FloatingSelectionControls';
 import { sortImages, toggleSortOrder } from '../utils/sorting';
 import { usePreference } from '../utils/useSettings';
@@ -131,6 +133,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [albums, setAlbums] = useState([]);
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   
   // Filter states
   const [filterVisible, setFilterVisible] = useState(false);
@@ -1199,6 +1202,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 </button>
               </div>
             )}
+
+            {/* Group 4: Manage Access */}
+            <div className="flex items-center space-x-3 px-4">
+              <PermissionGate requires="isProfilesManager">
+                <button
+                  onClick={() => setShowManageAccessModal(true)}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
+                  title="Manage profile access"
+                >
+                  <Key className="w-4 h-4" />
+                </button>
+              </PermissionGate>
+            </div>
           </div>
         </div>
 
@@ -1374,6 +1390,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
            onTransferComplete={handleTransferComplete}
          />
        )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="group"
+        entityIds={group?.id ? [group.id] : []}
+        eventUrl={eventUrl}
+      />
     </div>
   );
 }

@@ -170,6 +170,12 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         }
         return;
       }
+      // Allow Enter/Space on buttons and links to work normally
+      if ((e.key === 'Enter' || e.key === ' ') && 
+          (e.target.tagName === 'BUTTON' || e.target.tagName === 'A')) {
+        // Let the button/link handle the event naturally
+        return;
+      }
       e.stopPropagation();
       return;
     }

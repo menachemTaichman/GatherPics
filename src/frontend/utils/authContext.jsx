@@ -3,6 +3,7 @@ import jwtService from './jwtService';
 import { setCurrentProfile, getCurrentProfile } from './profileService';
 import { initializePreferences } from './settings';
 import { useModalStore } from './modalManager';
+import { profilesAPI } from './apiService';
 
 const AuthContext = createContext(null);
 
@@ -24,15 +25,27 @@ export function AuthProvider({ children }) {
           await jwtService.refresh();
           setIsAuthenticated(true);
           
+          // Fetch current profile from API
+          try {
+            const result = await profilesAPI.getCurrentProfile();
+            if (result.profile) {
+              setCurrentProfile(result.profile);
+            }
+          } catch (error) {
+            console.error('Failed to fetch current profile:', error);
+          }
+          
           // Load preferences from API after successful authentication
           await initializePreferences(true);
         } catch (error) {
           // Token is invalid, clear it
           jwtService.clearToken();
+          setCurrentProfile(null);
           setIsAuthenticated(false);
         }
       } else {
         setIsAuthenticated(false);
+        setCurrentProfile(null);
         // Initialize with defaults when not authenticated
         await initializePreferences(false);
       }

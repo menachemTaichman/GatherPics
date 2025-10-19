@@ -401,9 +401,19 @@ def upload_images(event_id):
     if not files:
         return jsonify({"error": "No files provided"}), 400
     
+    def cleanup_files(file_names, to_process_dir):
+        """Delete files from to_process directory, ignoring if already deleted."""
+        for filename in file_names:
+            try:
+                filepath = os.path.join(to_process_dir, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass  # Ignore errors during cleanup
+    
+    saved_files = []
     try:
         # Save files to to_process directory
-        saved_files = []
         for file in files:
             if file and file.filename:
                 # Check file extension
@@ -428,7 +438,7 @@ def upload_images(event_id):
             return jsonify({"error": "No valid JPG files provided"}), 400
         
         # Process images
-        result = general_models.process_new_images(event_id, assign_moments=assign_moments)
+        result = general_models.process_new_images(event_id, file_names=saved_files, assign_moments=assign_moments)
         
         # Build changes for frontend
         changes = []
@@ -485,8 +495,18 @@ def upload_images(event_id):
                     'items': event.models.get_entities('moments', list(assigned_moments.keys()))
                 })
         
+        # Add upload entity to changes
+        if result.get('upload_id'):
+            upload_entity = event.models.get_entities('uploads', [result['upload_id']])
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'upload',
+                'items': upload_entity
+            })
+        
         return jsonify({
             "success": True,
+            "upload_id": result.get('upload_id'),
             "images_processed": result['images_processed'],
             "faces_detected": result['faces_detected'],
             "groups_created": result['groups_created'],
@@ -495,13 +515,17 @@ def upload_images(event_id):
         })
         
     except ValueError as e:
-        # Validation errors (limits exceeded, etc.)
+        # Validation errors (limits exceeded, etc.) - cleanup uploaded files
+        cleanup_files(saved_files, event.to_process_dir)
         return jsonify({"error": str(e)}), 400
     except Forbidden as e:
+        cleanup_files(saved_files, event.to_process_dir)
         return forbidden(e)
     except DatabaseError as e:
+        cleanup_files(saved_files, event.to_process_dir)
         return internal_error(e)
     except Exception as e:
+        cleanup_files(saved_files, event.to_process_dir)
         return bad_request(e)
 
 @app.route("/api/events/<event_id>/images/upload", methods=["POST"])
@@ -509,6 +533,9 @@ def upload_images(event_id):
 def upload_files_only(event_id):
     """Upload files to to_process directory without processing."""
     event = get_event(event_id)
+
+    if not event.models.get_current_profile().get('can_upload_and_delete_images', False):
+        raise Forbidden("You are not allowed to upload and delete images")
     
     if 'files' not in request.files:
         return jsonify({"error": "No files provided"}), 400
@@ -558,6 +585,29 @@ def process_images_stream(event_id):
     general_models = get_general_models()
     assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
     
+    # Get file names from query parameter (comma-separated)
+    file_names_str = request.args.get('file_names', None)
+    file_names = file_names_str.split(',') if file_names_str else None
+    
+    # Get the actual list of files that will be processed for cleanup purposes
+    if file_names is None:
+        # Get all image files in to_process directory
+        files_to_track = [f for f in os.listdir(event.to_process_dir) 
+                         if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+    else:
+        files_to_track = file_names
+    
+    def cleanup_files(file_names, to_process_dir):
+        """Delete files from to_process directory, ignoring if already deleted."""
+        if file_names:
+            for filename in file_names:
+                try:
+                    filepath = os.path.join(to_process_dir, filename)
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                except Exception:
+                    pass  # Ignore errors during cleanup
+    
     progress_queue = queue.Queue()
     
     def progress_callback(progress_data):
@@ -574,6 +624,7 @@ def process_images_stream(event_id):
             try:
                 result = general_models.process_new_images(
                     event_id,
+                    file_names=file_names,
                     assign_moments=assign_moments,
                     progress_callback=progress_callback
                 )
@@ -581,6 +632,8 @@ def process_images_stream(event_id):
                 progress_queue.put({'_step': '_done_', 'result': result})
             except Exception as e:
                 error_container['error'] = str(e)
+                # Cleanup files on error
+                cleanup_files(file_names, event.to_process_dir)
                 progress_queue.put({'_step': '_error_', 'message': str(e)})
         
         # Start processing in background thread
@@ -588,6 +641,7 @@ def process_images_stream(event_id):
         thread.start()
         
         # Stream progress updates
+        processing_completed = False
         try:
             while True:
                 try:
@@ -646,12 +700,22 @@ def process_images_stream(event_id):
                                     'items': event.models.get_entities('moments', list(assigned_moments.keys()))
                                 })
                         
+                        # Add upload entity to changes
+                        if result.get('upload_id'):
+                            upload_entity = event.models.get_entities('uploads', [result['upload_id']])
+                            changes.append({
+                                'type': 'UPSERT',
+                                'entity': 'upload',
+                                'items': upload_entity
+                            })
+                        
                         final_response = {
                             'step': 'complete',
                             'result': result,
                             'changes': changes
                         }
                         yield f"data: {json.dumps(final_response)}\n\n"
+                        processing_completed = True
                         break
                         
                     elif progress.get('_step') == '_error_':
@@ -671,8 +735,20 @@ def process_images_stream(event_id):
                     yield ": keepalive\n\n"
                     
         except GeneratorExit:
-            pass
+            print(f'GeneratorExit: {processing_completed}')
+            # Client disconnected - cleanup files if processing wasn't completed
+            if not processing_completed:
+                cleanup_files(files_to_track, event.to_process_dir)
+        except Exception:
+            print(f'Exception: {processing_completed}')
+            # Any other error in generator - cleanup files if processing wasn't completed
+            if not processing_completed:
+                cleanup_files(files_to_track, event.to_process_dir)
+            raise
         finally:
+            # Cleanup files if processing wasn't completed (handles timeout and other edge cases)
+            if not processing_completed:
+                cleanup_files(files_to_track, event.to_process_dir)
             thread.join(timeout=1)
     
     return Response(
@@ -1512,8 +1588,23 @@ def toggle_archive_images(event_id):
 @app.route("/api/profiles/current", methods=["GET"])
 @require_auth
 def get_current_profile():
+    """Get current profile data combining general and event-specific information."""
+    event_id = request.args.get('event_id', None)
+    
     general_models = get_general_models()
-    profile = general_models.get_entities('profiles', [get_jwt_identity()])
+    profile_id = get_jwt_identity()
+    
+    if event_id:
+        event = get_event(event_id)
+        profile_event = event.models.get_current_profile()
+        profile_event.pop('profile_id')
+    else:
+        profile_event = {}
+
+    general_models = get_general_models(profile_id)
+    profile_general = general_models.profile_context
+    profile = {**profile_event, **profile_general}
+
     return jsonify({"profile": profile})
 
 @app.route("/api/profiles/current/preferences", methods=["GET"])
@@ -1641,12 +1732,11 @@ def update_profile_password(profile_id):
 def check_images_from_profile(event_id, profile_id):
     """Check accessible images for a profile."""
     event = get_event(event_id)
-    if not (event.models.is_profile_manager() and event.models.is_accessible('profiles', profile_id)):
+    if not (event.models.get_current_profile()['is_profiles_manager'] and event.models.is_accessible('profiles', profile_id)):
         return forbidden(f"Access denied")
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    profile = event.models.get_entities('profiles', profile_id)
-    have_all = bool(profile['all_images'])
+    have_all = bool(event.models.get_current_profile()['all_images'])
     len_accessible = len(event.models.get_childs('profiles', profile_id, 'images', image_ids, return_ids=True, within=not have_all))
     return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(image_ids) - len_accessible})
 
@@ -1655,14 +1745,26 @@ def check_images_from_profile(event_id, profile_id):
 def check_albums_from_profile(event_id, profile_id):
     """Check accessible albums for a profile."""
     event = get_event(event_id)
-    if not (event.models.is_profile_manager() and event.models.is_accessible('profiles', profile_id)):
+    if not (event.models.get_current_profile()['is_profiles_manager'] and event.models.is_accessible('profiles', profile_id)):
         return forbidden(f"Access denied")
     data = request.json or {}
     album_ids = data.get('album_ids', [])
-    profile = event.models.get_entities('profiles', profile_id)
-    have_all = bool(profile['all_albums'])
+    have_all = bool(event.models.get_current_profile()['all_albums'])
     len_accessible = len(event.models.get_childs('profiles', profile_id, 'albums', album_ids, return_ids=True, within=not have_all))
     return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(album_ids) - len_accessible})
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/groups/check", methods=["POST"])
+@require_auth
+def check_groups_from_profile(event_id, profile_id):
+    """Check accessible groups for a profile."""
+    event = get_event(event_id)
+    if not (event.models.get_current_profile()['is_profiles_manager'] and event.models.is_accessible('profiles', profile_id)):
+        return forbidden(f"Access denied")
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    have_all = bool(event.models.get_current_profile()['all_groups'])
+    len_accessible = len(event.models.get_childs('profiles', profile_id, 'groups', group_ids, return_ids=True, within=not have_all))
+    return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(group_ids) - len_accessible})
 
 # edit profiles
 @app.route("/api/events/profiles/check-name", methods=["POST"])
@@ -1699,6 +1801,7 @@ def _create_profile(data: dict, event_id: str | None = None):
     can_edit = data.get('can_edit', 0)
     all_images = data.get('all_images', 0)
     all_albums = data.get('all_albums', 0)
+    all_groups = data.get('all_groups', 0)
     save_preferences = data.get('save_preferences', 0)
     
     try:
@@ -1713,6 +1816,7 @@ def _create_profile(data: dict, event_id: str | None = None):
             'can_edit': can_edit,
             'all_images': all_images,
             'all_albums': all_albums,
+            'all_groups': all_groups,
             'save_preferences': save_preferences
         }
         event.models.edit('profiles', profile_id, sanitized)
@@ -1745,7 +1849,7 @@ def create_profile():
 def create_event_profile(event_id):
     event = get_event(event_id)
     general_models = get_general_models()
-    if not event.models.is_profile_manager():
+    if not event.models.get_current_profile()['is_profiles_manager']:
         return forbidden(f"Access denied")
 
     data = request.json or {}
@@ -1781,27 +1885,30 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
         if general_models.is_exists('profiles', {'label': label}, exclude_id = profile_id):
             raise ValueError("Profile with this label already exists")
 
-    try:
-        if 'hierarchy_rank' in data.keys():
-            general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
+    if 'hierarchy_rank' in data.keys():
+        general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
 
-        general_models.update_profile(profile_id, password=data.get('password', None), label=data.get('label', None))
-        
-        if event_id:
-            event_fields = [
-                'can_delete_event',
-                'can_upload_and_delete_images',
-                'can_edit',
-                'all_images',
-                'all_albums',
-                'save_preferences'
-            ]
-            event_data = {k: v for k, v in data.items() if k in event_fields}
-            event = get_event(event_id)
-            event.models.edit('profiles', profile_id, event_data)
+    general_fields = [
+        'label',
+        'password',
+        'save_preferences',
+    ]
+    general_data = {k: v for k, v in data.items() if k in general_fields}
+
+    general_models.update_profile(profile_id, general_data)
     
-    except Forbidden as e:
-        raise forbidden(e)
+    if event_id:
+        event_fields = [
+            'can_delete_event',
+            'can_upload_and_delete_images',
+            'can_edit',
+            'all_images',
+            'all_albums',
+            'all_groups',
+        ]
+        event_data = {k: v for k, v in data.items() if k in event_fields}
+        event = get_event(event_id)
+        event.models.edit('profiles', profile_id, event_data)
 
 @app.route("/api/profiles/<profile_id>", methods=["PUT"])
 @require_auth
@@ -1829,7 +1936,7 @@ def update_profile(profile_id):
 def update_event_profile(event_id, profile_id):
     event = get_event(event_id)
     general_models = get_general_models()
-    if not event.models.is_profile_manager():
+    if not event.models.get_current_profile()['is_profiles_manager']:
         return forbidden(f"Access denied")
 
     data = request.json or {}
@@ -1897,10 +2004,10 @@ def delete_event_profile(event_id, profile_id):
 # set profile access
 def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bool):
     """Add or remove multiple childs from a profile."""
-    if not (event.models.is_profile_manager() and event.models.is_accessible('profiles', profile_id)):
+    if not event.models.get_current_profile()['is_profiles_manager']:
         return forbidden(f"Access denied")
     
-    if child not in ['images', 'albums']:
+    if child not in ['images', 'albums', 'groups']:
         return bad_request(f"Invalid child: {child}")
 
     try:
@@ -1965,12 +2072,30 @@ def remove_albums_from_profile(event_id, profile_id):
     album_ids = data.get('album_ids', [])
     return _edit_event_profile_childs(event, profile_id, 'albums', album_ids, add=False)
 
+@app.route("/api/events/<event_id>/profiles/<profile_id>/groups", methods=["PUT"])
+@require_auth
+def add_groups_to_profile(event_id, profile_id):
+    """Add multiple groups to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    return _edit_event_profile_childs(event, profile_id, 'groups', group_ids, add=True)
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/groups", methods=["DELETE"])
+@require_auth
+def remove_groups_from_profile(event_id, profile_id):
+    """Remove multiple groups from a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    return _edit_event_profile_childs(event, profile_id, 'groups', group_ids, add=False)
+
 def _set_profile_accessibility(event, profile_id, child: str, child_ids, set_accessible: bool):
     """Set multiple childs as accessible or inaccessible to a profile."""
-    if not (event.models.is_profile_manager() and event.models.is_accessible('profiles', profile_id)):
+    if not (event.models.get_current_profile()['is_profiles_manager'] and event.models.is_accessible('profiles', profile_id)):
         return forbidden(f"Access denied")
     
-    if child not in ['images', 'albums']:
+    if child not in ['images', 'albums', 'groups']:
         return bad_request(f"Invalid child: {child}")
     
     try:
@@ -2035,8 +2160,231 @@ def set_albums_as_inaccessible(event_id, profile_id):
     album_ids = data.get('album_ids', [])
     return _set_profile_accessibility(event, profile_id, 'albums', album_ids, set_accessible=False)
 
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-groups", methods=["PUT"])
+@require_auth
+def set_groups_as_accessible(event_id, profile_id):
+    """Set multiple groups as accessible to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'groups', group_ids, set_accessible=True)
+
+@app.route("/api/events/<event_id>/profiles/<profile_id>/accessible-groups", methods=["DELETE"])
+@require_auth
+def set_groups_as_inaccessible(event_id, profile_id):
+    """Set multiple groups as inaccessible to a profile."""
+    event = get_event(event_id)
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    return _set_profile_accessibility(event, profile_id, 'groups', group_ids, set_accessible=False)
+
 # ==============================================================================
-# VII. FILE SERVING & DOWNLOADS
+# VII. UPLOADS ENDPOINTS
+# ==============================================================================
+
+# get uploads
+@app.route("/api/events/<event_id>/uploads", methods=["GET"])
+@require_auth
+def get_uploads(event_id):
+    """List all accessible uploads for the specific event."""
+    event = get_event(event_id)
+    uploads = event.models.get_entities('uploads')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'upload',
+        'items': uploads
+    }]
+    return jsonify({'changes': changes})
+
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>", methods=["GET"])
+@require_auth
+def get_upload(event_id, upload_id):
+    """Get a specific upload's details as changes."""
+    event = get_event(event_id)
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+
+    upload = event.models.get_entities('uploads', [upload_id])
+    images = event.models.get_childs('uploads', upload_id, 'images')
+    groups = event.models.get_childs('uploads', upload_id, 'groups')
+    moments = event.models.get_childs('uploads', upload_id, 'moments')
+    
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'upload',
+        'items': upload
+    }]
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'upload.images',
+        'parentId': str(upload_id),
+        'entities': images
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'upload.groups',
+        'parentId': str(upload_id),
+        'entities': groups
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'upload.moments',
+        'parentId': str(upload_id),
+        'entities': moments
+    })
+    
+    return jsonify({'changes': changes})
+
+# edit uploads
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>", methods=["PATCH"])
+@require_auth
+def update_upload(event_id, upload_id):
+    """Update an upload's notes."""
+    event = get_event(event_id)
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+        
+    data = request.json or {}
+    try:
+        allowed_fields = {'notes'}
+        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+        if sanitized:
+            event.models.edit('uploads', upload_id, sanitized)
+            updated_upload = event.models.get_entities('uploads', [upload_id])
+            changes = [{
+                'type': 'UPDATE',
+                'entity': 'upload',
+                'items': updated_upload
+            }]
+            response = {"success": True, "changes": changes}
+        else:
+            response = {"success": False}
+        return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>", methods=["DELETE"])
+@require_auth
+def delete_upload(event_id, upload_id):
+    """Delete an upload."""
+    event = get_event(event_id)
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+    
+    try:
+        event.models.delete('uploads', upload_id)
+        
+        response = {"success": True, "deleted_ids": [upload_id]}
+        response['changes'] = [{
+            'type': 'REMOVE',
+            'entity': 'upload',
+            'ids': [upload_id]
+        }]
+        return jsonify(response)
+    except Forbidden as e:
+        return forbidden(e)
+    except DatabaseError as e:
+        return internal_error(e)
+    except Exception as e:
+        return bad_request(e)
+
+# get upload group images
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>/groups/<group_id>/faces/in_upload", methods=["GET"])
+@require_auth
+def get_upload_group_faces_in_upload(event_id, upload_id, group_id):
+    """Get faces in a group that are from this upload."""
+    event = get_event(event_id)
+    
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+    
+    if not event.models.is_accessible('groups', group_id):
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        faces_data = event.models.get_uploads_groups_faces(upload_id, group_id, within=True)
+        face_ids = list(faces_data.keys())
+        
+        # Build changes for store
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'face',
+            'items': faces_data
+        }]
+        
+        return jsonify({
+            'face_ids': face_ids,
+            'changes': changes
+        })
+    except Exception as e:
+        return bad_request(e)
+
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>/groups/<group_id>/faces/not_in_upload", methods=["GET"])
+@require_auth
+def get_upload_group_faces_not_in_upload(event_id, upload_id, group_id):
+    """Get faces in a group that are NOT from this upload."""
+    event = get_event(event_id)
+    
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+    
+    if not event.models.is_accessible('groups', group_id):
+        return not_found(f"Group {group_id} not found or not accessible")
+    
+    try:
+        faces_data = event.models.get_uploads_groups_faces(upload_id, group_id, within=False)
+        face_ids = list(faces_data.keys())
+        
+        # Build changes for store
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'face',
+            'items': faces_data
+        }]
+        
+        return jsonify({
+            'face_ids': face_ids,
+            'changes': changes
+        })
+    except Exception as e:
+        return bad_request(e)
+
+# get upload moment images
+@app.route("/api/events/<event_id>/uploads/<int:upload_id>/moments/<moment_id>/images", methods=["GET"])
+@require_auth
+def get_upload_moment_images(event_id, upload_id, moment_id):
+    """Get images in a moment for an upload (only images from this upload)."""
+    event = get_event(event_id)
+    
+    if not event.models.is_accessible('uploads', upload_id):
+        return not_found(f"Upload {upload_id} not found or not accessible")
+    
+    if not event.models.is_accessible('moments', moment_id):
+        return not_found(f"Moment {moment_id} not found or not accessible")
+    
+    try:
+        images_data = event.models.get_uploads_moments_images(upload_id, moment_id)
+        
+        # Build changes for store
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'image',
+            'items': images_data
+        }]
+        
+        return jsonify({
+            'image_ids': list(images_data.keys()),
+            'changes': changes
+        })
+    except Exception as e:
+        return bad_request(e)
+
+# ==============================================================================
+# VIII. FILE SERVING & DOWNLOADS
 # ==============================================================================
 
 @app.route('/api/events/<event_id>/file/<file_type>/<file_id>.webp')
@@ -2170,11 +2518,11 @@ def download_images(event_id):
         return bad_request(e)
 
 # ==============================================================================
-# VII. DEPRECATED & MISC ENDPOINTS
+# IX. DEPRECATED & MISC ENDPOINTS
 # ==============================================================================
 
 # ==============================================================================
-# VIII. PRODUCTION BUILD SERVING (for testing production mode)
+# X. PRODUCTION BUILD SERVING (for testing production mode)
 # ==============================================================================
 
 # Serve production build assets (CSS, JS, etc.)
