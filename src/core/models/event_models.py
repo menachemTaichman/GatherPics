@@ -1,11 +1,10 @@
 from typing import List, Dict, Any
-from .base_db import ReturnFormat
-from .base_models import BaseModels
-from .event_db import EventDB
-from .errors import DBConstant
+from src.core.database.base_db import ReturnFormat
+from src.core.models.base_models import BaseModels
+from src.core.database.event_db import EventDB
+from src.core.errors import DBConstant
+from src.core.config import DATA_ROOT
 import os
-
-DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
 
 class EventModels(BaseModels):
 

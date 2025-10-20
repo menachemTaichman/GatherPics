@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import os
 from enum import Enum
 from abc import ABC, abstractmethod
-from .errors import Forbidden, DatabaseError, DBConstant
+from src.core.errors import Forbidden, DatabaseError, DBConstant
 
 class ReturnFormat(Enum):
     VALUE = 'value'

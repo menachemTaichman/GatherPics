@@ -1,11 +1,7 @@
 from typing import List, Dict, Any
-from .base_db import ReturnFormat
+from src.core.database.base_db import ReturnFormat
 from abc import ABC
 import uuid
-
-class Forbidden(Exception):
-    """Exception raised for forbidden access."""
-    pass
 
 class BaseModels(ABC):
 

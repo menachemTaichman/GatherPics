@@ -1,12 +1,11 @@
 import os
 import shutil
 from datetime import datetime
-from .errors import Forbidden, DBConstant
-from .face_utils import FaceUtils
-from .event_db import EventDB
-from .event_models import EventModels
-
-DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
+from src.core.errors import Forbidden, DBConstant
+from src.core.utils.face_utils import FaceUtils
+from src.core.database.event_db import EventDB
+from src.core.models.event_models import EventModels
+from src.core.config import DATA_ROOT
 
 class Event():
     """Event model for managing event data and operations."""

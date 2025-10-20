@@ -1,7 +1,7 @@
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from .base_db import BaseDB, ReturnFormat
+from src.core.database.base_db import BaseDB, ReturnFormat
 
 class EventDB(BaseDB):
     """Event-specific database for images, groups, albums, moments."""
@@ -30,8 +30,8 @@ class EventDB(BaseDB):
                 'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image'],
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
-                    'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
-                    'faces': {'relation_table': 'faces', 'fields_needed': []}
+                    'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
+                    'faces': {'relation_table': 'faces', 'fields_needed': ['upload_id']}
                 },
             },
             'moments': {
@@ -294,7 +294,7 @@ class EventDB(BaseDB):
                 AND (LOWER(g.label) != 'unassociated' OR cur_profile('can_edit') = 1)
             ''',
             'accessible_faces': '''
-                SELECT f.*
+                SELECT f.*, i.upload_id
                 FROM faces f 
                 INNER JOIN accessible_images i ON f.image_id = i.image_id
                 INNER JOIN accessible_groups_helper g ON f.group_id = g.group_id

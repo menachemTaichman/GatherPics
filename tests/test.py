@@ -1,10 +1,10 @@
-from src.core.event import Event
-from src.core.face_utils import FaceUtils
-from src.core.base_db import BaseDB
-from src.core.event_db import EventDB
-from src.core.general_models import GeneralModels
-from src.core.general_db import GeneralDB
-from src.core.base_db import ReturnFormat
+from src.core.services.event import Event
+from src.core.utils.face_utils import FaceUtils
+from src.core.database.base_db import BaseDB
+from src.core.database.event_db import EventDB
+from src.core.models.general_models import GeneralModels
+from src.core.database.general_db import GeneralDB
+from src.core.database.base_db import ReturnFormat
 from src.core.errors import DatabaseError
 import os
 
@@ -274,7 +274,4 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# upload_id = 42
-# result = event.models.edit('uploads', upload_id, {'errors': []})
-# print(result)
-# print('--------------------------------')
+recreate_views_triggers_and_indexes()

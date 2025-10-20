@@ -6,7 +6,7 @@ import random
 import uuid
 from datetime import datetime, timedelta
 
-from src.core.db import AppDB as DB
+from src.core.database.base_db import BaseDB as DB
 
 class TestDBPerformance(unittest.TestCase):
     DB_PATH = "tests/test_performance.db"

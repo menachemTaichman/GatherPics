@@ -1,9 +1,9 @@
 import sqlite3
 import os
 import uuid
-from .base_db import BaseDB
+from src.core.database.base_db import BaseDB
+from src.core.config import DATA_ROOT
 
-DATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data'))
 DB_PATH = os.path.join(DATA_ROOT, 'general.db')
 
 class GeneralDB(BaseDB):
