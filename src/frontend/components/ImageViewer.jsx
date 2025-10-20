@@ -231,7 +231,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, urlHelpers }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers }) {
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
@@ -242,9 +242,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   
   // Use universal util for related images
-  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds, includeArchived, sortBy, sortOrder });
+  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds, filterByUploadId, includeArchived, sortBy, sortOrder });
   useEffect(() => {
-  }, [relatedImages, entity, parent, includeArchived, sortBy, sortOrder, filteredIds]);
+  }, [relatedImages, entity, parent, includeArchived, sortBy, sortOrder, filteredIds, filterByUploadId]);
   
   // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {

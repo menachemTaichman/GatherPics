@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, ArrowUp, ArrowDown, Plus } from 'lucide-react';
@@ -11,6 +11,8 @@ import { getPreference, setPreference } from '../utils/settings';
 import { formatErrorMessage } from '../utils/errorHandler';
 import ConfirmDelete from './ConfirmDelete';
 import UploadImagesModal from './UploadImagesModal';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -30,6 +32,7 @@ function formatDateTime(dateString) {
 }
 
 export default function UploadsGallery({ eventUrl, urlHelpers }) {
+  const { isAuthenticated } = useAuth();
   const [sortBy, setSortBy] = useState(() => getPreference('UploadsGallery.sortBy', 'started_at'));
   const [sortDir, setSortDir] = useState(() => getPreference('UploadsGallery.sortDir', 'desc'));
   const [editingNotes, setEditingNotes] = useState(null);
@@ -43,47 +46,59 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
   useApplyScopes([{ entity: 'all', id: 'uploads' }]);
 
-  useEffect(() => {
-    const handleAuthLogout = () => {
-      navigate(`/${eventUrl}`);
-    };
-    window.addEventListener('auth:logout', handleAuthLogout);
-    
-    return () => {
-      window.removeEventListener('auth:logout', handleAuthLogout);
-    };
-  }, [eventUrl, navigate]);
-
   const storeUploads = useUploadsList();
 
-  useEffect(() => {
-    if (eventUrl) {
-      fetchUploads();
-      fetchUploadLimits();
-    }
-  }, [eventUrl]);
+  // Create placeholder uploads when not authenticated
+  const placeholderUploads = useMemo(() => {
+    return Array.from({ length: 5 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      started_at: null,
+      profile_label: '',
+      images_count: 0,
+      faces_count: 0,
+      clusters_count: 0,
+      status: '',
+      notes: '',
+      isPlaceholder: true
+    }));
+  }, []);
 
-  const fetchUploads = async () => {
+  // Use uploads from store or placeholders when not authenticated
+  const currentUploads = isAuthenticated ? storeUploads : placeholderUploads;
+
+  const fetchUploads = useCallback(async () => {
+    if (!eventUrl) return;
     try {
       await uploadsAPI.getAll(eventUrl);
     } catch (error) {
       console.error('Failed to fetch uploads:', error);
       showToast(formatErrorMessage('fetch uploads', error), 'error');
     }
-  };
+  }, [eventUrl, showToast]);
 
-  const fetchUploadLimits = async () => {
+  const fetchUploadLimits = useCallback(async () => {
+    if (!eventUrl) return;
     try {
       const limits = await imagesAPI.getUploadLimits(eventUrl);
       setUploadLimits(limits);
     } catch (error) {
       console.error('Failed to fetch upload limits:', error);
     }
-  };
+  }, [eventUrl]);
+
+  useAuthRefresh(fetchUploads, [eventUrl]);
+
+  useEffect(() => {
+    if (eventUrl && isAuthenticated) {
+      fetchUploadLimits();
+    }
+  }, [eventUrl, isAuthenticated, fetchUploadLimits]);
 
   const sortedUploads = useMemo(() => {
-    return sortUploads(storeUploads, sortBy, sortDir);
-  }, [storeUploads, sortBy, sortDir]);
+    // Skip sorting for placeholders
+    if (!isAuthenticated) return currentUploads;
+    return sortUploads(currentUploads, sortBy, sortDir);
+  }, [currentUploads, sortBy, sortDir, isAuthenticated]);
 
   const handleSort = (field) => {
     if (sortBy === field) {

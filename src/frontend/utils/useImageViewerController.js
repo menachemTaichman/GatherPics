@@ -8,7 +8,6 @@ export default function useImageViewerController({
   defaultSortBy = 'date',
   defaultSortOrder = 'asc',
   urlHelpers = null,
-  filteredIds = null,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -16,6 +15,8 @@ export default function useImageViewerController({
   const [entity, setEntity] = useState(null);
   const [sortBy, setSortBy] = useState(defaultSortBy);
   const [sortOrder, setSortOrder] = useState(defaultSortOrder);
+  const [filterByUploadId, setFilterByUploadId] = useState(null);
+  const [filteredIds, setFilteredIds] = useState(null);
   const [currentGroupId, setCurrentGroupId] = useState(null);
   const lastClosedAtRef = useRef(0);
 
@@ -38,13 +39,15 @@ export default function useImageViewerController({
     if (showToastRef.current) return showToastRef.current(...args);
   }, []);
 
-  const open = useCallback(({ index: startIndex = 0, parent: p, entity: e, sortBy: sb, sortOrder: so, currentGroupId: cg } = {}) => {
+  const open = useCallback(({ index: startIndex = 0, parent: p, entity: e, sortBy: sb, sortOrder: so, filteredIds: fi, filterByUploadId: fbu, currentGroupId: cg } = {}) => {
     const now = Date.now();
     if (now - (lastClosedAtRef.current || 0) < 200) return;
     if (typeof p !== 'undefined') setParent(p);
     if (typeof e !== 'undefined') setEntity(e);
     if (typeof sb !== 'undefined') setSortBy(sb);
     if (typeof so !== 'undefined') setSortOrder(so);
+    if (typeof fi !== 'undefined') setFilteredIds(fi);
+    if (typeof fbu !== 'undefined') setFilterByUploadId(fbu);
     if (typeof cg !== 'undefined') setCurrentGroupId(cg);
     setIndex(Math.max(0, startIndex));
     setIsOpen(true);
@@ -78,11 +81,12 @@ export default function useImageViewerController({
     showToast: stableShowToast,
     urlHelpers,
     filteredIds,
+    filterByUploadId,
     parent,
     entity,
     sortBy,
     sortOrder,
-  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers, filteredIds]);
+  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers]);
 
   return { isOpen, open, close, navigate, viewerProps };
 }

@@ -24,7 +24,7 @@ export function useApplyScopes(scopes = []) {
 }
 
 // Stable list of images for a parent entity (group/album/moment/upload) or filteredIds override
-export function useImagesForParent({ entity, parentId, filteredIds = null, includeArchived = false, sortBy = 'date', sortOrder = 'asc' }) {
+export function useImagesForParent({ entity, parentId, filteredIds = null, filterByUploadId = null, includeArchived = false, sortBy = 'date', sortOrder = 'asc' }) {
   const relationSet = useDataStore((state) => {
     if (!entity || !parentId) return null;
     const key = entity === 'group' ? 'groups' : (entity === 'album' ? 'albums' : (entity === 'moment' ? 'moments' : (entity === 'upload' ? 'uploads' : null)));
@@ -45,9 +45,10 @@ export function useImagesForParent({ entity, parentId, filteredIds = null, inclu
     const stateImages = (useDataStore.getState().entities || {}).images || {};
     let list = ids.map((id) => stateImages[id]).filter(Boolean);
     if (!includeArchived) list = list.filter((img) => !img.is_archived);
+    if (filterByUploadId !== null) list = list.filter((img) => String(img.upload_id) === String(filterByUploadId));
     const sorted = sortImages(list, sortBy || 'date', sortOrder || 'asc');
     return sorted;
-  }, [relationSet, filteredIds, entity, includeArchived, sortBy, sortOrder, imagesMapSub, parentId]);
+  }, [relationSet, filteredIds, entity, includeArchived, filterByUploadId, sortBy, sortOrder, imagesMapSub, parentId]);
 
   return images;
 }

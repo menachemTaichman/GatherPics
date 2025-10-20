@@ -444,33 +444,6 @@ class EventModels(BaseModels):
         """Get the favorites album id."""
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
-    # -------- Uploads helpers --------
-    def get_uploads_groups_faces(self, upload_id: str, group_id: str, within: bool = True) -> dict[str, Any]:
-        """Get faces in a group that are from this upload (within=True) or not from this upload (within=False)."""
-        where_clause = 'ai.upload_id = ?' if within else 'ai.upload_id <> ? OR ai.upload_id IS NULL'
-        query = f"""
-            SELECT
-                af.face_id,
-                af.image_id,
-                af.group_id
-            FROM accessible_faces af
-            INNER JOIN accessible_images ai ON af.image_id = ai.image_id
-            WHERE af.group_id = ? AND ({where_clause})
-        """
-        return self.db.execute_query(query, (group_id, upload_id), return_format=ReturnFormat.DICT_DICTS)
-
-    def get_uploads_moments_images(self, upload_id: str, moment_id: str) -> dict[str, Any]:
-        """Get uploads moments images (only images from this upload)."""
-        query = f"""
-            SELECT
-                ai.image_id,
-                ai.date_taken
-            FROM accessible_uploads_moments aum
-            INNER JOIN accessible_images ai ON aum.moment_id = ai.moment_id
-            WHERE aum.upload_id = ? AND aum.moment_id = ? AND ai.upload_id = ?
-        """
-        return self.db.execute_query(query, (upload_id, moment_id, upload_id), return_format=ReturnFormat.DICT_DICTS)
-
     # -------- Profiles helpers --------
     def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0) -> None:
         """Sync profile to event db."""

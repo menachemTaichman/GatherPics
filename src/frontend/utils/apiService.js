@@ -306,6 +306,15 @@ export const groupsAPI = {
     });
   },
 
+  getWithFaces: async (groupId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `GROUP_GET_WITH_FACES:${eventId}:${groupId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/with-faces`);
+      return response.data || {};
+    });
+  },
+
   update: async (groupId, updates, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.put(`/api/events/${eventId}/groups/${groupId}`, updates);
@@ -1000,26 +1009,6 @@ export const uploadsAPI = {
     return response.data;
   },
   
-  // Get faces in a group that are from this upload
-  getGroupFacesInUpload: async (uploadId, groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/groups/${groupId}/faces/in_upload`);
-    return response.data;
-  },
-  
-  // Get faces in a group that are NOT from this upload
-  getGroupFacesNotInUpload: async (uploadId, groupId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/groups/${groupId}/faces/not_in_upload`);
-    return response.data;
-  },
-  
-  // Get moment images for an upload (distinguishes uploaded vs other)
-  getMomentImages: async (uploadId, momentId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/moments/${momentId}/images`);
-    return response.data;
-  }
 };
 
 // Optimistic update helpers

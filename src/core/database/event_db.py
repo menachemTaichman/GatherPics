@@ -31,7 +31,7 @@ class EventDB(BaseDB):
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
                     'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
-                    'faces': {'relation_table': 'faces', 'fields_needed': ['upload_id']}
+                    'faces': {'relation_table': 'faces', 'fields_needed': ['image_id', 'upload_id']}
                 },
             },
             'moments': {
@@ -40,7 +40,7 @@ class EventDB(BaseDB):
                 'fields': ['label', 'description', 'start', 'end', 'images_count', 'active_images_count', 'representative_image'],
                 'representative': {'field': 'representative_image', 'table': 'images'},
                 'relations': {
-                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
+                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
                 },
             },
             'albums': {

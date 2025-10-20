@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle } from 'lucide-react';
-import { uploadsAPI } from '../utils/apiService';
+import { uploadsAPI, groupsAPI, momentsAPI } from '../utils/apiService';
 import { useToast } from '../utils/ToastContext';
 import { useUploadById, useDataStore } from '../utils/dataManager';
 import { useApplyScopes, useImagesForParent, useGroupsForUpload, useMomentsForUpload } from '../utils/storeUtils';
@@ -16,6 +16,9 @@ import FloatingSelectionControls from './FloatingSelectionControls';
 import { ImageComponent } from '../utils/useImage.jsx';
 import useImageSelection from '../utils/useImageSelection';
 import useImageViewerController from '../utils/useImageViewerController.js';
+import { shallow } from 'zustand/shallow';
+import { useAuth } from '../utils/authContext';
+import { useAuthRefresh } from '../utils/useAuthRefresh';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -38,6 +41,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
   const navigate = useNavigate();
   const uploadId = params.uploadId;
+  const { isAuthenticated } = useAuth();
   
   const [mode, setMode] = useState(() => getPreference('UploadsDetail.mode', 'images'));
   const sortDir = usePreference('UploadDetail.sortDir', 'asc');
@@ -47,12 +51,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
-  const [expandInUpload, setExpandInUpload] = useState(() => getPreference('UploadsDetail.groups_expand_in_upload', true));
-  const [expandOthers, setExpandOthers] = useState(() => getPreference('UploadsDetail.groups_expand_others', false));
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [expandedMoments, setExpandedMoments] = useState(new Set());
-  const [groupFacesCache, setGroupFacesCache] = useState({});
-  const [momentImagesCache, setMomentImagesCache] = useState({});
   const [imageClasses, setImageClasses] = useState({});
   const imageClassesRef = useRef(imageClasses);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -62,38 +62,55 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   
   useEffect(() => { imageClassesRef.current = imageClasses; }, [imageClasses]);
 
-  useApplyScopes([
+  // Base scopes: upload and its related entities
+  const baseScopes = useMemo(() => [
     { entity: 'upload', id: String(uploadId) },
-    { entity: 'all', id: 'faces' }  // Allow face upserts
-  ]);
+  ], [uploadId]);
 
-  useEffect(() => {
-    const handleAuthLogout = () => {
-      navigate(`/${eventUrl}`);
-    };
-    window.addEventListener('auth:logout', handleAuthLogout);
-    
-    return () => {
-      window.removeEventListener('auth:logout', handleAuthLogout);
-    };
-  }, [eventUrl, navigate]);
+  // Dynamic scopes for expanded groups and moments
+  const dynamicScopes = useMemo(() => {
+    const scopes = [];
+    expandedGroups.forEach(groupId => {
+      scopes.push({ entity: 'group', id: String(groupId) });
+    });
+    expandedMoments.forEach(momentId => {
+      scopes.push({ entity: 'moment', id: String(momentId) });
+    });
+    return scopes;
+  }, [expandedGroups, expandedMoments]);
 
-  const upload = useUploadById(uploadId);
+  // Combine base and dynamic scopes
+  const allScopes = useMemo(() => [...baseScopes, ...dynamicScopes], [baseScopes, dynamicScopes]);
+  
+  useApplyScopes(allScopes);
 
-  useEffect(() => {
-    if (uploadId && eventUrl) {
-      fetchUploadDetails();
-    }
-  }, [uploadId, eventUrl]);
+  const storeUpload = useUploadById(uploadId);
 
-  const fetchUploadDetails = async () => {
+  // Create placeholder upload when not authenticated
+  const placeholderUpload = useMemo(() => ({
+    id: uploadId,
+    started_at: null,
+    profile_label: '',
+    status: '',
+    notes: '',
+    errors: [],
+    isPlaceholder: true
+  }), [uploadId]);
+
+  // Use upload from store or placeholder when not authenticated
+  const upload = isAuthenticated ? storeUpload : placeholderUpload;
+
+  const fetchUploadDetails = useCallback(async () => {
+    if (!uploadId || !eventUrl) return;
     try {
       await uploadsAPI.getById(uploadId, eventUrl);
     } catch (error) {
       console.error('Failed to fetch upload details:', error);
       showToast(formatErrorMessage('fetch upload details', error), 'error');
     }
-  };
+  }, [uploadId, eventUrl, showToast]);
+
+  useAuthRefresh(fetchUploadDetails, [uploadId, eventUrl]);
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
@@ -103,18 +120,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const toggleSortDir = () => {
     const newDir = sortDir === 'asc' ? 'desc' : 'asc';
     setSortDir(newDir);
-  };
-
-  const toggleExpandInUpload = () => {
-    const newValue = !expandInUpload;
-    setExpandInUpload(newValue);
-    setPreference('UploadsDetail.groups_expand_in_upload', newValue);
-  };
-
-  const toggleExpandOthers = () => {
-    const newValue = !expandOthers;
-    setExpandOthers(newValue);
-    setPreference('UploadsDetail.groups_expand_others', newValue);
   };
 
   const toggleGroup = (groupId) => {
@@ -145,9 +150,32 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const rawUploadGroups = useGroupsForUpload(uploadId);
   const rawUploadMoments = useMomentsForUpload(uploadId);
   
+  // Create placeholder groups when not authenticated
+  const placeholderGroups = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => ({
+      id: `placeholder-group-${i}`,
+      label: '',
+      faces: new Set(),
+      isPlaceholder: true
+    }));
+  }, []);
+
+  // Create placeholder moments when not authenticated
+  const placeholderMoments = useMemo(() => {
+    return Array.from({ length: 6 }, (_, i) => ({
+      id: `placeholder-moment-${i}`,
+      label: '',
+      images: new Set(),
+      isPlaceholder: true
+    }));
+  }, []);
+  
   // Sort groups by label
   const uploadGroups = useMemo(() => {
-    return [...rawUploadGroups].sort((a, b) => {
+    // Use placeholders when not authenticated
+    const groups = isAuthenticated ? rawUploadGroups : placeholderGroups;
+    
+    return [...groups].sort((a, b) => {
       const labelA = (a.label || '').toLowerCase();
       const labelB = (b.label || '').toLowerCase();
       if (sortDir === 'asc') {
@@ -156,11 +184,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         return labelB.localeCompare(labelA);
       }
     });
-  }, [rawUploadGroups, sortDir]);
+  }, [rawUploadGroups, placeholderGroups, sortDir, isAuthenticated]);
   
   // Sort moments by label (which contains time)
   const uploadMoments = useMemo(() => {
-    return [...rawUploadMoments].sort((a, b) => {
+    // Use placeholders when not authenticated
+    const moments = isAuthenticated ? rawUploadMoments : placeholderMoments;
+    
+    return [...moments].sort((a, b) => {
       const labelA = a.label || '';
       const labelB = b.label || '';
       if (sortDir === 'asc') {
@@ -169,16 +200,28 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         return labelB.localeCompare(labelA);
       }
     });
-  }, [rawUploadMoments, sortDir]);
+  }, [rawUploadMoments, placeholderMoments, sortDir, isAuthenticated]);
 
   // Get all images for upload
-  const uploadImages = useImagesForParent({ 
+  const storeUploadImages = useImagesForParent({ 
     entity: 'upload', 
     parentId: uploadId, 
     includeArchived: true,
     sortBy: 'date',
     sortOrder: sortDir
   });
+
+  // Create placeholder images when not authenticated
+  const placeholderImages = useMemo(() => {
+    return Array.from({ length: 24 }, (_, i) => ({
+      id: `placeholder-image-${i}`,
+      date_taken: null,
+      isPlaceholder: true
+    }));
+  }, []);
+
+  // Use images from store or placeholders when not authenticated
+  const uploadImages = isAuthenticated ? storeUploadImages : placeholderImages;
   
   // Image selection
   const {
@@ -204,77 +247,69 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     filteredIds: null,
   });
 
-  // Fetch group faces when group is expanded
-  const fetchGroupFaces = async (groupId) => {
-    if (groupFacesCache[groupId]) return;
-    
+  // Fetch group data when group is expanded (scope already added by dynamic scopes)
+  const fetchGroupData = useCallback(async (groupId) => {
     try {
-      // Fetch both in_upload and not_in_upload faces
-      const [inUploadData, notInUploadData] = await Promise.all([
-        uploadsAPI.getGroupFacesInUpload(uploadId, groupId, eventUrl),
-        uploadsAPI.getGroupFacesNotInUpload(uploadId, groupId, eventUrl)
-      ]);
-      
-      setGroupFacesCache(prev => ({
-        ...prev,
-        [groupId]: {
-          uploaded_ids: inUploadData.face_ids || [],
-          other_ids: notInUploadData.face_ids || []
-        }
-      }));
+      await groupsAPI.getWithFaces(groupId, eventUrl);
     } catch (error) {
-      console.error('Failed to fetch group faces:', error);
-      showToast(formatErrorMessage('fetch group faces', error), 'error');
+      console.error('Failed to fetch group data:', error);
+      showToast(formatErrorMessage('fetch group data', error), 'error');
     }
-  };
+  }, [eventUrl, showToast]);
 
-  // Fetch moment images when moment is expanded
-  const fetchMomentImages = async (momentId) => {
-    if (momentImagesCache[momentId]) return;
-    
+  // Fetch moment data when moment is expanded (scope already added by dynamic scopes)
+  const fetchMomentData = useCallback(async (momentId) => {
     try {
-      const data = await uploadsAPI.getMomentImages(uploadId, momentId, eventUrl);
-      setMomentImagesCache(prev => ({
-        ...prev,
-        [momentId]: {
-          image_ids: data.image_ids || []
-        }
-      }));
+      await momentsAPI.getById(momentId, eventUrl);
     } catch (error) {
-      console.error('Failed to fetch moment images:', error);
-      showToast(formatErrorMessage('fetch moment images', error), 'error');
+      console.error('Failed to fetch moment data:', error);
+      showToast(formatErrorMessage('fetch moment data', error), 'error');
     }
-  };
+  }, [eventUrl, showToast]);
 
+  // Fetch data for expanded groups/moments
   useEffect(() => {
     if (mode === 'groups') {
       expandedGroups.forEach(groupId => {
-        if (!groupFacesCache[groupId]) {
-          fetchGroupFaces(groupId);
-        }
+        fetchGroupData(groupId);
       });
     }
-  }, [mode, expandedGroups, uploadId]);
+  }, [mode, expandedGroups, fetchGroupData]);
 
   useEffect(() => {
     if (mode === 'moments') {
       expandedMoments.forEach(momentId => {
-        if (!momentImagesCache[momentId]) {
-          fetchMomentImages(momentId);
-        }
+        fetchMomentData(momentId);
       });
     }
-  }, [mode, expandedMoments, uploadId]);
+  }, [mode, expandedMoments, fetchMomentData]);
 
-  const openImageViewer = (imageId, index, isFromUpload = true) => {
-    if (!isFromUpload) {
-      // For images not from this upload (e.g., "other images" in groups),
-      // show toast and don't open viewer
-      showToast('This image is not part of this upload', 'info');
-      return;
-    }
+  // Open image viewer for main photos tab
+  const openImageViewerInUpload = (imageId, index) => {
+    openViewer({ index, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir });
+  };
+
+  // Open image viewer for a group (showing only images from this upload)
+  const openImageViewerInGroup = (groupId, faceId) => {
+    const faces = getGroupFacesInUpload(groupId);
+    const imageIds = faces.map(f => f.image_id);
+    const face = entities?.faces?.[faceId];
+    if (!face) return;
     
-    openViewer({ index, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir, filteredIds: null });
+    const index = imageIds.indexOf(face.image_id);
+    if (index === -1) return;
+    
+    openViewer({ index, parent: groupId, entity: 'group', sortBy: 'date', sortOrder: 'asc', filterByUploadId: uploadId });
+  };
+
+  // Open image viewer for a moment (showing only images from this upload)
+  const openImageViewerInMoment = (momentId, imageId) => {
+    const images = getMomentImagesInUpload(momentId);
+    const imageIds = images.map(img => img.id);
+    const index = imageIds.indexOf(imageId);
+    if (index === -1) return;
+    
+    openViewer({ index, parent: momentId, entity: 'moment', sortBy: 'date', sortOrder: 'asc', filterByUploadId: uploadId });
   };
   
   const toggleImageSelection = (imageId, event) => {
@@ -346,25 +381,54 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [uploadImages]);
 
-  const getFacesByIds = (faceIds) => {
-    const facesMap = useDataStore.getState().entities?.faces || {};
-    return faceIds.map(id => facesMap[id]).filter(Boolean);
-  };
+  // Subscribe to entities to make component reactive
+  const entities = useDataStore((state) => state.entities, shallow);
 
-  const getImagesByIds = (imageIds) => {
-    const imagesMap = useDataStore.getState().entities?.images || {};
-    return imageIds.map(id => imagesMap[id]).filter(Boolean);
-  };
+  // Helper to get faces of a group filtered by this upload
+  const getGroupFacesInUpload = useCallback((groupId) => {
+    const group = entities?.groups?.[groupId];
+    if (!group) return [];
+    
+    const facesSet = group.faces;
+    if (!facesSet || !(facesSet instanceof Set)) return [];
+    
+    const facesMap = entities?.faces || {};
+    const imagesMap = entities?.images || {};
+    
+    return Array.from(facesSet)
+      .map(faceId => facesMap[faceId])
+      .filter(face => {
+        if (!face) return false;
+        const image = imagesMap[face.image_id];
+        return image && String(image.upload_id) === String(uploadId);
+      });
+  }, [entities, uploadId]);
+
+  // Helper to get images of a moment filtered by this upload
+  const getMomentImagesInUpload = useCallback((momentId) => {
+    const moment = entities?.moments?.[momentId];
+    if (!moment) return [];
+    
+    const imagesSet = moment.images;
+    if (!imagesSet || !(imagesSet instanceof Set)) return [];
+    
+    const imagesMap = entities?.images || {};
+    
+    return Array.from(imagesSet)
+      .map(imageId => imagesMap[imageId])
+      .filter(image => image && String(image.upload_id) === String(uploadId))
+      .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
+  }, [entities, uploadId]);
 
   const getGroupRepUrl = (groupId) => {
     const group = useDataStore.getState().entities?.groups?.[groupId];
-    if (!group || !urlHelpers?.getRepresentativeUrl) return null;
+    if (!group || group.isPlaceholder || !urlHelpers?.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('groups', groupId)}?v=${group.representative_face || 'none'}`;
   };
 
   const getMomentRepUrl = (momentId) => {
     const moment = useDataStore.getState().entities?.moments?.[momentId];
-    if (!moment || !urlHelpers?.getRepresentativeUrl) return null;
+    if (!moment || moment.isPlaceholder || !urlHelpers?.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('moments', momentId)}?v=${moment.representative_image || 'none'}`;
   };
 
@@ -448,7 +512,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               >
                 <ImageIcon className="w-4 h-4" />
                 <span className="font-medium">Photos</span>
-                {upload && <span className="font-medium">({upload.images_count || 0})</span>}
+                <span className="font-medium">({uploadImages.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('groups')}
@@ -460,7 +524,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               >
                 <Users className="w-4 h-4" />
                 <span className="font-medium">People</span>
-                {upload && <span className="font-medium">({upload.clusters_count || 0})</span>}
+                <span className="font-medium">({uploadGroups.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('moments')}
@@ -472,7 +536,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               >
                 <Clock className="w-4 h-4" />
                 <span className="font-medium">Moments</span>
-                {upload && <span className="font-medium">({upload.moments_count || 0})</span>}
+                <span className="font-medium">({uploadMoments.length})</span>
               </button>
             </div>
 
@@ -651,11 +715,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                         image={img}
                         aspectClass={imageClasses[img.id] || 'square'}
                         imageFit="cover"
-                        thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
+                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
                         selectionMode={selectionMode}
                         isSelected={selectedImages.has(img.id)}
                         onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                        onOpen={() => openImageViewer(img.id, index)}
+                        onOpen={() => openImageViewerInUpload(img.id, index)}
                         onImageLoad={(e) => handleImageLoad(img.id, e)}
                         eventUrl={eventUrl}
                         urlHelpers={urlHelpers}
@@ -686,9 +750,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                 <div className="space-y-4">
                   {uploadGroups.map((group) => {
                     const isExpanded = expandedGroups.has(group.id);
-                    const cache = groupFacesCache[group.id];
-                    const uploadedFaces = cache ? getFacesByIds(cache.uploaded_ids) : [];
-                    const otherFaces = cache ? getFacesByIds(cache.other_ids) : [];
+                    const groupFaces = isExpanded ? getGroupFacesInUpload(group.id) : [];
 
                     return (
                       <div key={group.id} className="border rounded-lg overflow-hidden">
@@ -696,7 +758,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           onClick={() => {
                             toggleGroup(group.id);
                             if (!isExpanded) {
-                              fetchGroupFaces(group.id);
+                              fetchGroupData(group.id);
                             }
                           }}
                           className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -712,101 +774,52 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             <div>
                               <h4 className="font-medium text-gray-900">{group.label}</h4>
                               <p className="text-xs text-gray-500">
-                                {group.faces_count || 0} total faces
+                                {groupFaces.length} {groupFaces.length === 1 ? 'face' : 'faces'} in this upload
                               </p>
                             </div>
                           </div>
                           {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
 
-                        {isExpanded && cache && (
-                          <div className="p-4 space-y-4">
-                            {/* From this upload section */}
-                            {uploadedFaces.length > 0 && (
-                              <div>
-                                <button
-                                  onClick={toggleExpandInUpload}
-                                  className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                                >
-                                  <span>From this upload ({uploadedFaces.length})</span>
-                                  {expandInUpload ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                </button>
-                                {expandInUpload && (
-                                  <div 
-                                    className="photo-gallery-grid"
-                                    style={{
-                                      gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                      gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                    }}
-                                  >
-                                    {uploadedFaces.map((face) => {
-                                      const img = uploadImages.find(i => i.id === face.image_id);
-                                      if (!img) return null;
-                                      const actualIndex = uploadImages.findIndex(i => i.id === face.image_id);
-                                      return (
-                                        <div
-                                          key={face.id}
-                                          className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
-                                        >
-                                          <SingleImageTile
-                                            image={img}
-                                            aspectClass={imageClasses[img.id] || 'square'}
-                                            imageFit="cover"
-                                            thumbSrc={urlHelpers?.getFaceCropUrl?.(face.id)}
-                                            selectionMode={selectionMode}
-                                            isSelected={selectedImages.has(img.id)}
-                                            onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                            onOpen={() => openImageViewer(face.image_id, actualIndex)}
-                                            onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                            eventUrl={eventUrl}
-                                            urlHelpers={urlHelpers}
-                                            showFavoriteButton={false}
-                                            showArchiveButton={false}
-                                            showCropBadge={false}
-                                          />
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Other faces section */}
-                            {otherFaces.length > 0 && (
-                              <div>
-                                <button
-                                  onClick={toggleExpandOthers}
-                                  className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                                >
-                                  <span>Other faces ({otherFaces.length})</span>
-                                  {expandOthers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                </button>
-                                {expandOthers && (
-                                  <div 
-                                    className="photo-gallery-grid"
-                                    style={{
-                                      gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                      gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                    }}
-                                  >
-                                    {otherFaces.map((face) => (
-                                      <div
-                                        key={face.id}
-                                        className="aspect-square cursor-pointer hover:opacity-80 transition-opacity rounded-lg overflow-hidden"
-                                        onClick={() => openImageViewer(face.image_id, 0, false)}
-                                      >
-                                        {ImageComponent(urlHelpers?.getFaceCropUrl?.(face.id), {
-                                          width: Math.max(100, 266 * imageSize * 0.75),
-                                          height: Math.max(100, 266 * imageSize * 0.75),
-                                          className: 'w-full h-full object-cover',
-                                          alt: group.label,
-                                          iconType: 'person'
-                                        })}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                        {isExpanded && (
+                          <div className="p-4">
+                            {groupFaces.length === 0 ? (
+                              <p className="text-gray-500 text-sm text-center py-4">No faces from this upload</p>
+                            ) : (
+                              <div 
+                                className="photo-gallery-grid"
+                                style={{
+                                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                  gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                }}
+                              >
+                                {groupFaces.map((face) => {
+                                  const img = entities?.images?.[face.image_id];
+                                  if (!img) return null;
+                                  return (
+                                    <div
+                                      key={face.id}
+                                      className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
+                                    >
+                                      <SingleImageTile
+                                        image={img}
+                                        aspectClass={imageClasses[img.id] || 'square'}
+                                        imageFit="cover"
+                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
+                                        selectionMode={selectionMode}
+                                        isSelected={selectedImages.has(img.id)}
+                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                        onOpen={() => openImageViewerInGroup(group.id, face.id)}
+                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                        eventUrl={eventUrl}
+                                        urlHelpers={urlHelpers}
+                                        showFavoriteButton={false}
+                                        showArchiveButton={false}
+                                        showCropBadge={false}
+                                      />
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -836,8 +849,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                 <div className="space-y-4">
                   {uploadMoments.map((moment) => {
                     const isExpanded = expandedMoments.has(moment.id);
-                    const cache = momentImagesCache[moment.id];
-                    const momentImages = cache ? getImagesByIds(cache.image_ids) : [];
+                    const momentImages = isExpanded ? getMomentImagesInUpload(moment.id) : [];
 
                     return (
                       <div key={moment.id} className="border rounded-lg overflow-hidden">
@@ -845,7 +857,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           onClick={() => {
                             toggleMoment(moment.id);
                             if (!isExpanded) {
-                              fetchMomentImages(moment.id);
+                              fetchMomentData(moment.id);
                             }
                           }}
                           className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -860,14 +872,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             <div>
                               <h4 className="font-medium text-gray-900">{moment.label}</h4>
                               <p className="text-xs text-gray-500">
-                                {cache ? momentImages.length : '...'} photos
+                                {momentImages.length} {momentImages.length === 1 ? 'photo' : 'photos'} in this upload
                               </p>
                             </div>
                           </div>
                           {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
 
-                        {isExpanded && cache && (
+                        {isExpanded && (
                           <div className="p-4">
                             {momentImages.length === 0 ? (
                               <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
@@ -879,8 +891,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                   gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
                                 }}
                               >
-                                {momentImages.map((img, index) => {
-                                  const actualIndex = uploadImages.findIndex(i => i.id === img.id);
+                                {momentImages.map((img) => {
                                   return (
                                     <div
                                       key={img.id}
@@ -890,11 +901,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         image={img}
                                         aspectClass={imageClasses[img.id] || 'square'}
                                         imageFit="cover"
-                                        thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
+                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
                                         selectionMode={selectionMode}
                                         isSelected={selectedImages.has(img.id)}
                                         onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                        onOpen={() => openImageViewer(img.id, actualIndex >= 0 ? actualIndex : index)}
+                                        onOpen={() => openImageViewerInMoment(moment.id, img.id)}
                                         onImageLoad={(e) => handleImageLoad(img.id, e)}
                                         eventUrl={eventUrl}
                                         urlHelpers={urlHelpers}

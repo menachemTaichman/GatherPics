@@ -66,6 +66,41 @@ def get_group(event_id, group_id):
 
     return jsonify(result)
 
+@group_bp.route("/groups/<group_id>/with-faces", methods=["GET"])
+@require_auth
+def get_group_with_faces(event_id, group_id):
+    """Get a specific group with its faces and images for upload detail view."""
+    event = get_event(event_id)
+
+    if not event.models.is_accessible('groups', group_id):
+        return jsonify({"error": f"Group {group_id} not found or not accessible"}), 404
+
+    group = event.models.get_groups([group_id])
+    faces = event.models.get_childs('groups', group_id, 'faces')
+    images = event.models.get_childs('groups', group_id, 'images')
+    
+    changes = [
+        {
+            'type': 'UPSERT',
+            'entity': 'group',
+            'items': group
+        },
+        {
+            'type': 'RELATION_SET',
+            'relation': 'group.faces',
+            'parentId': group_id,
+            'entities': faces
+        },
+        {
+            'type': 'RELATION_SET',
+            'relation': 'group.images',
+            'parentId': group_id,
+            'entities': images
+        }
+    ]
+    
+    return jsonify({'changes': changes})
+
 @group_bp.route("/groups/related", methods=["GET"])
 @require_auth
 def get_related_groups(event_id):
