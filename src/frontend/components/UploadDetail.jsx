@@ -1,18 +1,21 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from 'lucide-react';
-import { useModalFocus } from '../utils/useModalFocus';
-import { useModalManager } from '../utils/modalManager';
+import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle } from 'lucide-react';
 import { uploadsAPI } from '../utils/apiService';
 import { useToast } from '../utils/ToastContext';
 import { useUploadById, useDataStore } from '../utils/dataManager';
 import { useApplyScopes, useImagesForParent, useGroupsForUpload, useMomentsForUpload } from '../utils/storeUtils';
 import { sortImages } from '../utils/sorting';
 import { getPreference, setPreference } from '../utils/settings';
+import { usePreference } from '../utils/useSettings';
 import { formatErrorMessage } from '../utils/errorHandler';
 import SingleImageTile from './SingleImageTile';
 import ImageViewer from './ImageViewer';
+import FloatingSelectionControls from './FloatingSelectionControls';
 import { ImageComponent } from '../utils/useImage.jsx';
+import useImageSelection from '../utils/useImageSelection';
+import useImageViewerController from '../utils/useImageViewerController.js';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -31,20 +34,33 @@ function formatDateTime(dateString) {
   }
 }
 
-export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }) {
+export default function UploadDetail({ eventUrl, urlHelpers }) {
+  const params = useParams();
+  const navigate = useNavigate();
+  const uploadId = params.uploadId;
+  
   const [mode, setMode] = useState(() => getPreference('UploadsDetail.mode', 'images'));
-  const [sortDir, setSortDir] = useState(() => getPreference('UploadsDetail.sortDir', 'asc'));
+  const sortDir = usePreference('UploadDetail.sortDir', 'asc');
+  const setSortDir = (value) => setPreference('UploadDetail.sortDir', value);
+  const selectionMode = usePreference('general.select', false);
+  const setSelectionMode = (value) => setPreference('general.select', value);
+  const imageSize = usePreference('general.size', 1.0);
+  const setImageSize = (value) => setPreference('general.size', value);
+  const [imageSizeInputValue, setImageSizeInputValue] = useState();
   const [expandInUpload, setExpandInUpload] = useState(() => getPreference('UploadsDetail.groups_expand_in_upload', true));
   const [expandOthers, setExpandOthers] = useState(() => getPreference('UploadsDetail.groups_expand_others', false));
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [expandedMoments, setExpandedMoments] = useState(new Set());
-  const [viewerState, setViewerState] = useState({ show: false, imageId: null, index: 0 });
   const [groupFacesCache, setGroupFacesCache] = useState({});
   const [momentImagesCache, setMomentImagesCache] = useState({});
+  const [imageClasses, setImageClasses] = useState({});
+  const imageClassesRef = useRef(imageClasses);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState('');
   
   const { showToast } = useToast();
-  const { registerModal, unregisterModal } = useModalManager();
-  const modalId = `upload-detail-${uploadId}`;
+  
+  useEffect(() => { imageClassesRef.current = imageClasses; }, [imageClasses]);
 
   useApplyScopes([
     { entity: 'upload', id: String(uploadId) },
@@ -52,29 +68,15 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
   ]);
 
   useEffect(() => {
-    registerModal({ 
-      id: modalId, 
-      type: 'popup',
-      allowOutsideScroll: true,
-      scopes: [{ entity: 'upload', id: String(uploadId) }]
-    });
-    
     const handleAuthLogout = () => {
-      onClose();
+      navigate(`/${eventUrl}`);
     };
     window.addEventListener('auth:logout', handleAuthLogout);
     
     return () => {
-      unregisterModal(modalId);
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, [uploadId, registerModal, unregisterModal]);
-
-  const { modalRef } = useModalFocus(true, onClose, {
-    modalId: modalId,
-    modalType: 'popup',
-    allowOutsideScroll: true
-  });
+  }, [eventUrl, navigate]);
 
   const upload = useUploadById(uploadId);
 
@@ -101,7 +103,6 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
   const toggleSortDir = () => {
     const newDir = sortDir === 'asc' ? 'desc' : 'asc';
     setSortDir(newDir);
-    setPreference('UploadsDetail.sortDir', newDir);
   };
 
   const toggleExpandInUpload = () => {
@@ -141,8 +142,34 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
   };
 
   // Get upload groups and moments from relations using stable hooks
-  const uploadGroups = useGroupsForUpload(uploadId);
-  const uploadMoments = useMomentsForUpload(uploadId);
+  const rawUploadGroups = useGroupsForUpload(uploadId);
+  const rawUploadMoments = useMomentsForUpload(uploadId);
+  
+  // Sort groups by label
+  const uploadGroups = useMemo(() => {
+    return [...rawUploadGroups].sort((a, b) => {
+      const labelA = (a.label || '').toLowerCase();
+      const labelB = (b.label || '').toLowerCase();
+      if (sortDir === 'asc') {
+        return labelA.localeCompare(labelB);
+      } else {
+        return labelB.localeCompare(labelA);
+      }
+    });
+  }, [rawUploadGroups, sortDir]);
+  
+  // Sort moments by label (which contains time)
+  const uploadMoments = useMemo(() => {
+    return [...rawUploadMoments].sort((a, b) => {
+      const labelA = a.label || '';
+      const labelB = b.label || '';
+      if (sortDir === 'asc') {
+        return labelA.localeCompare(labelB);
+      } else {
+        return labelB.localeCompare(labelA);
+      }
+    });
+  }, [rawUploadMoments, sortDir]);
 
   // Get all images for upload
   const uploadImages = useImagesForParent({ 
@@ -151,6 +178,30 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
     includeArchived: true,
     sortBy: 'date',
     sortOrder: sortDir
+  });
+  
+  // Image selection
+  const {
+    selectedKeys: selectedImages,
+    toggleKey: toggleSelectedImageKey,
+    clear: clearSelection,
+    selectAll: selectAllImages,
+  } = useImageSelection({
+    items: uploadImages,
+    getKey: (img) => img?.id,
+    enableRange: true,
+  });
+  
+  // Image viewer controller
+  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
+    eventUrl,
+    showToast,
+    onTransferComplete: null,
+    onJumpToMoment: null,
+    defaultSortBy: 'date',
+    defaultSortOrder: sortDir,
+    urlHelpers,
+    filteredIds: null,
   });
 
   // Fetch group faces when group is expanded
@@ -215,7 +266,7 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
     }
   }, [mode, expandedMoments, uploadId]);
 
-  const openImageViewer = (imageId, isFromUpload = true) => {
+  const openImageViewer = (imageId, index, isFromUpload = true) => {
     if (!isFromUpload) {
       // For images not from this upload (e.g., "other images" in groups),
       // show toast and don't open viewer
@@ -223,35 +274,77 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
       return;
     }
     
-    // Always find the correct index in uploadImages
-    const actualIndex = uploadImages.findIndex(img => img.id === imageId);
-    if (actualIndex >= 0) {
-      setViewerState({ show: true, imageId, index: actualIndex });
-    }
+    openViewer({ index, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir, filteredIds: null });
   };
-
-  const closeImageViewer = () => {
-    setViewerState({ show: false, imageId: null, index: 0 });
+  
+  const toggleImageSelection = (imageId, event) => {
+    toggleSelectedImageKey(imageId, event);
   };
-
-  const handleNavigate = (direction, jumpIndex) => {
-    const images = uploadImages;
-    if (!images || images.length === 0) return;
-    
-    let newIndex = viewerState.index;
-    
-    if (direction === 'prev') {
-      newIndex = viewerState.index - 1;
-      if (newIndex < 0) newIndex = images.length - 1;
-    } else if (direction === 'next') {
-      newIndex = viewerState.index + 1;
-      if (newIndex >= images.length) newIndex = 0;
-    } else if (direction === 'jump' && typeof jumpIndex === 'number') {
-      newIndex = Math.max(0, Math.min(jumpIndex, images.length - 1));
+  
+  const handleImageLoad = (imageId, e) => {
+    const img = e.target;
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+    let imageClass = 'square';
+    if (aspectRatio > 1.2) {
+      imageClass = 'landscape';
+    } else if (aspectRatio < 0.8) {
+      imageClass = 'portrait';
     }
     
-    setViewerState({ show: true, imageId: images[newIndex]?.id, index: newIndex });
+    const current = imageClassesRef.current?.[imageId];
+    if (current === imageClass) return;
+    
+    setImageClasses(prev => {
+      if (prev[imageId] === imageClass) return prev;
+      return { ...prev, [imageId]: imageClass };
+    });
   };
+  
+  const handleEditNotes = () => {
+    setEditingNotes(true);
+    setNotesValue(upload?.notes || '');
+  };
+  
+  const handleSaveNotes = async () => {
+    try {
+      await uploadsAPI.update(uploadId, { notes: notesValue }, eventUrl);
+      showToast('Notes updated', 'success');
+      setEditingNotes(false);
+    } catch (error) {
+      console.error('Failed to update notes:', error);
+      showToast(formatErrorMessage('update notes', error), 'error');
+    }
+  };
+  
+  const handleCancelEditNotes = () => {
+    setEditingNotes(false);
+    setNotesValue(upload?.notes || '');
+  };
+  
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Don't handle shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Ctrl+A or Cmd+A for select all
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        if (uploadImages.length > 0) {
+          selectAllImages();
+        }
+      }
+      // Escape to clear selection
+      if (event.key === 'Escape') {
+        clearSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [uploadImages]);
 
   const getFacesByIds = (faceIds) => {
     const facesMap = useDataStore.getState().entities?.faces || {};
@@ -276,436 +369,587 @@ export default function UploadDetail({ uploadId, eventUrl, urlHelpers, onClose }
   };
 
   return (
-    <>
-      <AnimatePresence>
-        {!viewerState.show && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <motion.div
-              ref={modalRef}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"
+    <div className="w-full">
+      {/* Sticky Header */}
+      <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link
+              to={`/${eventUrl}/uploads`}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to uploads"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </Link>
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-primary-100 rounded-lg flex items-center justify-center">
+                <Upload className="w-7 h-7 text-primary-600" />
+              </div>
+              <div>
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                    <Upload className="w-5 h-5 text-primary-600" />
+                  <div className="flex-1">
+                    <h1 className="text-3xl font-bold text-gray-900">Upload Details</h1>
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-gray-600 mt-1">
+                      <span className="text-xs">{upload?.started_at ? formatDateTime(upload.started_at) : 'Loading...'}</span>
+                      {upload && upload.profile_label && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <span className="text-xs">{upload.profile_label}</span>
+                        </>
+                      )}
+                      {upload && upload.status && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <span className={`text-xs ${
+                            upload.status === 'completed' ? 'text-green-600' : upload.status === 'failed' ? 'text-red-600' : 'text-yellow-600'
+                          }`}>{upload.status}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Upload Details</h2>
-                    <p className="text-sm text-gray-500">
-                      {upload?.started_at ? formatDateTime(upload.started_at) : 'Loading...'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Upload Info Summary */}
-              {upload && (
-                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">Profile:</span>
-                      <span className="ml-2 font-medium text-gray-900">{upload.profile_label || 'Unknown'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Images:</span>
-                      <span className="ml-2 font-medium text-gray-900">{upload.images_count || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Faces:</span>
-                      <span className="ml-2 font-medium text-gray-900">{upload.faces_count || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Groups:</span>
-                      <span className="ml-2 font-medium text-gray-900">{upload.clusters_count || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Moments:</span>
-                      <span className="ml-2 font-medium text-gray-900">{upload.moments_count || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Status:</span>
-                      <span className={`ml-2 font-medium ${
-                        upload.status === 'completed' ? 'text-green-600' : 'text-yellow-600'
-                      }`}>{upload.status || 'unknown'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Completed:</span>
-                      <span className="ml-2 font-medium text-gray-900">
-                        {upload.completed_at ? formatDateTime(upload.completed_at) : 'N/A'}
-                      </span>
-                    </div>
-                    {upload.errors && (
-                      <div className="col-span-2 md:col-span-4">
-                        <span className="text-gray-600">Errors:</span>
-                        <span className="ml-2 text-red-600 text-xs">{upload.errors}</span>
+                  {upload && upload.errors && Array.isArray(upload.errors) && upload.errors.length > 0 && (
+                    <div className="relative group">
+                      <div className="flex items-center space-x-1 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors">
+                        <AlertCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-xs font-medium text-red-600">
+                          {upload.errors.length} {upload.errors.length === 1 ? 'Error' : 'Errors'}
+                        </span>
                       </div>
-                    )}
-                    {upload.notes && (
-                      <div className="col-span-2 md:col-span-4">
-                        <span className="text-gray-600">Notes:</span>
-                        <span className="ml-2 text-gray-900">{upload.notes}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Tabs */}
-              <div className="border-b border-gray-200 px-6">
-                <div className="flex space-x-1">
-                  <button
-                    onClick={() => handleModeChange('images')}
-                    className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                      mode === 'images'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                    <span className="font-medium">Images</span>
-                  </button>
-                  <button
-                    onClick={() => handleModeChange('groups')}
-                    className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                      mode === 'groups'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <Users className="w-4 h-4" />
-                    <span className="font-medium">Groups</span>
-                  </button>
-                  <button
-                    onClick={() => handleModeChange('moments')}
-                    className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
-                      mode === 'moments'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <Clock className="w-4 h-4" />
-                    <span className="font-medium">Moments</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6">
-                <AnimatePresence mode="wait">
-                  {mode === 'images' && (
-                    <motion.div
-                      key="images"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      {/* Sort control */}
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          All Images ({uploadImages.length})
-                        </h3>
-                        <button
-                          onClick={toggleSortDir}
-                          className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                        >
-                          <span className="text-sm font-medium">Date</span>
-                          {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                        </button>
-                      </div>
-
-                      {uploadImages.length === 0 ? (
-                        <div className="text-center py-12">
-                          <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                          <p className="text-gray-500">No images in this upload</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                          {uploadImages.map((img) => (
-                            <SingleImageTile
-                              key={img.id}
-                              image={img}
-                              thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
-                              onOpen={() => openImageViewer(img.id)}
-                              eventUrl={eventUrl}
-                              urlHelpers={urlHelpers}
-                              showFavoriteButton={false}
-                              showArchiveButton={false}
-                              showCheckbox={false}
-                            />
+                      <div className="absolute right-0 top-full mt-2 w-96 bg-white border border-red-200 rounded-lg shadow-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                        <div className="text-xs font-semibold text-red-700 mb-2">Upload Errors:</div>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {upload.errors.map((error, idx) => (
+                            <div key={idx} className="text-xs text-red-600 pl-2 border-l-2 border-red-300">
+                              {error}
+                            </div>
                           ))}
                         </div>
-                      )}
-                    </motion.div>
+                      </div>
+                    </div>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-                  {mode === 'groups' && (
-                    <motion.div
-                      key="groups"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="space-y-4"
+        {/* Controls Row with Tabs */}
+        <div className="mt-4 flex items-center justify-between">
+          {/* Tabs */}
+          <div className="flex items-center divide-x divide-gray-200">
+            <div className="flex space-x-1 px-4">
+              <button
+                onClick={() => handleModeChange('images')}
+                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                  mode === 'images'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <ImageIcon className="w-4 h-4" />
+                <span className="font-medium">Photos</span>
+                {upload && <span className="font-medium">({upload.images_count || 0})</span>}
+              </button>
+              <button
+                onClick={() => handleModeChange('groups')}
+                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                  mode === 'groups'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="font-medium">People</span>
+                {upload && <span className="font-medium">({upload.clusters_count || 0})</span>}
+              </button>
+              <button
+                onClick={() => handleModeChange('moments')}
+                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                  mode === 'moments'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">Moments</span>
+                {upload && <span className="font-medium">({upload.moments_count || 0})</span>}
+              </button>
+            </div>
+
+            {/* Controls */}
+            {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
+              <>
+                <div className="flex items-center space-x-3 px-4">
+                  {/* Sort */}
+                  <button
+                    onClick={toggleSortDir}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    title={`Sort ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+                  >
+                    {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center space-x-3 px-4">
+                  {/* Zoom Controls */}
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(imageSize * 100);
+                      const next25 = Math.ceil(currentPercent / 25) * 25;
+                      const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                      const subtract25 = currentPercent - 25;
+                      const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                      setImageSize(newPercent / 100);
+                    }}
+                    disabled={imageSize <= 0.5}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Decrease size"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="text"
+                    id="upload-detail-image-size"
+                    name="upload-detail-image-size"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
+                    onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                    onBlur={e => {
+                      let val = parseInt(e.target.value, 10);
+                      if (isNaN(val)) val = Math.round(imageSize * 100);
+                      val = Math.max(50, Math.min(300, val));
+                      setImageSize(val / 100);
+                      setImageSizeInputValue(undefined);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.target.blur();
+                      } else if (e.key === 'Escape') {
+                        setImageSizeInputValue(undefined);
+                      }
+                    }}
+                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '3rem'}}
+                  />
+                  <button
+                    onClick={() => {
+                      const currentPercent = Math.round(imageSize * 100);
+                      const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                      const add25 = currentPercent + 25;
+                      const newPercent = Math.min(300, Math.min(add25, next25));
+                      setImageSize(newPercent / 100);
+                    }}
+                    disabled={imageSize >= 3}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Increase size"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Selection Mode */}
+                {uploadImages.length > 0 && (
+                  <div className="flex items-center space-x-3 px-4">
+                    <button
+                      onClick={() => setSelectionMode(!selectionMode)}
+                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                        selectionMode 
+                          ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
                     >
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Groups ({uploadGroups.length})
-                      </h3>
+                      {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
-                      {uploadGroups.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                          <p className="text-gray-500">No groups in this upload</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {uploadGroups.map((group) => {
-                            const isExpanded = expandedGroups.has(group.id);
-                            const cache = groupFacesCache[group.id];
-                            const uploadedFaces = cache ? getFacesByIds(cache.uploaded_ids) : [];
-                            const otherFaces = cache ? getFacesByIds(cache.other_ids) : [];
+          {/* Notes field */}
+          {upload && (
+            <div className="mt-3 px-4 text-sm">
+              {editingNotes ? (
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-600">Notes:</span>
+                  <input
+                    type="text"
+                    value={notesValue}
+                    onChange={(e) => setNotesValue(e.target.value)}
+                    className="flex-1 border rounded px-2 py-1 text-sm"
+                    placeholder="Add notes..."
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveNotes}
+                    className="p-1 hover:bg-green-100 rounded transition-colors"
+                    title="Save"
+                  >
+                    <Save className="w-4 h-4 text-green-600" />
+                  </button>
+                  <button
+                    onClick={handleCancelEditNotes}
+                    className="p-1 hover:bg-red-100 rounded transition-colors"
+                    title="Cancel"
+                  >
+                    <RotateCcw className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-600">Notes:</span>
+                  <span className="text-gray-900">{upload.notes || <span className="text-gray-400 italic">No notes</span>}</span>
+                  <button
+                    onClick={handleEditNotes}
+                    className="p-1 hover:bg-blue-100 rounded transition-colors"
+                    title="Edit notes"
+                  >
+                    <Edit2 className="w-4 h-4 text-blue-600" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
-                            return (
-                              <div key={group.id} className="border rounded-lg overflow-hidden">
-                                <div
-                                  onClick={() => {
-                                    toggleGroup(group.id);
-                                    if (!isExpanded) {
-                                      fetchGroupFaces(group.id);
-                                    }
-                                  }}
-                                  className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
-                                >
-                                  <div className="flex items-center space-x-3">
-                                    {ImageComponent(getGroupRepUrl(group.id), {
-                                      width: 48,
-                                      height: 48,
-                                      className: 'w-12 h-12 object-cover rounded-full',
-                                      alt: group.label,
-                                      iconType: 'person'
-                                    })}
-                                    <div>
-                                      <h4 className="font-medium text-gray-900">{group.label}</h4>
-                                      <p className="text-xs text-gray-500">
-                                        {group.faces_count || 0} total faces
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                                </div>
-
-                                {isExpanded && cache && (
-                                  <div className="p-4 space-y-4">
-                                    {/* From this upload section */}
-                                    {uploadedFaces.length > 0 && (
-                                      <div>
-                                        <button
-                                          onClick={toggleExpandInUpload}
-                                          className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                                        >
-                                          <span>From this upload ({uploadedFaces.length})</span>
-                                          {expandInUpload ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                        </button>
-                                        {expandInUpload && (
-                                          <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                            {uploadedFaces.map((face) => (
-                                              <div
-                                                key={face.id}
-                                                className="aspect-square cursor-pointer hover:opacity-80 transition-opacity"
-                                                onClick={() => openImageViewer(face.image_id)}
-                                              >
-                                                {ImageComponent(urlHelpers?.getFaceCropUrl?.(face.id), {
-                                                  width: 100,
-                                                  height: 100,
-                                                  className: 'w-full h-full object-cover rounded-lg',
-                                                  alt: group.label,
-                                                  iconType: 'person'
-                                                })}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Other faces section */}
-                                    {otherFaces.length > 0 && (
-                                      <div>
-                                        <button
-                                          onClick={toggleExpandOthers}
-                                          className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                                        >
-                                          <span>Other faces ({otherFaces.length})</span>
-                                          {expandOthers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                        </button>
-                                        {expandOthers && (
-                                          <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                            {otherFaces.map((face) => (
-                                              <div
-                                                key={face.id}
-                                                className="aspect-square cursor-pointer hover:opacity-80 transition-opacity"
-                                                onClick={() => openImageViewer(face.image_id, false)}
-                                              >
-                                                {ImageComponent(urlHelpers?.getFaceCropUrl?.(face.id), {
-                                                  width: 100,
-                                                  height: 100,
-                                                  className: 'w-full h-full object-cover rounded-lg',
-                                                  alt: group.label,
-                                                  iconType: 'person'
-                                                })}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+      {/* Content Area */}
+      <div className="px-8 py-8">
+        <AnimatePresence mode="wait">
+          {mode === 'images' && (
+            <motion.div
+              key="images"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {uploadImages.length === 0 ? (
+                <div className="text-center py-12">
+                  <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No images in this upload</p>
+                </div>
+              ) : (
+                <div 
+                  className="photo-gallery-grid"
+                  style={{
+                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                  }}
+                >
+                  {uploadImages.map((img, index) => (
+                    <motion.div
+                      key={img.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.15 }}
+                      className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                    >
+                      <SingleImageTile
+                        image={img}
+                        aspectClass={imageClasses[img.id] || 'square'}
+                        imageFit="cover"
+                        thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
+                        selectionMode={selectionMode}
+                        isSelected={selectedImages.has(img.id)}
+                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                        onOpen={() => openImageViewer(img.id, index)}
+                        onImageLoad={(e) => handleImageLoad(img.id, e)}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        showFavoriteButton={false}
+                        showArchiveButton={false}
+                      />
                     </motion.div>
-                  )}
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
 
-                  {mode === 'moments' && (
-                    <motion.div
-                      key="moments"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="space-y-4"
-                    >
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Moments ({uploadMoments.length})
-                      </h3>
+          {mode === 'groups' && (
+            <motion.div
+              key="groups"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {uploadGroups.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No groups in this upload</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {uploadGroups.map((group) => {
+                    const isExpanded = expandedGroups.has(group.id);
+                    const cache = groupFacesCache[group.id];
+                    const uploadedFaces = cache ? getFacesByIds(cache.uploaded_ids) : [];
+                    const otherFaces = cache ? getFacesByIds(cache.other_ids) : [];
 
-                      {uploadMoments.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                          <p className="text-gray-500">No moments in this upload</p>
+                    return (
+                      <div key={group.id} className="border rounded-lg overflow-hidden">
+                        <div
+                          onClick={() => {
+                            toggleGroup(group.id);
+                            if (!isExpanded) {
+                              fetchGroupFaces(group.id);
+                            }
+                          }}
+                          className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center space-x-3">
+                            {ImageComponent(getGroupRepUrl(group.id), {
+                              width: 48,
+                              height: 48,
+                              className: 'w-12 h-12 object-cover rounded-full',
+                              alt: group.label,
+                              iconType: 'person'
+                            })}
+                            <div>
+                              <h4 className="font-medium text-gray-900">{group.label}</h4>
+                              <p className="text-xs text-gray-500">
+                                {group.faces_count || 0} total faces
+                              </p>
+                            </div>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {uploadMoments.map((moment) => {
-                            const isExpanded = expandedMoments.has(moment.id);
-                            const cache = momentImagesCache[moment.id];
-                            const momentImages = cache ? getImagesByIds(cache.image_ids) : [];
 
-                            return (
-                              <div key={moment.id} className="border rounded-lg overflow-hidden">
-                                <div
-                                  onClick={() => {
-                                    toggleMoment(moment.id);
-                                    if (!isExpanded) {
-                                      fetchMomentImages(moment.id);
-                                    }
-                                  }}
-                                  className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        {isExpanded && cache && (
+                          <div className="p-4 space-y-4">
+                            {/* From this upload section */}
+                            {uploadedFaces.length > 0 && (
+                              <div>
+                                <button
+                                  onClick={toggleExpandInUpload}
+                                  className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
                                 >
-                                  <div className="flex items-center space-x-3">
-                                    {ImageComponent(getMomentRepUrl(moment.id), {
-                                      width: 48,
-                                      height: 48,
-                                      className: 'w-12 h-12 object-cover rounded-lg',
-                                      alt: moment.label
-                                    })}
-                                    <div>
-                                      <h4 className="font-medium text-gray-900">{moment.label}</h4>
-                                      <p className="text-xs text-gray-500">
-                                        {cache ? momentImages.length : '...'} images from this upload
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                                </div>
-
-                                {isExpanded && cache && (
-                                  <div className="p-4">
-                                    {momentImages.length === 0 ? (
-                                      <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
-                                    ) : (
-                                      <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                        {momentImages.map((img) => (
+                                  <span>From this upload ({uploadedFaces.length})</span>
+                                  {expandInUpload ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                                {expandInUpload && (
+                                  <div 
+                                    className="photo-gallery-grid"
+                                    style={{
+                                      gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                      gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                    }}
+                                  >
+                                    {uploadedFaces.map((face) => {
+                                      const img = uploadImages.find(i => i.id === face.image_id);
+                                      if (!img) return null;
+                                      const actualIndex = uploadImages.findIndex(i => i.id === face.image_id);
+                                      return (
+                                        <div
+                                          key={face.id}
+                                          className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
+                                        >
                                           <SingleImageTile
-                                            key={img.id}
                                             image={img}
-                                            thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
-                                            onOpen={() => openImageViewer(img.id)}
+                                            aspectClass={imageClasses[img.id] || 'square'}
+                                            imageFit="cover"
+                                            thumbSrc={urlHelpers?.getFaceCropUrl?.(face.id)}
+                                            selectionMode={selectionMode}
+                                            isSelected={selectedImages.has(img.id)}
+                                            onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                            onOpen={() => openImageViewer(face.image_id, actualIndex)}
+                                            onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
                                             urlHelpers={urlHelpers}
                                             showFavoriteButton={false}
                                             showArchiveButton={false}
-                                            showCheckbox={false}
+                                            showCropBadge={false}
                                           />
-                                        ))}
-                                      </div>
-                                    )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                            )}
 
-                {/* Note about data changes */}
-                <div className="mt-6 text-xs text-gray-500 italic text-center">
-                  Note: Data may have changed since this upload was created
+                            {/* Other faces section */}
+                            {otherFaces.length > 0 && (
+                              <div>
+                                <button
+                                  onClick={toggleExpandOthers}
+                                  className="flex items-center justify-between w-full mb-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+                                >
+                                  <span>Other faces ({otherFaces.length})</span>
+                                  {expandOthers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                                {expandOthers && (
+                                  <div 
+                                    className="photo-gallery-grid"
+                                    style={{
+                                      gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                      gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                    }}
+                                  >
+                                    {otherFaces.map((face) => (
+                                      <div
+                                        key={face.id}
+                                        className="aspect-square cursor-pointer hover:opacity-80 transition-opacity rounded-lg overflow-hidden"
+                                        onClick={() => openImageViewer(face.image_id, 0, false)}
+                                      >
+                                        {ImageComponent(urlHelpers?.getFaceCropUrl?.(face.id), {
+                                          width: Math.max(100, 266 * imageSize * 0.75),
+                                          height: Math.max(100, 266 * imageSize * 0.75),
+                                          className: 'w-full h-full object-cover',
+                                          alt: group.label,
+                                          iconType: 'person'
+                                        })}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-                <div className="flex justify-end">
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+              )}
             </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+
+          {mode === 'moments' && (
+            <motion.div
+              key="moments"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {uploadMoments.length === 0 ? (
+                <div className="text-center py-12">
+                  <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No moments in this upload</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {uploadMoments.map((moment) => {
+                    const isExpanded = expandedMoments.has(moment.id);
+                    const cache = momentImagesCache[moment.id];
+                    const momentImages = cache ? getImagesByIds(cache.image_ids) : [];
+
+                    return (
+                      <div key={moment.id} className="border rounded-lg overflow-hidden">
+                        <div
+                          onClick={() => {
+                            toggleMoment(moment.id);
+                            if (!isExpanded) {
+                              fetchMomentImages(moment.id);
+                            }
+                          }}
+                          className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center space-x-3">
+                            {ImageComponent(getMomentRepUrl(moment.id), {
+                              width: 48,
+                              height: 48,
+                              className: 'w-12 h-12 object-cover rounded-lg',
+                              alt: moment.label
+                            })}
+                            <div>
+                              <h4 className="font-medium text-gray-900">{moment.label}</h4>
+                              <p className="text-xs text-gray-500">
+                                {cache ? momentImages.length : '...'} photos
+                              </p>
+                            </div>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                        </div>
+
+                        {isExpanded && cache && (
+                          <div className="p-4">
+                            {momentImages.length === 0 ? (
+                              <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
+                            ) : (
+                              <div 
+                                className="photo-gallery-grid"
+                                style={{
+                                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                  gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                }}
+                              >
+                                {momentImages.map((img, index) => {
+                                  const actualIndex = uploadImages.findIndex(i => i.id === img.id);
+                                  return (
+                                    <div
+                                      key={img.id}
+                                      className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                                    >
+                                      <SingleImageTile
+                                        image={img}
+                                        aspectClass={imageClasses[img.id] || 'square'}
+                                        imageFit="cover"
+                                        thumbSrc={urlHelpers?.getThumbnailUrl?.(img.id)}
+                                        selectionMode={selectionMode}
+                                        isSelected={selectedImages.has(img.id)}
+                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                        onOpen={() => openImageViewer(img.id, actualIndex >= 0 ? actualIndex : index)}
+                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                        eventUrl={eventUrl}
+                                        urlHelpers={urlHelpers}
+                                        showFavoriteButton={false}
+                                        showArchiveButton={false}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Note about data changes */}
+        <div className="mt-6 text-xs text-gray-500 italic text-center">
+          Note: Data may have changed since this upload was created
+        </div>
+      </div>
+
+      {/* Floating Selection Controls */}
+      <FloatingSelectionControls
+        selectedCount={selectedImages.size}
+        totalCount={uploadImages.length}
+        selectedImages={selectedImages}
+        onSelectAll={selectAllImages}
+        onClearSelection={clearSelection}
+        eventUrl={eventUrl}
+        urlHelpers={urlHelpers}
+        placeholderDataUrl={null}
+        showTransferFaces={false}
+        showRemoveFromMoment={false}
+        showMoveToMoment={false}
+        showArchive={true}
+        showFavorites={true}
+        showBucket={true}
+        showAlbum={true}
+        selectionMode={selectionMode}
+        entity="upload"
+        entityId={uploadId}
+      />
 
       {/* Image Viewer */}
-      {viewerState.show && viewerState.imageId && (
-        <ImageViewer
-          image={viewerState.imageId}
-          eventUrl={eventUrl}
-          onClose={closeImageViewer}
-          onNavigate={handleNavigate}
-          totalImages={uploadImages.length}
-          currentIndex={viewerState.index}
-          showToast={showToast}
-          parent={uploadId}
-          entity="upload"
-          sortBy="date"
-          sortOrder={sortDir}
-          urlHelpers={urlHelpers}
-        />
+      {viewerOpen && (
+        <ImageViewer {...viewerProps} />
       )}
-    </>
+    </div>
   );
 }
 

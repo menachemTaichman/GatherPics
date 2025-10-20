@@ -1,15 +1,17 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Settings, Clock, User, ShoppingBag, Home, Album } from 'lucide-react';
+import { Users, Settings, Clock, User, ShoppingBag, Home, Album, Upload } from 'lucide-react';
 import SettingsManager from './SettingsManager';
 import BucketDrawer from './BucketDrawer';
 import useBucketStore from '../utils/bucketStore';
+import { usePermissions } from '../utils/usePermissions';
 
 export default function Header() {
   const location = useLocation();
   const params = useParams();
   const eventUrl = params.eventUrl;
   const { toggle, lastPulseTs, queue, isOpen } = useBucketStore();
+  const permissions = usePermissions();
 
   const getEventPath = (path) => `/${eventUrl}${path}`;
 
@@ -110,6 +112,20 @@ export default function Header() {
                 )}
               </div>
             </motion.button>
+
+            {permissions.canUploadAndDeleteImages && (
+              <Link
+                to={getEventPath('/uploads')}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                  location.pathname.includes('/uploads')
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                title="Uploads"
+              >
+                <Upload className="w-4 h-4" />
+              </Link>
+            )}
 
             <SettingsManager />
           </nav>

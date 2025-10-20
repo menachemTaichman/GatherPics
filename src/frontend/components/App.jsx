@@ -9,6 +9,8 @@ import AlbumsGallery from './AlbumsGallery';
 import AlbumDetail from './AlbumDetail';
 import LoadingSpinner from './LoadingSpinner';
 import Moments from './Moments';
+import UploadsGallery from './UploadsGallery';
+import UploadDetail from './UploadDetail';
 import Toast from './Toast';
 import LoginModal from './LoginModal';
 import { useDataStore } from '../utils/dataManager';
@@ -502,6 +504,18 @@ function AppContent({ eventUrl }) {
               >
                 <Moments eventUrl={eventUrl} urlHelpers={urlHelpers} />
               </motion.div>
+            }
+          />
+          <Route
+            path="uploads/:uploadId"
+            element={
+              <UploadDetail eventUrl={eventUrl} urlHelpers={urlHelpers} />
+            }
+          />
+          <Route
+            path="uploads"
+            element={
+              <UploadsGallery eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
           <Route 

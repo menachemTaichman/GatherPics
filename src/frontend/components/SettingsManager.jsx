@@ -1,38 +1,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Upload, Archive, User, Info, MessageSquare, Loader2, Check, AlertCircle, AlertTriangle, Edit2, Plus, Save, RotateCcw, LogOut, Lock, Trash2 } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2 } from 'lucide-react';
 import { useModalFocus } from '../utils/useModalFocus';
 import { useModalManager } from '../utils/modalManager';
 import { getPreference, setPreference } from '../utils/settings';
-import { imagesAPI, profilesAPI } from '../utils/apiService';
+import { profilesAPI } from '../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../utils/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../utils/profileService';
 import { useProfilesList } from '../utils/dataManager';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useEventUrls } from '../utils/useEventUrls';
-import jwtService from '../utils/jwtService';
 import { formatErrorMessage } from '../utils/errorHandler';
 import { useAuth } from '../utils/authContext';
-import { sortByField } from '../utils/sorting';
 import ChangePasswordModal from './ChangePasswordModal';
 import EditProfileModal from './EditProfileModal';
 import ConfirmDelete from './ConfirmDelete';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
-import UploadImagesModal from './UploadImagesModal';
-import UploadsGallery from './UploadsGallery';
-import UploadDetail from './UploadDetail';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
-  const [uploadLimits, setUploadLimits] = useState(null);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showUploadsGallery, setShowUploadsGallery] = useState(false);
-  const [showUploadDetail, setShowUploadDetail] = useState(false);
-  const [selectedUploadId, setSelectedUploadId] = useState(null);
   const { eventUrl } = useParams();
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
@@ -130,7 +120,7 @@ export default function SettingsManager() {
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
     // If a child modal is open (like ChangePasswordModal or EditProfileModal), let events pass through
-    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal || showUploadModal || showUploadsGallery || showUploadDetail) {
+    if (showChangePasswordModal || showEditProfileModal || showDeleteConfirmModal) {
       return true; // Return true to prevent this modal from stopping propagation to child modal
     }
     
@@ -142,21 +132,20 @@ export default function SettingsManager() {
     }
     
     return false; // Let default modal behavior handle it (ESC to close)
-  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal, showUploadModal]);
+  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal]);
 
   const { modalRef } = useModalFocus(isOpen, () => setIsOpen(false), {
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
     // Disable focus trapping when child modal is open so child can receive focus
-    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal && !showUploadModal && !showUploadsGallery && !showUploadDetail,
+    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal,
     customKeyHandler: handleSettingsKeys
   });
 
   // Filter tabs based on permissions
   const allTabs = [
     { id: 'account', label: 'Account', icon: User },
-    { id: 'uploads', label: 'Upload Photos', icon: Upload },
     { id: 'profiles', label: 'Profiles', icon: User },
     { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
@@ -165,10 +154,6 @@ export default function SettingsManager() {
   const tabs = allTabs.filter(tab => {
     // Hide profiles tab if not a profiles manager
     if (tab.id === 'profiles' && !permissions.isProfilesManager) {
-      return false;
-    }
-    // Hide uploads tab if can't upload
-    if (tab.id === 'uploads' && !permissions.canUploadAndDeleteImages) {
       return false;
     }
     return true;
@@ -184,21 +169,6 @@ export default function SettingsManager() {
     }
   }, [isOpen, tabs, activeTab]);
 
-  // Fetch upload limits when opening settings
-  useEffect(() => {
-    if (isOpen && eventUrl) {
-      fetchUploadLimits();
-    }
-  }, [isOpen, eventUrl]);
-
-  const fetchUploadLimits = async () => {
-    try {
-      const limits = await imagesAPI.getUploadLimits(eventUrl);
-      setUploadLimits(limits);
-    } catch (error) {
-      console.error('Failed to fetch upload limits:', error);
-    }
-  };
 
   const handleIncludeArchivedChange = (checked) => {
     setIncludeArchived(checked);
@@ -320,17 +290,6 @@ export default function SettingsManager() {
       }
       return (a.label || '').localeCompare(b.label || ''); // ascending
     });
-
-  const handleUploadComplete = async (result) => {
-    // Refresh upload limits after successful upload
-    await fetchUploadLimits();
-  };
-
-  const handleUploadSuccess = (uploadId) => {
-    // Open upload detail modal for the new upload
-    setSelectedUploadId(uploadId);
-    setShowUploadDetail(true);
-  };
 
   return (
     <>
@@ -498,62 +457,6 @@ export default function SettingsManager() {
                           >
                             <LogOut className="w-4 h-4" />
                             <span>Sign Out</span>
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {activeTab === 'uploads' && (
-                      <motion.div
-                        key="uploads"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ 
-                          opacity: 1, 
-                          y: 0
-                        }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                      >
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Photos</h3>
-                          
-                          {/* Upload Photos */}
-                          <button
-                            onClick={() => setShowUploadModal(true)}
-                            className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full mb-3"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                <Upload className="w-5 h-5 text-gray-600" />
-                              </div>
-                              <div className="text-left">
-                                <p className="font-medium text-gray-900">Upload Photos</p>
-                                <p className="text-sm text-gray-500">Add new photos to the gallery</p>
-                              </div>
-                            </div>
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-
-                          {/* Uploads History */}
-                          <button
-                            onClick={() => setShowUploadsGallery(true)}
-                            className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors w-full"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                <Archive className="w-5 h-5 text-gray-600" />
-                              </div>
-                              <div className="text-left">
-                                <p className="font-medium text-gray-900">Uploads History</p>
-                                <p className="text-sm text-gray-500">View your past uploads</p>
-                              </div>
-                            </div>
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
                           </button>
                         </div>
                       </motion.div>
@@ -755,41 +658,6 @@ export default function SettingsManager() {
           confirmText="Delete"
           cancelText="Cancel"
           caption="This action cannot be undone."
-        />
-      )}
-
-      {/* Upload Images Modal */}
-      {showUploadModal && (
-        <UploadImagesModal
-          isOpen={showUploadModal}
-          onClose={() => setShowUploadModal(false)}
-          eventUrl={eventUrl}
-          uploadLimits={uploadLimits}
-          onUploadComplete={handleUploadComplete}
-          onUploadSuccess={handleUploadSuccess}
-        />
-      )}
-
-      {/* Uploads Gallery Modal */}
-      {showUploadsGallery && (
-        <UploadsGallery
-          isOpen={showUploadsGallery}
-          onClose={() => setShowUploadsGallery(false)}
-          eventUrl={eventUrl}
-          urlHelpers={urlHelpers}
-        />
-      )}
-
-      {/* Upload Detail Modal */}
-      {showUploadDetail && selectedUploadId && (
-        <UploadDetail
-          uploadId={selectedUploadId}
-          eventUrl={eventUrl}
-          urlHelpers={urlHelpers}
-          onClose={() => {
-            setShowUploadDetail(false);
-            setSelectedUploadId(null);
-          }}
         />
       )}
     </>

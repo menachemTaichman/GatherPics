@@ -274,11 +274,7 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# which one is person 64 group? find in groups
-'de5cdbc7-772b-4a2b-8c53-e6d9a505a6ba'
-upload_id = 41
-id = event.models.db.execute_query('SELECT group_id FROM groups WHERE label = "Person 104";', return_format=ReturnFormat.VALUE)
-
-result = event.models.get_uploads_groups_faces(upload_id, id, within=False)
-
-print(result)
+# upload_id = 42
+# result = event.models.edit('uploads', upload_id, {'errors': []})
+# print(result)
+# print('--------------------------------')
