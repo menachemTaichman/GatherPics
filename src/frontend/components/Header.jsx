@@ -25,7 +25,7 @@ export default function Header() {
       <div className="w-full px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Title */}
-          <Link to={getEventPath('/persons')} className="flex items-center space-x-3 group">
+          <Link to={getEventPath('/people')} className="flex items-center space-x-3 group">
             <motion.div
               className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center"
               whileHover={{ scale: 1.05 }}
@@ -55,41 +55,47 @@ export default function Header() {
               <Home className="w-4 h-4" />
             </Link>
 
-            <Link
-              to={getEventPath('/persons')}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                location.pathname.includes('/persons') 
-                  ? 'bg-primary-100 text-primary-700' 
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-              title="Persons"
-            >
-              <User className="w-4 h-4" />
-            </Link>
+            {permissions.has_groups && (
+              <Link
+                to={getEventPath('/people')}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                  location.pathname.includes('/people') 
+                    ? 'bg-primary-100 text-primary-700' 
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                title="People"
+              >
+                <User className="w-4 h-4" />
+              </Link>
+            )}
 
-            <Link
-              to={getEventPath('/albums')}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                location.pathname.includes('/albums') 
-                  ? 'bg-primary-100 text-primary-700' 
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-              title="Albums"
-            >
-              <Album className="w-4 h-4" />
-            </Link>
+            {permissions.has_albums && (
+              <Link
+                to={getEventPath('/albums')}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                  location.pathname.includes('/albums') 
+                    ? 'bg-primary-100 text-primary-700' 
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                title="Albums"
+              >
+                <Album className="w-4 h-4" />
+              </Link>
+            )}
 
-            <Link
-              to={getEventPath('/timeline')}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                location.pathname.includes('/timeline')
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-              title="Timeline"
-            >
-              <Clock className="w-4 h-4" />
-            </Link>
+            {permissions.has_images && (
+              <Link
+                to={getEventPath('/timeline')}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                  location.pathname.includes('/timeline')
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                title="Timeline"
+              >
+                <Clock className="w-4 h-4" />
+              </Link>
+            )}
 
             <motion.button
               onClick={(e) => {

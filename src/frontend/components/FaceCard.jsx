@@ -32,7 +32,7 @@ export default function FaceCard({ group, cardSize = 1.0, urlHelpers: injectedUr
         }}
       >
         {/* Circular Image Container */}
-        <Link to={`/${evUrl}/persons/${group.label}`} className="block mb-3 w-full flex justify-center">
+        <Link to={`/${evUrl}/people/${group.label}`} className="block mb-3 w-full flex justify-center">
           <div 
             className="relative rounded-full overflow-hidden shadow-lg group"
             style={{ 

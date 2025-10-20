@@ -762,7 +762,7 @@ def process_images_stream(event_id):
     )
 
 # ==============================================================================
-# III. GROUPS (PERSONS) ENDPOINTS
+# III. GROUPS (PEOPLE) ENDPOINTS
 # ==============================================================================
 
 # get groups

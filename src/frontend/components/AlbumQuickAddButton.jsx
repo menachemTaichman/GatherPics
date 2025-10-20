@@ -336,7 +336,7 @@ export default function AlbumQuickAddButton({
         ref={setButtonRef}
         onClick={() => setOpen(!open)}
         className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-        title="Add selected photos to album"
+        title="Add selected to album"
       >
         <PlusIcon className="w-4 h-4" />
       </button>

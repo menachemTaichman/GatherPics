@@ -164,6 +164,10 @@ class EventModels(BaseModels):
         assigned = {}
         for row in rows:
             assigned.setdefault(row['moment_id'], []).append(row['image_id'])
+
+        for moment_id in assigned.keys():
+            self.ensure_representative('moments', moment_id)
+
         return assigned
 
     def remove_images_from_moments(self, image_ids: list[str]) -> dict[str, list[str]]:

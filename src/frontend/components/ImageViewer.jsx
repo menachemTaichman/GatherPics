@@ -774,7 +774,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const gid = face?.groupId || face?.group_id;
     const label = gid ? ((useDataStore.getState().entities?.groups || {})[gid]?.label || '') : '';
     if (label) {
-      navigate(`/${eventUrl}/persons/${encodeURIComponent(label)}`, {
+      navigate(`/${eventUrl}/people/${encodeURIComponent(label)}`, {
         state: { highlightImages: [imageId] }
       });
       onClose();
@@ -846,7 +846,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     e.preventDefault();
     const groupLabel = getGroupLabel(face);
     if (!groupLabel) return;
-    navigate(`/${eventUrl}/persons/${encodeURIComponent(groupLabel)}`, {
+    navigate(`/${eventUrl}/people/${encodeURIComponent(groupLabel)}`, {
       state: { highlightImages: [imageId] }
     });
     onClose();
@@ -1522,7 +1522,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 </div>
                                 {!face.isPlaceholder && (
                                   <a
-                                    href={`/${eventUrl}/persons/${encodeURIComponent(getGroupLabel(face))}`}
+                                    href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
                                     onClick={(e) => handlePersonLinkClick(e, face)}
                                     className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
                                     title="Go to person page"

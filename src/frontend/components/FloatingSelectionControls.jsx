@@ -6,7 +6,7 @@ import {
   Heart as HeartIcon, 
   Users,
   Trash2,
-  Move,
+  Clock,
   Star,
   Minus,
   Key
@@ -249,7 +249,7 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onTransferFaces}
                 className="w-8 h-8 rounded-md hover:bg-orange-100 text-orange-700 flex items-center justify-center"
-                title="Change group for selected faces"
+                title="Transfer selected faces to different person"
               >
                 <Users className="w-4 h-4" />
               </button>
@@ -262,7 +262,7 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onRemoveFromMoment}
                 className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
-                title="Remove selected photos from moment"
+                title="Remove selected from moment"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -277,7 +277,7 @@ export default function FloatingSelectionControls({
                 className="w-8 h-8 rounded-md hover:bg-blue-100 text-blue-700 flex items-center justify-center"
                 title="Move or remove selected from moment"
               >
-                <Move className="w-4 h-4" />
+                <Clock className="w-4 h-4" />
               </button>
             </PermissionGate>
           )}

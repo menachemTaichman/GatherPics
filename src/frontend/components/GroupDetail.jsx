@@ -413,8 +413,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           }
         }
       } catch {}
-      // Not found -> redirect back to persons list
-      navigate(`/${eventUrl}/persons`);
+      // Not found -> redirect back to people list
+      navigate(`/${eventUrl}/people`);
     };
 
     const foundGroup = (currentGroups || []).find(g => g.label === decodedGroupName);
@@ -802,7 +802,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       const targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
       
       if (targetGroup) {
-        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+        const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
         
         // Manually update URL without triggering router navigation, then set group
         window.history.replaceState(null, '', link);
@@ -900,7 +900,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       // Changes are automatically applied by apiService interceptor
       
       // Update the URL to reflect the new group name
-      const newUrl = `/${eventUrl}/persons/${encodeURIComponent(editingTitle.trim())}`;
+      const newUrl = `/${eventUrl}/people/${encodeURIComponent(editingTitle.trim())}`;
       navigate(newUrl, { replace: true });
       
       setIsEditingTitle(false);
@@ -941,9 +941,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              to={`/${eventUrl}/persons`}
+              to={`/${eventUrl}/people`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Back to all persons"
+              title="Back to all people"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
@@ -1110,7 +1110,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
                 }`}
-                title={filterVisible ? 'Hide group filter' : 'Show group filter'}
+                title={filterVisible ? 'Hide people filter' : 'Show people filter'}
               >
                 <Filter className="w-4 h-4" />
               </button>
@@ -1180,7 +1180,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       ? 'bg-primary-100 text-primary-700' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={showCrops ? 'Show full images' : 'Show face crops'}
+                  title={showCrops ? 'Show full photos' : 'Show face crops'}
                 >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
@@ -1369,9 +1369,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             // Find the target group and navigate to it
             const targetGroup = currentGroups.find(g => g.id === targetGroupId);
             if (targetGroup) {
-              navigate(`/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`);
+              navigate(`/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`);
             } else {
-              navigate(`/${eventUrl}/persons`);
+              navigate(`/${eventUrl}/people`);
             }
           }}
         />

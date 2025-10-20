@@ -12,6 +12,9 @@ import { getCurrentProfile } from './profileService';
  * @property {boolean} canEdit - Can edit entities (labels, moments, albums, etc.)
  * @property {boolean} hasArchiveAlbum - Has access to archive album
  * @property {boolean} hasFavoritesAlbum - Has access to favorites album
+ * @property {boolean} has_groups - Has access to groups/people
+ * @property {boolean} has_albums - Has access to albums
+ * @property {boolean} has_images - Has access to images/timeline
  */
 export function usePermissions() {
   const profile = getCurrentProfile();
@@ -26,6 +29,9 @@ export function usePermissions() {
         canEdit: false,
         hasArchiveAlbum: false,
         hasFavoritesAlbum: false,
+        has_groups: false,
+        has_albums: false,
+        has_images: false,
       };
     }
 
@@ -43,6 +49,11 @@ export function usePermissions() {
       // From event_db - calculated in profiles_details view
       hasArchiveAlbum: Boolean(profile.has_archive_album),
       hasFavoritesAlbum: Boolean(profile.has_favorites_album),
+      
+      // Entity access flags
+      has_groups: Boolean(profile.has_groups),
+      has_albums: Boolean(profile.has_albums),
+      has_images: Boolean(profile.has_images),
     };
   }, [profile]);
 

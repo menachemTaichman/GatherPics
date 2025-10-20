@@ -180,7 +180,7 @@ export default function TransferFacesModal({
     }
 
     if (!selectedGroupId && !newGroupName.trim()) {
-      setError('Please select a target group or enter a new group name');
+      setError('Please select a target person or enter a new person name');
       setIsLoading(false);
       return;
     }
@@ -190,7 +190,7 @@ export default function TransferFacesModal({
       try {
         const conflictCheck = await groupsAPI.checkName(newGroupName.trim(), '', eventUrl);
         if (conflictCheck.conflict) {
-          setError('Group name already exists. Please choose a different name.');
+          setError('Person name already exists. Please choose a different name.');
           setIsLoading(false);
           return;
         }
@@ -225,7 +225,7 @@ export default function TransferFacesModal({
       
       if (targetGroup) {
         // Show success toast with link to target group
-        const link = `/${eventUrl}/persons/${encodeURIComponent(targetGroup.label)}`;
+        const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
         // Extract affected images for highlighting using new images_added field
         const affectedImages = result.images_added || result.affected_images_ids || 
           selectedFaces.map(f => f.image_id).filter(Boolean);
@@ -301,11 +301,11 @@ export default function TransferFacesModal({
                  Transfer {selectedFaces.length} Face{selectedFaces.length !== 1 ? 's' : ''}
                </h2>
                <p className="text-sm text-gray-500">
-                 Choose destination group or create new one
+                 Choose destination person or create new one
                </p>
                {selectedFaces.length > 0 && (
                  <div className="mt-2 text-xs text-gray-600">
-                   From: {currentGroup?.label || 'Unknown Group'}
+                   From: {currentGroup?.label || 'Unknown Person'}
                  </div>
                )}
              </div>
@@ -339,7 +339,7 @@ export default function TransferFacesModal({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search groups..."
+                placeholder="Search people..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -372,7 +372,7 @@ export default function TransferFacesModal({
 
           {/* Groups Grid */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Select existing group:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Select existing person:</h3>
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
               {filteredAndSortedGroups.map((group) => (
                 <div
@@ -414,7 +414,7 @@ export default function TransferFacesModal({
               ))}
               {filteredAndSortedGroups.length === 0 && (
                 <div className="col-span-full text-center py-8 text-gray-500">
-                  {searchTerm ? 'No groups found matching your search' : 'No groups available'}
+                  {searchTerm ? 'No people found matching your search' : 'No people available'}
                 </div>
               )}
             </div>
@@ -422,13 +422,13 @@ export default function TransferFacesModal({
 
           {/* New Group Creation */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Or create new group:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Or create new person:</h3>
             <div className="relative">
               <input
                 type="text"
                 value={newGroupName}
                 onChange={handleNewGroupNameChange}
-                placeholder="Enter new group name..."
+                placeholder="Enter new person name..."
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
                   nameConflict ? 'border-red-500' : 'border-gray-300'
                 }`}

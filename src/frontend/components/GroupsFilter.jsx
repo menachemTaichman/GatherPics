@@ -268,7 +268,7 @@ export default function GroupsFilter({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
             <Filter className="w-4 h-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Filter by Persons</span>
+            <span className="text-sm font-medium text-gray-700">Filter by People</span>
             
             {/* Filter Mode Toggle - Single button with icon only */}
             <button

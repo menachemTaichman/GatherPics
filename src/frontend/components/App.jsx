@@ -192,7 +192,7 @@ function HomePage() {
                     )}
                     <div className="flex items-center text-primary-600 font-medium text-sm group-hover:gap-2 transition-all">
                       <User className="w-4 h-4 mr-1" />
-                      Browse Persons
+                      Browse People
                     </div>
                   </div>
                 </a>
@@ -284,16 +284,16 @@ function AppContent({ eventUrl }) {
     if (pathAfterEvent === '/' || pathAfterEvent === '') {
       // Home: only event name
       nextTitle = eventName;
-    } else if (pathAfterEvent.startsWith('/persons')) {
+    } else if (pathAfterEvent.startsWith('/people')) {
       const parts = pathAfterEvent.split('/').filter(Boolean);
       if (parts.length >= 2) {
-        // persons/:group_name
+        // people/:group_name
         const groupLabelEncoded = parts.slice(1).join('/');
         const groupLabel = decodeURIComponent(groupLabelEncoded);
         nextTitle = `${eventName} - person: ${groupLabel}`;
       } else {
-        // persons
-        nextTitle = `${eventName} - persons`;
+        // people
+        nextTitle = `${eventName} - people`;
       }
     } else if (pathAfterEvent.startsWith('/timeline')) {
       const params = new URLSearchParams(location.search);
@@ -428,7 +428,7 @@ function AppContent({ eventUrl }) {
       <AnimatePresence mode="wait">
         <Routes>
           <Route 
-            path="persons/:group_name" 
+            path="people/:group_name" 
             element={
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -448,7 +448,7 @@ function AppContent({ eventUrl }) {
             } 
           />
           <Route 
-            path="persons" 
+            path="people" 
             element={
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -533,11 +533,11 @@ function AppContent({ eventUrl }) {
                   <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome to Face Gallery</h1>
                   <p className="text-gray-600 mb-6 text-lg">AI-Powered Face Recognition System</p>
                   <Link 
-                    to={`/${eventUrl}/persons`}
+                    to={`/${eventUrl}/people`}
                     className="inline-flex items-center px-6 py-3 bg-primary-500 text-white font-medium rounded-lg hover:bg-primary-600 transition-colors"
                   >
                     <User className="w-5 h-5 mr-2" />
-                    Browse Persons
+                    Browse People
                   </Link>
                 </div>
               </motion.div>
