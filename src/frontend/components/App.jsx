@@ -2,24 +2,20 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User } from 'lucide-react';
-import Header from './Header';
-import Gallery from './GroupsGallery';
-import GroupDetail from './GroupDetail';
-import AlbumsGallery from './AlbumsGallery';
-import AlbumDetail from './AlbumDetail';
-import LoadingSpinner from './LoadingSpinner';
-import Moments from './Moments';
-import UploadsGallery from './UploadsGallery';
-import UploadDetail from './UploadDetail';
-import Toast from './Toast';
-import LoginModal from './LoginModal';
+import { Header } from './layout';
+import { GroupsGalleryPage, GroupDetailPage } from '../pages/groups';
+import { AlbumsGalleryPage, AlbumDetailPage } from '../pages/albums';
+import { MomentsPage } from '../pages/moments';
+import { UploadsGalleryPage, UploadDetailPage } from '../pages/uploads';
+import { LoadingSpinner, Toast } from './common';
+import { LoginModal } from './auth';
 import { useDataStore } from '../utils/dataManager';
 import { groupsAPI, profilesAPI } from '../utils/apiService';
-import { useEventUrls } from '../utils/useEventUrls';
+import { useEventUrls } from '../hooks/useEventUrls';
 import jwtService from '../utils/jwtService';
 import { initializePreferences } from '../utils/settings';
-import { ToastProvider, useToast } from '../utils/ToastContext';
-import { AuthProvider, useAuth } from '../utils/authContext';
+import { ToastProvider, useToast } from '../contexts/ToastContext';
+import { AuthProvider, useAuth } from '../contexts/authContext';
 import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
 
 // Cache for events list to prevent duplicate requests
@@ -436,7 +432,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <GroupDetail 
+                <GroupDetailPage 
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
                   groups={groups}
@@ -456,7 +452,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <Gallery 
+                <GroupsGalleryPage 
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
                   groups={groups}
@@ -476,7 +472,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <AlbumDetail urlHelpers={urlHelpers} />
+                <AlbumDetailPage urlHelpers={urlHelpers} />
               </motion.div>
             }
           />
@@ -489,7 +485,7 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <AlbumsGallery eventUrl={eventUrl} urlHelpers={urlHelpers} />
+                <AlbumsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
               </motion.div>
             }
           />
@@ -502,20 +498,20 @@ function AppContent({ eventUrl }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <Moments eventUrl={eventUrl} urlHelpers={urlHelpers} />
+                <MomentsPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
               </motion.div>
             }
           />
           <Route
             path="uploads/:uploadId"
             element={
-              <UploadDetail eventUrl={eventUrl} urlHelpers={urlHelpers} />
+              <UploadDetailPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
           <Route
             path="uploads"
             element={
-              <UploadsGallery eventUrl={eventUrl} urlHelpers={urlHelpers} />
+              <UploadsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
           <Route 
@@ -581,3 +577,6 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+
+

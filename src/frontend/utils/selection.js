@@ -29,3 +29,6 @@ export const clearTransferredImagesFromCache = (sourceGroupId, transferredImageI
     console.warn(`Failed to update selection cache for group ${sourceGroupId}:`, error);
   }
 };
+
+
+

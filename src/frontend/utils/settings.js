@@ -234,3 +234,5 @@ export const getImageCount = (entity) => {
     return entity.active_images_count ?? entity.images_count ?? 0;
   }
 }; 
+
+
