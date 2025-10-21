@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle } from 'lucide-react';
+import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key } from 'lucide-react';
 import { uploadsAPI, groupsAPI, momentsAPI } from '../utils/apiService';
 import { useToast } from '../utils/ToastContext';
 import { useUploadById, useDataStore } from '../utils/dataManager';
@@ -13,12 +13,16 @@ import { formatErrorMessage } from '../utils/errorHandler';
 import SingleImageTile from './SingleImageTile';
 import ImageViewer from './ImageViewer';
 import FloatingSelectionControls from './FloatingSelectionControls';
+import ManageAccessModal from './ManageAccessModal';
+import MoveToMomentModal from './MoveToMomentModal';
+import TransferFacesModal from './TransferFacesModal';
 import { ImageComponent } from '../utils/useImage.jsx';
 import useImageSelection from '../utils/useImageSelection';
 import useImageViewerController from '../utils/useImageViewerController.js';
 import { shallow } from 'zustand/shallow';
 import { useAuth } from '../utils/authContext';
 import { useAuthRefresh } from '../utils/useAuthRefresh';
+import { usePermissions } from '../utils/usePermissions';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -43,7 +47,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const uploadId = params.uploadId;
   const { isAuthenticated } = useAuth();
   
-  const [mode, setMode] = useState(() => getPreference('UploadsDetail.mode', 'images'));
+  const [mode, setMode] = useState(() => getPreference('UploadDetail.mode', 'images'));
   const sortDir = usePreference('UploadDetail.sortDir', 'asc');
   const setSortDir = (value) => setPreference('UploadDetail.sortDir', value);
   const selectionMode = usePreference('general.select', false);
@@ -51,12 +55,20 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const [expandedMoments, setExpandedMoments] = useState(new Set());
+  const [expandedGroup, setExpandedGroup] = useState(null); // Single group ID
+  const [expandedMoment, setExpandedMoment] = useState(null); // Single moment ID
   const [imageClasses, setImageClasses] = useState({});
   const imageClassesRef = useRef(imageClasses);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
+  const [editingGroupLabel, setEditingGroupLabel] = useState(null);
+  const [groupLabelValue, setGroupLabelValue] = useState('');
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+  const [manageAccessEntity, setManageAccessEntity] = useState({ type: null, ids: [] });
+  const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
+  const [showTransferFacesModal, setShowTransferFacesModal] = useState(false);
+  
+  const permissions = usePermissions();
   
   const { showToast } = useToast();
   
@@ -67,17 +79,17 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     { entity: 'upload', id: String(uploadId) },
   ], [uploadId]);
 
-  // Dynamic scopes for expanded groups and moments
+  // Dynamic scopes for expanded group and moment
   const dynamicScopes = useMemo(() => {
     const scopes = [];
-    expandedGroups.forEach(groupId => {
-      scopes.push({ entity: 'group', id: String(groupId) });
-    });
-    expandedMoments.forEach(momentId => {
-      scopes.push({ entity: 'moment', id: String(momentId) });
-    });
+    if (expandedGroup) {
+      scopes.push({ entity: 'group', id: String(expandedGroup) });
+    }
+    if (expandedMoment) {
+      scopes.push({ entity: 'moment', id: String(expandedMoment) });
+    }
     return scopes;
-  }, [expandedGroups, expandedMoments]);
+  }, [expandedGroup, expandedMoment]);
 
   // Combine base and dynamic scopes
   const allScopes = useMemo(() => [...baseScopes, ...dynamicScopes], [baseScopes, dynamicScopes]);
@@ -114,7 +126,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
-    setPreference('UploadsDetail.mode', newMode);
+    setPreference('UploadDetail.mode', newMode);
   };
 
   const toggleSortDir = () => {
@@ -123,27 +135,23 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   };
 
   const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
+    if (expandedGroup === groupId) {
+      setExpandedGroup(null);
+      // Clear group selection when closing
+      clearGroupSelection();
+    } else {
+      setExpandedGroup(groupId);
+    }
   };
 
   const toggleMoment = (momentId) => {
-    setExpandedMoments(prev => {
-      const next = new Set(prev);
-      if (next.has(momentId)) {
-        next.delete(momentId);
-      } else {
-        next.add(momentId);
-      }
-      return next;
-    });
+    if (expandedMoment === momentId) {
+      setExpandedMoment(null);
+      // Clear moment selection when closing
+      clearMomentSelection();
+    } else {
+      setExpandedMoment(momentId);
+    }
   };
 
   // Get upload groups and moments from relations using stable hooks
@@ -223,17 +231,56 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   // Use images from store or placeholders when not authenticated
   const uploadImages = isAuthenticated ? storeUploadImages : placeholderImages;
   
-  // Image selection
+  // Separate selection states for each mode
   const {
-    selectedKeys: selectedImages,
-    toggleKey: toggleSelectedImageKey,
-    clear: clearSelection,
-    selectAll: selectAllImages,
+    selectedKeys: selectedImagesInImagesMode,
+    toggleKey: toggleSelectedImageInImagesMode,
+    clear: clearImagesSelection,
+    selectAll: selectAllImagesInImagesMode,
   } = useImageSelection({
     items: uploadImages,
     getKey: (img) => img?.id,
     enableRange: true,
   });
+
+  const {
+    selectedKeys: selectedImagesInGroupsMode,
+    toggleKey: toggleSelectedImageInGroupsMode,
+    clear: clearGroupSelection,
+    selectAll: selectAllImagesInGroupsMode,
+  } = useImageSelection({
+    items: uploadImages,
+    getKey: (img) => img?.id,
+    enableRange: true,
+  });
+
+  const {
+    selectedKeys: selectedImagesInMomentsMode,
+    toggleKey: toggleSelectedImageInMomentsMode,
+    clear: clearMomentSelection,
+    selectAll: selectAllImagesInMomentsMode,
+  } = useImageSelection({
+    items: uploadImages,
+    getKey: (img) => img?.id,
+    enableRange: true,
+  });
+
+  // Current selection based on mode
+  const currentSelection = mode === 'images' ? selectedImagesInImagesMode : 
+                          mode === 'groups' ? selectedImagesInGroupsMode :
+                          selectedImagesInMomentsMode;
+  
+  const toggleCurrentSelection = mode === 'images' ? toggleSelectedImageInImagesMode :
+                                 mode === 'groups' ? toggleSelectedImageInGroupsMode :
+                                 toggleSelectedImageInMomentsMode;
+  
+  const clearCurrentSelection = mode === 'images' ? clearImagesSelection :
+                                mode === 'groups' ? clearGroupSelection :
+                                clearMomentSelection;
+  
+  const selectAllCurrent = mode === 'images' ? selectAllImagesInImagesMode :
+                           mode === 'groups' ? selectAllImagesInGroupsMode :
+                           selectAllImagesInMomentsMode;
   
   // Image viewer controller
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
@@ -267,22 +314,18 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     }
   }, [eventUrl, showToast]);
 
-  // Fetch data for expanded groups/moments
+  // Fetch data for expanded group/moment
   useEffect(() => {
-    if (mode === 'groups') {
-      expandedGroups.forEach(groupId => {
-        fetchGroupData(groupId);
-      });
+    if (mode === 'groups' && expandedGroup) {
+      fetchGroupData(expandedGroup);
     }
-  }, [mode, expandedGroups, fetchGroupData]);
+  }, [mode, expandedGroup, fetchGroupData]);
 
   useEffect(() => {
-    if (mode === 'moments') {
-      expandedMoments.forEach(momentId => {
-        fetchMomentData(momentId);
-      });
+    if (mode === 'moments' && expandedMoment) {
+      fetchMomentData(expandedMoment);
     }
-  }, [mode, expandedMoments, fetchMomentData]);
+  }, [mode, expandedMoment, fetchMomentData]);
 
   // Open image viewer for main photos tab
   const openImageViewerInUpload = (imageId, index) => {
@@ -313,7 +356,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   };
   
   const toggleImageSelection = (imageId, event) => {
-    toggleSelectedImageKey(imageId, event);
+    toggleCurrentSelection(imageId, event);
   };
   
   const handleImageLoad = (imageId, e) => {
@@ -355,6 +398,88 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     setEditingNotes(false);
     setNotesValue(upload?.notes || '');
   };
+
+  const handleEditGroupLabel = (groupId, currentLabel) => {
+    setEditingGroupLabel(groupId);
+    setGroupLabelValue(currentLabel || '');
+  };
+
+  const handleSaveGroupLabel = async (groupId) => {
+    try {
+      await groupsAPI.update(groupId, { label: groupLabelValue }, eventUrl);
+      showToast('Person label updated', 'success');
+      setEditingGroupLabel(null);
+    } catch (error) {
+      console.error('Failed to update group label:', error);
+      showToast(formatErrorMessage('update person label', error), 'error');
+    }
+  };
+
+  const handleCancelEditGroupLabel = () => {
+    setEditingGroupLabel(null);
+    setGroupLabelValue('');
+  };
+
+  const handleManageGroupAccess = (groupId) => {
+    setManageAccessEntity({ type: 'group', ids: [groupId] });
+    setShowManageAccessModal(true);
+  };
+
+  const handleSetFaceAsRep = async (groupId, faceId) => {
+    try {
+      await groupsAPI.update(groupId, { representative_face: faceId }, eventUrl);
+      showToast('Representative face updated', 'success');
+    } catch (error) {
+      console.error('Failed to set representative:', error);
+      showToast(formatErrorMessage('set representative', error), 'error');
+    }
+  };
+
+  const handleSetMomentImageAsRep = async (momentId, imageId) => {
+    try {
+      await momentsAPI.update(momentId, { representative_image: imageId }, eventUrl);
+      showToast('Representative image updated', 'success');
+    } catch (error) {
+      console.error('Failed to set representative:', error);
+      showToast(formatErrorMessage('set representative', error), 'error');
+    }
+  };
+
+  const handleMoveToMomentComplete = (result) => {
+    setShowMoveToMomentModal(false);
+    clearCurrentSelection();
+  };
+
+  const handleTransferFacesComplete = (result) => {
+    setShowTransferFacesModal(false);
+    clearCurrentSelection();
+  };
+
+  const getSelectedFacesForTransfer = () => {
+    if (mode !== 'groups' || !expandedGroup) return [];
+    
+    // Get the faces mapping for the expanded group
+    const groupEntity = entities?.groups?.[expandedGroup];
+    const facesMapping = groupEntity?.faces_mapping || {};
+    
+    const selectedFaces = [];
+    for (const imageId of currentSelection) {
+      const faceId = facesMapping?.[imageId];
+      if (!faceId) continue;
+      selectedFaces.push({
+        id: faceId,
+        face_id: faceId,
+        image_id: imageId,
+        group_id: expandedGroup,
+        width: 0,
+        height: 0,
+        left: 0,
+        top: 0,
+        group_label: groupEntity?.label || ''
+      });
+    }
+    return selectedFaces;
+  };
   
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -368,18 +493,18 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
         event.preventDefault();
         if (uploadImages.length > 0) {
-          selectAllImages();
+          selectAllCurrent();
         }
       }
       // Escape to clear selection
       if (event.key === 'Escape') {
-        clearSelection();
+        clearCurrentSelection();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [uploadImages]);
+  }, [uploadImages, selectAllCurrent, clearCurrentSelection]);
 
   // Subscribe to entities to make component reactive
   const entities = useDataStore((state) => state.entities, shallow);
@@ -711,21 +836,21 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       transition={{ duration: 0.15 }}
                       className={`photo-card ${imageClasses[img.id] || 'square'}`}
                     >
-                      <SingleImageTile
-                        image={img}
-                        aspectClass={imageClasses[img.id] || 'square'}
-                        imageFit="cover"
-                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
-                        selectionMode={selectionMode}
-                        isSelected={selectedImages.has(img.id)}
-                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                        onOpen={() => openImageViewerInUpload(img.id, index)}
-                        onImageLoad={(e) => handleImageLoad(img.id, e)}
-                        eventUrl={eventUrl}
-                        urlHelpers={urlHelpers}
-                        showFavoriteButton={false}
-                        showArchiveButton={false}
-                      />
+                                      <SingleImageTile
+                                        image={img}
+                                        aspectClass={imageClasses[img.id] || 'square'}
+                                        imageFit="cover"
+                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
+                                        selectionMode={selectionMode}
+                                        isSelected={currentSelection.has(img.id)}
+                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                        onOpen={() => openImageViewerInUpload(img.id, index)}
+                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                        eventUrl={eventUrl}
+                                        urlHelpers={urlHelpers}
+                                        showFavoriteButton={false}
+                                        showArchiveButton={false}
+                                      />
                     </motion.div>
                   ))}
                 </div>
@@ -749,21 +874,23 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               ) : (
                 <div className="space-y-4">
                   {uploadGroups.map((group) => {
-                    const isExpanded = expandedGroups.has(group.id);
+                    const isExpanded = expandedGroup === group.id;
                     const groupFaces = isExpanded ? getGroupFacesInUpload(group.id) : [];
+                    const groupEntity = entities?.groups?.[group.id];
+                    const isRepresentative = (faceId) => groupEntity?.representative_face === faceId;
 
                     return (
                       <div key={group.id} className="border rounded-lg overflow-hidden">
                         <div
+                          className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
                           onClick={() => {
                             toggleGroup(group.id);
                             if (!isExpanded) {
                               fetchGroupData(group.id);
                             }
                           }}
-                          className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
                         >
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-3 flex-1">
                             {ImageComponent(getGroupRepUrl(group.id), {
                               width: 48,
                               height: 48,
@@ -771,57 +898,120 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               alt: group.label,
                               iconType: 'person'
                             })}
-                            <div>
-                              <h4 className="font-medium text-gray-900">{group.label}</h4>
-                              <p className="text-xs text-gray-500">
-                                {groupFaces.length} {groupFaces.length === 1 ? 'face' : 'faces'} in this upload
-                              </p>
+                            <div className="flex-1">
+                              {editingGroupLabel === group.id ? (
+                                <div 
+                                  className="flex items-center space-x-2" 
+                                  onClick={(e) => e.stopPropagation()}
+                                  onBlur={(e) => {
+                                    // Only save if focus moved outside this element
+                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                      handleSaveGroupLabel(group.id);
+                                    }
+                                  }}
+                                >
+                                  <input
+                                    type="text"
+                                    value={groupLabelValue}
+                                    onChange={(e) => setGroupLabelValue(e.target.value)}
+                                    className="flex-1 border-b-2 border-primary-500 bg-transparent px-2 py-1 text-base font-medium focus:outline-none"
+                                    placeholder="Person name..."
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleSaveGroupLabel(group.id);
+                                      } else if (e.key === 'Escape') {
+                                        handleCancelEditGroupLabel();
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <h4 
+                                  className={`font-medium text-gray-900 inline-block ${
+                                    permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
+                                  }`}
+                                  onClick={permissions.canEdit ? ((e) => {
+                                    e.stopPropagation();
+                                    handleEditGroupLabel(group.id, group.label);
+                                  }) : undefined}
+                                >
+                                  {group.label}
+                                </h4>
+                              )}
                             </div>
                           </div>
-                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                          <div className="flex items-center space-x-2">
+                            {permissions.isProfilesManager && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleManageGroupAccess(group.id);
+                                }}
+                                className="w-8 h-8 rounded-md hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors"
+                                title="Manage profile access"
+                              >
+                                <Key className="w-4 h-4" />
+                              </button>
+                            )}
+                            <div>
+                              {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                            </div>
+                          </div>
                         </div>
 
                         {isExpanded && (
-                          <div className="p-4">
-                            {groupFaces.length === 0 ? (
-                              <p className="text-gray-500 text-sm text-center py-4">No faces from this upload</p>
-                            ) : (
-                              <div 
-                                className="photo-gallery-grid"
-                                style={{
-                                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                  gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                }}
-                              >
-                                {groupFaces.map((face) => {
-                                  const img = entities?.images?.[face.image_id];
-                                  if (!img) return null;
-                                  return (
-                                    <div
-                                      key={face.id}
-                                      className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
-                                    >
-                                      <SingleImageTile
-                                        image={img}
-                                        aspectClass={imageClasses[img.id] || 'square'}
-                                        imageFit="cover"
-                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
-                                        selectionMode={selectionMode}
-                                        isSelected={selectedImages.has(img.id)}
-                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                        onOpen={() => openImageViewerInGroup(group.id, face.id)}
-                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                        eventUrl={eventUrl}
-                                        urlHelpers={urlHelpers}
-                                        showFavoriteButton={false}
-                                        showArchiveButton={false}
-                                        showCropBadge={false}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
+                          <div className="border-t border-gray-200">
+                            <div className="p-4 bg-gray-50">
+                              <p className="text-sm text-gray-600">
+                                {groupEntity?.faces_count || 0} {(groupEntity?.faces_count || 0) === 1 ? 'face' : 'faces'}, {groupFaces.length} in this upload
+                              </p>
+                            </div>
+                            <div className="p-4">
+                              {groupFaces.length === 0 ? (
+                                <p className="text-gray-500 text-sm text-center py-4">No faces from this upload</p>
+                              ) : (
+                                <div 
+                                  className="photo-gallery-grid"
+                                  style={{
+                                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                  }}
+                                >
+                                  {groupFaces.map((face) => {
+                                    const img = entities?.images?.[face.image_id];
+                                    if (!img) return null;
+                                    const isRep = isRepresentative(face.id);
+                                    return (
+                                      <div
+                                        key={face.id}
+                                        className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
+                                      >
+                                        <SingleImageTile
+                                          image={img}
+                                          aspectClass={imageClasses[img.id] || 'square'}
+                                          imageFit="cover"
+                                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
+                                          selectionMode={selectionMode}
+                                          isSelected={currentSelection.has(img.id)}
+                                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                          onOpen={() => openImageViewerInGroup(group.id, face.id)}
+                                          onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                          eventUrl={eventUrl}
+                                          urlHelpers={urlHelpers}
+                                          showFavoriteButton={false}
+                                          showArchiveButton={false}
+                                          showCropBadge={false}
+                                          showRepresentativeButton={true}
+                                          isRepresentative={isRep}
+                                          onSetRepresentative={() => handleSetFaceAsRep(group.id, face.id)}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -848,8 +1038,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               ) : (
                 <div className="space-y-4">
                   {uploadMoments.map((moment) => {
-                    const isExpanded = expandedMoments.has(moment.id);
+                    const isExpanded = expandedMoment === moment.id;
                     const momentImages = isExpanded ? getMomentImagesInUpload(moment.id) : [];
+                    const momentEntity = entities?.moments?.[moment.id];
+                    const isRepresentative = (imageId) => momentEntity?.representative_image === imageId;
 
                     return (
                       <div key={moment.id} className="border rounded-lg overflow-hidden">
@@ -871,52 +1063,60 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             })}
                             <div>
                               <h4 className="font-medium text-gray-900">{moment.label}</h4>
-                              <p className="text-xs text-gray-500">
-                                {momentImages.length} {momentImages.length === 1 ? 'photo' : 'photos'} in this upload
-                              </p>
                             </div>
                           </div>
                           {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
 
                         {isExpanded && (
-                          <div className="p-4">
-                            {momentImages.length === 0 ? (
-                              <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
-                            ) : (
-                              <div 
-                                className="photo-gallery-grid"
-                                style={{
-                                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                  gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                }}
-                              >
-                                {momentImages.map((img) => {
-                                  return (
-                                    <div
-                                      key={img.id}
-                                      className={`photo-card ${imageClasses[img.id] || 'square'}`}
-                                    >
-                                      <SingleImageTile
-                                        image={img}
-                                        aspectClass={imageClasses[img.id] || 'square'}
-                                        imageFit="cover"
-                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
-                                        selectionMode={selectionMode}
-                                        isSelected={selectedImages.has(img.id)}
-                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                        onOpen={() => openImageViewerInMoment(moment.id, img.id)}
-                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                        eventUrl={eventUrl}
-                                        urlHelpers={urlHelpers}
-                                        showFavoriteButton={false}
-                                        showArchiveButton={false}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
+                          <div className="border-t border-gray-200">
+                            <div className="p-4 bg-gray-50">
+                              <p className="text-sm text-gray-600">
+                                {momentEntity?.images_count || 0} {(momentEntity?.images_count || 0) === 1 ? 'photo' : 'photos'}, {momentImages.length} in this upload
+                              </p>
+                            </div>
+                            <div className="p-4">
+                              {momentImages.length === 0 ? (
+                                <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
+                              ) : (
+                                <div 
+                                  className="photo-gallery-grid"
+                                  style={{
+                                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
+                                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                                  }}
+                                >
+                                  {momentImages.map((img) => {
+                                    const isRep = isRepresentative(img.id);
+                                    return (
+                                      <div
+                                        key={img.id}
+                                        className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                                      >
+                                        <SingleImageTile
+                                          image={img}
+                                          aspectClass={imageClasses[img.id] || 'square'}
+                                          imageFit="cover"
+                                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
+                                          selectionMode={selectionMode}
+                                          isSelected={currentSelection.has(img.id)}
+                                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                          onOpen={() => openImageViewerInMoment(moment.id, img.id)}
+                                          onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                          eventUrl={eventUrl}
+                                          urlHelpers={urlHelpers}
+                                          showFavoriteButton={false}
+                                          showArchiveButton={false}
+                                          showRepresentativeButton={true}
+                                          isRepresentative={isRep}
+                                          onSetRepresentative={() => handleSetMomentImageAsRep(moment.id, img.id)}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -934,31 +1134,127 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         </div>
       </div>
 
-      {/* Floating Selection Controls */}
-      <FloatingSelectionControls
-        selectedCount={selectedImages.size}
-        totalCount={uploadImages.length}
-        selectedImages={selectedImages}
-        onSelectAll={selectAllImages}
-        onClearSelection={clearSelection}
-        eventUrl={eventUrl}
-        urlHelpers={urlHelpers}
-        placeholderDataUrl={null}
-        showTransferFaces={false}
-        showRemoveFromMoment={false}
-        showMoveToMoment={false}
-        showArchive={true}
-        showFavorites={true}
-        showBucket={true}
-        showAlbum={true}
-        selectionMode={selectionMode}
-        entity="upload"
-        entityId={uploadId}
-      />
+      {/* Floating Selection Controls - using component for all modes */}
+      {mode === 'images' && (
+        <FloatingSelectionControls
+          selectedCount={currentSelection.size}
+          totalCount={uploadImages.length}
+          selectedImages={currentSelection}
+          onSelectAll={selectAllCurrent}
+          onClearSelection={clearCurrentSelection}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          placeholderDataUrl={null}
+          showTransferFaces={false}
+          showRemoveFromMoment={false}
+          showMoveToMoment={true}
+          showArchive={false}
+          showFavorites={false}
+          showBucket={false}
+          showAlbum={false}
+          showDelete={true}
+          showManageAccess={true}
+          showSetRepresentative={false}
+          selectionMode={selectionMode}
+          entity="upload"
+          entityId={uploadId}
+          onMoveToMoment={() => setShowMoveToMomentModal(true)}
+        />
+      )}
+      
+      {mode === 'groups' && (
+        <FloatingSelectionControls
+          selectedCount={currentSelection.size}
+          totalCount={uploadImages.length}
+          selectedImages={currentSelection}
+          onSelectAll={selectAllCurrent}
+          onClearSelection={clearCurrentSelection}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          placeholderDataUrl={null}
+          showTransferFaces={true}
+          showRemoveFromMoment={false}
+          showMoveToMoment={false}
+          showArchive={false}
+          showFavorites={false}
+          showBucket={false}
+          showAlbum={false}
+          showDelete={false}
+          showManageAccess={false}
+          showSetRepresentative={false}
+          selectionMode={selectionMode}
+          entity="upload"
+          entityId={uploadId}
+          onTransferFaces={() => setShowTransferFacesModal(true)}
+        />
+      )}
+      
+      {mode === 'moments' && (
+        <FloatingSelectionControls
+          selectedCount={currentSelection.size}
+          totalCount={uploadImages.length}
+          selectedImages={currentSelection}
+          onSelectAll={selectAllCurrent}
+          onClearSelection={clearCurrentSelection}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          placeholderDataUrl={null}
+          showTransferFaces={false}
+          showRemoveFromMoment={false}
+          showMoveToMoment={true}
+          showArchive={false}
+          showFavorites={false}
+          showBucket={false}
+          showAlbum={false}
+          showDelete={false}
+          showManageAccess={false}
+          showSetRepresentative={false}
+          selectionMode={selectionMode}
+          entity="upload"
+          entityId={uploadId}
+          onMoveToMoment={() => setShowMoveToMomentModal(true)}
+        />
+      )}
 
       {/* Image Viewer */}
       {viewerOpen && (
         <ImageViewer {...viewerProps} />
+      )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType={manageAccessEntity.type}
+        entityIds={manageAccessEntity.ids}
+        eventUrl={eventUrl}
+      />
+
+      {/* Move to Moment Modal */}
+      {showMoveToMomentModal && (
+        <MoveToMomentModal
+          isOpen={showMoveToMomentModal}
+          onClose={() => setShowMoveToMomentModal(false)}
+          selectedImages={currentSelection}
+          onMoveComplete={handleMoveToMomentComplete}
+          sourceMomentId={mode === 'moments' && expandedMoment ? expandedMoment : null}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+        />
+      )}
+
+      {/* Transfer Faces Modal */}
+      {showTransferFacesModal && (
+        <TransferFacesModal
+          isOpen={showTransferFacesModal}
+          onClose={() => setShowTransferFacesModal(false)}
+          currentGroup={expandedGroup ? entities?.groups?.[expandedGroup] : null}
+          selectedFaces={getSelectedFacesForTransfer()}
+          onTransferComplete={handleTransferFacesComplete}
+          sourceGroupId={expandedGroup}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+        />
       )}
     </div>
   );

@@ -42,6 +42,9 @@ export default function FloatingSelectionControls({
   showFavorites = true,
   showBucket = true,
   showAlbum = true,
+  showDelete = true,
+  showManageAccess = true,
+  showSetRepresentative = true,
   selectionMode = false,
   entity = null,
   entityId = null
@@ -83,13 +86,13 @@ export default function FloatingSelectionControls({
 
   // Check if management buttons group has any visible buttons
   const hasManagementButtons = (
-    permissions.canUploadAndDeleteImages ||
-    permissions.isProfilesManager
+    (showDelete && permissions.canUploadAndDeleteImages) ||
+    (showManageAccess && permissions.isProfilesManager)
   );
 
   // Check if advanced buttons group has any visible buttons
   const hasAdvancedButtons = (
-    (selectedImageActions.canSetRepresentative && permissions.canEdit) ||
+    (showSetRepresentative && selectedImageActions.canSetRepresentative && permissions.canEdit) ||
     (showTransferFaces && permissions.canEdit) ||
     (showRemoveFromMoment && permissions.canEdit) ||
     (showMoveToMoment && permissions.canEdit) ||
@@ -202,32 +205,36 @@ export default function FloatingSelectionControls({
           {hasActionButtons && hasManagementButtons && <span className="text-gray-300">|</span>}
 
           {/* Delete Images */}
-          <PermissionGate requires="canUploadAndDeleteImages">
-            <button
-              onClick={selectedImageActions.deleteImages}
-              className="w-8 h-8 rounded-md hover:bg-red-100 flex items-center justify-center text-red-600"
-              title="Delete selected photos"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </PermissionGate>
+          {showDelete && (
+            <PermissionGate requires="canUploadAndDeleteImages">
+              <button
+                onClick={selectedImageActions.deleteImages}
+                className="w-8 h-8 rounded-md hover:bg-red-100 flex items-center justify-center text-red-600"
+                title="Delete selected photos"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </PermissionGate>
+          )}
 
           {/* Manage Access */}
-          <PermissionGate requires="isProfilesManager">
-            <button
-              onClick={() => setShowManageAccessModal(true)}
-              className="w-8 h-8 rounded-md hover:bg-blue-100 flex items-center justify-center text-blue-600"
-              title="Manage profile access"
-            >
-              <Key className="w-4 h-4" />
-            </button>
-          </PermissionGate>
+          {showManageAccess && (
+            <PermissionGate requires="isProfilesManager">
+              <button
+                onClick={() => setShowManageAccessModal(true)}
+                className="w-8 h-8 rounded-md hover:bg-blue-100 flex items-center justify-center text-blue-600"
+                title="Manage profile access"
+              >
+                <Key className="w-4 h-4" />
+              </button>
+            </PermissionGate>
+          )}
 
           {/* Separator before advanced buttons - only if management buttons exist AND advanced buttons exist */}
           {hasManagementButtons && hasAdvancedButtons && <span className="text-gray-300">|</span>}
 
           {/* Set as representative - only for single image selection */}
-          {selectedImageActions.canSetRepresentative && (
+          {showSetRepresentative && selectedImageActions.canSetRepresentative && (
             <PermissionGate requires="canEdit">
               <button
                 onClick={() => selectedImageActions.setRepresentative()}

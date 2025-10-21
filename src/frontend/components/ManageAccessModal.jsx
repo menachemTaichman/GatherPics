@@ -7,6 +7,7 @@ import { useToast } from '../utils/ToastContext';
 import { useProfilesList } from '../utils/dataManager';
 import { profilesAPI } from '../utils/apiService';
 import { getCurrentProfileId } from '../utils/profileService';
+import { useApplyScopes } from '../utils/storeUtils';
 
 /**
  * Profile Access Row Component
@@ -249,16 +250,26 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
   const otherProfiles = allProfiles.filter(p => p.id !== currentProfileId);
 
   const [error, setError] = useState('');
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: MODAL_ID,
     modalType: 'popup'
   });
 
+  // Apply scopes to allow profiles to be inserted into the store
+  useApplyScopes(
+    isOpen ? [{ entity: 'all', id: 'profiles' }] : []
+  );
+
   // Register modal
   useEffect(() => {
     if (isOpen) {
-      registerModal(MODAL_ID, { priority: 60 });
+      registerModal(MODAL_ID, { 
+        priority: 60,
+        scopes: [{ entity: 'all', id: 'profiles' }]
+      });
       
       // Listen for logout to auto-close modal
       const handleAuthLogout = () => {
@@ -280,9 +291,33 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
     }
   }, [isOpen]);
 
+  // Fetch profiles when modal opens
+  useEffect(() => {
+    if (isOpen && eventUrl) {
+      const loadProfiles = async () => {
+        setProfilesLoading(true);
+        setProfilesLoaded(false);
+        
+        try {
+          // Fetch profiles from backend
+          // Changes are automatically applied by apiService interceptor
+          await profilesAPI.getAll(eventUrl);
+          setProfilesLoaded(true);
+        } catch (err) {
+          console.error('Failed to load profiles:', err);
+          setError('Failed to load profiles. Please try again.');
+        } finally {
+          setProfilesLoading(false);
+        }
+      };
+      
+      loadProfiles();
+    }
+  }, [isOpen, eventUrl]);
+
   if (!isOpen) return null;
 
-  const entityLabel = entityType === 'image' ? 'image' : entityType === 'album' ? 'album' : 'group';
+  const entityLabel = entityType === 'image' ? 'photo' : entityType === 'album' ? 'album' : 'person';
   const entityCount = entityIds.length;
 
   return (
@@ -329,12 +364,17 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            {otherProfiles.length === 0 ? (
+            {profilesLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-3" />
+                <p className="text-gray-500">Loading profiles...</p>
+              </div>
+            ) : profilesLoaded && otherProfiles.length === 0 ? (
               <div className="text-center py-12">
                 <Key className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-500">No other profiles available</p>
               </div>
-            ) : (
+            ) : profilesLoaded ? (
               <div className="space-y-3">
                 {otherProfiles.map(profile => (
                   <ProfileAccessRow
@@ -347,7 +387,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
                   />
                 ))}
               </div>
-            )}
+            ) : null}
 
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2 text-red-700">

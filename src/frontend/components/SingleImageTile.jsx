@@ -24,7 +24,10 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   isHighlighted = false, // New prop for highlighting
   showFavoriteButton = true, // Control favorite button visibility
   showArchiveButton = true, // Control archive button visibility
-  showCheckbox = true // Control checkbox visibility
+  showCheckbox = true, // Control checkbox visibility
+  showRepresentativeButton = false, // Control representative star button visibility
+  isRepresentative = false, // Whether this is the current representative
+  onSetRepresentative = null // Callback to set as representative
 }, ref) {
   // Use the centralized ImageActions hook
   const imageActions = useImageActions({
@@ -204,6 +207,44 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
           Crop
         </div>
+      )}
+
+      {/* Representative star button - positioned after heart and archive */}
+      {showRepresentativeButton && (permissions.canEdit || isRepresentative) && (
+        <button
+          type="button"
+          aria-label={isRepresentative ? 'Current representative' : 'Set as representative'}
+          aria-pressed={isRepresentative}
+          className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+            (showArchiveButton && isArchived) || (showFavoriteButton && isFavorite)
+              ? 'left-20' // Third position if archive or favorite is shown
+              : (showArchiveButton || showFavoriteButton)
+              ? 'left-10' // Second position if one button shown
+              : 'left-2' // First position if no other buttons
+          } ${
+            isRepresentative ? 'opacity-100' : (selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }`}
+          title={isRepresentative ? 'Current representative' : 'Set as representative'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetRepresentative && onSetRepresentative();
+          }}
+          disabled={!permissions.canEdit}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`w-5 h-5 ${isRepresentative ? 'text-orange-500' : 'text-white'}`}
+            fill={isRepresentative ? 'currentColor' : 'none'}
+            stroke={isRepresentative ? 'currentColor' : 'white'}
+            strokeWidth="2"
+            role="img"
+            focusable="false"
+            style={{ color: isRepresentative ? '#f97316' : '#ffffff' }}
+          >
+            <title>Representative</title>
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
       )}
     </div>
   );

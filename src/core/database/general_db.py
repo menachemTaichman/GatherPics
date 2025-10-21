@@ -58,11 +58,9 @@ class GeneralDB(BaseDB):
                     'sortDir': (str, 'desc'),
                     'sortBy': (str, 'started_at')
                 },
-                'UploadsDetail': {
+                'UploadDetail': {
                     'mode': (str, 'groups'),
-                    'sortDir': (str, 'asc'),
-                    'groups_expand_others': (bool, False),
-                    'groups_expand_in_upload': (bool, False),
+                    'sortDir': (str, 'asc')
                 }
             }
         }

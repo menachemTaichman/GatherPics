@@ -27,7 +27,11 @@ export function AuthProvider({ children }) {
           
           // Fetch current profile from API
           try {
-            const result = await profilesAPI.getCurrentProfile();
+            // Try to get event URL from current location path
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            const eventUrl = pathParts[0] || null;
+            
+            const result = await profilesAPI.getCurrentProfile(eventUrl);
             if (result.profile) {
               setCurrentProfile(result.profile);
             }
@@ -105,10 +109,28 @@ export function AuthProvider({ children }) {
       
       // Listen for login signal from other tabs
       if (e.key === 'auth:login' && e.newValue) {
-        // Token is already in localStorage (shared), load profile
-        const profile = getCurrentProfile();
-        if (profile) {
-          setCurrentProfile(profile);
+        // Token is already in localStorage (shared), fetch fresh profile with event context
+        try {
+          const pathParts = window.location.pathname.split('/').filter(Boolean);
+          const eventUrl = pathParts[0] || null;
+          
+          profilesAPI.getCurrentProfile(eventUrl).then(result => {
+            if (result.profile) {
+              setCurrentProfile(result.profile);
+            }
+          }).catch(() => {
+            // Fallback to cached profile
+            const profile = getCurrentProfile();
+            if (profile) {
+              setCurrentProfile(profile);
+            }
+          });
+        } catch (error) {
+          // Fallback to cached profile
+          const profile = getCurrentProfile();
+          if (profile) {
+            setCurrentProfile(profile);
+          }
         }
         // Sync login to this tab
         setIsAuthenticated(true);
@@ -132,9 +154,20 @@ export function AuthProvider({ children }) {
     try {
       const result = await jwtService.login(label, password);
       
-      // Store profile
-      if (result.profile) {
-        setCurrentProfile(result.profile);
+      // Store profile - fetch full profile with event context
+      try {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const eventUrl = pathParts[0] || null;
+        
+        const profileResult = await profilesAPI.getCurrentProfile(eventUrl);
+        if (profileResult.profile) {
+          setCurrentProfile(profileResult.profile);
+        }
+      } catch (error) {
+        // Fallback to profile from login result
+        if (result.profile) {
+          setCurrentProfile(result.profile);
+        }
       }
       
       setIsAuthenticated(true);

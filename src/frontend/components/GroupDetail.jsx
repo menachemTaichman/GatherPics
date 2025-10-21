@@ -170,6 +170,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   // Subscribe to normalized groups list
   const currentGroups = useGroupsList();
   const attemptedLookupRef = useRef(false);
+  const isRenamingRef = useRef(false);
   const decodedGroupName = useMemo(() => {
     try { return decodeURIComponent(group_name || ''); } catch { return group_name || ''; }
   }, [group_name]);
@@ -387,6 +388,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   useEffect(() => {
     if (!eventUrl || !decodedGroupName) return;
+    
+    // Skip lookup if we're in the middle of a rename
+    if (isRenamingRef.current) {
+      isRenamingRef.current = false; // Reset the flag
+      return;
+    }
     
     // If not authenticated, immediately set placeholder and skip all logic
     if (!isAuthenticated) {
@@ -860,12 +867,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const navigateImage = (direction, index) => navigateViewer(direction, index);
 
   const handleTitleEdit = useCallback(() => {
-    
+    setEditingTitle(group?.label || '');
     setIsEditingTitle(true);
     setTimeout(() => {
       // titleInputRef.current?.focus(); // This ref is not defined in the original file
     }, 0);
-  }, []);
+  }, [group?.label]);
 
   const handleTitleSave = useCallback(async () => {
     if (!group || !editingTitle.trim()) {
@@ -895,9 +902,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         return;
       }
       
+      // Set flag to prevent the lookup effect from running BEFORE the API call
+      // because the response interceptor will update the store during the API call
+      isRenamingRef.current = true;
+      
+      // Also reset attemptedLookupRef to allow the new name to be looked up if needed
+      attemptedLookupRef.current = false;
+      
       // No conflict, proceed with update
       await groupsAPI.update(group.id, { label: editingTitle.trim() }, eventUrl);
       // Changes are automatically applied by apiService interceptor
+      
+      // Update local group state immediately to ensure smooth transition
+      setGroup(prev => ({ ...prev, label: editingTitle.trim() }));
       
       // Update the URL to reflect the new group name
       const newUrl = `/${eventUrl}/people/${encodeURIComponent(editingTitle.trim())}`;

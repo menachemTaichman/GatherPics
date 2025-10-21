@@ -67,8 +67,8 @@ class EventDB(BaseDB):
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
-                    'groups': {'relation_table': 'uploads_groups', 'fields_needed': ['label', 'representative_face']},
-                    'moments': {'relation_table': 'uploads_moments', 'fields_needed': ['label', 'representative_image']},
+                    'groups': {'relation_table': 'uploads_groups', 'fields_needed': ['label', 'representative_face', 'faces_count']},
+                    'moments': {'relation_table': 'uploads_moments', 'fields_needed': ['label', 'representative_image', 'images_count']},
                 },
                 'serializable': {
                     'errors': list,
@@ -315,16 +315,19 @@ class EventDB(BaseDB):
             ''',
             'accessible_groups': '''
                 SELECT 
-                    g.*, f.image_id as representative_image,
-                    COUNT(agi.image_id) AS images_count,
-                    COUNT(agi.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
+                    g.*, rf.image_id as representative_image,
+                    COUNT(DISTINCT f.face_id) AS faces_count,
+                    COUNT(DISTINCT agi.image_id) AS images_count,
+                    COUNT(DISTINCT CASE WHEN ai.is_archived = 0 THEN agi.image_id END) AS active_images_count
                 FROM accessible_groups_helper g
                 LEFT JOIN accessible_groups_images agi 
                     ON g.group_id = agi.group_id
                 LEFT JOIN accessible_images ai
                     ON agi.image_id = ai.image_id
                 LEFT JOIN faces f
-                    ON g.representative_face = f.face_id
+                    ON f.group_id = g.group_id
+                LEFT JOIN faces rf
+                    ON g.representative_face = rf.face_id
                 GROUP BY g.group_id
             ''',
             'accessible_moments': '''
