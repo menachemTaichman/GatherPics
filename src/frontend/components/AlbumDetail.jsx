@@ -363,20 +363,6 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     openViewer({ index, parent: album.id, entity: 'album', sortBy: 'date', sortOrder, filteredIds: null });
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
   // Handle removing images from album
   const handleRemoveFromAlbum = async () => {
     if (!album || selectedImages.size === 0) return;
@@ -775,8 +761,6 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                   onOpen={() => openImageViewer(image.id, index)}
                   onImageLoad={(e) => handleImageLoad(image.id, e)}
-                  dateLabel={formatDate(image.date_taken)}
-                  showDate={!!image.date_taken}
                   showCropBadge={false}
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}

@@ -674,20 +674,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     window.history.replaceState(null, '', newUrl);
   }, []);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
 
   // Create ImageActions instance for selected images
   const selectedImageActions = useImageActions({
@@ -1316,8 +1302,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     onToggleSelect={(e) => toggleImageSelection(image.id, e)}
                       onOpen={() => openImageViewer(image.id, index)}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
-                      dateLabel={formatDate(image.date_taken)}
-                      showDate={!!image.date_taken}
                       showCropBadge={showCrops && !!facesMapping?.[image.id]}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}

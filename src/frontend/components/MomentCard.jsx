@@ -7,6 +7,7 @@ import { useToast } from '../utils/ToastContext';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useDataStore } from '../utils/dataManager';
 import { momentsAPI } from '../utils/apiService';
+import { ImageComponent } from '../utils/useImage.jsx';
 
 function formatTimeOnly(dateString) {
   if (!dateString) return '';
@@ -148,6 +149,20 @@ const MomentCard = forwardRef(({
         >
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-start space-x-4">
+              {/* Representative Image */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shadow-md">
+                  {ImageComponent(
+                    urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
+                    {
+                      width: 64,
+                      height: 64,
+                      className: 'w-full h-full object-cover',
+                      alt: moment.label
+                    }
+                  )}
+                </div>
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xl font-bold text-gray-900">{moment.label}</h3>
@@ -245,8 +260,6 @@ const MomentCard = forwardRef(({
                       onToggleSelect={(e) => onImageSelect(image.id, moment.id, e)}
                       onOpen={() => onOpenImageViewer(images, image, index)}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
-                      dateLabel={image.date_taken ? formatTimeOnly(image.date_taken) : ''}
-                      showDate={!!image.date_taken}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
                       isHighlighted={highlightedIds?.has(image.id)}

@@ -4,6 +4,20 @@ import { useImageComponent } from '../utils/useImage.jsx';
 import PermissionGate from './PermissionGate';
 import { usePermissions } from '../utils/usePermissions';
 
+function formatTime(dateString) {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return dateString;
+  }
+}
+
 const SingleImageTile = forwardRef(function SingleImageTile({
   image,
   aspectClass = 'square',
@@ -14,8 +28,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   onOpen,
   onImageLoad,
   onImageError,
-  dateLabel,
-  showDate = false,
+  dateLabel, // Optional override for date label
+  showDate = true, // Show date by default if available
   showCropBadge = false,
   imageFit = 'cover',
   placeholderDataUrl = null, // Use universal placeholder components instead
@@ -196,9 +210,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       </div>
 
       {/* Date overlay */}
-      {showDate && dateLabel && (
+      {showDate && (dateLabel || image?.date_taken) && (
         <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-          {dateLabel}
+          {dateLabel || formatTime(image?.date_taken)}
         </div>
       )}
 
