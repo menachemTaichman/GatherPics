@@ -220,59 +220,29 @@ class EventModels(BaseModels):
         """Get the unassociated group id."""
         return self.db.execute_query('SELECT group_id FROM accessible_groups WHERE LOWER(label) = "unassociated"', return_format=ReturnFormat.VALUE)
 
-    def get_faces_mapping(self, group_id: str) -> dict[str, str]:
-        """Return faces mapping for between images and faces in a group.
+    def get_faces_group_in_image(self, group_id: str, image_ids: str | list[str]) -> list[str] | None:
+        """Return the faces in image(s) from a group.
         Args:
             group_id: group id
-        Returns:
-            dict of faces mapping with image ids as keys and face id as value
-        """
-        accessible_groups_images = self.db.STRUCTURE()['groups_images']['accessible_table']
-        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
-        query = f"""
-            SELECT agi.image_id,
-            (
-                SELECT f.face_id
-                FROM {accessible_faces} f
-                WHERE f.image_id = agi.image_id AND f.group_id = agi.group_id
-                GROUP BY f.image_id, f.group_id
-                ORDER BY (f.width * f.height) DESC
-                LIMIT 1
-            ) as representative_face
-            FROM {accessible_groups_images} agi
-            WHERE agi.group_id = ?
-        """
-        return self.db.execute_query(query, (group_id,), return_format=ReturnFormat.DICT_VALUES)
-
-    def get_groups(self, group_ids: list[str] | str | None = None, *, faces_mapping: bool = True) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
-        """Return groups.
-        Args:
-            group_ids: list of group ids or single group id or None to get all groups
-        Returns:
-            dict of groups with group ids as keys and group data as values
-            if single group id is provided, return the group data
-        """
-        entities = self.get_entities('groups', group_ids)
-        if faces_mapping:
-            if isinstance(group_ids, str):
-                entities['faces_mapping'] = self.get_faces_mapping(group_ids)
-            else:
-                for group_id, group in entities.items():
-                    group['faces_mapping'] = self.get_faces_mapping(group_id)
-        return entities
-
-    def get_faces_group_in_image(self, group_id: str, image_id: str) -> list[str] | None:
-        """Return the faces in an image from a group.
-        Args:
-            group_id: group id
-            image_id: image id
+            image_ids: single image id or list of image ids
         Returns:
             list of face ids if found, None if not found
         """
-        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
+        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']        
+        # Handle multiple images
+        if not image_ids:
+            return []
+        
+        if isinstance(image_ids, str):
+            image_ids = [image_ids]
+
+        image_placeholders = ','.join(['?'] * len(image_ids))
         query = f"""
-            SELECT f.face_id FROM {accessible_faces} f WHERE f.image_id = ? AND f.group_id = ?"""
-        return self.db.execute_query(query, (image_id, group_id), return_format=ReturnFormat.LIST_VALUES) or None
+            SELECT f.face_id FROM {accessible_faces} f 
+            WHERE f.image_id IN ({image_placeholders}) 
+            AND f.group_id = ?
+        """
+        return self.db.execute_query(query, image_ids + [group_id], return_format=ReturnFormat.LIST_VALUES)
 
     def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
@@ -305,18 +275,19 @@ class EventModels(BaseModels):
 
         return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
 
-    def get_filtered_images(self, group_ids: list[str], mode: str = 'and', only: bool = False) -> tuple[list[str], dict[str, str], dict[str, dict]]:
-        """Return filtered images.
+    def get_filtered_images(self, group_ids: list[str], mode: str = 'and', only: bool = False) -> tuple[list[str], dict[str, dict], list[str], dict[str, dict]]:
+        """Return filtered images and faces.
         Args:
             group_ids: list of group ids
             mode: 'and' or 'or'
             only: if True, return images without any other groups
         Returns:
-            list of image ids, dict of faces mapping between images and faces, dict of images with image ids as keys and image data as values
+            list of image ids, dict of images with image ids as keys and image data as values,
+            list of face ids, dict of faces with face ids as keys and face data as values
         """
 
         if not group_ids:
-            return []
+            return [], {}, [], {}
 
         accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
         accessible_images = self.db.STRUCTURE()['images']['accessible_table']
@@ -335,21 +306,10 @@ class EventModels(BaseModels):
                 i.date_taken,
                 i.is_archived,
                 i.is_favorite,
-                (
-                    SELECT sf.face_id
-                    FROM {accessible_faces} sf
-                    WHERE sf.image_id = i.image_id AND sf.group_id IN ({group_placeholders})
-                    GROUP BY sf.image_id, sf.group_id
-                    ORDER BY
-                        {priority_case},
-                        (sf.width * sf.height) DESC
-                    LIMIT 1
-                ) as representative_face
+                i.upload_id
             FROM {accessible_faces} f
             INNER JOIN {accessible_images} i ON f.image_id = i.image_id
         """
-        params.extend(group_ids)
-        params.extend(group_ids[:M])
 
         if mode == 'and':
             having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id IN ({group_placeholders}) THEN f.group_id END) = {N}")
@@ -367,11 +327,22 @@ class EventModels(BaseModels):
             query += f" HAVING {' AND '.join(having_clause)}"
 
         image_ids, images = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
-        faces_mapping = {id: row['representative_face'] for id, row in images.items()}
-        for row in images.values():
-            row.pop('representative_face')
 
-        return image_ids, faces_mapping, images
+        # Get all faces for these images from the specified groups
+        if image_ids:
+            image_placeholders = ','.join(['?'] * len(image_ids))
+            faces_query = f"""
+                SELECT f.face_id, f.image_id, f.group_id, i.upload_id
+                FROM {accessible_faces} f
+                INNER JOIN {accessible_images} i ON f.image_id = i.image_id
+                WHERE f.image_id IN ({image_placeholders})
+                AND f.group_id IN ({group_placeholders})
+            """
+            face_ids, faces = self.db.execute_query(faces_query, image_ids + group_ids, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
+        else:
+            face_ids, faces = [], {}
+
+        return image_ids, images, face_ids, faces
 
     def add_faces_to_group(self, *, face_ids: List[str] | None = None, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
         """Add faces to a group.
@@ -383,7 +354,9 @@ class EventModels(BaseModels):
         Returns:
             dict:
                 detached_groups: dict of detached groups with group ids as keys and list of detached images ids as values
+                detached_groups_faces: dict of detached groups with group ids as keys and list of detached face ids as values
                 length_faces_added: length of faces ids added
+                faces_added: list of face ids added to target group
                 images_added: dict of images ids added with image ids as keys and dict of faces entities added to the imageas values
                 source_deleted: if source group is deleted
                 new_group_created: if new group is created
@@ -425,9 +398,10 @@ class EventModels(BaseModels):
             images_added.setdefault(face['image_id'], {})[face_id] = face
         
         result = {
-            'detached_groups': detached_groups_images,
-            'length_faces_added': len(faces_added),
+            'detached_groups_images': detached_groups_images,
+            'detached_groups_faces': detached_groups_faces,
             'images_added': images_added,
+            'faces_added': faces_added,
             'source_deleted': source_deleted,
             'new_group_created': bool(new_group_name),
             'target_group_id': target_group_id,

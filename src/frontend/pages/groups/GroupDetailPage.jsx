@@ -78,6 +78,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   __renderCountRef.current += 1;
   
   const __lastUrlRef = useRef('');
+  const __initialRestorationComplete = useRef(false);
   const { group_name, eventUrl } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -123,6 +124,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [selectedFacesForTransfer, setSelectedFacesForTransfer] = useState([]);
   const { addImages, open } = useBucketStore();
   const [imageClasses, setImageClasses] = useState({});
   const imageClassesRef = useRef(imageClasses);
@@ -142,9 +144,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const [filterMode, setFilterMode] = useState('and');
   const [onlySelected, setOnlySelected] = useState(false);
   
-  // Only store the filtered results (the actual image IDs to use instead of relations)
-  const [filteredIds, setFilteredIds] = useSessionStorage('groupDetail_filteredIds', null);
-  // Initialize ImageViewer controller after filteredIds is defined
+  // Wrapped callback for when related groups are updated
+  const handleRelatedGroupsUpdate = useCallback((groups) => {
+    setRelatedGroups(groups);
+  }, []);
+  
+  // Wrapped callback for when filter groups are changed
+  const handleFilterGroupsChange = useCallback((groups) => {
+    setFilterGroups(groups);
+  }, []);
+  
+  // Store the filtered results (the actual IDs to use instead of relations)
+  const [filteredImageIds, setFilteredImageIds] = useSessionStorage('groupDetail_filteredImageIds', null);
+  const [filteredFaceIds, setFilteredFaceIds] = useSessionStorage('groupDetail_filteredFaceIds', null);
+  
+  // Initialize ImageViewer controller after filteredImageIds is defined
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
     showToast,
@@ -153,9 +167,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     defaultSortBy: 'date',
     defaultSortOrder: sortOrder,
     urlHelpers,
-    filteredIds,
+    filteredIds: filteredImageIds,
   });
-  const [filteredFacesMapping, setFilteredFacesMapping] = useSessionStorage('groupDetail_filteredFacesMapping', null);
   const lastFetchSignatureRef = useRef('');
   const prevGroupIdRef = useRef(null);
   const suppressSpinnerRef = useRef(false);
@@ -180,7 +193,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   // Initialize filter state from URL on first load - only run once
   useEffect(() => {
-    
     const searchParams = new URLSearchParams(location.search);
     const mode = searchParams.get('filterMode');
     const only = searchParams.get('only');
@@ -194,54 +206,116 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       setOnlySelected(only === 'true');
     }
 
-    // Store group names for later restoration when relatedGroups are loaded
+    // Store group names for later restoration when currentGroups are loaded
     if (groupNames) {
-      // We'll restore these when relatedGroups are available
-      // Store them in a ref to avoid dependency issues
-      window.__pendingFilterGroups = groupNames.split(',');
+      const groupNamesArray = groupNames.split(',');
+      window.__pendingFilterGroups = groupNamesArray;
+    }
+    
+    // Open filter panel if there are any filter params in URL
+    if (groupNames || only || mode) {
+      window.__shouldOpenFilterPanel = true;
+    } else {
+      // No filter params in URL, mark restoration as complete immediately
+      __initialRestorationComplete.current = true;
     }
   }, []); // Empty dependency array - only run once on mount
 
-  // Restore filter groups from URL once relatedGroups are loaded
+  // Subscribe to store groups count (stable value) to trigger restoration
+  const groupsCount = useDataStore(state => Object.keys(state.entities?.groups || {}).length);
+  
+  // Fetch groups from URL using check-name endpoint
   useEffect(() => {
-    if (relatedGroups.length === 0 || !window.__pendingFilterGroups) return;
-    
-    const groupNames = window.__pendingFilterGroups;
-    const groupIds = groupNames
-      .map(name => relatedGroups.find(g => g.label === name)?.id)
-      .filter(Boolean); // Filter out any undefineds if a group isn't found
-    
-    // Only set filter groups if we found matching groups
-    if (groupIds.length > 0) {
-      setFilterGroups(groupIds);
+    if (window.__pendingFilterGroups && !window.__fetchingGroupsForRestore) {
+      const groupNames = window.__pendingFilterGroups;
+      window.__fetchingGroupsForRestore = true;
+      
+      // Check each group name - the check-name endpoint returns INSERT changes
+      Promise.all(
+        groupNames.map(name => groupsAPI.checkName(name, '', eventUrl))
+      ).then(results => {
+        // Apply changes from all results (check-name returns INSERT type which ignores scopes)
+        const store = useDataStore.getState();
+        results.forEach(result => {
+          if (result.changes) {
+            store.applyChanges(result.changes, { broadcast: false });
+          }
+        });
+        
+        delete window.__fetchingGroupsForRestore;
+      }).catch(err => {
+        console.error('[GroupDetail] Failed to check group names:', err);
+        delete window.__fetchingGroupsForRestore;
+      });
+    }
+  }, []); // Run once on mount
+  
+  // Open filter panel early if filter params in URL
+  useEffect(() => {
+    if (window.__shouldOpenFilterPanel) {
+      setFilterVisible(true);
+      delete window.__shouldOpenFilterPanel;
+    }
+  }, []); // Run once on mount
+  
+  // Manage all:groups scope based on filter panel visibility
+  useEffect(() => {
+    if (filterVisible) {
+      // Add scope when filter panel opens
+      try {
+        useApplyScopes([{ entity: 'all', id: 'groups' }]);
+      } catch (e) {}
+    } else {
+      // Remove scope when filter panel closes
+      const store = useDataStore.getState();
+      try {
+        store.removeScope({ entity: 'all', id: 'groups' });
+      } catch (e) {}
+    }
+  }, [filterVisible]);
+  
+  useEffect(() => {
+    // Don't wait for perfect conditions - attempt restoration with whatever we have
+    if (!window.__pendingFilterGroups) {
+      // Nothing to restore, mark complete
+      if (!__initialRestorationComplete.current) {
+        __initialRestorationComplete.current = true;
+      }
+      return;
     }
     
-    // Clear the pending groups
-    delete window.__pendingFilterGroups;
-  }, [relatedGroups]); // Only depend on relatedGroups, not location.search
-
-  // Fallback: Try to restore filter groups from main groups list if relatedGroups aren't loaded yet
-  useEffect(() => {
-    if (currentGroups.length === 0 || !window.__pendingFilterGroups) return;
-    
-    const groupNames = window.__pendingFilterGroups;
-    const groupIds = groupNames
-      .map(name => currentGroups.find(g => g.label === name)?.id)
-      .filter(Boolean); // Filter out any undefineds if a group isn't found
-    
-    // Only set filter groups if we found matching groups
-    if (groupIds.length > 0) {
+    // Handle filter groups restoration
+    if (window.__pendingFilterGroups && groupsCount > 0) {
+      // If only 1 group in store, wait for our specific fetch to complete
+      if (groupsCount === 1 && window.__fetchingGroupsForRestore) {
+        return;
+      }
+      
+      // Access store directly to get all groups (unscoped)
+      const allGroupsFromStore = Object.values(useDataStore.getState().entities?.groups || {});
+      
+      const groupNames = window.__pendingFilterGroups;
+      const groupIds = groupNames
+        .map(name => allGroupsFromStore.find(g => g.label === name)?.id)
+        .filter(Boolean); // Filter out any undefineds if a group isn't found
+      
+      // Set filter groups with whatever we found
       setFilterGroups(groupIds);
+      
+      // Always clear the pending groups after attempting restoration
+      delete window.__pendingFilterGroups;
     }
     
-    // Clear the pending groups
-    delete window.__pendingFilterGroups;
-  }, [currentGroups]); // Only depend on currentGroups, not location.search
+    // Mark restoration as complete after processing
+    if (!window.__pendingFilterGroups && !__initialRestorationComplete.current) {
+      __initialRestorationComplete.current = true;
+    }
+  }, [groupsCount]); // Depend on groups count (stable number), not the array
 
   // Update URL when filter state changes
   useEffect(() => {
-    // Skip URL updates during initial load to avoid conflicts with URL restoration
-    if (window.__pendingFilterGroups) {
+    // Skip URL updates until initial restoration is complete
+    if (!__initialRestorationComplete.current) {
       return;
     }
     const depSig = {
@@ -315,7 +389,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
     const same = __lastUrlRef.current === newUrl;
     if (same) {
-      
       return;
     }
     window.history.replaceState(null, '', newUrl);
@@ -343,9 +416,30 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   // Derive images using the universal util; keep scopes in sync
   const includeArchived = usePreference('general.includeArchived', false);
   useApplyScopes(group?.id ? [{ entity: 'group', id: String(group.id) }] : []);
-  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, filteredIds, includeArchived, sortBy: 'date', sortOrder });
+  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, filteredIds: filteredImageIds, includeArchived, sortBy: 'date', sortOrder });
 
-  const facesMapping = filteredFacesMapping || group?.faces_mapping || {};
+  // Get faces from store
+  const entities = useDataStore((state) => state.entities);
+  const groupFaces = useMemo(() => {
+    if (!showCrops || !group?.id) return [];
+    
+    const facesMap = entities?.faces || {};
+    
+    // If we have filtered face IDs, use those instead of the group's faces set
+    if (filteredFaceIds && Array.isArray(filteredFaceIds)) {
+      return filteredFaceIds
+        .map(faceId => facesMap[faceId])
+        .filter(Boolean);
+    }
+    
+    // Otherwise use all faces from the group
+    const facesSet = entities?.groups?.[group.id]?.faces;
+    if (!facesSet || !(facesSet instanceof Set)) return [];
+    
+    return Array.from(facesSet)
+      .map(faceId => facesMap[faceId])
+      .filter(Boolean);
+  }, [showCrops, group?.id, entities, filteredFaceIds]);
 
   // Create placeholder images for unauthenticated state
   const placeholderImages = useMemo(() => {
@@ -361,29 +455,70 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     if (!group?.id) return EMPTY_ARRAY;
     // Use placeholders if group is a placeholder
     if (group.isPlaceholder) return placeholderImages;
+    
+    // If showCrops, return faces sorted by their image's date_taken
+    if (showCrops) {
+      const sorted = [...groupFaces].sort((a, b) => {
+        const imgA = entities?.images?.[a.image_id];
+        const imgB = entities?.images?.[b.image_id];
+        const dateA = imgA?.date_taken || '';
+        const dateB = imgB?.date_taken || '';
+        return sortOrder === 'asc' 
+          ? dateA.localeCompare(dateB)
+          : dateB.localeCompare(dateA);
+      });
+      return sorted;
+    }
+    
     const out = sortImages(relatedImages, 'date', sortOrder);
     
     return out;
-  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages]);
+  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, entities, sortOrder]);
 
   useEffect(() => {
     
   }, [sortedImages]);
 
   // Now compute memoizedImageIds after sortedImages exists
-  const memoizedImageIds = useMemo(() => sortedImages.map(img => img.id), [sortedImages]);
+  const memoizedImageIds = useMemo(() => {
+    if (showCrops) {
+      // In faces mode, map to image IDs from faces
+      return sortedImages.map(face => face.image_id);
+    }
+    return sortedImages.map(img => img.id);
+  }, [sortedImages, showCrops]);
 
+  // Separate selection states for images mode and faces mode
   const {
-    selectedKeys: selectedImages,
-    toggleKey: toggleSelectedImageKey,
-    clear: clearSelection,
-    selectAll: selectAllImages,
-    deselectMany,
+    selectedKeys: selectedImagesInImagesMode,
+    toggleKey: toggleSelectedInImagesMode,
+    clear: clearImagesSelection,
+    selectAll: selectAllInImagesMode,
+    deselectMany: deselectManyImagesMode,
   } = useImageSelection({
     items: sortedImages,
-    getKey: (img) => img?.id,
+    getKey: (item) => item?.id,
     enableRange: true,
   });
+
+  const {
+    selectedKeys: selectedImagesInFacesMode,
+    toggleKey: toggleSelectedInFacesMode,
+    clear: clearFacesSelection,
+    selectAll: selectAllInFacesMode,
+    deselectMany: deselectManyFacesMode,
+  } = useImageSelection({
+    items: sortedImages,
+    getKey: (item) => item?.id,
+    enableRange: true,
+  });
+
+  // Use the appropriate selection based on current mode
+  const selectedImages = showCrops ? selectedImagesInFacesMode : selectedImagesInImagesMode;
+  const toggleSelectedImageKey = showCrops ? toggleSelectedInFacesMode : toggleSelectedInImagesMode;
+  const clearSelection = showCrops ? clearFacesSelection : clearImagesSelection;
+  const selectAllImages = showCrops ? selectAllInFacesMode : selectAllInImagesMode;
+  const deselectMany = showCrops ? deselectManyFacesMode : deselectManyImagesMode;
 
   useEffect(() => {
     if (!eventUrl || !decodedGroupName) return;
@@ -508,24 +643,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     try {
       const payload = await groupsAPI.getById(group.id, eventUrl, params);
       
-      // Handle filtered_ids from API response
-      // If filter is active, always use filtered_ids (even if empty array for 0 results)
-      if (payload?.filter && Array.isArray(payload?.filtered_ids)) {
-        setFilteredIds(payload.filtered_ids);
+      // Handle filtered_image_ids and filtered_face_ids from API response
+      // If filter is active, always use filtered IDs (even if empty array for 0 results)
+      if (payload?.filter) {
+        if (Array.isArray(payload?.filtered_image_ids)) {
+          setFilteredImageIds(payload.filtered_image_ids);
+        }
+        if (Array.isArray(payload?.filtered_face_ids)) {
+          setFilteredFaceIds(payload.filtered_face_ids);
+        }
       } else {
-        setFilteredIds(null);
-      }
-      
-      // Handle faces_mapping from API response (for filtered results)
-      if (payload?.filter && payload?.faces_mapping) {
-        setFilteredFacesMapping(payload.faces_mapping);
-      } else {
-        setFilteredFacesMapping(null);
+        setFilteredImageIds(null);
+        setFilteredFaceIds(null);
       }
       
       const pageCount = Array.isArray(payload?.images)
         ? payload.images.length
-        : (Array.isArray(payload?.filtered_ids) ? payload.filtered_ids.length : 0);
+        : (Array.isArray(payload?.filtered_image_ids) ? payload.filtered_image_ids.length : 0);
       setHasMore(pageCount === 50);
       
     } catch (error) {
@@ -548,9 +682,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     // Skip for placeholder groups
     if (!group?.id || group.isPlaceholder) return;
     
-    // Scope to the specific group for relation updates
+    // Scope to the specific group for relation updates (both images and faces)
     if (group?.id) {
-      try { useDataStore.getState().setScope({ entity: 'group', id: String(group.id) }); } catch {}
+      try { 
+        useDataStore.getState().setScope({ entity: 'group', id: String(group.id) });
+      } catch {}
     }
 
     if (smoothNextGroupLoad.current) {
@@ -576,11 +712,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     // If this is a group change, clear filtered data
     if (isGroupChange) {
-      setFilteredIds(null);
-      setFilteredFacesMapping(null);
+      setFilteredImageIds(null);
+      setFilteredFaceIds(null);
       // Also clear from session storage when switching groups
-      sessionStorage.removeItem('groupDetail_filteredIds');
-      sessionStorage.removeItem('groupDetail_filteredFacesMapping');
+      sessionStorage.removeItem('groupDetail_filteredImageIds');
+      sessionStorage.removeItem('groupDetail_filteredFaceIds');
       sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
     }
     
@@ -657,12 +793,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     setFilterGroups([]);
     setFilterMode('and');
     setOnlySelected(false);
-    setFilteredIds(null);
-    setFilteredFacesMapping(null);
+    setFilteredImageIds(null);
+    setFilteredFaceIds(null);
     // Clear all filter-related session storage items
     sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
-    sessionStorage.removeItem('groupDetail_filteredIds');
-    sessionStorage.removeItem('groupDetail_filteredFacesMapping');
+    sessionStorage.removeItem('groupDetail_filteredImageIds');
+    sessionStorage.removeItem('groupDetail_filteredFaceIds');
     
     // Clear URL parameters
     const searchParams = new URLSearchParams(location.search);
@@ -751,30 +887,64 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
 
 
-  const getSelectedFaces = () => {
+  const getSelectedFaces = async () => {
     const selectedFaces = [];
-    for (const imageId of selectedImages) {
-      const faceId = facesMapping?.[imageId];
-      if (!faceId) continue;
-      selectedFaces.push({
-        face_id: faceId,
-        image_id: imageId,
-        group_id: group.id,
-        width: 0,
-        height: 0,
-        left: 0,
-        top: 0,
-        group_label: group.label
-      });
+    
+    if (showCrops) {
+      // In faces mode, selectedImages contains face IDs
+      for (const faceId of selectedImages) {
+        const face = entities?.faces?.[faceId];
+        if (!face) continue;
+        selectedFaces.push({
+          face_id: faceId,
+          image_id: face.image_id,
+          group_id: group.id,
+          width: face.width || 0,
+          height: face.height || 0,
+          left: face.left || 0,
+          top: face.top || 0,
+          group_label: group.label
+        });
+      }
+    } else {
+      // In images mode, fetch ALL faces for all selected images in one API call
+      const imageIds = Array.from(selectedImages);
+      
+      try {
+        const response = await groupsAPI.getFacesInImages(group.id, imageIds, eventUrl);
+        const faceIds = response?.faces || [];
+        
+        // Add all faces
+        for (const faceId of faceIds) {
+          const face = entities?.faces?.[faceId];
+          if (!face) continue;
+          selectedFaces.push({
+            face_id: faceId,
+            image_id: face.image_id,
+            group_id: group.id,
+            width: face?.width || 0,
+            height: face?.height || 0,
+            left: face?.left || 0,
+            top: face?.top || 0,
+            group_label: group.label
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch faces for images:', error);
+      }
     }
     return selectedFaces;
   };
 
-  const handleTransferFaces = () => {
+  const handleTransferFaces = async () => {
     if (selectedImages.size === 0) {
       showToast('Please select photos to transfer', 'error');
       return;
     }
+    
+    // Fetch all faces for selected images
+    const faces = await getSelectedFaces();
+    setSelectedFacesForTransfer(faces);
     
     try {
       restoreScrollYRef.current = window.scrollY;
@@ -811,9 +981,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     // No additional action needed - modal already showed toast
   };
 
-  const toggleImageSelection = (imageId, event) => {
-    
-    toggleSelectedImageKey(imageId, event);
+  const toggleImageSelection = (itemId, event) => {
+    // itemId can be either image ID or face ID depending on showCrops mode
+    toggleSelectedImageKey(itemId, event);
   };
 
   // selectAllImages and clearSelection provided by useImageSelection
@@ -843,8 +1013,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sortedImages]);
 
-  const openImageViewer = (imageId, index) => {
-    openViewer({ index, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder, filteredIds });
+  const openImageViewer = (itemId, index) => {
+    // In faces mode, itemId is a face ID; we need to get the image ID
+    let imageIndex = index;
+    if (showCrops) {
+      const face = entities?.faces?.[itemId];
+      if (face) {
+        // Find the index of this image in the original images list
+        const imageId = face.image_id;
+        imageIndex = relatedImages.findIndex(img => img.id === imageId);
+        if (imageIndex === -1) imageIndex = index; // Fallback to original index
+      }
+    }
+    openViewer({ index: imageIndex, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder, filteredIds: filteredImageIds });
   };
 
   
@@ -1041,14 +1222,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedImages.length === getImageCount(group)
-                    ? `${sortedImages.length} photos`
-                    : `${sortedImages.length} of ${getImageCount(group)} photos`
-                  }
-                  {showCrops && (
-                    <span className="ml-2 text-primary-600 font-medium">
-                      • Showing face crops
-                    </span>
+                  {showCrops ? (
+                    `${sortedImages.length} faces`
+                  ) : (
+                    sortedImages.length === getImageCount(group)
+                      ? `${sortedImages.length} photos`
+                      : `${sortedImages.length} of ${getImageCount(group)} photos`
                   )}
                 </p>
               </div>
@@ -1182,7 +1361,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       ? 'bg-primary-100 text-primary-700' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={showCrops ? 'Show full photos' : 'Show face crops'}
+                  title={showCrops ? 'Show full photos' : 'Show faces'}
                 >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
@@ -1235,9 +1414,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               isVisible={filterVisible}
               eventUrl={eventUrl}
               imageIds={memoizedImageIds}
-              onRelatedGroupsUpdate={setRelatedGroups}
+              onRelatedGroupsUpdate={handleRelatedGroupsUpdate}
               currentGroupId={group?.id}
-              onSelectedGroupsChange={setFilterGroups}
+              onSelectedGroupsChange={handleFilterGroupsChange}
               initialSelectedGroups={filterGroups}
             />
           )}
@@ -1281,33 +1460,75 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 skipNextAnimation.current = false;
               }}
             >
-              {sortedImages.map((image, index) => (
-                <motion.div
-                  key={image.id || `unknown-${index}`}
-                  initial={skipNextAnimation.current ? false : { opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className={`photo-card ${imageClasses[image.id] || 'square'}`}
-                >
-                  <SingleImageTile
-                    ref={(el) => registerImageRef(image.id, el)}
-                    image={image}
-                    aspectClass={imageClasses[image.id] || 'square'}
-                    imageFit={'cover'}
-                    thumbSrc={image.isPlaceholder ? null : (showCrops && facesMapping?.[image.id] && urlHelpers ? urlHelpers.getFaceCropUrl(facesMapping[image.id]) : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null))}
-                    selectionMode={selectionMode}
-                    isSelected={selectedImages.has(image.id)}
-                    onToggleSelect={(e) => toggleImageSelection(image.id, e)}
-                      onOpen={() => openImageViewer(image.id, index)}
-                      onImageLoad={(e) => handleImageLoad(image.id, e)}
-                      showCropBadge={showCrops && !!facesMapping?.[image.id]}
+              {sortedImages.map((item, index) => {
+                // In faces mode, item is a face; in images mode, item is an image
+                const isFacesMode = showCrops;
+                const itemId = item.id;
+                const imageId = isFacesMode ? item.image_id : item.id;
+                const image = isFacesMode ? entities?.images?.[item.image_id] : item;
+                
+                // In faces mode, item IS the face; in images mode, we don't need the face for display
+                let faceId = null;
+                if (isFacesMode) {
+                  faceId = item.id;
+                } else {
+                  // For images mode, find a face for the crop URL (if any)
+                  const facesSet = entities?.groups?.[group.id]?.faces;
+                  if (facesSet) {
+                    const facesMap = entities?.faces || {};
+                    const facesInImage = Array.from(facesSet)
+                      .map(fId => facesMap[fId])
+                      .filter(f => f && f.image_id === imageId)
+                      .sort((a, b) => {
+                        const sizeA = (a.width || 0) * (a.height || 0);
+                        const sizeB = (b.width || 0) * (b.height || 0);
+                        return sizeB - sizeA;
+                      });
+                    faceId = facesInImage[0]?.id || null;
+                  }
+                }
+                const isRep = group?.representative_face === faceId;
+                
+                return (
+                  <motion.div
+                    key={itemId || `unknown-${index}`}
+                    initial={skipNextAnimation.current ? false : { opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className={`photo-card ${imageClasses[imageId] || 'square'}`}
+                  >
+                    <SingleImageTile
+                      ref={(el) => registerImageRef(itemId, el)}
+                      image={image || item}
+                      aspectClass={imageClasses[imageId] || 'square'}
+                      imageFit={'cover'}
+                      thumbSrc={item.isPlaceholder ? null : (isFacesMode && urlHelpers ? urlHelpers.getFaceCropUrl(faceId) : (urlHelpers ? urlHelpers.getThumbnailUrl(imageId) : null))}
+                      selectionMode={selectionMode}
+                      isSelected={selectedImages.has(itemId)}
+                      onToggleSelect={(e) => toggleImageSelection(itemId, e)}
+                      onOpen={() => openImageViewer(itemId, index)}
+                      onImageLoad={(e) => handleImageLoad(imageId, e)}
+                      showCropBadge={false}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
-                      isHighlighted={isHighlighted(image.id)}
+                      isHighlighted={isHighlighted(itemId)}
+                      showFavoriteButton={!isFacesMode}
+                      showArchiveButton={!isFacesMode}
+                      showRepresentativeButton={isFacesMode}
+                      isRepresentative={isRep}
+                      onSetRepresentative={isFacesMode ? (async () => {
+                        try {
+                          await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
+                          showToast('Representative updated', 'success');
+                        } catch (error) {
+                          showToast(formatErrorMessage('set representative', error), 'error');
+                        }
+                      }) : undefined}
                     />
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </motion.div>
             {hasMore && (
               <div className="text-center mt-8">
@@ -1332,19 +1553,31 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         onSelectAll={selectAllImages}
         onClearSelection={clearSelection}
         onTransferFaces={handleTransferFaces}
+        onSetRepresentative={showCrops ? async (faceId) => {
+          try {
+            await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
+            showToast('Representative updated', 'success');
+            clearSelection();
+          } catch (error) {
+            showToast(formatErrorMessage('set representative', error), 'error');
+          }
+        } : undefined}
         eventUrl={eventUrl}
         urlHelpers={urlHelpers}
         placeholderDataUrl={null}
         showTransferFaces={true}
         showRemoveFromMoment={false}
         showMoveToMoment={false}
-        showArchive={true}
-        showFavorites={true}
-        showBucket={true}
-        showAlbum={true}
+        showArchive={!showCrops}
+        showFavorites={!showCrops}
+        showBucket={!showCrops}
+        showAlbum={!showCrops}
+        showDelete={!showCrops}
+        showManageAccess={!showCrops}
         selectionMode={selectionMode}
         entity="group"
         entityId={group?.id}
+        isFacesMode={showCrops}
       />
 
       {/* Modals */}
@@ -1383,10 +1616,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
            isOpen={showTransferModal}
            eventUrl={eventUrl}
            urlHelpers={urlHelpers}
-           onClose={() => setShowTransferModal(false)}
+           onClose={() => {
+             setShowTransferModal(false);
+             setSelectedFacesForTransfer([]);
+           }}
            groups={currentGroups}
            currentGroup={group}
-           selectedFaces={getSelectedFaces()}
+           selectedFaces={selectedFacesForTransfer}
            onTransferComplete={handleTransferComplete}
          />
        )}

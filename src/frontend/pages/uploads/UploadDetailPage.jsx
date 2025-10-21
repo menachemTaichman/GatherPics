@@ -66,6 +66,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const [manageAccessEntity, setManageAccessEntity] = useState({ type: null, ids: [] });
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
   const [showTransferFacesModal, setShowTransferFacesModal] = useState(false);
+  const [selectedFacesForTransfer, setSelectedFacesForTransfer] = useState([]);
   
   const permissions = usePermissions();
   
@@ -296,7 +297,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   // Fetch group data when group is expanded (scope already added by dynamic scopes)
   const fetchGroupData = useCallback(async (groupId) => {
     try {
-      await groupsAPI.getWithFaces(groupId, eventUrl);
+      await groupsAPI.getById(groupId, eventUrl);
     } catch (error) {
       console.error('Failed to fetch group data:', error);
       showToast(formatErrorMessage('fetch group data', error), 'error');
@@ -451,29 +452,35 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   const handleTransferFacesComplete = (result) => {
     setShowTransferFacesModal(false);
+    setSelectedFacesForTransfer([]);
     clearCurrentSelection();
+  };
+
+  const handleTransferFacesClick = () => {
+    const faces = getSelectedFacesForTransfer();
+    setSelectedFacesForTransfer(faces);
+    setShowTransferFacesModal(true);
   };
 
   const getSelectedFacesForTransfer = () => {
     if (mode !== 'groups' || !expandedGroup) return [];
     
-    // Get the faces mapping for the expanded group
     const groupEntity = entities?.groups?.[expandedGroup];
-    const facesMapping = groupEntity?.faces_mapping || {};
-    
     const selectedFaces = [];
-    for (const imageId of currentSelection) {
-      const faceId = facesMapping?.[imageId];
-      if (!faceId) continue;
+    
+    // currentSelection contains face IDs in groups mode
+    for (const faceId of currentSelection) {
+      const face = entities?.faces?.[faceId];
+      if (!face) continue;
       selectedFaces.push({
         id: faceId,
         face_id: faceId,
-        image_id: imageId,
+        image_id: face.image_id,
         group_id: expandedGroup,
-        width: 0,
-        height: 0,
-        left: 0,
-        top: 0,
+        width: face?.width || 0,
+        height: face?.height || 0,
+        left: face?.left || 0,
+        top: face?.top || 0,
         group_label: groupEntity?.label || ''
       });
     }
@@ -992,8 +999,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                           imageFit="cover"
                                           thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
                                           selectionMode={selectionMode}
-                                          isSelected={currentSelection.has(img.id)}
-                                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                          isSelected={currentSelection.has(face.id)}
+                                          onToggleSelect={(e) => toggleImageSelection(face.id, e)}
                                           onOpen={() => openImageViewerInGroup(group.id, face.id)}
                                           onImageLoad={(e) => handleImageLoad(img.id, e)}
                                           eventUrl={eventUrl}
@@ -1184,7 +1191,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
           selectionMode={selectionMode}
           entity="upload"
           entityId={uploadId}
-          onTransferFaces={() => setShowTransferFacesModal(true)}
+          onTransferFaces={handleTransferFacesClick}
         />
       )}
       
@@ -1246,9 +1253,12 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       {showTransferFacesModal && (
         <TransferFacesModal
           isOpen={showTransferFacesModal}
-          onClose={() => setShowTransferFacesModal(false)}
+          onClose={() => {
+            setShowTransferFacesModal(false);
+            setSelectedFacesForTransfer([]);
+          }}
           currentGroup={expandedGroup ? entities?.groups?.[expandedGroup] : null}
-          selectedFaces={getSelectedFacesForTransfer()}
+          selectedFaces={selectedFacesForTransfer}
           onTransferComplete={handleTransferFacesComplete}
           sourceGroupId={expandedGroup}
           eventUrl={eventUrl}

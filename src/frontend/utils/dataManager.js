@@ -232,13 +232,6 @@ export const useDataStore = create((set, get) => {
                 }
               });
             }
-      // Preserve faces_mapping (plain object) when contents are equal
-      if (childTypeKey === 'groups' && before && before.faces_mapping && mergedCandidate.faces_mapping) {
-        if (shallowEqualPlainObject(before.faces_mapping, mergedCandidate.faces_mapping)) {
-          mergedCandidate.faces_mapping = before.faces_mapping;
-          
-        }
-      }
       const nextObj = before && shallowEqualObjects(before, mergedCandidate) ? before : mergedCandidate;
       if (nextObj !== before) {
         if (map === prevMap) map = { ...prevMap };
@@ -527,13 +520,6 @@ export const useDataStore = create((set, get) => {
                 }
               });
             }
-            // Preserve faces_mapping (plain object) when contents are equal
-            if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
-              if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
-                mergedCandidate.faces_mapping = prev.faces_mapping;
-                
-              }
-            }
             const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
             if (nextObj !== prev) {
               if (map === prevMap) map = { ...prevMap };
@@ -598,13 +584,6 @@ export const useDataStore = create((set, get) => {
                   if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
                 }
               });
-            }
-            // Preserve faces_mapping (plain object) when contents are equal
-            if (key === 'groups' && prev && prev.faces_mapping && mergedCandidate.faces_mapping) {
-              if (shallowEqualPlainObject(prev.faces_mapping, mergedCandidate.faces_mapping)) {
-                mergedCandidate.faces_mapping = prev.faces_mapping;
-                
-              }
             }
             const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
             if (nextObj !== prev) {

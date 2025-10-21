@@ -383,6 +383,15 @@ export const groupsAPI = {
     });
   },
 
+  getFacesInImages: async (groupId, imageIds, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `GROUP_GET_FACES_IN_IMAGES:${eventId}:${groupId}:${imageIds.join(',')}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces?image_ids=${imageIds.join(',')}`);
+      return response.data || {};
+    });
+  },
+
   getRelated: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `GROUPS_GET_RELATED:${eventId}:${JSON.stringify(params||{})}`;

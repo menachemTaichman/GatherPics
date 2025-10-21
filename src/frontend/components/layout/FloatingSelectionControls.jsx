@@ -31,6 +31,7 @@ export default function FloatingSelectionControls({
   onRemoveFromMoment,
   onMoveToMoment,
   onRemoveFromAlbum,
+  onSetRepresentative,
   eventUrl,
   urlHelpers,
   placeholderDataUrl,
@@ -47,7 +48,8 @@ export default function FloatingSelectionControls({
   showSetRepresentative = true,
   selectionMode = false,
   entity = null,
-  entityId = null
+  entityId = null,
+  isFacesMode = false
 }) {  
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const permissions = usePermissions();
@@ -90,9 +92,12 @@ export default function FloatingSelectionControls({
     (showManageAccess && permissions.isProfilesManager)
   );
 
+  // Check if we can set representative in faces mode
+  const canSetRepInFacesMode = isFacesMode && selectedCount === 1 && permissions.canEdit;
+  
   // Check if advanced buttons group has any visible buttons
   const hasAdvancedButtons = (
-    (showSetRepresentative && selectedImageActions.canSetRepresentative && permissions.canEdit) ||
+    (showSetRepresentative && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && permissions.canEdit) ||
     (showTransferFaces && permissions.canEdit) ||
     (showRemoveFromMoment && permissions.canEdit) ||
     (showMoveToMoment && permissions.canEdit) ||
@@ -233,17 +238,25 @@ export default function FloatingSelectionControls({
           {/* Separator before advanced buttons - only if management buttons exist AND advanced buttons exist */}
           {hasManagementButtons && hasAdvancedButtons && <span className="text-gray-300">|</span>}
 
-          {/* Set as representative - only for single image selection */}
-          {showSetRepresentative && selectedImageActions.canSetRepresentative && (
+          {/* Set as representative - for single image/face selection */}
+          {showSetRepresentative && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && (
             <PermissionGate requires="canEdit">
               <button
-                onClick={() => selectedImageActions.setRepresentative()}
+                onClick={() => {
+                  if (isFacesMode && canSetRepInFacesMode && onSetRepresentative) {
+                    // In faces mode, call the callback with the face ID
+                    const faceId = Array.from(selectedImages)[0];
+                    onSetRepresentative(faceId);
+                  } else {
+                    selectedImageActions.setRepresentative();
+                  }
+                }}
                 className={`w-8 h-8 rounded-md hover:bg-yellow-100 flex items-center justify-center ${
                   selectedImageActions.isRepresentative
                     ? 'text-orange-600'
                     : 'text-yellow-600'
                 }`}
-                title={selectedImageActions.representativeTooltip}
+                title={isFacesMode ? 'Set as representative' : selectedImageActions.representativeTooltip}
               >
                 <Star className={`w-4 h-4 ${selectedImageActions.isRepresentative ? 'fill-current' : ''}`} />
               </button>

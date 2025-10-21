@@ -11,7 +11,7 @@ group_bp = Blueprint('groups', __name__, url_prefix='/api/events/<event_id>')
 def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
     event = get_event(event_id)
-    groups = event.models.get_groups()
+    groups = event.models.get_entities('groups')
     changes = [{
         'type': 'UPSERT',
         'entity': 'group',
@@ -22,7 +22,7 @@ def get_groups(event_id):
 @group_bp.route("/groups/<group_id>", methods=["GET"])
 @require_auth
 def get_group(event_id, group_id):
-    """Get a specific group's details as changes, including its paginated images and faces mapping."""
+    """Get a specific group's details as changes, including its paginated images, faces, and faces mapping."""
     event = get_event(event_id)
 
     if not event.models.is_accessible('groups', group_id):
@@ -36,25 +36,34 @@ def get_group(event_id, group_id):
     filter = filter_group_ids or only_mode
     changes = []
     result = {'changes': changes, 'filter': filter}    
-    group = event.models.get_groups([group_id], faces_mapping=not filter)
+    
+    # Get group with faces
+    group = event.models.get_entities('groups', [group_id])
     result['changes'].append({
         'type': 'UPSERT',
         'entity': 'group',
         'items': group
     })
+    
     group_ids = [group_id] + filter_group_ids
-    image_ids, faces_mapping, images = event.models.get_filtered_images(
+    image_ids, images, face_ids, faces = event.models.get_filtered_images(
         group_ids,
         mode=filter_mode,
         only=only_mode,
     )
+    
     if filter:
-        result['filtered_ids'] = image_ids
-        result['faces_mapping'] = faces_mapping
+        result['filtered_image_ids'] = image_ids
+        result['filtered_face_ids'] = face_ids
         result['changes'].append({
             'type': 'INSERT',
             'entity': 'image',
             'items': images
+        })
+        result['changes'].append({
+            'type': 'INSERT',
+            'entity': 'face',
+            'items': faces
         })
     else:
         result['changes'].append({
@@ -63,43 +72,14 @@ def get_group(event_id, group_id):
             'parentId': group_id,
             'entities': images
         })
-
-    return jsonify(result)
-
-@group_bp.route("/groups/<group_id>/with-faces", methods=["GET"])
-@require_auth
-def get_group_with_faces(event_id, group_id):
-    """Get a specific group with its faces and images for upload detail view."""
-    event = get_event(event_id)
-
-    if not event.models.is_accessible('groups', group_id):
-        return jsonify({"error": f"Group {group_id} not found or not accessible"}), 404
-
-    group = event.models.get_groups([group_id])
-    faces = event.models.get_childs('groups', group_id, 'faces')
-    images = event.models.get_childs('groups', group_id, 'images')
-    
-    changes = [
-        {
-            'type': 'UPSERT',
-            'entity': 'group',
-            'items': group
-        },
-        {
+        result['changes'].append({
             'type': 'RELATION_SET',
             'relation': 'group.faces',
             'parentId': group_id,
             'entities': faces
-        },
-        {
-            'type': 'RELATION_SET',
-            'relation': 'group.images',
-            'parentId': group_id,
-            'entities': images
-        }
-    ]
-    
-    return jsonify({'changes': changes})
+        })
+
+    return jsonify(result)
 
 @group_bp.route("/groups/related", methods=["GET"])
 @require_auth
@@ -133,7 +113,7 @@ def check_group_name(event_id):
         return jsonify({"error": "Label is required"}), 400
     conflict_group_id = event.models.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
     if conflict_group_id:
-        conflicting_group = event.models.get_groups([conflict_group_id])
+        conflicting_group = event.models.get_entities('groups', [conflict_group_id])
         response = {"conflict": True, "conflicting_group": conflict_group_id}
         if conflicting_group:
             changes = [{
@@ -166,7 +146,7 @@ def update_group(event_id, group_id):
             changes.append({
                 'type': 'UPDATE',
                 'entity': 'group',
-                'items': event.models.get_groups([group_id])
+                'items': event.models.get_entities('groups', [group_id])
             })
 
         return jsonify({"success": True, "changes": changes})
@@ -180,12 +160,21 @@ def update_group(event_id, group_id):
 @group_bp.route("/groups/<group_id>/faces", methods=["GET"])
 @require_auth
 def get_faces_group_in_image(event_id, group_id):
-    """Get the faces in an image from a group."""
+    """Get the faces in image(s) from a group."""
     event = get_event(event_id)
     image_id = request.args.get('image_id')
-    if not image_id:
-        return jsonify({"error": "Image ID is required"}), 400
-    faces = event.models.get_faces_group_in_image(group_id, image_id)
+    image_ids_str = request.args.get('image_ids')
+    
+    if not image_id and not image_ids_str:
+        return jsonify({"error": "image_id or image_ids parameter is required"}), 400
+    
+    # Handle single or multiple images
+    if image_id:
+        faces = event.models.get_faces_group_in_image(group_id, image_id)
+    else:
+        image_ids = image_ids_str.split(',') if image_ids_str else []
+        faces = event.models.get_faces_group_in_image(group_id, image_ids)
+    
     return jsonify({"faces": faces})
 
 @group_bp.route("/groups/transfer-faces", methods=["POST"])
@@ -210,8 +199,9 @@ def transfer_faces(event_id):
             source_group_id=source_group_id
         )
 
-        detached_groups = result['detached_groups']
-        len_faces_added = result['length_faces_added']
+        detached_groups_images = result['detached_groups_images']
+        detached_groups_faces = result['detached_groups_faces']
+        faces_added = result['faces_added']
         images_added = result['images_added']
         source_deleted = result['source_deleted']
         new_group_created = result['new_group_created']
@@ -220,14 +210,26 @@ def transfer_faces(event_id):
         images_added_ids = list(images_added.keys())
 
         changes = []
-        for group_id, images_ids in detached_groups.items():
+        
+        # Remove images from detached groups
+        for group_id, images_ids in detached_groups_images.items():
             changes.append({
                 'type': 'RELATION_REMOVE',
                 'relation': 'group.images',
                 'parentId': group_id,
                 'ids': images_ids
             })
+        
+        # Remove faces from detached groups
+        for group_id, face_ids in detached_groups_faces.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'group.faces',
+                'parentId': group_id,
+                'ids': face_ids
+            })
 
+        # Add images to target group
         images_added_entities = event.models.get_childs('groups', target_group_id, 'images', images_added_ids)
         changes.append({
             'type': 'RELATION_ADD',
@@ -235,11 +237,24 @@ def transfer_faces(event_id):
             'parentId': target_group_id,
             'entities': images_added_entities
         })
+        
+        # Add faces to target group
+        faces_added_entities = event.models.get_entities('faces', faces_added)
+        changes.append({
+            'type': 'RELATION_ADD',
+            'relation': 'group.faces',
+            'parentId': target_group_id,
+            'entities': faces_added_entities
+        })
+        
+        # Update all affected groups
         changes.append({
             'type': 'UPDATE',
             'entity': 'group',
-            'items': event.models.get_groups(list(detached_groups.keys()) + [target_group_id], faces_mapping=True)
+            'items': event.models.get_entities('groups', list(detached_groups_images.keys()) + [target_group_id])
         })
+        
+        # Add faces and groups to images
         for image_id, faces in images_added.items():
             changes.append({
                 'type': 'RELATION_ADD',
@@ -253,6 +268,8 @@ def transfer_faces(event_id):
                 'parentId': image_id,
                 'entities': event.models.get_entities('groups', [target_group_id])
             })
+        
+        # Remove source group if deleted
         if source_deleted:
             changes.append({
                 'type': 'REMOVE',
@@ -264,7 +281,7 @@ def transfer_faces(event_id):
             'source_deleted': source_deleted,
             'new_group_created': new_group_created,
             'target_group_id': target_group_id,
-            'len_added': len_faces_added,
+            'len_added': len(faces_added),
             'images_added': images_added_ids,
             'changes': changes
         }
