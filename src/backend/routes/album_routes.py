@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, _parse_bool
-from src.core.errors import Forbidden, DatabaseError
+from src.core.errors import Forbidden, DatabaseError, DBConstant
 
 album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 
@@ -117,6 +117,8 @@ def update_album(event_id, album_id):
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
+    except DBConstant as e:
+        return jsonify({"error": str(e)}), 400
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
@@ -146,6 +148,8 @@ def delete_album(event_id, album_id):
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
+    except DBConstant as e:
+        return jsonify({"error": str(e)}), 400
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:

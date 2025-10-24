@@ -563,6 +563,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     return `${urlHelpers.getRepresentativeUrl('moments', momentId)}?v=${moment.representative_image || 'none'}`;
   };
 
+  const shouldLetBrowserHandle = (e) => {
+    // Allow default for modifier/middle/double click so new tab/window works
+    return e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1);
+  };
+
   return (
     <div className="w-full">
       {/* Sticky Header */}
@@ -960,6 +965,23 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                 <Key className="w-4 h-4" />
                               </button>
                             )}
+                            <a
+                              href={`/${eventUrl}/people/${encodeURIComponent(group.label)}`}
+                              onClick={(e) => {
+                                if (shouldLetBrowserHandle(e)) return; // Let browser handle
+                                e.stopPropagation();
+                                e.preventDefault();
+                                const groupFaces = getGroupFacesInUpload(group.id);
+                                const imageIds = groupFaces.map(f => f.image_id);
+                                navigate(`/${eventUrl}/people/${encodeURIComponent(group.label)}`, {
+                                  state: { highlightImages: imageIds }
+                                });
+                              }}
+                              className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 flex items-center justify-center transition-colors"
+                              title="Go to person page"
+                            >
+                              <User className="w-4 h-4" />
+                            </a>
                             <div>
                               {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                             </div>
@@ -1060,7 +1082,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           }}
                           className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
                         >
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-3 flex-1">
                             {ImageComponent(getMomentRepUrl(moment.id), {
                               width: 48,
                               height: 48,
@@ -1071,7 +1093,29 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               <h4 className="font-medium text-gray-900">{moment.label}</h4>
                             </div>
                           </div>
-                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                          <div className="flex items-center space-x-2">
+                            <a
+                              href={`/${eventUrl}/timeline?moment=${encodeURIComponent(moment.label)}`}
+                              onClick={(e) => {
+                                if (shouldLetBrowserHandle(e)) return; // Let browser handle
+                                e.stopPropagation();
+                                e.preventDefault();
+                                const momentImages = getMomentImagesInUpload(moment.id);
+                                const imageIds = momentImages.map(img => img.id);
+                                navigate(`/${eventUrl}/timeline?moment=${encodeURIComponent(moment.label)}`, {
+                                  state: { 
+                                    highlightImages: imageIds,
+                                    highlightMoment: moment.label
+                                  }
+                                });
+                              }}
+                              className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 flex items-center justify-center transition-colors"
+                              title="Go to moment"
+                            >
+                              <Clock className="w-4 h-4" />
+                            </a>
+                            {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                          </div>
                         </div>
 
                         {isExpanded && (

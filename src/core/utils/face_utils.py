@@ -4,11 +4,11 @@ from PIL import Image
 import boto3
 from io import BytesIO
 from collections import defaultdict
+from src.core.config import AWS_CONFIG_PATH
 
 class AWSRekognitionHelper:
     def __init__(self, event_id: str):
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'aws_config.json')
-        with open(config_path, 'r') as f:
+        with open(AWS_CONFIG_PATH, 'r') as f:
             config = json.load(f)
         try:
             self.client = boto3.client(
@@ -90,10 +90,6 @@ class AWSRekognitionHelper:
             print(f"Error deleting collection: {e}")
 
 class FaceUtils:
-    def __init__(self, event_id: str):
-        self.event_id = event_id
-        self.rek_helper = AWSRekognitionHelper(event_id)
-
     @staticmethod
     def bbox_conv(bbox: dict) -> dict:
         """Converts the AWS Rekognition bounding box to a PIL image bounding box."""
@@ -104,6 +100,16 @@ class FaceUtils:
             'height': bbox['Height']
         }
     
+    def __init__(self, event_id: str):
+        self.event_id = event_id
+        self._rek_helper = None
+
+    @property
+    def rek_helper(self) -> AWSRekognitionHelper:
+        if self._rek_helper is None:
+            self._rek_helper = AWSRekognitionHelper(self.event_id)
+        return self._rek_helper
+
     def detect_faces(self, image: Image.Image, external_image_id = '') -> list[tuple[str, dict]]:
         """Detects faces in the given PIL image and returns a list of tuples of AWSfaceId and face bounding box dicts."""
         buffer = BytesIO()
@@ -119,7 +125,8 @@ class FaceUtils:
         face_ids: list[str],
         threshold_similarity: int = 90,
         max_matches_faces: int = 100,
-    ) -> list[tuple[str, list[str]]]:
+        reduce_calls: bool = False
+    ) -> list[tuple[list[str], list[str]]]:
         """
         Clusters faces with transitive merging.
 
@@ -127,11 +134,14 @@ class FaceUtils:
             face_ids: list of AWS FaceIds (new faces to cluster)
             threshold_similarity: similarity threshold for Rekognition search_similar_faces
             max_matches_faces: maximum number of matches to retrieve per face
+            reduce_calls: reduce the number of calls to Rekognition search_similar_faces
+
+            if reduce_calls is True, the complete transitivity may be compromised.
 
         Returns:
-            List of tuples: (existing_face_id or 'new', [list of new face_ids in cluster])
-            - If cluster contains an existing face (not in face_ids), returns that face_id
-            - If cluster only contains new faces, returns 'new'
+            List of tuples: (new_faces_list, similar_faces_list)
+            - new_faces_list: faces from the input face_ids that are in this cluster
+            - similar_faces_list: existing faces (not in face_ids) that are similar to this cluster
         """
         class UnionFind:
             def __init__(self):
@@ -148,40 +158,30 @@ class FaceUtils:
                 self.parent[self.find(x)] = self.find(y)
 
         uf = UnionFind()
+        all_faces = set(face_ids)
         visited = set()
-        new_face_ids_set = set(face_ids)  # Track which faces are new
-        existing_faces_found = set()  # Track existing faces found during matching
-
         for face_id in face_ids:
             if face_id in visited:
-                continue
-            visited.add(face_id)
+                continue            
             matches = self.rek_helper.search_similar_faces(face_id, threshold=threshold_similarity, max_faces=max_matches_faces)
             for match in matches:
                 match_id = match['Face']['FaceId']
                 uf.union(face_id, match_id)
-                visited.add(match_id)
-                # Track if this is an existing face (not in the new list)
-                if match_id not in new_face_ids_set:
-                    existing_faces_found.add(match_id)
+                all_faces.add(match_id)
+                if reduce_calls and match_id in face_ids:
+                    visited.add(match_id)
 
         # Group faces by root parent
         clusters = defaultdict(list)
-        for face_id in face_ids:
+        for face_id in all_faces:
             clusters[uf.find(face_id)].append(face_id)
         
-        # For each cluster, determine if it contains an existing face
+        # For each cluster, separate new faces from similar faces
         result = []
-        for root, new_faces in clusters.items():
-            # Find if there's an existing face in this cluster
-            existing_face = None
-            for existing_id in existing_faces_found:
-                if uf.find(existing_id) == root:
-                    existing_face = existing_id
-                    break
-            
-            cluster_identifier = existing_face if existing_face else 'new'
-            result.append((cluster_identifier, new_faces))
+        for root, all_faces in clusters.items():
+            new_faces = [face_id for face_id in all_faces if face_id in face_ids]
+            similar_faces = [face_id for face_id in all_faces if face_id not in face_ids]
+            result.append((new_faces, similar_faces))
         
         return result
 

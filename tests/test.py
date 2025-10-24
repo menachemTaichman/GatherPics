@@ -274,4 +274,3 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes()

@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, _parse_bool
-from src.core.errors import Forbidden, DatabaseError
+from src.core.errors import Forbidden, DatabaseError, DBConstant
 
 group_bp = Blueprint('groups', __name__, url_prefix='/api/events/<event_id>')
 
@@ -142,6 +142,8 @@ def update_group(event_id, group_id):
         return jsonify({"success": True, "changes": changes})
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
+    except DBConstant as e:
+        return jsonify({"error": str(e)}), 400
     except DatabaseError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:

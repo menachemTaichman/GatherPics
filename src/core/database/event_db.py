@@ -1077,9 +1077,9 @@ class EventDB(BaseDB):
             BEFORE UPDATE ON groups
             BEGIN
                 SELECT CASE
-                    WHEN LOWER(OLD.label) = 'unassociated' AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
+                    WHEN LOWER(OLD.label) = 'unassociated' AND COALESCE(OLD.label, '') <> COALESCE(NEW.label, '') THEN
                         RAISE(ABORT, 'Constant error: cannot update default group label')
-                    WHEN LOWER(NEW.label) = 'unassociated' AND OLD.representative_face <> NEW.representative_face THEN
+                    WHEN LOWER(NEW.label) = 'unassociated' AND COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '') THEN
                         RAISE(ABORT, 'Constant error: cannot update default group representative face')
                 END;
             END;

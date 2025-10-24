@@ -5,6 +5,7 @@ from datetime import timedelta
 import traceback
 import os
 
+from src.core.config import DIST_DIR
 from src.backend.routes import (
     auth_bp,
     image_bp,
@@ -60,8 +61,7 @@ def forbidden(error):
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):
     """Serve static assets from dist/assets/ folder"""
-    dist_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'dist')
-    return send_file(os.path.join(dist_dir, 'assets', filename))
+    return send_file(os.path.join(DIST_DIR, 'assets', filename))
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -70,13 +70,11 @@ def serve_production(path):
     if path.startswith('api/'):
         abort(404)
     
-    dist_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'dist')
-    
-    file_path = os.path.join(dist_dir, path)
+    file_path = os.path.join(DIST_DIR, path)
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return send_file(file_path)
     
-    return send_file(os.path.join(dist_dir, 'index.html'))
+    return send_file(os.path.join(DIST_DIR, 'index.html'))
 
 if __name__ == "__main__":
     app.run(debug=True)

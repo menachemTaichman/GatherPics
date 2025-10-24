@@ -37,7 +37,7 @@ class Event():
         
         self.event_id = event_id
         self.models = EventModels(event_id, profile_id)
-        self.face_utils = None
+        self.face_utils = FaceUtils(event_id)
         self.display_dir = os.path.join(event_dir, 'display')
         self.original_dir = os.path.join(event_dir, 'original')
         self.thumb_dir = os.path.join(event_dir, 'thumb')
@@ -68,9 +68,6 @@ class Event():
             image_parents = self.models.get_parents('images', image_id)
 
             face_ids = self.models.get_childs('images', image_id, 'faces', return_ids=True)
-            if not self.face_utils:
-                self.face_utils = FaceUtils(self.event_id)
-            
             self.models.delete('faces', face_ids)
             self.models.delete('images', image_id)
             self.face_utils.rek_helper.delete_faces(face_ids)
@@ -122,6 +119,7 @@ class Event():
         thumb_size: int = 512,
         cluster_threshold: int = 90,
         max_matches_faces: int = 100,
+        minimal_group_size: int = 2,
         verbose: bool = True,
         assign_moments: bool = False,
         progress_callback=None,
@@ -136,6 +134,7 @@ class Event():
             thumb_size: Size for thumbnail images (width, height) 
             cluster_threshold: Similarity threshold for face clustering (0-100)
             max_matches_faces: Maximum number of faces to match for clustering
+            minimal_group_size: Minimum number of faces required to create/join a group
             verbose: Whether to print progress messages
             assign_moments: Whether to assign images to moments by time
             progress_callback: Optional callback function to report progress (receives dict with step info)
@@ -144,7 +143,7 @@ class Event():
         Returns:
             dict: Summary of processing results
         """
-        from .image_utils import resize_image, crop_image, extract_all_metadata, save_image
+        from ..utils.image_utils import resize_image, crop_image, extract_all_metadata, save_image
         import os
         import shutil
         from PIL import Image as PILImage
@@ -190,35 +189,31 @@ class Event():
                 "group_id": unassociated_group_id
             }
 
-        def _get_valid_group_label_number() -> str:
-            group_num = self.models.get_last_group_num() + 1
-            for _ in range(1000):
-                label = f"Person {group_num}"
-                if self.models.is_exists('groups', {'label': label}):
-                    group_num += 1
-                else:
-                    return group_num
-            
-            raise Exception(f"Failed to find a unique group label after 100 attempts")
-
-        def _cluster_and_group_faces(face_ids):
+        def _cluster_and_group_faces(face_ids, minimal_group_size, unassociated_group_id):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             groups_created = 0
-            for cluster_identifier, new_faces in clusters:
-                if cluster_identifier != 'new':
-                    existing_face_id = cluster_identifier
-                    existing_group_id = self.models.get_entities('faces', existing_face_id).get('group_id', None)
-                    if existing_group_id:
-                        # Add new faces to the existing group
-                        self.models.edit_childs('groups', existing_group_id, 'faces', new_faces, add=True)
-                        continue
+            
+            for new_faces, similar_faces in clusters:
+                if len(new_faces) + len(similar_faces) < minimal_group_size:
+                    continue
 
-                    new_faces += [existing_face_id]
+                partition = {}
+                for similar_face_id in similar_faces:
+                    group_id = self.models.get_entities('faces', similar_face_id).get('group_id')
+                    partition.setdefault(group_id, []).append(similar_face_id)
 
-                group_num = _get_valid_group_label_number()
-                group_id = self.models.add('groups', {'label': f"Person {group_num}"})
-                self.models.edit_childs('groups', group_id, 'faces', new_faces, add=True)
-                groups_created += 1
+                # Find the largest non-unassociated group to assign faces to
+                group_id = max((group_id for group_id in partition if group_id != unassociated_group_id), key=lambda x: len(partition[x]), default=None)
+                group_faces = partition.get(group_id, [])
+                add_faces = new_faces + group_faces + partition.get(unassociated_group_id, [])
+
+                if len(add_faces) >= minimal_group_size:
+                    if len(group_faces) == 0:
+                        group_num = self.models.get_last_group_num() + 1
+                        group_id = self.models.add('groups', {'label': f"Person {group_num}"})
+                        groups_created += 1
+                    
+                    self.models.edit_childs('groups', group_id, 'faces', add_faces, add=True)
 
             return groups_created
 
@@ -346,9 +341,6 @@ class Event():
         errors = []
         
         try:
-            if not self.face_utils:
-                self.face_utils = FaceUtils(self.event_id)
-            
             unassociated_group_id = self.models.get_unassociated_group()
             for i, image_file in enumerate(image_files, 1):
                 _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
@@ -378,7 +370,7 @@ class Event():
                 _send_progress('clustering', 0, 1, 'Clustering faces...')
                 if verbose:
                     print("Clustering faces...")
-                groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values])
+                groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values], minimal_group_size, unassociated_group_id)
             else:
                 groups_created = 0
             
