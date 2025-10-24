@@ -8,6 +8,10 @@ export default function useImageViewerController({
   defaultSortBy = 'date',
   defaultSortOrder = 'asc',
   urlHelpers = null,
+  // New filtering parameters
+  filterGroups = [],
+  filterMode = 'and',
+  onlySelected = false,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -18,6 +22,10 @@ export default function useImageViewerController({
   const [filterByUploadId, setFilterByUploadId] = useState(null);
   const [filteredIds, setFilteredIds] = useState(null);
   const [currentGroupId, setCurrentGroupId] = useState(null);
+  // New filtering state
+  const [currentFilterGroups, setCurrentFilterGroups] = useState(filterGroups);
+  const [currentFilterMode, setCurrentFilterMode] = useState(filterMode);
+  const [currentOnlySelected, setCurrentOnlySelected] = useState(onlySelected);
   const lastClosedAtRef = useRef(0);
 
   // Stabilize external callbacks to avoid prop churn
@@ -39,7 +47,7 @@ export default function useImageViewerController({
     if (showToastRef.current) return showToastRef.current(...args);
   }, []);
 
-  const open = useCallback(({ index: startIndex = 0, parent: p, entity: e, sortBy: sb, sortOrder: so, filteredIds: fi, filterByUploadId: fbu, currentGroupId: cg } = {}) => {
+  const open = useCallback(({ index: startIndex = 0, parent: p, entity: e, sortBy: sb, sortOrder: so, filteredIds: fi, filterByUploadId: fbu, currentGroupId: cg, filterGroups: fg, filterMode: fm, onlySelected: os } = {}) => {
     const now = Date.now();
     if (now - (lastClosedAtRef.current || 0) < 200) return;
     if (typeof p !== 'undefined') setParent(p);
@@ -49,6 +57,10 @@ export default function useImageViewerController({
     if (typeof fi !== 'undefined') setFilteredIds(fi);
     if (typeof fbu !== 'undefined') setFilterByUploadId(fbu);
     if (typeof cg !== 'undefined') setCurrentGroupId(cg);
+    // Handle new filtering parameters
+    if (typeof fg !== 'undefined') setCurrentFilterGroups(fg);
+    if (typeof fm !== 'undefined') setCurrentFilterMode(fm);
+    if (typeof os !== 'undefined') setCurrentOnlySelected(os);
     setIndex(Math.max(0, startIndex));
     setIsOpen(true);
   }, []);
@@ -86,7 +98,11 @@ export default function useImageViewerController({
     entity,
     sortBy,
     sortOrder,
-  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers]);
+    // New filtering parameters
+    filterGroups: currentFilterGroups,
+    filterMode: currentFilterMode,
+    onlySelected: currentOnlySelected,
+  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, currentFilterGroups, currentFilterMode, currentOnlySelected, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers]);
 
   return { isOpen, open, close, navigate, viewerProps };
 }

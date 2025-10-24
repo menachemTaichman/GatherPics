@@ -25,7 +25,7 @@ useApplyScopes([
 ```
 
 Notes:
-- Scopes are idempotent and reference-stable; re-adding the same scope is a no-op.
+- Scopes use reference counting; multiple components can scope the same entity safely.
 - Without the proper scope, relation changes (e.g., `image.albums`) are ignored.
 
 ### Read data via stable hooks
@@ -48,6 +48,16 @@ const images = useImagesForParent({
 const faces = useFacesForImage(imageId);
 const albums = useAlbumsForImage(imageId);
 ```
+
+Faces filtering parity with images mode:
+
+- `useFacesForGroups(groupIds, filterMode, onlySelected, includeArchived)` computes faces by first deriving the image set using the same semantics as images mode:
+  - Base images = union of `group.images` for the main group plus any selected groups
+  - Apply `includeArchived` to exclude archived images when false
+  - Apply `filterImages(images, [main + selected], filterMode, onlySelected)` using `image.groups` membership
+  - Faces = union of `group.faces` for main + selected groups, filtered to those whose `face.image_id` is in the derived image set
+
+This keeps faces mode output consistent with images mode filters and the archive preference, while maintaining stable subscriptions to avoid render loops.
 
 The hooks:
 - Subscribe narrowly to the relevant relation `Set`

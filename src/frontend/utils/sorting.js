@@ -207,4 +207,35 @@ export const sortUploads = (uploads, sortBy = 'started_at', sortOrder = 'desc') 
   });
 }; 
 
+/**
+ * Filter images by group membership
+ * @param {Array} images - Array of image objects
+ * @param {Array} selectedGroups - Array of group IDs to filter by
+ * @param {string} mode - 'and' or 'or'
+ * @param {boolean} only - If true, only show images that belong exclusively to selected groups
+ * @returns {Array} Filtered images array
+ */
+export const filterImages = (images, selectedGroups, mode = 'and', only = false) => {
+  if (!images || !images.length) return images;
+  if (!selectedGroups || selectedGroups.length === 0) return images;
+
+  const selected = (selectedGroups || []).map((g) => String(g));
+  return images.filter((img) => {
+    const groups = Array.from(img.groups || new Set()).map((g) => String(g));
+
+    // First check if image belongs to any/all of the selected groups
+    let belongsToSelected = false;
+    if (mode === 'and') belongsToSelected = selected.every((g) => groups.includes(g));
+    else if (mode === 'or') belongsToSelected = selected.some((g) => groups.includes(g));
+
+    if (!belongsToSelected) return false;
+
+    // If "only" mode is enabled, ensure image has no groups outside the selected list
+    if (only && groups.some((g) => !selected.includes(g))) return false;
+
+    return true;
+  });
+};
+
+
 

@@ -21,7 +21,8 @@ export default function MergeConflictModal({
   onCancel,
   onNavigateToGroup,
   onTransferComplete,
-  urlHelpers: injectedUrlHelpers
+  urlHelpers: injectedUrlHelpers,
+  showCrops = false // Add showCrops prop to know current mode
 }) {
   const urlHelpers = injectedUrlHelpers;
   const [loading, setLoading] = useState(false);
@@ -83,22 +84,46 @@ export default function MergeConflictModal({
         return;
       }
       
-      // Call transfer faces API without face_ids for merge conflict case
+      // Get all faces and images from the current group from store BEFORE transfer
+      const store = useDataStore.getState();
+      const currentGroupData = store.entities?.groups?.[currentGroup.id];
+      const groupFaces = currentGroupData?.faces;
+      const groupImages = currentGroupData?.images;
+      
+      let faceIds = [];
+      let imageIds = [];
+      
+      if (groupFaces instanceof Set) {
+        faceIds = Array.from(groupFaces);
+      } else if (Array.isArray(groupFaces)) {
+        faceIds = groupFaces;
+      }
+      
+      if (groupImages instanceof Set) {
+        imageIds = Array.from(groupImages);
+      } else if (Array.isArray(groupImages)) {
+        imageIds = groupImages;
+      }
+      
+      // Call transfer faces API with face_ids from store
       const result = await groupsAPI.transferFaces(
-        currentGroup.id,
         conflictingGroupId,
-        null, // No face_ids for merge conflict - transfer all faces
-        eventUrl
+        faceIds, // Pass all faces from current group
+        eventUrl,
+        null // No new_group_name for merge conflict
       );
       
       // The API service interceptor will automatically handle state updates
       // No need for manual refresh or window.location.href
       
-      // Call the appropriate completion handler
+      // Call the appropriate completion handler with IDs for highlighting
+      // Pass face IDs if in faces mode, otherwise image IDs
+      const idsForHighlighting = showCrops ? faceIds : imageIds;
+      
       if (onTransferComplete) {
-        await onTransferComplete(result);
+        await onTransferComplete(result, idsForHighlighting);
       } else if (onNavigateToGroup) {
-        onNavigateToGroup(conflictingGroupId);
+        onNavigateToGroup(conflictingGroupId, idsForHighlighting);
       } else if (onMerge) {
         await onMerge();
       }

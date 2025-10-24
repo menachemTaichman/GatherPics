@@ -31,7 +31,7 @@ class EventDB(BaseDB):
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
                     'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
-                    'faces': {'relation_table': 'faces', 'fields_needed': ['image_id', 'upload_id']}
+                    'faces': {'relation_table': 'faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']}
                 },
             },
             'moments': {

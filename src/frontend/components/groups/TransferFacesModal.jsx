@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../../utils/apiService';
 import { usePreference } from '../../hooks/useSettings';
@@ -20,7 +20,8 @@ export default function TransferFacesModal({
   selectedFaces,
   onTransferComplete,
   sourceGroupId,
-  urlHelpers: injectedUrlHelpers
+  urlHelpers: injectedUrlHelpers,
+  showCrops = false // Add showCrops prop to know current mode
 }) {
   const { showToast } = useToast();
   const urlHelpers = injectedUrlHelpers;
@@ -58,11 +59,30 @@ export default function TransferFacesModal({
     modalId: MODAL_ID
   });
 
-  // Filter out current group and source group from available groups
-  const availableGroups = groups.filter(g => 
-    g.id !== currentGroup?.id && 
-    g.id !== sourceGroupId
-  );
+  // Get all source groups from the selected faces
+  const sourceGroups = useMemo(() => {
+    const groupMap = new Map();
+    selectedFaces.forEach(face => {
+      const groupId = face.group_id;
+      if (groupId && !groupMap.has(groupId)) {
+        const group = groups.find(g => g.id === groupId);
+        if (group) {
+          groupMap.set(groupId, group);
+        }
+      }
+    });
+    return Array.from(groupMap.values());
+  }, [selectedFaces, groups]);
+
+  // Filter out source groups from available groups only when all faces come from a single group
+  const availableGroups = groups.filter(g => {
+    // Only exclude source groups if all faces come from the same group
+    if (sourceGroups.length === 1) {
+      return !sourceGroups.some(sg => sg.id === g.id);
+    }
+    // If faces come from multiple groups, don't exclude any groups
+    return true;
+  });
 
   // Filter and sort groups
   const filteredAndSortedGroups = availableGroups
@@ -206,7 +226,6 @@ export default function TransferFacesModal({
       const faceIds = selectedFaces.map(face => face.id || face.face_id);
       
       const result = await groupsAPI.transferFaces(
-        currentGroup?.id || sourceGroupId || null,
         selectedGroupId || null,
         faceIds,
         eventUrl,
@@ -226,9 +245,19 @@ export default function TransferFacesModal({
       if (targetGroup) {
         // Show success toast with link to target group
         const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
-        // Extract affected images for highlighting using new images_added field
-        const affectedImages = result.images_added || result.affected_images_ids || 
-          selectedFaces.map(f => f.image_id).filter(Boolean);
+        
+        // Extract affected items for highlighting based on mode
+        let highlightState;
+        if (showCrops) {
+          // In faces mode, highlight the transferred faces
+          const faceIds = selectedFaces.map(f => f.face_id || f.id).filter(Boolean);
+          highlightState = { highlightFaces: faceIds.slice(0, 10) };
+        } else {
+          // In images mode, highlight affected images
+          const affectedImages = result.images_added || selectedFaces.map(f => f.image_id).filter(Boolean);
+          highlightState = { highlightImages: affectedImages.slice(0, 10) };
+        }
+        
         showToast(
           <span>
             {transferredCount} {imageText} transferred to <a 
@@ -238,7 +267,7 @@ export default function TransferFacesModal({
                 if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                   e.preventDefault();
                   navigate(link, {
-                    state: { highlightImages: affectedImages.slice(0, 10) }
+                    state: highlightState
                   });
                 }
               }}
@@ -305,7 +334,10 @@ export default function TransferFacesModal({
                </p>
                {selectedFaces.length > 0 && (
                  <div className="mt-2 text-xs text-gray-600">
-                   From: {currentGroup?.label || 'Unknown Person'}
+                   From: {sourceGroups.length === 1 
+                     ? sourceGroups[0]?.label || 'Unknown Person'
+                     : `${sourceGroups.length} people (${sourceGroups.map(g => g.label || `Person ${g.id}`).join(', ')})`
+                   }
                  </div>
                )}
              </div>

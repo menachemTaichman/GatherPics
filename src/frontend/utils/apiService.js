@@ -339,10 +339,9 @@ export const groupsAPI = {
     });
   },
 
-  transferFaces: async (sourceGroupId, targetGroupId, faceIds, eventUrl, newGroupName = null) => {
+  transferFaces: async (targetGroupId, faceIds, eventUrl, newGroupName = null) => {
     const eventId = await getEventIdForApi(eventUrl);
     const requestData = {
-      source_group_id: sourceGroupId,
       target_group_id: targetGroupId,
       face_ids: faceIds
     };

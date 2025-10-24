@@ -1,26 +1,79 @@
 // Store utils: read the guide at docs/STORE_USAGE.md for patterns and examples.
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useDataStore } from './dataManager';
-import { sortImages, sortGroups, sortByField } from './sorting';
+import { sortImages, sortGroups, sortByField, filterImages } from './sorting';
 
 // debug logs removed
 
 // Apply and cleanup scopes against the data store
 export function useApplyScopes(scopes = []) {
+  const prevKeysRef = useRef(new Set());
+
+  // Normalize scopes and build a stable signature
+  const { keysSet: nextKeys, signature } = useMemo(() => {
+    const normalized = Array.isArray(scopes)
+      ? scopes
+          .filter((s) => s && s.entity && s.id !== undefined && s.id !== null)
+          .map((s) => ({ entity: s.entity, id: String(s.id) }))
+      : [];
+    const keyList = Array.from(
+      new Set(normalized.map((s) => `${s.entity}:${s.id}`))
+    ).sort();
+    return {
+      keysSet: new Set(keyList),
+      signature: keyList.join('|'),
+    };
+  }, [scopes]);
+
+  // Apply only the diffs between previous and next scope keys
   useEffect(() => {
     try {
       const ds = useDataStore.getState();
-      scopes.forEach((s) => s?.entity && ds.addScope && ds.addScope({ entity: s.entity, id: String(s.id) }));
-      
+      const prevKeys = prevKeysRef.current;
+
+      // Compute removals (in prev but not in next)
+      const toRemove = [];
+      prevKeys.forEach((k) => {
+        if (!nextKeys.has(k)) toRemove.push(k);
+      });
+
+      // Compute additions (in next but not in prev)
+      const toAdd = [];
+      nextKeys.forEach((k) => {
+        if (!prevKeys.has(k)) toAdd.push(k);
+      });
+
+      // Apply removals first
+      for (const key of toRemove) {
+        const [entity, id] = key.split(':');
+        ds.removeScope && ds.removeScope({ entity, id });
+        prevKeys.delete(key);
+      }
+
+      // Apply additions
+      for (const key of toAdd) {
+        const [entity, id] = key.split(':');
+        ds.addScope && ds.addScope({ entity, id });
+        prevKeys.add(key);
+      }
+
+      // logging removed
     } catch {}
+  }, [signature]);
+
+  // Cleanup on unmount: remove what we still hold
+  useEffect(() => {
     return () => {
       try {
         const ds = useDataStore.getState();
-        scopes.forEach((s) => s?.entity && ds.removeScope && ds.removeScope({ entity: s.entity, id: String(s.id) }));
-        
+        prevKeysRef.current.forEach((key) => {
+          const [entity, id] = key.split(':');
+          ds.removeScope && ds.removeScope({ entity, id });
+        });
+        prevKeysRef.current.clear();
       } catch {}
     };
-  }, [JSON.stringify(scopes)]);
+  }, []);
 }
 
 // Stable list of images for a parent entity (group/album/moment/upload) or filteredIds override
@@ -72,6 +125,102 @@ export function useFacesForImage(imageId) {
     });
     return sorted;
   }, [imageId, facesSet, facesMapSub, groupsMapSub]);
+
+  return faces;
+}
+
+// Stable faces list for a group id
+export function useFacesForGroup(groupId) {
+  const facesSet = useDataStore((state) => (groupId ? state.entities?.groups?.[groupId]?.faces || null : null));
+
+  const faces = useMemo(() => {
+    if (!facesSet) return [];
+    const ids = Array.from(facesSet);
+    const facesMap = (useDataStore.getState().entities?.faces || {});
+    const list = ids.map((fid) => facesMap[fid]).filter(Boolean);
+    return list;
+  }, [groupId, facesSet]);
+
+  return faces;
+}
+
+// Stable faces list for multiple groups with filtering
+export function useFacesForGroups(groupIds, filterMode = 'and', onlySelected = false, includeArchived = false) {
+  const selectedIds = useMemo(() => {
+    const ids = Array.isArray(groupIds) ? groupIds : [];
+    return Array.from(new Set(ids.map((g) => String(g)))).sort();
+  }, [groupIds]);
+
+  // Subscribe to a compact signature of sizes for selected groups to avoid unstable arrays
+  const sizesSig = useDataStore((state) => {
+    if (!selectedIds.length) return '';
+    const parts = [];
+    for (const gid of selectedIds) {
+      const g = state.entities?.groups?.[gid];
+      const isz = g?.images instanceof Set ? g.images.size : (Array.isArray(g?.images) ? g.images.length : -1);
+      const fsz = g?.faces instanceof Set ? g.faces.size : (Array.isArray(g?.faces) ? g.faces.length : -1);
+      parts.push(`${gid}:${isz}:${fsz}`);
+    }
+    return parts.join('|');
+  });
+
+  // Subscribe to images map to reflect archive status changes
+  const imagesMapSub = useDataStore((state) => state.entities?.images || {});
+
+  const faces = useMemo(() => {
+    if (selectedIds.length === 0) return [];
+    const groupsMap = (useDataStore.getState().entities || {}).groups || {};
+    const facesMap = (useDataStore.getState().entities || {}).faces || {};
+    const imagesMap = (useDataStore.getState().entities || {}).images || {};
+
+    // Determine filtered image ids using same semantics as images mode, with fallbacks
+    const filteredImageIds = new Set();
+    // Union of images from all selected groups
+    const baseIdSet = new Set();
+    selectedIds.forEach((gid) => {
+      const rel = groupsMap[gid]?.images;
+      if (rel instanceof Set) rel.forEach((iid) => baseIdSet.add(String(iid)));
+      else if (Array.isArray(rel)) rel.forEach((iid) => baseIdSet.add(String(iid)));
+    });
+    const baseIds = Array.from(baseIdSet);
+    const baseImages = baseIds
+      .map((id) => imagesMap[String(id)])
+      .filter(Boolean)
+      .filter((img) => includeArchived || !img.is_archived);
+
+    // Always use image.groups + AND/OR/ONLY semantics (no fallback)
+    const utilFiltered = (!onlySelected && selectedIds.length === 1)
+      ? baseImages
+      : filterImages(baseImages, selectedIds, filterMode, onlySelected);
+
+    utilFiltered.forEach((img) => {
+      filteredImageIds.add(String(img.id));
+    });
+
+    // Collect faces whose image is in the filtered set
+    const out = [];
+    selectedIds.forEach((gid) => {
+      const setOrArray = groupsMap[gid]?.faces;
+      if (setOrArray instanceof Set) {
+        setOrArray.forEach((faceId) => {
+          const face = facesMap[faceId];
+          const imgId = face ? String(face.image_id) : null;
+          if (face && filteredImageIds.has(imgId)) {
+            out.push(face);
+          }
+        });
+      } else if (Array.isArray(setOrArray)) {
+        setOrArray.forEach((faceId) => {
+          const face = facesMap[faceId];
+          const imgId = face ? String(face.image_id) : null;
+          if (face && filteredImageIds.has(imgId)) {
+            out.push(face);
+          }
+        });
+      }
+    });
+    return out;
+  }, [selectedIds.join('|'), sizesSig, filterMode, onlySelected, includeArchived, imagesMapSub]);
 
   return faces;
 }

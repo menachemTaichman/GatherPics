@@ -228,8 +228,7 @@ function AppContent({ eventUrl }) {
     setError, 
     error,
     updateGroup, 
-    deleteGroup,
-    transferFaces 
+    deleteGroup
   } = useDataStore();
   
   const { toast, showToast } = useToast();

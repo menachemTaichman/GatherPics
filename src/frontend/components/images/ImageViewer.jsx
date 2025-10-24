@@ -14,7 +14,7 @@ import { useApplyScopes, useImagesForParent, useFacesForImage, useAlbumsForImage
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { useModalFocus } from '../../hooks/useModalFocus';
-import { sortImages, sortGroups, sortByField } from '../../utils/sorting';
+import { sortImages, sortGroups, sortByField, filterImages } from '../../utils/sorting';
 import { useModalStore } from '../../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -230,7 +230,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected }) {
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
@@ -240,19 +240,55 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const includeArchived = usePreference('general.includeArchived', false);
   
   
+  
   // Use universal util for related images
-  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds, filterByUploadId, includeArchived, sortBy, sortOrder });
+  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds: null, filterByUploadId, includeArchived, sortBy, sortOrder });
+  
+  // Get entities from store for filtering
+  const entities = useDataStore((state) => state.entities);
+  
+  // Apply frontend filtering with same logic as GroupDetailPage
+  const filteredImages = useMemo(() => {
+    if (!filterGroups || filterGroups.length === 0) {
+      return relatedImages;
+    }
+    
+    // Include current group in filtering for OR mode
+    const allGroups = [parent, ...filterGroups].filter(Boolean);
+    
+    // Get all images from all groups (current + filter groups)
+    const allImageIds = new Set();
+    allGroups.forEach(groupId => {
+      const groupImages = entities?.groups?.[groupId]?.images;
+      if (groupImages instanceof Set) {
+        groupImages.forEach(imageId => allImageIds.add(imageId));
+      }
+    });
+    
+    // Convert to image objects
+    const allImages = Array.from(allImageIds)
+      .map(imageId => entities?.images?.[imageId])
+      .filter(Boolean);
+    
+    const filtered = filterImages(allImages, allGroups, filterMode, onlySelected);
+    
+    // Apply sorting to filtered images
+    const sorted = sortImages(filtered, sortBy, sortOrder);
+    
+    return sorted;
+  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder]);
+  
   useEffect(() => {
-  }, [relatedImages, entity, parent, includeArchived, sortBy, sortOrder, filteredIds, filterByUploadId]);
+  }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);
   
   // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
-    if (relatedImages.length > 0) {
-      const idx = Math.min(Math.max(0, currentIndex), relatedImages.length - 1);
-      return relatedImages[idx]?.id || null;
+    if (filteredImages.length > 0) {
+      const idx = Math.min(Math.max(0, currentIndex), filteredImages.length - 1);
+      return filteredImages[idx]?.id || null;
     }
     return typeof image === 'string' ? image : (image?.id || null);
-  }, [relatedImages, currentIndex, image]);
+  }, [filteredImages, currentIndex, image]);
   
   const imageId = currentImageId;
   
@@ -307,13 +343,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       
     switch (e.key) {
       case 'ArrowLeft':
-        if (relatedImages.length > 1) {
+        if (filteredImages.length > 1) {
           handleNavigate('prev');
           return true; // Mark as handled (circular via handleNavigate)
         }
         break;
       case 'ArrowRight':
-        if (relatedImages.length > 1) {
+        if (filteredImages.length > 1) {
           handleNavigate('next');
           return true; // Mark as handled (circular via handleNavigate)
         }
@@ -538,18 +574,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     if (!onNavigate) return;
     if (direction === 'prev') {
       if (effectiveIndex === 0) {
-        onNavigate('jump', relatedImages.length - 1);
+        onNavigate('jump', filteredImages.length - 1);
       } else {
         onNavigate('prev');
       }
     } else if (direction === 'next') {
-      if (effectiveIndex === relatedImages.length - 1) {
+      if (effectiveIndex === filteredImages.length - 1) {
         onNavigate('jump', 0);
       } else {
         onNavigate('next');
       }
     } else if (direction === 'jump' && typeof index === 'number') {
-      const clamped = Math.min(Math.max(0, index), Math.max(0, relatedImages.length - 1));
+      const clamped = Math.min(Math.max(0, index), Math.max(0, filteredImages.length - 1));
       onNavigate('jump', clamped);
     }
   };
@@ -611,12 +647,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Find the current image index in the store data
   const currentImageIndex = useMemo(() => {
-    if (!imageId || !relatedImages.length) return 0;
-    const foundIndex = relatedImages.findIndex(img => img.id === imageId);
-    const result = foundIndex >= 0 ? foundIndex : Math.min(currentIndex, relatedImages.length - 1);
+    if (!imageId || !filteredImages.length) return 0;
+    const foundIndex = filteredImages.findIndex(img => img.id === imageId);
+    const result = foundIndex >= 0 ? foundIndex : Math.min(currentIndex, filteredImages.length - 1);
     
     return result;
-  }, [imageId, relatedImages, currentIndex]);
+  }, [imageId, filteredImages, currentIndex]);
 
   // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
@@ -1189,7 +1225,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   </button>
 
                   {/* Navigation - top-center */}
-                  {relatedImages.length > 1 && (
+                  {filteredImages.length > 1 && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
                       <button
                         onClick={() => handleNavigate('prev')}
@@ -1211,7 +1247,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             onBlur={e => {
                               let val = parseInt(e.target.value, 10);
                               if (isNaN(val)) val = effectiveIndex + 1;
-                              val = Math.max(1, Math.min(relatedImages.length, val));
+                              val = Math.max(1, Math.min(filteredImages.length, val));
                               handleNavigate('jump', val - 1);
                               setIsEditingIndex(false);
                               setEditIndexValue(undefined);
@@ -1239,7 +1275,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           </span>
                         )}
                         <span className="mx-1">/</span>
-                        <span>{relatedImages.length}</span>
+                        <span>{filteredImages.length}</span>
                       </div>
                       <button
                         onClick={() => handleNavigate('next')}

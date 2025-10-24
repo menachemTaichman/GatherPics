@@ -269,119 +269,34 @@ class EventModels(BaseModels):
             WHERE f.image_id IN ({image_placeholders})
             AND g.group_id NOT IN ({group_id_placeholders})
             GROUP BY g.group_id, g.label
+            HAVING COUNT(f.face_id) > 0
             ORDER BY COUNT(DISTINCT f.image_id) DESC, g.label ASC
         '''
         query_params = base_image_ids + group_ids
 
         return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
 
-    def get_filtered_images(self, group_ids: list[str], mode: str = 'and', only: bool = False) -> tuple[list[str], dict[str, dict], list[str], dict[str, dict]]:
-        """Return filtered images and faces.
-        Args:
-            group_ids: list of group ids
-            mode: 'and' or 'or'
-            only: if True, return images without any other groups
-        Returns:
-            list of image ids, dict of images with image ids as keys and image data as values,
-            list of face ids, dict of faces with face ids as keys and face data as values
-        """
-
-        if not group_ids:
-            return [], {}, [], {}
-
-        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
-        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
-
-        N = len(group_ids)
-        M = min(N, 8)
-        group_placeholders = ','.join(['?'] * N)
-        having_clause = []
-        params = []
-
-        priority_case = "CASE sf.group_id " + " ".join(f"WHEN ? THEN {idx+1}" for idx in range(M)) + " ELSE 9999 END"
-
-        query = f"""
-            SELECT
-                i.image_id,
-                i.date_taken,
-                i.is_archived,
-                i.is_favorite,
-                i.upload_id
-            FROM {accessible_faces} f
-            INNER JOIN {accessible_images} i ON f.image_id = i.image_id
-        """
-
-        if mode == 'and':
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id IN ({group_placeholders}) THEN f.group_id END) = {N}")
-            params.extend(group_ids)
-        elif mode == 'or' and not only:
-            query += f"WHERE f.group_id IN ({group_placeholders})"
-            params.extend(group_ids)
-
-        if only:
-            having_clause.append(f"COUNT(DISTINCT CASE WHEN f.group_id NOT IN ({group_placeholders}) THEN f.group_id END) = 0")
-            params.extend(group_ids)
-
-        query += f" GROUP BY f.image_id"
-        if having_clause:
-            query += f" HAVING {' AND '.join(having_clause)}"
-
-        image_ids, images = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
-
-        # Get all faces for these images from the specified groups
-        if image_ids:
-            image_placeholders = ','.join(['?'] * len(image_ids))
-            faces_query = f"""
-                SELECT f.face_id, f.image_id, f.group_id, i.upload_id
-                FROM {accessible_faces} f
-                INNER JOIN {accessible_images} i ON f.image_id = i.image_id
-                WHERE f.image_id IN ({image_placeholders})
-                AND f.group_id IN ({group_placeholders})
-            """
-            face_ids, faces = self.db.execute_query(faces_query, image_ids + group_ids, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
-        else:
-            face_ids, faces = [], {}
-
-        return image_ids, images, face_ids, faces
-
-    def add_faces_to_group(self, *, face_ids: List[str] | None = None, target_group_id: str | None = None, new_group_name: str | None = None, source_group_id: str | None = None) -> Dict:
+    def add_faces_to_group(self, face_ids: List[str], target_group_id: str) -> Dict:
         """Add faces to a group.
         Args:
             face_ids: list of face ids
             target_group_id: target group id
-            new_group_name: new group name
-            source_group_id: source group id
         Returns:
             dict:
-                detached_groups: dict of detached groups with group ids as keys and list of detached images ids as values
+                detached_groups_images: dict of detached groups with group ids as keys and list of detached images ids as values
                 detached_groups_faces: dict of detached groups with group ids as keys and list of detached face ids as values
-                length_faces_added: length of faces ids added
-                faces_added: list of face ids added to target group
                 images_added: dict of images ids added with image ids as keys and dict of faces entities added to the imageas values
-                source_deleted: if source group is deleted
-                new_group_created: if new group is created
-                target_group_id: target group id
+                faces_added: list of face ids added to target group
+                deleted_group_ids: list of group ids that were deleted (based on accessibility)
         """
-        # handle new group
-        if face_ids is None:
-            if not source_group_id:
-                raise ValueError("face_ids or source_group_id must be provided")
-            face_ids = self.get_childs('groups', source_group_id, 'faces', return_ids=True)
-
-        if new_group_name:
-            if self.is_exists('groups', {'label': new_group_name}):
-                raise ValueError(f"Group name '{new_group_name}' already exists")
-            target_group_id = self.add('groups', {'label': new_group_name})
-
-        if not target_group_id:
-            raise ValueError("target_group_id or new_group_name must be provided")
-        
         faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, add=True)
 
-        source_deleted = self.is_empty('groups', source_group_id, child='faces', only_accessible=True)
-        if self.is_empty('groups', source_group_id, child='faces'):
-            if source_group_id != self.get_unassociated_group():
-                self.delete('groups', source_group_id)
+        # Track which groups were deleted based on accessibility
+        deleted_group_ids = []
+        for group_id, detached_faces in detached_groups_faces.items():
+            if self.is_empty('groups', group_id, child='faces') and group_id != self.get_unassociated_group():
+                self.delete('groups', group_id)
+                deleted_group_ids.append(group_id)
 
         detached_groups_images = {}
         for group_id, detached_faces in detached_groups_faces.items():
@@ -392,19 +307,14 @@ class EventModels(BaseModels):
             
             detached_groups_images[group_id] = list(set(detached_images))
                  
-        images_added = {}
-        for face_id in faces_added:
-            face = self.get_entities('faces', face_id)
-            images_added.setdefault(face['image_id'], {})[face_id] = face
+        images_added = list(set([self.get_entities('faces', face_id)['image_id'] for face_id in faces_added]))
         
         result = {
             'detached_groups_images': detached_groups_images,
             'detached_groups_faces': detached_groups_faces,
             'images_added': images_added,
             'faces_added': faces_added,
-            'source_deleted': source_deleted,
-            'new_group_created': bool(new_group_name),
-            'target_group_id': target_group_id,
+            'deleted_group_ids': deleted_group_ids,
         }
 
         return result

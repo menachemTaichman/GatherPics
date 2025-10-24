@@ -8,6 +8,8 @@ export const CHANGE_TYPES = {
   RELATION_ADD: 'RELATION_ADD',
   RELATION_REMOVE: 'RELATION_REMOVE',
   RELATION_SET: 'RELATION_SET',
+  SCOPE_ADD: 'SCOPE_ADD',
+  SCOPE_REMOVE: 'SCOPE_REMOVE',
 };
 
 // Shallow compare two plain objects (compares own enumerable keys, by reference for values)
@@ -379,14 +381,13 @@ export const useDataStore = create((set, get) => {
     addScope: (scope) => set((state) => {
       if (!scope?.entity) return {};
       const key = `${scope.entity}:${scope.id ?? ''}`;
-      const existing = state.scopes?.[key];
-      if (existing && existing.entity === scope.entity && String(existing.id || '') === String(scope.id || '')) {
-        // Already present; do not increment or change state
-        return {};
-      }
-      const nextScopes = { ...(state.scopes || {}), [key]: { entity: scope.entity, id: scope.id } };
       const counts = { ...(state.scopeCounts || {}) };
-      counts[key] = 1;
+      const currentCount = counts[key] || 0;
+      
+      // Always add/update the scope entry and increment the reference count
+      const nextScopes = { ...(state.scopes || {}), [key]: { entity: scope.entity, id: scope.id } };
+      counts[key] = currentCount + 1;
+      
       return { scopes: nextScopes, scopeCounts: counts };
     }),
     removeScope: (scope) => set((state) => {
@@ -605,31 +606,61 @@ export const useDataStore = create((set, get) => {
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const map = { ...(nextEntities[key] || {}) };
+          const prevMap = nextEntities[key] || {};
+          let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
             const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id || it.upload_id;
             if (!id) return;
-            if (map[id]) return; // insert-only
-            const merged = { id, ...it };
+            const exists = !!map[id];
+            // Gate only inserts unless ignoreScope=true
+            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
+            const prev = prevMap[id] || { id };
+            const mergedCandidate = { ...prev, ...it };
             ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
             });
             // Handle profile relations
             if (key === 'profiles') {
               ['images', 'albums'].forEach((rk) => {
-                if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
               });
             }
             // Handle upload relations
             if (key === 'uploads') {
               ['images', 'groups', 'moments'].forEach((rk) => {
-                if (rk in merged) merged[rk] = coerceToSet(merged[rk]);
+                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
               });
             }
-            map[id] = merged;
+            // Preserve set refs when contents equal
+            ['images','faces','albums'].forEach((rk) => {
+              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+              }
+            });
+            // Preserve profile relations
+            if (key === 'profiles') {
+              ['images', 'albums'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
+            // Preserve upload relations
+            if (key === 'uploads') {
+              ['images', 'groups', 'moments'].forEach((rk) => {
+                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
+                }
+              });
+            }
+            const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
+            if (nextObj !== prev) {
+              if (map === prevMap) map = { ...prevMap };
+              map[id] = nextObj;
+            }
           });
-          nextEntities[key] = map;
+          if (map !== prevMap) nextEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -718,6 +749,34 @@ export const useDataStore = create((set, get) => {
           if (effBroadcastRemove) outgoing.push(ch);
           return;
         }
+
+        if (ch.type === CHANGE_TYPES.SCOPE_ADD) {
+          // Only apply scope instructions in the tab that requested the API
+          // Don't broadcast these instructions to other tabs
+          if (!options.fromBroadcast) {
+            const entity = ch.entity;
+            const id = ch.id;
+            if (entity && id) {
+              get().addScope({ entity, id });
+            }
+          }
+          // Don't broadcast scope instructions to other tabs
+          return;
+        }
+
+        if (ch.type === CHANGE_TYPES.SCOPE_REMOVE) {
+          // Only apply scope instructions in the tab that requested the API
+          // Don't broadcast these instructions to other tabs
+          if (!options.fromBroadcast) {
+            const entity = ch.entity;
+            const id = ch.id;
+            if (entity && id) {
+              get().removeScope({ entity, id });
+            }
+          }
+          // Don't broadcast scope instructions to other tabs
+          return;
+        }
       });
 
       set({ entities: nextEntities });
@@ -746,27 +805,6 @@ export const useDataStore = create((set, get) => {
       });
     },
 
-    // Optional helper for UI that emits minimal changes
-    transferFaces: (transferData = {}) => {
-      const changes = [];
-      if (transferData.target_group_id && Array.isArray(transferData.images_added) && transferData.images) {
-        const entitiesDict = {};
-        transferData.images_added.forEach((id) => {
-          const img = transferData.images?.[id] || { id };
-          entitiesDict[id] = img;
-        });
-        changes.push({
-          type: CHANGE_TYPES.RELATION_ADD,
-          relation: 'group.images',
-          parentId: transferData.target_group_id,
-          entities: entitiesDict,
-        });
-      }
-      if (transferData.old_group_deleted && transferData.old_group_id) {
-        changes.push({ type: CHANGE_TYPES.REMOVE, entity: 'group', ids: [transferData.old_group_id] });
-      }
-      if (changes.length > 0) get().applyChanges(changes);
-    },
   };
 });
 

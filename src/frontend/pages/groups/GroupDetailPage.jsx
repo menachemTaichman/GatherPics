@@ -24,7 +24,7 @@ import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { MergeConflictModal, TransferFacesModal } from '../../components/groups';
 import { ManageAccessModal } from '../../components/profiles';
 import { FloatingSelectionControls } from '../../components/layout';
-import { sortImages, toggleSortOrder } from '../../utils/sorting';
+import { sortImages, toggleSortOrder, filterImages } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
 import { PermissionGate } from '../../components/common';
@@ -57,8 +57,9 @@ const useSessionStorage = (key, defaultValue) => {
 import useImageSelection from '../../hooks/useImageSelection';
 import { useGroupNameConflict } from '../../hooks/useGroupNameConflict';
 import { useDataStore, selectors } from '../../utils/dataManager';
+import { shallow } from 'zustand/shallow';
 import { selectors as storeSelectors, useGroupsList, useGroupById } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent } from '../../utils/storeUtils';
+import { useApplyScopes, useImagesForParent, useFacesForGroup, useFacesForGroups } from '../../utils/storeUtils';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../../utils/apiService';
 import useImageActions from '../../components/images/ImageActions';
 import { clearTransferredImagesFromCache } from '../../utils/selection';
@@ -73,6 +74,25 @@ import { useImageHighlight } from '../../hooks/useImageHighlight';
 const EMPTY_ARRAY = Object.freeze([]);
 
 export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
+  const renderCount = (window.__groupDetailRenderCount = (window.__groupDetailRenderCount || 0) + 1);
+  
+  // Track what's changing between renders
+  const prevPropsRef = useRef(null);
+  const propsChanged = !prevPropsRef.current || 
+    JSON.stringify(prevPropsRef.current) !== JSON.stringify({
+      groupsLength: groups?.length,
+      onDeleteGroup: !!onDeleteGroup,
+      onRefreshGroups: !!onRefreshGroups,
+      urlHelpers: !!injectedUrlHelpers
+    });
+  
+  // Update ref with current props
+  prevPropsRef.current = {
+    groupsLength: groups?.length,
+    onDeleteGroup: !!onDeleteGroup,
+    onRefreshGroups: !!onRefreshGroups,
+    urlHelpers: !!injectedUrlHelpers
+  };
   // Render counter to spot potential render loops
   const __renderCountRef = useRef(0);
   __renderCountRef.current += 1;
@@ -111,9 +131,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   // (moved below after sortedImages is defined)
   
+  const sortBy = usePreference('GroupDetail.sortBy', 'date');
   const sortOrder = usePreference('GroupDetail.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('GroupDetail.sortDir', value);
-  // ImageViewer controller is initialized after filteredIds declaration to avoid TDZ issues
+  // ImageViewer controller is initialized
   const [loading, setLoading] = useState(false);
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
@@ -143,22 +164,63 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const [filterGroups, setFilterGroups] = useState([]);
   const [filterMode, setFilterMode] = useState('and');
   const [onlySelected, setOnlySelected] = useState(false);
+  const filterGroupsSig = useMemo(() => {
+    return Array.isArray(filterGroups) ? filterGroups.map((g) => String(g)).sort().join(',') : '';
+  }, [filterGroups]);
+  
+  // Apply scopes at top-level to avoid conditional hook usage
+  const scopes = useMemo(() => {
+    const scopesList = [];
+    if (group?.id) {
+      scopesList.push({ entity: 'group', id: String(group.id) });
+      if (Array.isArray(filterGroups) && filterGroups.length > 0) {
+        const uniqueGroupIds = new Set(filterGroups.map((g) => String(g)));
+        uniqueGroupIds.delete(String(group.id));
+        uniqueGroupIds.forEach((gid) => scopesList.push({ entity: 'group', id: gid }));
+      }
+    }
+    if (filterVisible) {
+      scopesList.push({ entity: 'all', id: 'groups' });
+    }
+    // Sort for stable identity
+    return scopesList
+      .map((s) => ({ entity: s.entity, id: String(s.id) }))
+      .sort((a, b) => (a.entity === b.entity ? a.id.localeCompare(b.id) : a.entity.localeCompare(b.entity)));
+  }, [group?.id, showCrops, filterGroups.join(','), filterVisible]);
+
+  useApplyScopes(scopes);
+
+  useEffect(() => {
+    try {
+      
+    } catch {}
+  }, [scopes, showCrops, group?.id, filterGroups, filterVisible]);
+
+  // Debug log after all variables are declared
+  
+  /* debug removed */
+  
+  /*console.log('[DEBUG] GroupDetail component render:', {
+    timestamp: Date.now(),
+    renderCount,
+    groupsLength: groups?.length,
+    onDeleteGroup: !!onDeleteGroup,
+    onRefreshGroups: !!onRefreshGroups,
+    urlHelpers: !!injectedUrlHelpers,
+    propsChanged,
+    prevProps: prevPropsRef.current,
+    showCrops,
+    groupId: group?.id,
+    filterGroupsLength: filterGroups.length
+  });*/
   
   // Wrapped callback for when related groups are updated
   const handleRelatedGroupsUpdate = useCallback((groups) => {
     setRelatedGroups(groups);
   }, []);
   
-  // Wrapped callback for when filter groups are changed
-  const handleFilterGroupsChange = useCallback((groups) => {
-    setFilterGroups(groups);
-  }, []);
   
-  // Store the filtered results (the actual IDs to use instead of relations)
-  const [filteredImageIds, setFilteredImageIds] = useSessionStorage('groupDetail_filteredImageIds', null);
-  const [filteredFaceIds, setFilteredFaceIds] = useSessionStorage('groupDetail_filteredFaceIds', null);
-  
-  // Initialize ImageViewer controller after filteredImageIds is defined
+  // Initialize ImageViewer controller
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
     showToast,
@@ -167,7 +229,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     defaultSortBy: 'date',
     defaultSortOrder: sortOrder,
     urlHelpers,
-    filteredIds: filteredImageIds,
+    // Pass filter settings for ImageViewer
+    filterGroups: filterGroups,
+    filterMode: filterMode,
+    onlySelected: onlySelected,
   });
   const lastFetchSignatureRef = useRef('');
   const prevGroupIdRef = useRef(null);
@@ -222,7 +287,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   }, []); // Empty dependency array - only run once on mount
 
   // Subscribe to store groups count (stable value) to trigger restoration
-  const groupsCount = useDataStore(state => Object.keys(state.entities?.groups || {}).length);
+  // Get groups count without subscribing to entire map (per STORE_USAGE.md)
+  const groupsCount = useMemo(() => {
+    return Object.keys(useDataStore.getState().entities?.groups || {}).length;
+  }, []);
   
   // Fetch groups from URL using check-name endpoint
   useEffect(() => {
@@ -258,21 +326,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
   }, []); // Run once on mount
   
-  // Manage all:groups scope based on filter panel visibility
-  useEffect(() => {
-    if (filterVisible) {
-      // Add scope when filter panel opens
-      try {
-        useApplyScopes([{ entity: 'all', id: 'groups' }]);
-      } catch (e) {}
-    } else {
-      // Remove scope when filter panel closes
-      const store = useDataStore.getState();
-      try {
-        store.removeScope({ entity: 'all', id: 'groups' });
-      } catch (e) {}
-    }
-  }, [filterVisible]);
+  // all:groups scope is now managed via top-level useApplyScopes(scopes)
+
   
   useEffect(() => {
     // Don't wait for perfect conditions - attempt restoration with whatever we have
@@ -335,9 +390,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       if (changedKeys.length > 0) {
         const diff = {};
         changedKeys.forEach(k => { diff[k] = { from: prev[k], to: depSig[k] }; });
-        
       } else {
-        
+        return;
       }
     }
     prevRef.current = depSig;
@@ -353,25 +407,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     // Update filter groups - always update URL when filterGroups changes, regardless of relatedGroups
     if (filterGroups.length > 0) {
-      // If we have relatedGroups loaded, use them to get group names
-      if (relatedGroups.length > 0) {
-        const groupNames = filterGroups
-          .map(id => relatedGroups.find(g => g.id === id)?.label)
-          .filter(Boolean)
-          .join(',');
-        if (groupNames) {
-          searchParams.set('filterGroups', groupNames);
-        }
-      } else {
-        // If relatedGroups aren't loaded yet, try to get names from currentGroups as fallback
-        const groupNames = filterGroups
-          .map(id => currentGroups.find(g => g.id === id)?.label)
-          .filter(Boolean)
-          .filter(name => name !== group?.label) // Exclude the main group
-          .join(',');
-        if (groupNames) {
-          searchParams.set('filterGroups', groupNames);
-        }
+      // Always use currentGroups (store data) as the authoritative source for group names
+      // This prevents race conditions where relatedGroups state changes after filterGroups is set
+      const groupNames = filterGroups
+        .map(id => {
+          const group = currentGroups.find(g => g.id === id);
+          return group?.label;
+        })
+        .filter(Boolean)
+        .filter(name => {
+          const excludeMain = name !== group?.label;
+          return excludeMain;
+        })
+        .join(',');
+      if (groupNames) {
+        searchParams.set('filterGroups', groupNames);
       }
     } else {
       // Always clear filterGroups from URL when empty
@@ -388,16 +438,16 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     // Update URL without triggering navigation
     const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
     const same = __lastUrlRef.current === newUrl;
+    
     if (same) {
       return;
     }
+    
     window.history.replaceState(null, '', newUrl);
     __lastUrlRef.current = newUrl;
     
   }, [filterGroups, filterMode, onlySelected, relatedGroups, location.pathname, currentGroups, group?.label]);
 
-  // Memoize props for GroupsFilter to prevent infinite re-renders (defined after sortedImages below)
-  const memoizedRelatedGroups = useMemo(() => relatedGroups.filter(g => g.id !== group?.id), [relatedGroups, group?.id]);
 
   // Use the custom hook for conflict handling
   const {
@@ -413,33 +463,56 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   } = useGroupNameConflict(group, onRefreshGroups, eventUrl);
 
 
+
   // Derive images using the universal util; keep scopes in sync
   const includeArchived = usePreference('general.includeArchived', false);
-  useApplyScopes(group?.id ? [{ entity: 'group', id: String(group.id) }] : []);
-  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, filteredIds: filteredImageIds, includeArchived, sortBy: 'date', sortOrder });
+  
+  // Scopes for group/filter are now managed via top-level useApplyScopes(scopes)
+  
+  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, includeArchived, sortBy, sortOrder });
+  
+  // Use stable hooks to avoid subscribing to entire maps (per STORE_USAGE.md)
+  const allGroups = [group?.id, ...filterGroups].filter(Boolean);
 
-  // Get faces from store
-  const entities = useDataStore((state) => state.entities);
+  // Faces filtered by images matching the selected groups and mode
+  const filteredFaces = useFacesForGroups(allGroups, filterMode, onlySelected, includeArchived);
+
   const groupFaces = useMemo(() => {
     if (!showCrops || !group?.id) return [];
-    
-    const facesMap = entities?.faces || {};
-    
-    // If we have filtered face IDs, use those instead of the group's faces set
-    if (filteredFaceIds && Array.isArray(filteredFaceIds)) {
-      return filteredFaceIds
-        .map(faceId => facesMap[faceId])
-        .filter(Boolean);
-    }
-    
-    // Otherwise use all faces from the group
-    const facesSet = entities?.groups?.[group.id]?.faces;
-    if (!facesSet || !(facesSet instanceof Set)) return [];
-    
-    return Array.from(facesSet)
-      .map(faceId => facesMap[faceId])
-      .filter(Boolean);
-  }, [showCrops, group?.id, entities, filteredFaceIds]);
+    // Stable signature for debug
+    const sig = {
+      showCrops,
+      groupId: group?.id,
+      filterGroups: filterGroupsSig,
+      filterMode,
+      onlySelected,
+      facesCount: filteredFaces.length
+    };
+    // debug removed
+    return filteredFaces;
+  }, [showCrops, group?.id, filteredFaces, filterGroupsSig, filterMode, onlySelected]);
+
+  // Ensure selected filter groups have data loaded (faces/images) to support faces mode filtering
+  const fetchedGroupsRef = useRef(new Set());
+  useEffect(() => {
+    if (!showCrops || !eventUrl) return;
+    const store = useDataStore.getState();
+    const ensureIds = [group?.id, ...filterGroups].filter(Boolean).map(String);
+    const toFetch = [];
+    ensureIds.forEach((gid) => {
+      const g = store.entities?.groups?.[gid];
+      const hasImages = (g?.images instanceof Set) || Array.isArray(g?.images);
+      const hasFaces = (g?.faces instanceof Set) || Array.isArray(g?.faces);
+      if ((!hasImages || !hasFaces) && !fetchedGroupsRef.current.has(gid)) {
+        toFetch.push(gid);
+      }
+    });
+    if (toFetch.length === 0) return;
+    toFetch.forEach((gid) => fetchedGroupsRef.current.add(gid));
+    Promise.all(
+      toFetch.map((gid) => groupsAPI.getById(gid, eventUrl, { filter: true }))
+    ).catch(() => {});
+  }, [showCrops, group?.id, filterGroupsSig, eventUrl]);
 
   // Create placeholder images for unauthenticated state
   const placeholderImages = useMemo(() => {
@@ -458,35 +531,100 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     // If showCrops, return faces sorted by their image's date_taken
     if (showCrops) {
+      const store = useDataStore.getState();
+      const storeImages = store.entities?.images || {};
+      
       const sorted = [...groupFaces].sort((a, b) => {
-        const imgA = entities?.images?.[a.image_id];
-        const imgB = entities?.images?.[b.image_id];
+        const imgA = storeImages[a.image_id];
+        const imgB = storeImages[b.image_id];
         const dateA = imgA?.date_taken || '';
         const dateB = imgB?.date_taken || '';
         return sortOrder === 'asc' 
           ? dateA.localeCompare(dateB)
           : dateB.localeCompare(dateA);
       });
+      
       return sorted;
     }
     
-    const out = sortImages(relatedImages, 'date', sortOrder);
+    // For images mode, apply frontend filtering
+    let images = relatedImages;
+    if (filterGroups.length > 0 || onlySelected) {
+      // Include current group in filtering
+      const allGroups = [group?.id, ...filterGroups].filter(Boolean);
+      
+      // Get all images from all groups (current + filter groups)
+      const store = useDataStore.getState();
+      const storeGroups = store.entities?.groups || {};
+      const storeImages = store.entities?.images || {};
+      
+      const allImageIds = new Set();
+      allGroups.forEach(groupId => {
+        const groupImages = storeGroups[groupId]?.images;
+        if (groupImages instanceof Set) {
+          groupImages.forEach(imageId => allImageIds.add(imageId));
+        }
+      });
+      
+      // Convert to image objects
+      const allImages = Array.from(allImageIds)
+        .map(imageId => storeImages[imageId])
+        .filter(Boolean);
+      
+      images = filterImages(allImages, allGroups, filterMode, onlySelected);
+    }
+    
+    const out = sortImages(images, 'date', sortOrder);
     
     return out;
-  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, entities, sortOrder]);
+  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected]);
+
+  // Memoize filtered imageIds to prevent infinite re-renders in GroupsFilter
+  // Use the already filtered images from sortedImages instead of all images from main group
+  const memoizedImageIds = useMemo(() => {
+    if (!group?.id) return [];
+    
+    // Use the already filtered images from sortedImages
+    // In faces mode, sortedImages contains faces, so extract image_id
+    // In images mode, sortedImages contains images, so extract id
+    const filteredImageIds = sortedImages.map(item => 
+      showCrops ? item.image_id : item.id
+    );
+    
+    // Remove duplicates (important in faces mode where multiple faces can belong to same image)
+    const uniqueImageIds = [...new Set(filteredImageIds)];
+    
+    return uniqueImageIds;
+  }, [sortedImages, group?.id, filterGroups, filterMode, onlySelected, showCrops]);
+
+  // Wrapped callback for when filter groups are changed
+  const handleFilterGroupsChange = useCallback((groups) => {
+    const next = Array.isArray(groups)
+      ? Array.from(new Set(groups.map((g) => String(g)))).sort()
+      : [];
+    setFilterGroups((prev) => {
+      const prevSig = (prev || []).join(',');
+      const nextSig = next.join(',');
+      return prevSig === nextSig ? prev : next;
+    });
+  }, []);
+
+  // Call fetch_related when memoizedImageIds changes (after filtering)
+  useEffect(() => {
+    if (fetchRelatedRef.current && memoizedImageIds.length > 0) {
+      fetchRelatedRef.current(memoizedImageIds);
+    }
+  }, [memoizedImageIds]);
+
+  // Memoize relatedGroups to prevent infinite re-renders in GroupsFilter
+  const memoizedRelatedGroups = useMemo(() => {
+    return relatedGroups.filter(g => g.id !== group?.id);
+  }, [relatedGroups, group?.id]);
 
   useEffect(() => {
     
   }, [sortedImages]);
 
-  // Now compute memoizedImageIds after sortedImages exists
-  const memoizedImageIds = useMemo(() => {
-    if (showCrops) {
-      // In faces mode, map to image IDs from faces
-      return sortedImages.map(face => face.image_id);
-    }
-    return sortedImages.map(img => img.id);
-  }, [sortedImages, showCrops]);
 
   // Separate selection states for images mode and faces mode
   const {
@@ -632,34 +770,17 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       limit: 50 
     };
 
-    if (onlySelected || filterGroups.length > 0) {
-      if (filterGroups.length > 0) {
-        params.filter_groups = filterGroups.join(',');
-      }
-      params.filter_mode = filterMode;
-      params.only_selected = onlySelected;
+    // Add filter parameter when filtering is active
+    if (filterGroups.length > 0 || filterVisible) {
+      params.filter = true;
     }
 
     try {
       const payload = await groupsAPI.getById(group.id, eventUrl, params);
       
-      // Handle filtered_image_ids and filtered_face_ids from API response
-      // If filter is active, always use filtered IDs (even if empty array for 0 results)
-      if (payload?.filter) {
-        if (Array.isArray(payload?.filtered_image_ids)) {
-          setFilteredImageIds(payload.filtered_image_ids);
-        }
-        if (Array.isArray(payload?.filtered_face_ids)) {
-          setFilteredFaceIds(payload.filtered_face_ids);
-        }
-      } else {
-        setFilteredImageIds(null);
-        setFilteredFaceIds(null);
-      }
-      
       const pageCount = Array.isArray(payload?.images)
         ? payload.images.length
-        : (Array.isArray(payload?.filtered_image_ids) ? payload.filtered_image_ids.length : 0);
+        : 0;
       setHasMore(pageCount === 50);
       
     } catch (error) {
@@ -675,25 +796,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         } catch {}
       }
     }
-  }, [group?.id, eventUrl, filterGroups, filterMode, onlySelected, isFetchingMore]);
+  }, [group?.id, eventUrl, isFetchingMore, filterGroups, filterVisible]);
 
   // Centralized effect for fetching all image and group data
   useEffect(() => {
     // Skip for placeholder groups
     if (!group?.id || group.isPlaceholder) return;
     
-    // Scope to the specific group for relation updates (both images and faces)
-    if (group?.id) {
-      try { 
-        useDataStore.getState().setScope({ entity: 'group', id: String(group.id) });
-      } catch {}
-    }
 
     if (smoothNextGroupLoad.current) {
       smoothNextGroupLoad.current = false;
       // When smoothly navigating between groups, we rely on store data
       // and skip the API fetch. We just need to update refs.
-      const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
+      const sig = `${group.id}|${filterGroups.length > 0 || filterVisible ? 'filter' : 'nofilter'}`;
       lastFetchSignatureRef.current = sig;
       prevGroupIdRef.current = group.id;
       
@@ -702,23 +817,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       return;
     }
 
-    const sig = `${group.id}|${(filterGroups || []).join(',')}|${filterMode}|${onlySelected ? '1' : '0'}`;
+    const sig = `${group.id}|${filterGroups.length > 0 || filterVisible ? 'filter' : 'nofilter'}`;
     if (sig === lastFetchSignatureRef.current) {
       
       return;
     }
     const isGroupChange = prevGroupIdRef.current !== group.id;
     prevGroupIdRef.current = group.id;
-    
-    // If this is a group change, clear filtered data
-    if (isGroupChange) {
-      setFilteredImageIds(null);
-      setFilteredFaceIds(null);
-      // Also clear from session storage when switching groups
-      sessionStorage.removeItem('groupDetail_filteredImageIds');
-      sessionStorage.removeItem('groupDetail_filteredFaceIds');
-      sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
-    }
     
     // If this is only a filter change, do a silent fetch and preserve scroll
     if (!isGroupChange) {
@@ -733,7 +838,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     setOffset(0);
     fetchGroupData(0, true);
-  }, [group?.id, filterGroups, filterMode, onlySelected]); // Re-run whenever the main group or filters change
+  }, [group?.id, filterGroupsSig, filterVisible]); // Re-run when group or filter state changes
 
   // Related groups are fetched inside GroupsFilter; keep local state updated via callback
 
@@ -758,9 +863,26 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     setFilterVisible(prev => {
       const next = !prev;
       
+      // If opening the panel, notify GroupsFilter that it was opened by user
+      if (next && !prev) {
+        handlePanelOpenedByUser();
+      }
+      
       return next;
     });
   };
+  
+  // Callback to notify GroupsFilter when panel is opened by user
+  const handlePanelOpenedByUser = useCallback(() => {
+    // This will be called by GroupsFilter when panel is opened by user action
+  }, []);
+
+  // Store the fetch_related function from GroupsFilter
+  const fetchRelatedRef = useRef(null);
+  
+  const handleFetchRelated = useCallback((fetchRelatedFn) => {
+    fetchRelatedRef.current = fetchRelatedFn;
+  }, []);
 
   const arraysEqual = (a = [], b = []) => {
     if (a === b) return true;
@@ -779,26 +901,17 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   }, [filterGroups]);
 
   const handleFilterModeChange = useCallback((newMode) => {
-    
     setFilterMode(newMode);
   }, [filterMode]);
 
   const handleOnlySelectedChange = useCallback((newOnlySelected) => {
-    
     setOnlySelected(newOnlySelected);
   }, [onlySelected]);
 
   const handleFilterReset = useCallback(() => {
-    
     setFilterGroups([]);
     setFilterMode('and');
     setOnlySelected(false);
-    setFilteredImageIds(null);
-    setFilteredFaceIds(null);
-    // Clear all filter-related session storage items
-    sessionStorage.removeItem('groupDetail_filteredRelatedGroups');
-    sessionStorage.removeItem('groupDetail_filteredImageIds');
-    sessionStorage.removeItem('groupDetail_filteredFaceIds');
     
     // Clear URL parameters
     const searchParams = new URLSearchParams(location.search);
@@ -889,21 +1002,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   const getSelectedFaces = async () => {
     const selectedFaces = [];
+    const store = useDataStore.getState();
+    const storeFaces = store.entities?.faces || {};
     
     if (showCrops) {
       // In faces mode, selectedImages contains face IDs
       for (const faceId of selectedImages) {
-        const face = entities?.faces?.[faceId];
+        const face = storeFaces[faceId];
         if (!face) continue;
         selectedFaces.push({
           face_id: faceId,
           image_id: face.image_id,
-          group_id: group.id,
+          group_id: face.group_id,
           width: face.width || 0,
           height: face.height || 0,
           left: face.left || 0,
           top: face.top || 0,
-          group_label: group.label
+          group_label: face.group_id ? store.entities?.groups?.[face.group_id]?.label : group.label
         });
       }
     } else {
@@ -916,24 +1031,24 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         
         // Add all faces
         for (const faceId of faceIds) {
-          const face = entities?.faces?.[faceId];
+          const face = storeFaces[faceId];
           if (!face) continue;
           selectedFaces.push({
             face_id: faceId,
             image_id: face.image_id,
-            group_id: group.id,
+            group_id: face.group_id,
             width: face?.width || 0,
             height: face?.height || 0,
             left: face?.left || 0,
             top: face?.top || 0,
-            group_label: group.label
+            group_label: face.group_id ? store.entities?.groups?.[face.group_id]?.label : group.label
           });
         }
       } catch (error) {
         console.error('Failed to fetch faces for images:', error);
       }
     }
-    return selectedFaces;
+    return { faces: selectedFaces, hasFaces: selectedFaces.length > 0 };
   };
 
   const handleTransferFaces = async () => {
@@ -943,7 +1058,16 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
     
     // Fetch all faces for selected images
-    const faces = await getSelectedFaces();
+    const result = await getSelectedFaces();
+    const faces = result.faces;
+    const hasFaces = result.hasFaces;
+    
+    // Show toast and don't open modal if no faces found
+    if (!hasFaces) {
+      showToast('No faces found in selected photos', 'error');
+      return;
+    }
+    
     setSelectedFacesForTransfer(faces);
     
     try {
@@ -952,28 +1076,41 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     setShowTransferModal(true);
   };
 
-  const handleTransferComplete = async (result) => {
+  const handleTransferComplete = async (result, imageIds = null) => {
     const transferData = { ...(result || {}) };
     
     // Clear selection (UI state management)
     clearSelection();
 
-    // Handle source_deleted case (merge) - navigate to target group
-    // The modal already showed the toast, we just need to handle navigation
-    if (transferData.source_deleted && transferData.target_group_id) {
-      const targetGroup = currentGroups.find(g => g.id === transferData.target_group_id);
-      
-      if (targetGroup) {
-        const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
+    // Handle deleted groups - if current group was deleted, start merge process
+    const deletedGroupIds = transferData.deleted_group_ids || [];
+    if (deletedGroupIds.includes(group?.id)) {
+      // Current group was deleted, navigate to target group
+      const targetGroupId = transferData.target_group_id;
+      if (targetGroupId) {
+        const targetGroup = currentGroups.find(g => g.id === targetGroupId);
         
-        // Manually update URL without triggering router navigation, then set group
-        window.history.replaceState(null, '', link);
-        smoothNextGroupLoad.current = true;
-        skipNextAnimation.current = true;
-        
-        setGroup(targetGroup);
-
-        return;
+        if (targetGroup) {
+          const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
+          
+          // Use provided IDs or fallback to current group data
+          const fallbackIds = showCrops 
+            ? (group?.faces ? Array.from(group.faces) : [])
+            : (group?.images ? Array.from(group.images) : []);
+          const idsToHighlight = imageIds || fallbackIds;
+          
+          // Pass appropriate highlighting state based on mode
+          const highlightState = showCrops 
+            ? { highlightFaces: idsToHighlight.slice(0, 10) }
+            : { highlightImages: idsToHighlight.slice(0, 10) };
+          
+          // Use React Router navigation to properly update URL and state
+          navigate(link, { 
+            replace: true,
+            state: highlightState
+          });
+          return;
+        }
       }
     }
     
@@ -1014,18 +1151,44 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   }, [sortedImages]);
 
   const openImageViewer = (itemId, index) => {
-    // In faces mode, itemId is a face ID; we need to get the image ID
     let imageIndex = index;
-    if (showCrops) {
-      const face = entities?.faces?.[itemId];
-      if (face) {
-        // Find the index of this image in the original images list
-        const imageId = face.image_id;
-        imageIndex = relatedImages.findIndex(img => img.id === imageId);
-        if (imageIndex === -1) imageIndex = index; // Fallback to original index
+    const store = useDataStore.getState();
+    const face = showCrops ? (store.entities?.faces || {})[itemId] : null;
+    const targetImageId = showCrops && face ? face.image_id : (sortedImages[index]?.id || null);
+    if (targetImageId) {
+      // Build viewer image list with same semantics as ImageViewer
+      const allGroupsLocal = [group.id, ...filterGroups].filter(Boolean);
+      let viewerImages;
+      if (allGroupsLocal.length === 1 && !onlySelected && (!filterGroups || filterGroups.length === 0)) {
+        viewerImages = relatedImages;
+      } else {
+        const allImageIdsSet = new Set();
+        allGroupsLocal.forEach((gid) => {
+          const rel = store.entities?.groups?.[gid]?.images;
+          if (rel instanceof Set) rel.forEach((iid) => allImageIdsSet.add(iid));
+          else if (Array.isArray(rel)) rel.forEach((iid) => allImageIdsSet.add(iid));
+        });
+        const allImages = Array.from(allImageIdsSet)
+          .map((iid) => store.entities?.images?.[iid])
+          .filter((img) => !!img && (includeArchived || !img.is_archived));
+        viewerImages = filterImages(allImages, allGroupsLocal, filterMode, onlySelected);
+        viewerImages = sortImages(viewerImages, sortBy, sortOrder);
       }
+      const ids = viewerImages.map((img) => img.id);
+      const idx = ids.indexOf(targetImageId);
+      if (idx >= 0) imageIndex = idx;
     }
-    openViewer({ index: imageIndex, parent: group.id, entity: 'group', currentGroupId: group.id, sortBy: 'date', sortOrder, filteredIds: filteredImageIds });
+    openViewer({
+      index: imageIndex,
+      parent: group.id,
+      entity: 'group',
+      currentGroupId: group.id,
+      sortBy,
+      sortOrder,
+      filterGroups,
+      filterMode,
+      onlySelected,
+    });
   };
 
   
@@ -1418,6 +1581,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               currentGroupId={group?.id}
               onSelectedGroupsChange={handleFilterGroupsChange}
               initialSelectedGroups={filterGroups}
+              onPanelOpenedByUser={handlePanelOpenedByUser}
+              onFetchRelated={handleFetchRelated}
             />
           )}
         </AnimatePresence>
@@ -1465,7 +1630,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 const isFacesMode = showCrops;
                 const itemId = item.id;
                 const imageId = isFacesMode ? item.image_id : item.id;
-                const image = isFacesMode ? entities?.images?.[item.image_id] : item;
+                const image = isFacesMode ? (() => {
+                  const store = useDataStore.getState();
+                  return store.entities?.images?.[item.image_id];
+                })() : item;
                 
                 // In faces mode, item IS the face; in images mode, we don't need the face for display
                 let faceId = null;
@@ -1473,9 +1641,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   faceId = item.id;
                 } else {
                   // For images mode, find a face for the crop URL (if any)
-                  const facesSet = entities?.groups?.[group.id]?.faces;
+                  const store = useDataStore.getState();
+                  const facesSet = store.entities?.groups?.[group.id]?.faces;
                   if (facesSet) {
-                    const facesMap = entities?.faces || {};
+                    const facesMap = store.entities?.faces || {};
                     const facesInImage = Array.from(facesSet)
                       .map(fId => facesMap[fId])
                       .filter(f => f && f.image_id === imageId)
@@ -1496,19 +1665,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className={`photo-card ${imageClasses[imageId] || 'square'}`}
+                    className={`photo-card ${(showCrops ? 'square' : (imageClasses[imageId] || 'square'))} relative`}
                   >
                     <SingleImageTile
                       ref={(el) => registerImageRef(itemId, el)}
                       image={image || item}
-                      aspectClass={imageClasses[imageId] || 'square'}
+                      aspectClass={showCrops ? 'square' : (imageClasses[imageId] || 'square')}
                       imageFit={'cover'}
                       thumbSrc={item.isPlaceholder ? null : (isFacesMode && urlHelpers ? urlHelpers.getFaceCropUrl(faceId) : (urlHelpers ? urlHelpers.getThumbnailUrl(imageId) : null))}
                       selectionMode={selectionMode}
                       isSelected={selectedImages.has(itemId)}
                       onToggleSelect={(e) => toggleImageSelection(itemId, e)}
                       onOpen={() => openImageViewer(itemId, index)}
-                      onImageLoad={(e) => handleImageLoad(imageId, e)}
+                      onImageLoad={showCrops ? undefined : ((e) => handleImageLoad(imageId, e))}
                       showCropBadge={false}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
@@ -1526,6 +1695,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                         }
                       }) : undefined}
                     />
+                    {/* Group label overlay for faces mode when filtering with at least one group */}
+                    {isFacesMode && filterGroups.length > 1 && (
+                      <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium">
+                        {(() => {
+                          const store = useDataStore.getState();
+                          return store.entities?.groups?.[item.group_id]?.label || `Person ${item.group_id}`;
+                        })()}
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
@@ -1591,6 +1769,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           isOpen={showMergeModal}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
+          showCrops={showCrops}
           onClose={() => setShowMergeModal(false)}
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}
@@ -1598,11 +1777,24 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           onMerge={handleMergeGroups}
           onCancel={handleMergeCancelLocal}
           onTransferComplete={handleTransferComplete}
-          onNavigateToGroup={(targetGroupId) => {
+          onNavigateToGroup={(targetGroupId, idsToHighlight = null) => {
             // Find the target group and navigate to it
             const targetGroup = currentGroups.find(g => g.id === targetGroupId);
             if (targetGroup) {
-              navigate(`/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`);
+              // Use provided IDs or fallback to current group data
+              const fallbackIds = showCrops 
+                ? (group?.faces ? Array.from(group.faces) : [])
+                : (group?.images ? Array.from(group.images) : []);
+              const idsForHighlighting = idsToHighlight || fallbackIds;
+              
+              // Pass appropriate highlighting state based on mode
+              const highlightState = showCrops 
+                ? { highlightFaces: idsForHighlighting.slice(0, 10) }
+                : { highlightImages: idsForHighlighting.slice(0, 10) };
+              
+              navigate(`/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`, {
+                state: highlightState
+              });
             } else {
               navigate(`/${eventUrl}/people`);
             }
@@ -1616,6 +1808,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
            isOpen={showTransferModal}
            eventUrl={eventUrl}
            urlHelpers={urlHelpers}
+           showCrops={showCrops}
            onClose={() => {
              setShowTransferModal(false);
              setSelectedFacesForTransfer([]);

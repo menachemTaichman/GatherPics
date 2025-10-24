@@ -34,19 +34,23 @@ export function useImageHighlight() {
   // Effect: Handle navigation changes
   useEffect(() => {
     const highlightImages = location.state?.highlightImages;
+    const highlightFaces = location.state?.highlightFaces;
     
-    if (!highlightImages || !Array.isArray(highlightImages) || highlightImages.length === 0) {
+    // Use highlightFaces if available, otherwise fall back to highlightImages
+    const idsToHighlight = highlightFaces || highlightImages;
+    
+    if (!idsToHighlight || !Array.isArray(idsToHighlight) || idsToHighlight.length === 0) {
       clearHighlights();
       return;
     }
     
     // Set highlighted IDs
-    setHighlightedIds(new Set(highlightImages));
+    setHighlightedIds(new Set(idsToHighlight));
     scrollAttemptRef.current = 0;
     
-    // Scroll to first highlighted image (with retry logic)
+    // Scroll to first highlighted item (with retry logic)
     const scrollToFirst = () => {
-      const firstId = highlightImages[0];
+      const firstId = idsToHighlight[0];
       const element = imageRefsMap.current.get(firstId);
       
       if (element) {

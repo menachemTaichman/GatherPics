@@ -73,6 +73,7 @@ class BaseModels(ABC):
             entity_ids: list of entity ids or single entity id or None to get all entities
         Returns:
             dict of entities with entity ids as keys and entity data as values
+            if single item is provided, return the entity data
         """
         accessible_table = self.db.STRUCTURE()[table]['accessible_table']
         fields = self.db.get_view_fields(table)
