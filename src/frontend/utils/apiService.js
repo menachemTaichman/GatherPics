@@ -1042,6 +1042,72 @@ export const uploadsAPI = {
   
 };
 
+// Requests API
+export const requestsAPI = {
+  // Get all requests
+  getAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/requests`);
+    return response.data;
+  },
+  
+  // Get open requests count
+  getOpenCount: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/requests/open-count`);
+    return response.data;
+  },
+  
+  // Get request by ID
+  getById: async (requestId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `REQUEST_GET_BY_ID:${eventId}:${requestId}`;
+    const result = await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/requests/${requestId}`);
+      return response.data;
+    });
+    return result;
+  },
+  
+  // Create request
+  create: async (data, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/requests`, data);
+    return response.data;
+  },
+  
+  // Update request
+  update: async (requestId, data, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.patch(`/api/events/${eventId}/requests/${requestId}`, data);
+    return response.data;
+  },
+  
+  // Delete request
+  delete: async (requestId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/requests/${requestId}`);
+    return response.data;
+  },
+  
+  // Approve request
+  approve: async (requestId, groupIds, close, closedDetails, profileName, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const data = { groupIds, close, closedDetails, profileName };
+    const response = await api.post(`/api/events/${eventId}/requests/${requestId}/approve`, data);
+    return response.data;
+  },
+  
+  // Deny request
+  deny: async (requestId, groupIds, close, closedDetails, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const data = { groupIds, close, closedDetails };
+    const response = await api.post(`/api/events/${eventId}/requests/${requestId}/deny`, data);
+    return response.data;
+  },
+  
+};
+
 // Optimistic update helpers
 export const optimisticUpdates = {
   // Optimistic group update

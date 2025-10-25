@@ -1,20 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
-import { profilesAPI } from '../../utils/apiService';
+import { profilesAPI, requestsAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useProfilesList } from '../../utils/dataManager';
+import { useProfilesList, useRequestsList } from '../../utils/dataManager';
 import { useApplyScopes } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../contexts/authContext';
 import { ChangePasswordModal, EditProfileModal } from '../profiles';
 import { ConfirmDelete } from '../modals';
+import { RequestFormModal } from '../requests';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -42,6 +43,13 @@ export default function SettingsManager() {
   const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
   const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
   
+  // Requests state
+  const [showRequestFormModal, setShowRequestFormModal] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(null);
+  const [showDeleteRequestModal, setShowDeleteRequestModal] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState(null);
+  const [openRequestsCount, setOpenRequestsCount] = useState(0);
+  
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'settings-manager';
 
@@ -53,7 +61,10 @@ export default function SettingsManager() {
       if (activeTab === 'profiles') {
         scopes = [{ entity: 'all', id: 'profiles' }];
       } else if (activeTab === 'account' && currentProfile?.id) {
-        scopes = [{ entity: 'profile', id: String(currentProfile.id) }];
+        scopes = [
+          { entity: 'profile', id: String(currentProfile.id) },
+          { entity: 'all', id: 'access_requests' }
+        ];
       }
       
       registerModal({ 
@@ -81,7 +92,10 @@ export default function SettingsManager() {
     isOpen && activeTab === 'profiles' 
       ? [{ entity: 'all', id: 'profiles' }] 
       : isOpen && activeTab === 'account' && currentProfile?.id
-      ? [{ entity: 'profile', id: String(currentProfile.id) }]
+      ? [
+          { entity: 'profile', id: String(currentProfile.id) },
+          { entity: 'all', id: 'access_requests' }
+        ]
       : []
   );
 
@@ -99,6 +113,13 @@ export default function SettingsManager() {
     }
   }, [isOpen, activeTab, eventUrl, currentProfile?.id]);
 
+  // Fetch open requests count when profiles tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === 'profiles' && eventUrl && permissions.isProfilesManager) {
+      fetchOpenRequestsCount();
+    }
+  }, [isOpen, activeTab, eventUrl, permissions.isProfilesManager]);
+
   const fetchCurrentProfile = async () => {
     try {
       await profilesAPI.getById(currentProfile.id, eventUrl);
@@ -114,6 +135,16 @@ export default function SettingsManager() {
       // Changes are automatically applied by apiService interceptor
     } catch (error) {
       console.error('Failed to fetch profiles:', error);
+    }
+  };
+
+  const fetchOpenRequestsCount = async () => {
+    try {
+      const result = await requestsAPI.getOpenCount(eventUrl);
+      setOpenRequestsCount(result.count || 0);
+    } catch (error) {
+      console.error('Failed to fetch open requests count:', error);
+      setOpenRequestsCount(0);
     }
   };
 
@@ -347,6 +378,40 @@ export default function SettingsManager() {
       return (a.label || '').localeCompare(b.label || ''); // ascending
     });
 
+  // Requests handlers
+  const handleCreateRequest = () => {
+    setEditingRequest(null);
+    setShowRequestFormModal(true);
+  };
+
+  const handleEditRequest = (request) => {
+    setEditingRequest(request);
+    setShowRequestFormModal(true);
+  };
+
+  const handleDeleteRequest = (request) => {
+    setRequestToDelete(request);
+    setShowDeleteRequestModal(true);
+  };
+
+  const handleConfirmDeleteRequest = async () => {
+    if (!requestToDelete) return;
+
+    try {
+      await requestsAPI.delete(requestToDelete.access_request_id, eventUrl);
+      showToast(`Request deleted`, 'success');
+    } catch (error) {
+      console.error('Failed to delete request:', error);
+      showToast(formatErrorMessage('delete request', error), 'error');
+    } finally {
+      setRequestToDelete(null);
+    }
+  };
+
+  // Get user's requests
+  const allRequests = useRequestsList();
+  const userRequests = allRequests.filter(req => req.profile_id === (currentProfile?.id || currentProfile?.profile_id));
+
   return (
     <>
       <button
@@ -494,6 +559,84 @@ export default function SettingsManager() {
                           </div>
                         </PermissionGate>
 
+                        {/* My Requests Section */}
+                        <PermissionGate requires="enable_requests">
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-sm font-semibold text-gray-700">My Requests</h4>
+                              <button
+                                onClick={handleCreateRequest}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Create Request</span>
+                              </button>
+                            </div>
+                            
+                            {currentProfile?.is_public ? (
+                              <div className="text-center py-4">
+                                <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">Public profiles can only create requests for new profiles</p>
+                              </div>
+                            ) : userRequests.length === 0 ? (
+                              <div className="text-center py-4">
+                                <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">No requests yet</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {userRequests.map((request) => (
+                                  <div
+                                    key={request.access_request_id}
+                                    className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <FileText className="w-5 h-5 text-blue-600" />
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center space-x-2">
+                                          <p className="font-medium text-gray-900">{request.applicant_name}</p>
+                                          <span className={`px-2 py-1 text-xs rounded-full ${
+                                            request.is_closed 
+                                              ? (request.groups_approved_count === request.groups_count ? 'bg-green-100 text-green-700' : 
+                                                 request.groups_approved_count === 0 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700')
+                                              : 'bg-blue-100 text-blue-700'
+                                          }`}>
+                                            {request.is_closed 
+                                              ? (request.groups_approved_count === request.groups_count ? 'Approved' : 
+                                                 request.groups_approved_count === 0 ? 'Denied' : 'Partial')
+                                              : 'Pending'}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                          {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {new Date(request.requested_at).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-1">
+                                      <button
+                                        onClick={() => handleEditRequest(request)}
+                                        className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                        title="Edit request"
+                                      >
+                                        <Edit2 className="w-4 h-4 text-blue-600" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteRequest(request)}
+                                        className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                        title="Delete request"
+                                      >
+                                        <Trash2 className="w-4 h-4 text-red-600" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </PermissionGate>
+
                         {/* Sign Out */}
                         <div className="pt-4 border-t border-gray-200">
                           <button
@@ -521,24 +664,43 @@ export default function SettingsManager() {
                           <div className="bg-gray-50 rounded-lg p-4">
                           {/* Header with explanation tooltip */}
                           <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-semibold text-gray-700">Profiles</h3>
-                            <div className="relative">
-                              <button
-                                onMouseEnter={() => setShowPublicAccessTooltip(true)}
-                                onMouseLeave={() => setShowPublicAccessTooltip(false)}
-                                className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
-                              >
-                                <HelpCircle className="w-5 h-5" />
-                              </button>
-                              {showPublicAccessTooltip && (
-                                <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-                                  <p className="mb-2 font-medium">Public Access Codes</p>
-                                  <p className="mb-1">• Public profiles can be accessed via direct links</p>
-                                  <p className="mb-1">• Copy link: Share the public access URL</p>
-                                  <p className="mb-1">• Reset link: Generate a new access code</p>
-                                  <p>• Remove link: Disable public access</p>
+                            <div className="flex items-center space-x-3">
+                              <h3 className="text-sm font-semibold text-gray-700">Profiles</h3>
+                              {openRequestsCount > 0 && (
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <span className="text-xs font-medium text-blue-600">{openRequestsCount}</span>
+                                  </div>
+                                  <span className="text-xs text-gray-500">open requests</span>
                                 </div>
                               )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => urlHelpers.navigateToRequests()}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span>View Requests</span>
+                              </button>
+                              <div className="relative">
+                                <button
+                                  onMouseEnter={() => setShowPublicAccessTooltip(true)}
+                                  onMouseLeave={() => setShowPublicAccessTooltip(false)}
+                                  className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                  <HelpCircle className="w-5 h-5" />
+                                </button>
+                                {showPublicAccessTooltip && (
+                                  <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+                                    <p className="mb-2 font-medium">Public Access Codes</p>
+                                    <p className="mb-1">• Public profiles can be accessed via direct links</p>
+                                    <p className="mb-1">• Copy link: Share the public access URL</p>
+                                    <p className="mb-1">• Reset link: Generate a new access code</p>
+                                    <p>• Remove link: Disable public access</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -777,6 +939,38 @@ export default function SettingsManager() {
           confirmText="Delete"
           cancelText="Cancel"
           caption="This action cannot be undone."
+        />
+      )}
+
+      {/* Delete Request Confirmation Modal */}
+      {showDeleteRequestModal && requestToDelete && (
+        <ConfirmDelete
+          isOpen={showDeleteRequestModal}
+          onClose={() => {
+            setShowDeleteRequestModal(false);
+            setRequestToDelete(null);
+          }}
+          onConfirm={handleConfirmDeleteRequest}
+          title="Delete Request"
+          message="Are you sure you want to delete this request"
+          itemName={requestToDelete.applicant_name}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
+        />
+      )}
+
+      {/* Request Form Modal */}
+      {showRequestFormModal && (
+        <RequestFormModal
+          isOpen={showRequestFormModal}
+          onClose={() => {
+            setShowRequestFormModal(false);
+            setEditingRequest(null);
+          }}
+          request={editingRequest}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
         />
       )}
     </>

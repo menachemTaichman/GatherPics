@@ -319,4 +319,6 @@ ids = {
 # event.models.db.execute_query(f"CREATE TABLE access_requests_groups ({access_requests_groups})")
 # create_views_triggers_and_indexes()
 
-recreate_views_triggers_and_indexes()
+access_requests = event.models.get_entities('access_requests')
+print(access_requests)
+print('--------------------------------')

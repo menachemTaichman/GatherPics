@@ -15,6 +15,7 @@ import { getCurrentProfile } from '../utils/profileService';
  * @property {boolean} has_groups - Has access to groups/people
  * @property {boolean} has_albums - Has access to albums
  * @property {boolean} has_images - Has access to images/timeline
+ * @property {boolean} enable_requests - Can manage access requests
  */
 export function usePermissions() {
   const profile = getCurrentProfile();
@@ -32,6 +33,7 @@ export function usePermissions() {
         has_groups: false,
         has_albums: false,
         has_images: false,
+        enable_requests: false,
       };
     }
 
@@ -54,6 +56,9 @@ export function usePermissions() {
       has_groups: Boolean(profile.has_groups),
       has_albums: Boolean(profile.has_albums),
       has_images: Boolean(profile.has_images),
+      
+      // Enable requests flag
+      enable_requests: Boolean(profile.enable_requests),
     };
   }, [profile]);
 

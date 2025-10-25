@@ -119,7 +119,29 @@ export function useEventUrls(eventUrl) {
       if (!eventId) return null;
       return `/api/events/${eventId}/faces/${faceId}.webp`;
     },
-  }), [eventId]);
+    
+    // Navigation helpers
+    navigateToGroups: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/people`;
+    },
+    navigateToAlbums: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/albums`;
+    },
+    navigateToTimeline: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/timeline`;
+    },
+    navigateToUploads: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/uploads`;
+    },
+    navigateToRequests: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/requests`;
+    },
+  }), [eventId, eventUrl]);
 
   
 

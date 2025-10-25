@@ -400,11 +400,27 @@ class EventModels(BaseModels):
             groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
             if groups_left:
                 self.edit_accessibility(applicant_profile_id, 'groups', groups_left, set_accessible=False)
-                self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data={'approved': False, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
+                self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=groups_left, operation=ChildOperation.UPDATE, data={'approved': False, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
 
             groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
             if groups_left:
                 raise ValueError(f"Failed to close access request {access_request_id} for groups {groups_left}")
+
+    def get_open_requests_count(self) -> int:
+        """Get count of open requests for current profile."""
+        # TODO: move it to the database
+        query = '''
+            SELECT COUNT(aar.access_request_id) 
+            FROM accessible_access_requests aar
+            LEFT JOIN
+            (accessible_access_requests_groups aarg
+            INNER JOIN accessible_groups ag
+            ON aarg.group_id = ag.group_id AND ag.is_accessible = 1)
+            ON aar.access_request_id = aarg.access_request_id
+            GROUP BY aar.access_request_id
+            HAVING COUNT(aarg.group_id) > 0 OR aar.is_closed = 0
+        '''
+        return self.db.execute_query(query, return_format=ReturnFormat.VALUE) or 0
 
     # -------- Public Access Code helpers --------
     def generate_public_access_code(self, profile_id: str) -> str:

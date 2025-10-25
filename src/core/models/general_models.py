@@ -1,4 +1,5 @@
 from typing import Dict, Any
+import secrets
 from src.core.database.base_db import ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.database.general_db import GeneralDB
@@ -210,13 +211,13 @@ class GeneralModels(BaseModels):
         
         self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
-    def toggle_access_request(self, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None) -> str | None:
+    def toggle_access_request(self, event_id: str,access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
         """
         Toggle an access request.
         Returns:
             applicant_profile_id if the access request is approved, None otherwise
         """
-        event = Event(access_request_id, self.profile_context['profile_id'])
+        event = Event(event_id, self.profile_context['profile_id'])
         if not event:
             raise Forbidden('Profile does not have permission to toggle this access request')
 
@@ -224,7 +225,9 @@ class GeneralModels(BaseModels):
         if not access_request:
             raise Forbidden('Access request not found')
         if not access_request['applicant_profile_id']:
-            applicant_profile_id = self.create_profile(access_request['applicant_name'], '', 0, event_id=access_request['event_id'])
+            label = profile_name or access_request['applicant_name']
+            password = secrets.token_urlsafe(6)
+            applicant_profile_id = self.create_profile(label, password, 0, event_id=event_id)
             event.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         
         event.toggle_access_request(access_request_id, approve, group_ids, close, closed_details)

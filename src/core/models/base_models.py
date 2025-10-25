@@ -186,7 +186,7 @@ class BaseModels(ABC):
         
         valid_childs = self.db.execute_query(query, (entity_id, *child_ids), return_format=return_format)
         if relation_table_fields and not return_ids:
-            query = f"""SELECT {','.join([f'r.{child_id_field}'] + relation_table_fields)}
+            query = f"""SELECT {','.join(relation_table_fields)}
             FROM {relation_table} r
             WHERE {child_id_field} IN ({','.join(['?'] * len(valid_childs))})
             """

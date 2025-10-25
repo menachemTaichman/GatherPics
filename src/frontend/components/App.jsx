@@ -7,6 +7,7 @@ import { GroupsGalleryPage, GroupDetailPage } from '../pages/groups';
 import { AlbumsGalleryPage, AlbumDetailPage } from '../pages/albums';
 import { MomentsPage } from '../pages/moments';
 import { UploadsGalleryPage, UploadDetailPage } from '../pages/uploads';
+import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
 import { LoadingSpinner, Toast } from './common';
 import { LoginModal } from './auth';
 import { useDataStore } from '../utils/dataManager';
@@ -564,6 +565,12 @@ function AppContent({ eventUrl }) {
             path="uploads"
             element={
               <UploadsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
+            }
+          />
+          <Route
+            path="requests"
+            element={
+              <RequestsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
           <Route 

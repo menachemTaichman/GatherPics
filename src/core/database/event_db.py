@@ -90,7 +90,11 @@ class EventDB(BaseDB):
                 'accessible_table': 'accessible_access_requests',
                 'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
                 'relations': {
-                    'groups': {'relation_table': 'access_requests_groups', 'fields_needed': ['label', 'representative_face'], 'relation_table_fields': ['approved', 'closed_at', 'closed_by']},
+                    'groups': {
+                        'relation_table': 'access_requests_groups',
+                        'fields_needed': ['label', 'representative_face'],
+                        'relation_table_fields': ['approved', 'closed_at', 'closed_by']
+                    },
                 },
                 'serializable': {
                     'closed_details': list,

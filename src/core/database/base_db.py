@@ -140,7 +140,7 @@ class BaseDB(ABC):
         elif value_type == float:
             return str(float(value))
         elif value_type in (list, dict):
-            return json.dumps(value)
+            return json.dumps(value if value is not None else [])
         else:  # str
             return str(value)
     
@@ -154,7 +154,7 @@ class BaseDB(ABC):
         elif value_type == float:
             return float(value_str)
         elif value_type in (list, dict):
-            return json.loads(value_str)
+            return json.loads(value_str if value_str is not None else '[]')
         else:  # str
             return value_str
 
@@ -219,7 +219,7 @@ class BaseDB(ABC):
             fields = cls._get_fields([child_id_field] + relation_meta['fields_needed'], 'c')
             relation_table_fields = relation_meta.get('relation_table_fields', [])
             if relation_table_fields:
-                relation_table_fields = cls._get_fields(relation_table_fields, 'r')
+                relation_table_fields = cls._get_fields([child_id_field] + relation_table_fields, 'r')
             relations.append((relation_table, child, child_id_field, fields, relation_table_fields))
 
         if return_single:
