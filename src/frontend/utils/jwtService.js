@@ -172,6 +172,27 @@ class JWTService {
     }
     this.clearToken();
   }
+
+  // Authenticate with public access code
+  async authenticateWithPublicCode(eventUrl, publicCode) {
+    try {
+      // Use the apiService method that properly resolves the event URL
+      const { authAPI } = await import('./apiService');
+      const response = await authAPI.authenticateWithPublicCode(eventUrl, publicCode);
+
+      this.token = response.access_token;
+      this.tokenExpiry = this.calculateExpiry();
+      this.saveToStorage();
+
+      return {
+        access_token: this.token,
+        profile: response.profile
+      };
+    } catch (error) {
+      console.error('Public access authentication failed:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance

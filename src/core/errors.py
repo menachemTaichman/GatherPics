@@ -3,8 +3,8 @@ class Forbidden(Exception):
     """Exception raised for forbidden access."""
     pass
 
-class DBConstant(Exception):
-    """Exception raised for database constant error."""
+class DBPolicyError(Exception):
+    """Exception raised for database policy error."""
     pass
 
 class DatabaseError(Exception):

@@ -1,6 +1,7 @@
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from src.core.errors import Forbidden
 from src.core.database.base_db import BaseDB, ReturnFormat
 
 class EventDB(BaseDB):
@@ -77,7 +78,7 @@ class EventDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
+                'fields': ['hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums', 'is_public', 'public_access_code'],
                 'relations': {
                     'images': {'relation_table': 'profile_images', 'fields_needed': ['date_taken']},
                     'groups': {'relation_table': 'profile_groups', 'fields_needed': ['label']},
@@ -176,7 +177,9 @@ class EventDB(BaseDB):
                 can_edit BOOLEAN DEFAULT 0,
                 all_images BOOLEAN DEFAULT 0,
                 all_groups BOOLEAN DEFAULT 0,
-                all_albums BOOLEAN DEFAULT 0
+                all_albums BOOLEAN DEFAULT 0,
+                is_public BOOLEAN DEFAULT 0,
+                public_access_code TEXT
             ''',
             'profile_images': '''
                 profile_id TEXT NOT NULL,
@@ -221,15 +224,16 @@ class EventDB(BaseDB):
     @classmethod
     def INDEXES(self) -> list:
         return [
-            'idx_faces_image_id ON faces(image_id)',
-            'idx_faces_group_id ON faces(group_id)',
             'idx_images_moment_id ON images(moment_id)',
             'idx_images_upload_id ON images(upload_id)',
+            'idx_images_date_taken ON images(date_taken)',
+            'idx_faces_image_id ON faces(image_id)',
+            'idx_faces_group_id ON faces(group_id)',
+            'idx_faces_group_id_image_id ON faces(group_id, image_id)',
             'idx_groups_representative_face ON groups(representative_face)',
             'idx_moments_representative_image ON moments(representative_image)',
-            'idx_faces_group_id_image_id ON faces(group_id, image_id)',
-            'idx_images_date_taken ON images(date_taken)',
             'idx_albums_representative_image ON albums(representative_image)',
+            'idx_profiles_public_access_code ON profiles(public_access_code)',
             'idx_uploads_profile_id ON uploads(profile_id)',
             'idx_uploads_status ON uploads(status)',
             'idx_uploads_started_at ON uploads(started_at)',
@@ -381,6 +385,7 @@ class EventDB(BaseDB):
                     all_images,
                     all_groups,
                     all_albums,
+                    is_public,
                     CASE WHEN hierarchy_rank = 0 THEN 0 ELSE 1 END as is_profiles_manager,
                     CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
                     CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
@@ -404,7 +409,9 @@ class EventDB(BaseDB):
                     can_edit,
                     all_images,
                     all_groups,
-                    all_albums
+                    all_albums,
+                    is_public,
+                    public_access_code
                 FROM profiles p
             ''',
             'accessible_profiles': '''
@@ -733,12 +740,14 @@ class EventDB(BaseDB):
                         RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
                     WHEN NEW.all_images = 1 and cur_profile('all_images') = 0 THEN
                         RAISE(ABORT, 'Permission denied: cannot create profile with all_images=1 if current profile does not have all_images=1')
+                    WHEN NEW.all_groups = 1 and cur_profile('all_groups') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1')
                     WHEN NEW.all_albums = 1 and cur_profile('all_albums') = 0 THEN
                         RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
                 END;
 
-                INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_albums)
-                VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_albums);
+                INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_groups, all_albums, is_public, public_access_code)
+                VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_groups, NEW.all_albums, NEW.is_public, CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END);
 
                 -- Create the profile_images and profile_albums tables
                 INSERT INTO profile_images (profile_id, image_id, accessible)
@@ -746,10 +755,16 @@ class EventDB(BaseDB):
                 FROM profile_images
                 WHERE profile_id = cur_profile('profile_id');
 
+                INSERT INTO profile_groups (profile_id, group_id, accessible)
+                SELECT NEW.profile_id, group_id, accessible
+                FROM profile_groups
+                WHERE profile_id = cur_profile('profile_id');
+                
                 INSERT INTO profile_albums (profile_id, album_id, accessible)
                 SELECT NEW.profile_id, album_id, accessible
                 FROM profile_albums
                 WHERE profile_id = cur_profile('profile_id');
+
             END;
             """,
             'trg_update_accessible_profiles': """
@@ -759,22 +774,27 @@ class EventDB(BaseDB):
                 SELECT CASE
                     WHEN cur_profile('hierarchy_rank') = 0 THEN
                         RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') AND OLD.profile_id <> cur_profile('profile_id') THEN
+                    WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
                         RAISE(ABORT, 'Permission denied: cannot edit profile with higher or equal rank')
                     WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
                         RAISE(ABORT, 'Permission denied: cannot set profile rank higher or equal to own rank')
                     WHEN NEW.all_images = 1 AND cur_profile('all_images') = 0 THEN
                         RAISE(ABORT, 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1')
+                    WHEN NEW.all_groups = 1 AND cur_profile('all_groups') = 0 THEN
+                        RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
                     WHEN NEW.all_albums = 1 AND cur_profile('all_albums') = 0 THEN
                         RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
                 END;
 
                 UPDATE profiles
-                SET hierarchy_rank = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.hierarchy_rank ELSE NEW.hierarchy_rank END,
-                    can_upload_and_delete_images = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.can_upload_and_delete_images ELSE NEW.can_upload_and_delete_images END,
-                    can_edit = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.can_edit ELSE NEW.can_edit END,
-                    all_images = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.all_images ELSE NEW.all_images END,
-                    all_albums = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.all_albums ELSE NEW.all_albums END
+                SET hierarchy_rank = NEW.hierarchy_rank,
+                    can_upload_and_delete_images = NEW.can_upload_and_delete_images,
+                    can_edit = NEW.can_edit,
+                    all_images = NEW.all_images,
+                    all_groups = NEW.all_groups,
+                    all_albums = NEW.all_albums,
+                    is_public = NEW.is_public,
+                    public_access_code = CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END
                 WHERE profile_id = OLD.profile_id;
 
                 DELETE FROM profile_images 
@@ -1049,6 +1069,48 @@ class EventDB(BaseDB):
             END;
             """,
 
+            # ensure_profiles_policy
+            'trg_insert_ensure_profiles_publicity': """
+            CREATE TRIGGER IF NOT EXISTS trg_insert_ensure_profiles_publicity
+            BEFORE INSERT ON profiles
+            BEGIN
+                SELECT CASE
+                    WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                        RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                END;
+            END;
+            """,
+            'trg_insert_ensure_profiles_public_access_code': """
+            CREATE TRIGGER IF NOT EXISTS trg_insert_ensure_profiles_public_access_code
+            AFTER INSERT ON profiles
+            BEGIN
+                UPDATE profiles
+                SET public_access_code = NULL
+                WHERE profile_id = NEW.profile_id
+                AND is_public = 0;
+            END;
+            """,
+            'trg_update_ensure_profiles_publicity': """
+            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_profiles_publicity
+            BEFORE UPDATE ON profiles
+            BEGIN
+                SELECT CASE
+                    WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                        RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                END;
+            END;
+            """,
+            'trg_update_ensure_profiles_public_access_code': """
+            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_profiles_public_access_code
+            AFTER UPDATE ON profiles
+            BEGIN
+                UPDATE profiles
+                SET public_access_code = NULL
+                WHERE profile_id = OLD.profile_id
+                AND is_public = 0;
+            END;
+            """,
+
             # ensure_default_albums
             'trg_update_ensure_default_albums': """
             CREATE TRIGGER IF NOT EXISTS trg_update_ensure_default_albums
@@ -1056,7 +1118,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites') AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
-                        RAISE(ABORT, 'Constant error: cannot update default albums')
+                        RAISE(ABORT, 'Policy error: cannot update default albums')
                 END;
             END;
             """,
@@ -1066,7 +1128,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites' THEN
-                        RAISE(ABORT, 'Constant error: cannot delete default albums')
+                        RAISE(ABORT, 'Policy error: cannot delete default albums')
                 END;
             END;
             """,
@@ -1078,9 +1140,9 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN LOWER(OLD.label) = 'unassociated' AND COALESCE(OLD.label, '') <> COALESCE(NEW.label, '') THEN
-                        RAISE(ABORT, 'Constant error: cannot update default group label')
+                        RAISE(ABORT, 'Policy error: cannot update default group label')
                     WHEN LOWER(NEW.label) = 'unassociated' AND COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '') THEN
-                        RAISE(ABORT, 'Constant error: cannot update default group representative face')
+                        RAISE(ABORT, 'Policy error: cannot update default group representative face')
                 END;
             END;
             """,
@@ -1090,7 +1152,7 @@ class EventDB(BaseDB):
             BEGIN
                 SELECT CASE
                     WHEN LOWER(OLD.label) = 'unassociated' THEN
-                        RAISE(ABORT, 'Constant error: cannot delete default group')
+                        RAISE(ABORT, 'Policy error: cannot delete default group')
                 END;
             END;
             """,
@@ -1125,8 +1187,20 @@ class EventDB(BaseDB):
         
         return archive_album_id, favorites_album_id, unassociated_group_id
 
-    def __init__(self, db_path: str, profile_id: str):
+    def __init__(self, db_path: str, profile_id: str | None = None, public_code: str | None = None):
         super().__init__(db_path)
+        if not profile_id:
+            if not public_code:
+                raise Forbidden('Access denied: no profile ID or public code provided')
+            with super().get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT profile_id FROM profiles WHERE public_access_code = ?', (public_code,))
+                result = cursor.fetchone()
+                if result:
+                    profile_id = result[0]
+                else:
+                    raise Forbidden(f'Access denied: public access code {public_code} is invalid')
+
         self.profile_id = profile_id
     
     @property
@@ -1144,7 +1218,9 @@ class EventDB(BaseDB):
             'can_upload_and_delete_images': False,
             'can_edit': False,
             'all_images': False,
+            'all_groups': False,
             'all_albums': False,
+            'is_public': False,
         }
         profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.DICT)
 

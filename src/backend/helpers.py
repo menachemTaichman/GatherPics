@@ -15,12 +15,12 @@ def get_general_models(profile_id=None):
     
     return GeneralModels(profile_id=profile_id)
 
-def get_event(event_id, profile_id=None):
+def get_event(event_id, profile_id=None, public_code=None):
     """Get event instance with profile context."""
-    if profile_id is None:
+    if profile_id is None and public_code is None:
         profile_id = getattr(g, 'profile_id', None)
     
-    return Event(event_id, profile_id=profile_id)
+    return Event(event_id, profile_id=profile_id, public_code=public_code)
 
 def get_event_details(event_id, profile_id=None):
     """Get event details with profile context."""

@@ -7,12 +7,12 @@ used by Flask, CLI tools, background workers, or any other Python code.
 """
 
 from src.core.config import DATA_ROOT
-from src.core.errors import Forbidden, DatabaseError, DBConstant
+from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 
 __all__ = [
     'DATA_ROOT',
     'Forbidden',
     'DatabaseError', 
-    'DBConstant',
+    'DBPolicyError',
 ]
 

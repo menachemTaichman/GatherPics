@@ -217,6 +217,59 @@ function AppContentWrapper() {
   return <AppContent eventUrl={eventUrl} />;
 }
 
+// Public access page component
+function PublicAccessPage() {
+  const { eventUrl, publicCode } = useParams();
+  const navigate = useNavigate();
+  const { loginWithPublicCode } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const authenticate = async () => {
+      try {
+        const result = await loginWithPublicCode(eventUrl, publicCode);
+        if (result.success) {
+          // Redirect to the event page
+          navigate(`/${eventUrl}`);
+        } else {
+          setError(result.error);
+          setLoading(false);
+        }
+      } catch (err) {
+        setError('Authentication failed');
+        setLoading(false);
+      }
+    };
+
+    authenticate();
+  }, [eventUrl, publicCode, loginWithPublicCode, navigate]);
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">🔒</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return null; // Will redirect on success
+}
+
 // Main content component that receives eventUrl as a prop
 function AppContent({ eventUrl }) {
   const location = useLocation();
@@ -568,6 +621,7 @@ export default function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/:eventUrl/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>
           </div>

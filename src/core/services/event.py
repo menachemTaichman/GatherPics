@@ -1,7 +1,7 @@
 import os
 import shutil
 from datetime import datetime
-from src.core.errors import Forbidden, DBConstant
+from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.event_db import EventDB
 from src.core.models.event_models import EventModels
@@ -32,11 +32,11 @@ class Event():
         event_dir = os.path.join(DATA_ROOT, event_id)
         shutil.rmtree(event_dir)
    
-    def __init__(self, event_id: str, profile_id: str):
+    def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         event_dir = os.path.join(DATA_ROOT, event_id)
         
         self.event_id = event_id
-        self.models = EventModels(event_id, profile_id)
+        self.models = EventModels(event_id, profile_id, public_code)
         self.face_utils = FaceUtils(event_id)
         self.display_dir = os.path.join(event_dir, 'display')
         self.original_dir = os.path.join(event_dir, 'original')
@@ -90,7 +90,7 @@ class Event():
                     try:
                         self.models.delete('groups', group_id)                    
                         deleted_groups.add(group_id)
-                    except DBConstant as e:
+                    except DBPolicyError as e:
                         continue
                     except Forbidden as e:
                         continue

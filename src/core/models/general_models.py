@@ -59,6 +59,23 @@ class GeneralModels(BaseModels):
         
         return self.profile_context['hierarchy_rank'] > profile.get('hierarchy_rank') or self.profile_context['profile_id'] == profile_id
 
+    def is_public_profile(self, profile_id: str) -> bool:
+        """Check if a profile is public."""
+        error = Forbidden('Profile does not have permission to check if this profile is public')
+        restricted_to_event_id = self.get_entities('profiles', profile_id).get('restricted_to_event')
+        if not restricted_to_event_id:
+            raise error
+        
+        event = Event(restricted_to_event_id, self.profile_context['profile_id'])
+        if not event:
+            raise error
+        
+        profile = event.models.get_entities('profiles', profile_id)
+        if not profile:
+            raise error
+        
+        return profile.get('is_public')
+
     def create_profile(self, label: str, password: str, hierarchy_rank: int, event_id: str | None = None, can_delete: bool = False) -> str:
         """
         Create a new profile.
@@ -114,15 +131,26 @@ class GeneralModels(BaseModels):
         query = 'SELECT password FROM profiles WHERE profile_id = ?'
         return self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
     
+    def update_profile_password(self, profile_id: str, password: str):
+        """Update the password for a profile."""
+        if not self.is_managable_profile(profile_id):
+            if profile_id != self.profile_context['profile_id'] or self.is_public_profile(profile_id):
+                raise Forbidden('Profile does not have permission to update this profile password')
+        
+        self.edit('profiles', profile_id, {'password': password})
+        self.revoke_all_refresh_tokens(profile_id)
+    
     def update_profile(self, profile_id: str, data: dict):
-        """Update the profile data."""
+        """
+        Update the profile data.
+        Allowed fields: label
+        """
         if not self.is_managable_profile(profile_id):
             raise Forbidden('Profile does not have permission to update this profile')
+
+        data = {k: v for k, v in data.items() if k in ['label']}
         
         self.edit('profiles', profile_id, data)
-
-        if 'password' in data:
-            self.revoke_all_refresh_tokens(profile_id)
 
     def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
         """Update the hierarchy rank for a profile."""
@@ -164,12 +192,9 @@ class GeneralModels(BaseModels):
 
     def update_profile_preferences(self, profile_id: str, preference_group: str, preference_key: str, preference_value):
         """Update the preferences for a profile."""
-        # check if the profile have save_preferences permission
-        if not self.is_managable_profile(profile_id) and profile_id != self.profile_context['profile_id']:
-            raise Forbidden('Profile does not have permissions to update this profile preferences')
-
-        if not self.profile_context['save_preferences']:
-            raise Forbidden('Profile does not have permission to save preferences')
+        if not self.is_managable_profile(profile_id):
+            if profile_id != self.profile_context['profile_id'] or self.is_public_profile(profile_id):
+                raise Forbidden('Profile does not have permission to update this profile preferences')
 
         preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
         

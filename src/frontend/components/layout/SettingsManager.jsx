@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2 } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -40,6 +40,7 @@ export default function SettingsManager() {
   const [profileToDelete, setProfileToDelete] = useState(null);
   const [profileNameConflict, setProfileNameConflict] = useState(false);
   const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
+  const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'settings-manager';
@@ -238,8 +239,9 @@ export default function SettingsManager() {
       can_upload_and_delete_images: 0,
       can_edit: 0,
       all_images: 0,
+      all_groups: 0,
       all_albums: 0,
-      save_preferences: 0
+      is_public: 0
     };
     
     setSelectedProfile(newProfileTemplate);
@@ -271,6 +273,61 @@ export default function SettingsManager() {
   const handleSignOut = async () => {
     await logout();
     setIsOpen(false); // Close settings modal
+  };
+
+  // Public access code management functions
+  const handleCopyPublicLink = async (profile) => {
+    try {
+      const publicCode = profile.public_access_code;
+      if (!publicCode) {
+        showToast('No public access code available. Generate one first.', 'error');
+        return;
+      }
+      
+      const publicUrl = `${window.location.origin}/${eventUrl}/${publicCode}`;
+      await navigator.clipboard.writeText(publicUrl);
+      showToast('Public link copied to clipboard', 'success');
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      showToast('Failed to copy link', 'error');
+    }
+  };
+
+  const handleResetPublicCode = async (profile) => {
+    try {
+      const result = await profilesAPI.resetPublicAccessCode(profile.id, eventUrl);
+      showToast('Public access code reset', 'success');
+      
+      // Auto-copy the new link
+      if (result.public_code) {
+        const publicUrl = `${window.location.origin}/${eventUrl}/${result.public_code}`;
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          showToast('Public link copied to clipboard', 'success');
+        } catch (copyError) {
+          console.error('Failed to copy link:', copyError);
+          showToast('Link created but failed to copy', 'warning');
+        }
+      }
+      
+      // Refresh profiles list
+      await fetchProfiles();
+    } catch (error) {
+      console.error('Failed to reset public access code:', error);
+      showToast(formatErrorMessage('reset public access code', error), 'error');
+    }
+  };
+
+  const handleRemovePublicCode = async (profile) => {
+    try {
+      await profilesAPI.removePublicAccessCode(profile.id, eventUrl);
+      showToast('Public access code removed', 'success');
+      // Refresh profiles list
+      await fetchProfiles();
+    } catch (error) {
+      console.error('Failed to remove public access code:', error);
+      showToast(formatErrorMessage('remove public access code', error), 'error');
+    }
   };
 
   // Get other profiles (exclude current) and sort by rank desc, then label asc
@@ -373,53 +430,42 @@ export default function SettingsManager() {
                         className="space-y-6"
                       >
                         {/* Current Profile Section */}
-                        {permissions.isProfilesManager ? (
-                          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile</h3>
-                            
-                            <div className="flex items-center space-x-3">
-                              {/* Profile Name - Read Only */}
-                              <div className="flex-1">
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                                <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
-                                  {currentProfile?.label || 'Not set'}
-                                </div>
+                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile</h3>
+                          
+                          <div className="flex items-center space-x-3">
+                            {/* Profile Name - Read Only */}
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                              <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
+                                {currentProfile?.label || 'Not set'}
                               </div>
+                            </div>
 
-                              {/* Hierarchy Rank - Read Only */}
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Rank</label>
-                                <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
-                                  {currentProfile?.hierarchy_rank || 0}
-                                </div>
+                            {/* Hierarchy Rank - Read Only */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Rank</label>
+                              <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
+                                {currentProfile?.hierarchy_rank || 0}
                               </div>
+                            </div>
 
-                              {/* Change Password Button */}
+                            {/* Change Password Button - Only show if not public */}
+                            {!currentProfile?.is_public && (
                               <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
                                 <button
                                   onClick={() => setShowChangePasswordModal(true)}
                                   className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 whitespace-nowrap"
+                                  title="Change password"
                                 >
                                   <Lock className="w-4 h-4" />
                                   <span>Change Password</span>
                                 </button>
                               </div>
-                            </div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-100">
-                            <div className="flex items-center space-x-4">
-                              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                                <User className="w-8 h-8 text-white" />
-                              </div>
-                              <div>
-                                <p className="text-xs font-medium text-gray-600 mb-1">Current Profile</p>
-                                <h3 className="text-2xl font-bold text-gray-900">{currentProfile?.label || 'Not set'}</h3>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        </div>
 
                         {/* Include Archived */}
                         <PermissionGate requires="hasArchiveAlbum">
@@ -473,6 +519,29 @@ export default function SettingsManager() {
                         <PermissionGate requires="isProfilesManager">
                           {/* Other Profiles Section */}
                           <div className="bg-gray-50 rounded-lg p-4">
+                          {/* Header with explanation tooltip */}
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-semibold text-gray-700">Profiles</h3>
+                            <div className="relative">
+                              <button
+                                onMouseEnter={() => setShowPublicAccessTooltip(true)}
+                                onMouseLeave={() => setShowPublicAccessTooltip(false)}
+                                className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
+                              >
+                                <HelpCircle className="w-5 h-5" />
+                              </button>
+                              {showPublicAccessTooltip && (
+                                <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+                                  <p className="mb-2 font-medium">Public Access Codes</p>
+                                  <p className="mb-1">• Public profiles can be accessed via direct links</p>
+                                  <p className="mb-1">• Copy link: Share the public access URL</p>
+                                  <p className="mb-1">• Reset link: Generate a new access code</p>
+                                  <p>• Remove link: Disable public access</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                           {/* Create Profile Button */}
                           <button
                             onClick={handleCreateProfile}
@@ -492,15 +561,66 @@ export default function SettingsManager() {
                                   className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
                                 >
                                   <div className="flex items-center space-x-3">
-                                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                      <User className="w-5 h-5 text-purple-600" />
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                      profile.is_public ? 'bg-green-100' : 'bg-purple-100'
+                                    }`}>
+                                      <User className={`w-5 h-5 ${
+                                        profile.is_public ? 'text-green-600' : 'text-purple-600'
+                                      }`} />
                                     </div>
                                     <div>
-                                      <p className="font-medium text-gray-900">{profile.label}</p>
-                                      <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank}</p>
+                                      <div className="flex items-center space-x-2">
+                                        <p className="font-medium text-gray-900">{profile.label}</p>
+                                        {profile.is_public ? (
+                                          <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
+                                            Public
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank || 0}</p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center space-x-2">
+                                  <div className="flex items-center space-x-1">
+                                    {/* Public access code buttons - only show for public profiles */}
+                                    {profile.is_public ? (
+                                      <>
+                                        {profile.public_access_code ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleCopyPublicLink(profile)}
+                                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                              title={`Copy public link: ${window.location.origin}/${eventUrl}/${profile.public_access_code}`}
+                                            >
+                                              <Link className="w-4 h-4 text-blue-600" />
+                                            </button>
+                                            <button
+                                              onClick={() => handleResetPublicCode(profile)}
+                                              className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                                              title="Reset public access code"
+                                            >
+                                              <RotateCcw className="w-4 h-4 text-yellow-600" />
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleResetPublicCode(profile)}
+                                            className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                                            title="Create public access code"
+                                          >
+                                            <Link className="w-4 h-4 text-green-600" />
+                                          </button>
+                                        )}
+                                        {profile.public_access_code ? (
+                                          <button
+                                            onClick={() => handleRemovePublicCode(profile)}
+                                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                            title="Remove public access code"
+                                          >
+                                            <Minus className="w-4 h-4 text-red-600" />
+                                          </button>
+                                        ) : null}
+                                      </>
+                                    ) : null}
                                     <button
                                       onClick={() => handleEditProfile(profile)}
                                       className="p-2 hover:bg-blue-100 rounded-lg transition-colors"

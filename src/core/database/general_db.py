@@ -79,7 +79,7 @@ class GeneralDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'profiles',
-                'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'save_preferences'],
+                'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
                 'relations': {
                     'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
                 },
@@ -124,7 +124,6 @@ class GeneralDB(BaseDB):
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
                 can_create_events INTEGER DEFAULT 0,
                 restricted_to_event TEXT DEFAULT NULL,
-                save_preferences INTEGER DEFAULT 0,
                 UNIQUE (label, restricted_to_event)
             ''',
             'profiles_events': '''

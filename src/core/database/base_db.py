@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import os
 from enum import Enum
 from abc import ABC, abstractmethod
-from src.core.errors import Forbidden, DatabaseError, DBConstant
+from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 
 class ReturnFormat(Enum):
     VALUE = 'value'
@@ -193,7 +193,8 @@ class BaseDB(ABC):
         """Initialize database connection."""
         self.db_path = db_path
         if not os.path.exists(self.db_path):
-            raise FileNotFoundError(f"Database file not found: {self.db_path}")
+            file_name = os.path.basename(self.db_path)
+            raise FileNotFoundError(f"Database file not found: {file_name}")
 
     @contextmanager
     def get_connection(self):
@@ -226,8 +227,8 @@ class BaseDB(ABC):
                 conn.commit()
         
         except sqlite3.IntegrityError as e:
-            if "Constant error" in str(e):
-                raise DBConstant(f"Database constant error: {str(e)}") from e
+            if "Policy error" in str(e):
+                raise DBPolicyError(f"Database policy error: {str(e)}") from e
             elif "Permission denied" in str(e):
                 raise Forbidden(f"Permission denied: {e}") from e
             else:

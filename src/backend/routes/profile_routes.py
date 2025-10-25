@@ -227,8 +227,8 @@ def _create_profile(data: dict, event_id: str | None = None):
     all_images = data.get('all_images', 0)
     all_albums = data.get('all_albums', 0)
     all_groups = data.get('all_groups', 0)
-    save_preferences = data.get('save_preferences', 0)
-    
+    is_public = data.get('is_public', 0)
+
     try:
         profile_id = general_models.create_profile(label, password, hierarchy_rank, event_id, can_delete_event)
     except Forbidden as e:
@@ -242,7 +242,7 @@ def _create_profile(data: dict, event_id: str | None = None):
             'all_images': all_images,
             'all_albums': all_albums,
             'all_groups': all_groups,
-            'save_preferences': save_preferences
+            'is_public': is_public
         }
         event.models.edit('profiles', profile_id, sanitized)
 
@@ -310,18 +310,15 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
         if general_models.is_exists('profiles', {'label': label}, exclude_id = profile_id):
             raise ValueError("Profile with this label already exists")
 
+        general_models.update_profile(profile_id, {'label': label})
+    
+
     if 'hierarchy_rank' in data.keys():
         general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
 
-    general_fields = [
-        'label',
-        'password',
-        'save_preferences',
-    ]
-    general_data = {k: v for k, v in data.items() if k in general_fields}
+    if 'password' in data.keys():
+        general_models.update_profile_password(profile_id, data['password'])
 
-    general_models.update_profile(profile_id, general_data)
-    
     if event_id:
         event_fields = [
             'can_delete_event',
@@ -330,6 +327,7 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
             'all_images',
             'all_albums',
             'all_groups',
+            'is_public'
         ]
         event_data = {k: v for k, v in data.items() if k in event_fields}
         event = get_event(event_id)
@@ -602,4 +600,62 @@ def set_groups_as_inaccessible(event_id, profile_id):
     data = request.json or {}
     group_ids = data.get('group_ids', [])
     return _set_profile_accessibility(event, profile_id, 'groups', group_ids, set_accessible=False)
+
+# Public access code management
+@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/public-access-code", methods=["POST"])
+@require_auth
+def generate_public_access_code(event_id, profile_id):
+    """Generate a public access code for a profile."""
+    event = get_event(event_id)
+    if not event.models.get_current_profile()['is_profiles_manager']:
+        return jsonify({"error": "Access denied"}), 403
+    
+    try:
+        # Check if profile is public
+        profile = event.models.get_entities('profiles', [profile_id])
+        if not profile or not profile[profile_id].get('is_public'):
+            return jsonify({"error": "Profile must be public to generate access code"}), 400
+        
+        public_code = event.models.generate_public_access_code(profile_id)
+        
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': event.models.get_entities('profiles', [profile_id])
+        }]
+        
+        return jsonify({"success": True, "public_code": public_code, "changes": changes})
+    
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/public-access-code", methods=["DELETE"])
+@require_auth
+def remove_public_access_code(event_id, profile_id):
+    """Remove public access code for a profile."""
+    event = get_event(event_id)
+    if not event.models.get_current_profile()['is_profiles_manager']:
+        return jsonify({"error": "Access denied"}), 403
+    
+    try:
+        event.models.revoke_public_access_code(profile_id)
+        
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': event.models.get_entities('profiles', [profile_id])
+        }]
+        
+        return jsonify({"success": True, "changes": changes})
+    
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 

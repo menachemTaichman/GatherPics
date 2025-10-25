@@ -2,15 +2,16 @@ from typing import List, Dict, Any
 from src.core.database.base_db import ReturnFormat
 from src.core.models.base_models import BaseModels
 from src.core.database.event_db import EventDB
-from src.core.errors import DBConstant
+from src.core.errors import DBPolicyError
 from src.core.config import DATA_ROOT
 import os
+import secrets
 
 class EventModels(BaseModels):
 
-    def __init__(self, event_id: str, profile_id: str):
+    def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         db_path = os.path.join(DATA_ROOT, event_id, f'{event_id}.db')
-        self.db = EventDB(db_path, profile_id)
+        self.db = EventDB(db_path, profile_id, public_code)
 
     def get_current_profile(self) -> dict[str, Any]:
         """Get the current profile."""
@@ -80,7 +81,7 @@ class EventModels(BaseModels):
         
         try:
             self.edit(table, entity_id, {representative_field: biggest})
-        except DBConstant as e:
+        except DBPolicyError as e:
             return None
         
         return biggest
@@ -365,3 +366,23 @@ class EventModels(BaseModels):
 
         valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, add=set_accessible)
         return valid_ids, set_accessible
+
+    # -------- Public Access Code helpers --------
+    def generate_public_access_code(self, profile_id: str) -> str:
+        """Generate a 12-character public access code for a profile."""
+        
+        # Generate a 12-character code
+        code = secrets.token_urlsafe(9)[:12]  # Remove padding chars, take first 12
+        
+        # Ensure uniqueness
+        while self.db.execute_query('SELECT 1 FROM profiles WHERE public_access_code = ?', (code,), return_format=ReturnFormat.VALUE):
+            code = secrets.token_urlsafe(9)[:12]
+        
+        # Update profile with the code
+        self.edit('profiles', profile_id, {'public_access_code': code})
+        return self.get_entities('profiles', profile_id)['public_access_code']
+
+    def revoke_public_access_code(self, profile_id: str):
+        """Revoke public access code for a profile."""
+        self.edit('profiles', profile_id, {'public_access_code': None})
+    

@@ -202,6 +202,49 @@ export function AuthProvider({ children }) {
     }
   }, [pendingNavigation]);
 
+  const loginWithPublicCode = useCallback(async (eventUrl, publicCode) => {
+    setLoginError(null);
+    
+    try {
+      const result = await jwtService.authenticateWithPublicCode(eventUrl, publicCode);
+      
+      // Store profile
+      if (result.profile) {
+        setCurrentProfile(result.profile);
+      }
+      
+      setIsAuthenticated(true);
+      setShowLoginModal(false);
+      
+      // Load preferences from API
+      await initializePreferences(true);
+      
+      // Execute pending navigation if any
+      if (pendingNavigation) {
+        pendingNavigation();
+        setPendingNavigation(null);
+      }
+      
+      // Trigger data refetch event for components to listen to
+      window.dispatchEvent(new CustomEvent('auth:login'));
+      
+      // Broadcast login to other tabs via localStorage
+      try {
+        localStorage.setItem('auth:login', Date.now().toString());
+        // Remove immediately to allow future logins to trigger storage events
+        setTimeout(() => localStorage.removeItem('auth:login'), 100);
+      } catch (e) {
+        console.error('Failed to broadcast login:', e);
+      }
+      
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || 'Invalid access code';
+      setLoginError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }, [pendingNavigation]);
+
   const logout = useCallback(async () => {
     try {
       await jwtService.logout();
@@ -265,6 +308,7 @@ export function AuthProvider({ children }) {
     showLoginModal,
     loginError,
     login,
+    loginWithPublicCode,
     logout,
     requireAuth,
     openLoginModal: () => setShowLoginModal(true),

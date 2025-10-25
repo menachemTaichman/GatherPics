@@ -107,7 +107,7 @@ export const setPreference = async (path, value) => {
     detail: { path, value, preferences }
   }));
   
-  // Sync to backend if user has save_preferences permission
+  // Sync to backend if user is not public
   try {
     const pathParts = path.split('.');
     if (pathParts.length >= 2) {
@@ -117,7 +117,7 @@ export const setPreference = async (path, value) => {
       await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
     }
   } catch (error) {
-    // Silently fail - profile might not have save_preferences permission or not logged in
+    // Silently fail - profile is public or not logged in
     // The preference is still saved locally, which is fine
     if (error.response?.status !== 403) {
       console.warn('Failed to sync preference to backend:', error);
@@ -127,7 +127,7 @@ export const setPreference = async (path, value) => {
 
 /**
  * Initialize preferences at startup - ensures preferences exist in localStorage
- * Optionally loads from API if user has save_preferences permission
+ * Optionally loads from API if user is not public
  * @param {boolean} loadFromAPI - Whether to attempt loading from API
  */
 export const initializePreferences = async (loadFromAPI = false) => {

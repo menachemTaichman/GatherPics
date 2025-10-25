@@ -980,6 +980,29 @@ export const profilesAPI = {
       preference_value: preferenceValue
     });
     return response.data;
+  },
+
+  // === Public Access Code Management ===
+  
+  // Generate public access code for a profile
+  generatePublicAccessCode: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+    return response.data;
+  },
+  
+  // Reset public access code for a profile (generates new one)
+  resetPublicAccessCode: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+    return response.data;
+  },
+  
+  // Remove public access code for a profile
+  removePublicAccessCode: async (profileId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+    return response.data;
   }
 };
 
@@ -1107,6 +1130,19 @@ export const authAPI = {
   // Check if user is authenticated
   isAuthenticated: () => {
     return jwtService.hasToken();
+  },
+
+  // Authenticate with public access code
+  authenticateWithPublicCode: async (eventUrl, publicCode) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    if (!eventId) {
+      throw new Error(`Event not found: ${eventUrl}`);
+    }
+    
+    const response = await api.post(`/api/events/${eventId}/public-access/${publicCode}`, {}, { 
+      withCredentials: true 
+    });
+    return response.data;
   }
 };
 
