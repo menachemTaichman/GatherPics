@@ -1,6 +1,6 @@
 from flask import g
 from src.core.models.general_models import GeneralModels
-from src.core.services.event import Event
+from src.core.services.event import Event, ChildOperation
 
 def _parse_bool(val: str | None, default: bool) -> bool:
     """Parse a boolean value from a string, with a default."""

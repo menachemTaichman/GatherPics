@@ -49,6 +49,7 @@ class BaseDB(ABC):
             - relations: dict with other_table_name as keys and relation info as values
                 - relation_table: relation table name
                 - fields_needed: list of fields needed to be returned by the get_childs query
+                - relation_table_fields: list of relation_table fields to be returned by the get_childs query. default is none.
             - serializable: dict with field names as keys and field types as values, for all fields that need to be serialized
         
         Example:
@@ -194,14 +195,13 @@ class BaseDB(ABC):
         return fields
 
     @classmethod
-    def get_relation(cls, parent: str, child: str | None = None) -> tuple[str, str, str, list[str]] | list[tuple[str, str, str, list[str]]]:
+    def get_relation(cls, parent: str, child: str | None = None) -> tuple[str, str, str, list[str], list[str]] | list[tuple[str, str, str, list[str], list[str]]]:
         """Get the relation info for a parent and child.
         Args:
-            structure: database structure dict
             parent: parent table
             child: child table or None to get all childs
         Returns:
-            relation table, child table, child id field, and view fields for a relation.
+            tuple with relation table, child table, child id field, view fields and relation table fields for a relation.
             if child is None, return a list of all relations info.
         """
         return_single = False
@@ -217,7 +217,10 @@ class BaseDB(ABC):
             relation_table = relation_meta['relation_table']
             child_id_field = cls.get_id_field(relation_table, remove_parent=parent)
             fields = cls._get_fields([child_id_field] + relation_meta['fields_needed'], 'c')
-            relations.append((relation_table, child, child_id_field, fields))
+            relation_table_fields = relation_meta.get('relation_table_fields', [])
+            if relation_table_fields:
+                relation_table_fields = cls._get_fields(relation_table_fields, 'r')
+            relations.append((relation_table, child, child_id_field, fields, relation_table_fields))
 
         if return_single:
             return relations[0]

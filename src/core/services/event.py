@@ -4,7 +4,7 @@ from datetime import datetime
 from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.event_db import EventDB
-from src.core.models.event_models import EventModels
+from src.core.models.event_models import EventModels, ChildOperation
 from src.core.config import DATA_ROOT
 
 class Event():
@@ -52,6 +52,9 @@ class Event():
 
     def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0):
         self.models.sync_profile_to_event_db(profile_id, upsert=upsert, hierarchy_rank=hierarchy_rank)
+
+    def toggle_access_request(self, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None) -> str | None:
+        return self.models.toggle_access_request(access_request_id, approve, group_ids, close, closed_details)
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
@@ -213,7 +216,7 @@ class Event():
                         group_id = self.models.add('groups', {'label': f"Person {group_num}"})
                         groups_created += 1
                     
-                    self.models.edit_childs('groups', group_id, 'faces', add_faces, add=True)
+                    self.models.edit_childs('groups', group_id, 'faces', add_faces, operation=ChildOperation.ADD)
 
             return groups_created
 

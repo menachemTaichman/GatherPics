@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models
+from src.backend.helpers import get_event, get_general_models, ChildOperation
 from src.core.errors import Forbidden, DatabaseError
 
 profile_bp = Blueprint('profiles', __name__)
@@ -221,6 +221,7 @@ def _create_profile(data: dict, event_id: str | None = None):
     hierarchy_rank = data.get('hierarchy_rank', 0)
     password = data.get('password', '')
 
+    can_create_events = data.get('can_create_events', False)
     can_delete_event = data.get('can_delete_event', False)
     can_upload_and_delete_images = data.get('can_upload_and_delete_images', 0)
     can_edit = data.get('can_edit', 0)
@@ -230,7 +231,7 @@ def _create_profile(data: dict, event_id: str | None = None):
     is_public = data.get('is_public', 0)
 
     try:
-        profile_id = general_models.create_profile(label, password, hierarchy_rank, event_id, can_delete_event)
+        profile_id = general_models.create_profile(label, password, hierarchy_rank, can_create_events=can_create_events, event_id=event_id, can_delete=can_delete_event)
     except Forbidden as e:
         raise e
 
@@ -434,7 +435,8 @@ def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bo
         return jsonify({"error": f"Invalid child: {child}"}), 400
 
     try:
-        affected_ids, _ = event.models.edit_childs('profiles', profile_id, child, child_ids, add=add)
+        operation = ChildOperation.ADD if add else ChildOperation.REMOVE
+        affected_ids, _ = event.models.edit_childs('profiles', profile_id, child, child_ids, operation=operation)
         if add:
             changes = [{
                 'type': 'RELATION_ADD',

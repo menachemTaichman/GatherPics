@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from src.core.database.base_db import ReturnFormat
-from src.core.models.base_models import BaseModels
+from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.database.general_db import GeneralDB
 from src.core.services.event import Event
 from src.core.errors import Forbidden
@@ -76,7 +76,7 @@ class GeneralModels(BaseModels):
         
         return profile.get('is_public')
 
-    def create_profile(self, label: str, password: str, hierarchy_rank: int, event_id: str | None = None, can_delete: bool = False) -> str:
+    def create_profile(self, label: str, password: str, hierarchy_rank: int, *, can_create_events: bool = False, event_id: str | None = None, can_delete: bool = False) -> str:
         """
         Create a new profile.
         Returns:
@@ -92,7 +92,7 @@ class GeneralModels(BaseModels):
             raise Exception('Profile does not have permissions in this event')
 
         profile_id = self.generate_id()
-        self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'restricted_to_event': event_id})
+        self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
         if event_id:
             self.add_profile_to_event(profile_id, event_id, can_delete)
 
@@ -210,6 +210,26 @@ class GeneralModels(BaseModels):
         
         self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
+    def toggle_access_request(self, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None) -> str | None:
+        """
+        Toggle an access request.
+        Returns:
+            applicant_profile_id if the access request is approved, None otherwise
+        """
+        event = Event(access_request_id, self.profile_context['profile_id'])
+        if not event:
+            raise Forbidden('Profile does not have permission to toggle this access request')
+
+        access_request = event.get_entities('access_requests', access_request_id)
+        if not access_request:
+            raise Forbidden('Access request not found')
+        if not access_request['applicant_profile_id']:
+            applicant_profile_id = self.create_profile(access_request['applicant_name'], '', 0, event_id=access_request['event_id'])
+            event.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
+        
+        event.toggle_access_request(access_request_id, approve, group_ids, close, closed_details)
+        return applicant_profile_id
+
     # Profile-Event management
     def add_profile_to_event(self, profile_id: str, event_id: str, can_delete: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
@@ -220,7 +240,7 @@ class GeneralModels(BaseModels):
         if not self.is_managable_profile(profile_id):
             raise Forbidden('Profile does not have permissions in this profile')
         
-        self.edit_childs('profiles', profile_id, 'events', [event_id], add=True, data={'can_delete': can_delete})
+        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete': can_delete})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
@@ -232,7 +252,7 @@ class GeneralModels(BaseModels):
             raise Forbidden('Profile does not have permissions in this profile')
         
         self.sync_profile_to_event_db(profile_id, event_id, upsert=False)
-        self.edit_childs('profiles', profile_id, 'events', [event_id], add=False)
+        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.REMOVE)
     
     def sync_profile_to_event_db(self, profile_id: str, event_id: str, upsert: bool = True):
         """Updates event DB when profile is added/removed from an event."""        

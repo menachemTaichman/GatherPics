@@ -200,10 +200,12 @@ def transfer_faces(event_id):
         if not target_group_id:
             return jsonify({"error": "target_group_id or new_group_name must be provided"}), 400
         
+        print(f"Adding faces to group {target_group_id}")
         result = event.models.add_faces_to_group(
             face_ids=face_ids,
             target_group_id=target_group_id,
         )
+        print(f"Result: {result}")
 
         detached_groups_images = result['detached_groups_images']
         detached_groups_faces = result['detached_groups_faces']

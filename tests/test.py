@@ -1,4 +1,5 @@
-from src.core.services.event import Event
+from flask.config import T
+from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.base_db import BaseDB
 from src.core.database.event_db import EventDB
@@ -205,17 +206,17 @@ def test_edit_methods():
     # print(result)
     # print('--------------------------------')
     # moments.images
-    moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c'
-    image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
-    result = event.models.edit_childs('moments', moment_id, 'images', image_ids, add=True)
-    print(result)
-    print('--------------------------------')
-    # # albums.images
-    # album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
+    # moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c'
     # image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
-    # result = event.models.edit_childs('albums', album_id, 'images', image_ids, add=True)
+    # result = event.models.edit_childs('moments', moment_id, 'images', image_ids, operation=ChildOperation.ADD)
     # print(result)
     # print('--------------------------------')
+    # albums.images
+    album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
+    image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
+    result = event.models.edit_childs('albums', album_id, 'images', image_ids, operation=ChildOperation.ADD)
+    print(result)
+    print('--------------------------------')
 
 def test_faces_in_aws_and_db():
     if not event.face_utils:
@@ -274,3 +275,48 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+# access_requests = '''
+# access_request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+# profile_id TEXT,
+# requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+# profile_label_requested TEXT NOT NULL,
+# profile_password_requested TEXT NOT NULL,
+# email TEXT NOT NULL,
+# details TEXT,
+# is_closed BOOLEAN DEFAULT 0,
+# closed_at DATETIME,
+# closed_by TEXT,
+# closed_details TEXT,
+# profile_id_created TEXT NOT NULL,
+# FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
+# FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL,
+# FOREIGN KEY (profile_id_created) REFERENCES profiles(profile_id) ON DELETE SET NULL
+# '''
+# access_requests_groups = '''
+# access_request_id INTEGER NOT NULL,
+# group_id TEXT NOT NULL,
+# approved BOOLEAN DEFAULT NULL,
+# closed_at DATETIME,
+# closed_by TEXT,
+# FOREIGN KEY (access_request_id) REFERENCES access_requests(access_request_id) ON DELETE CASCADE,
+# FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE,
+# FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL,
+# PRIMARY KEY (access_request_id, group_id)
+# '''
+# drop_views_triggers_and_indexes()
+# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests")
+# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests_groups")
+# event.models.db.execute_query(f"CREATE TABLE access_requests ({access_requests})")
+# event.models.db.execute_query(f"CREATE TABLE access_requests_groups ({access_requests_groups})")
+# create_views_triggers_and_indexes()
+
+# access_requests = EventDB.TABLES()['access_requests']
+# access_requests_groups = EventDB.TABLES()['access_requests_groups']
+# drop_views_triggers_and_indexes()
+# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests_groups")
+# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests")
+# event.models.db.execute_query(f"CREATE TABLE access_requests ({access_requests})")
+# event.models.db.execute_query(f"CREATE TABLE access_requests_groups ({access_requests_groups})")
+# create_views_triggers_and_indexes()
+
+recreate_views_triggers_and_indexes()

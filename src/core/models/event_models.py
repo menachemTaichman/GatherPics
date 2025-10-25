@@ -1,11 +1,12 @@
 from typing import List, Dict, Any
 from src.core.database.base_db import ReturnFormat
-from src.core.models.base_models import BaseModels
+from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.database.event_db import EventDB
 from src.core.errors import DBPolicyError
 from src.core.config import DATA_ROOT
 import os
 import secrets
+from datetime import datetime
 
 class EventModels(BaseModels):
 
@@ -49,7 +50,7 @@ class EventModels(BaseModels):
         representative_table = representative['table']
 
         id_field = self.db.get_id_field(table)
-        relation, child, child_id_field, view_fields = self.db.get_relation(table, representative_table)
+        relation, child, child_id_field, view_fields, relation_table_fields = self.db.get_relation(table, representative_table)
 
         query = f"""SELECT r.{child_id_field}
         FROM {relation} r
@@ -86,19 +87,20 @@ class EventModels(BaseModels):
         
         return biggest
 
-    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], *, add: bool) -> tuple[list[str], dict[str, list[str]]]:
+    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict | None = None) -> tuple[list[str], dict[str, list[str]]]:
         """Edit childs of a parent.
         Args:
             parent: parent entity
             entity_id: parent id
             child: child entity
             child_ids: list of child ids
-            add: if True, add childs, if False, remove childs
+            operation: operation to perform on the childs
+            data: data to add or edit in the relation table
         Returns:
             list of affected child ids, dict of detached parents with parent ids as keys and list of detached child ids as values
         """
 
-        valid_child_ids, detached_parents = super().edit_childs(parent, entity_id, child, child_ids, add=add)
+        valid_child_ids, detached_parents = super().edit_childs(parent, entity_id, child, child_ids, operation=operation, data=data)
         if self.db.STRUCTURE()[parent].get('representative',''):
             for parent_id in set(detached_parents.keys()).union([entity_id]):
                 self.ensure_representative(parent, parent_id)
@@ -290,7 +292,7 @@ class EventModels(BaseModels):
                 faces_added: list of face ids added to target group
                 deleted_group_ids: list of group ids that were deleted (based on accessibility)
         """
-        faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, add=True)
+        faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, operation=ChildOperation.ADD)
 
         # Track which groups were deleted based on accessibility
         deleted_group_ids = []
@@ -361,11 +363,48 @@ class EventModels(BaseModels):
         if not profile:
             return []
 
+        add = set_accessible
         if bool(profile[f'all_{entity}']):
-            set_accessible = not set_accessible
+            add = not add
 
-        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, add=set_accessible)
-        return valid_ids, set_accessible
+        operation = ChildOperation.ADD if add else ChildOperation.REMOVE
+        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
+        return valid_ids, add
+
+    def toggle_access_request(self, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None):
+        """
+        Approve an access request for a group.
+        Args:
+            access_request_id: access request id
+            approve: if True, approve the access request, if False, reject the access request
+            group_ids: list of group ids to approve, if None, approve all groups
+            close: if True, deny all other groups requests access of this access request
+            closed_details: details of the closed request to add to the closed details list
+        """
+        access_request = self.get_entities('access_requests', access_request_id)
+        if not access_request:
+            raise ValueError(f"Access request not found for id {access_request_id}")
+        applicant_profile_id = access_request['applicant_profile_id']
+        if not applicant_profile_id:
+            raise ValueError(f"Applicant profile id not found for access request {access_request_id}")            
+        
+        if group_ids is None:
+            group_ids = self.get_childs('access_requests', access_request_id, 'groups', return_ids=True)
+
+        accessible_groups = self.get_entities('groups', group_ids)
+        group_ids = [group_id for group_id in group_ids if accessible_groups[group_id].get('is_accessible')]
+        self.edit_accessibility(applicant_profile_id, 'groups', group_ids, set_accessible=approve)
+        self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data={'approved': approve, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
+
+        if close:
+            groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
+            if groups_left:
+                self.edit_accessibility(applicant_profile_id, 'groups', groups_left, set_accessible=False)
+                self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data={'approved': False, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
+
+            groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
+            if groups_left:
+                raise ValueError(f"Failed to close access request {access_request_id} for groups {groups_left}")
 
     # -------- Public Access Code helpers --------
     def generate_public_access_code(self, profile_id: str) -> str:

@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, _parse_bool
+from src.backend.helpers import get_event, _parse_bool, ChildOperation
 from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 
 album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
@@ -157,9 +157,8 @@ def delete_album(event_id, album_id):
 
 def _edit_album_images(event, album_id, image_ids, add: bool):
     """Helper: Add or remove images from an album, return response with changes."""
-    updated_image_ids, _ = event.models.edit_childs(
-        'albums', album_id, child='images', child_ids=image_ids, add=add
-    )
+    operation = ChildOperation.ADD if add else ChildOperation.REMOVE
+    updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=operation)
     changes = []
     if updated_image_ids:
         album = event.models.get_entities('albums', [album_id])

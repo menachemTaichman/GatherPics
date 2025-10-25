@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event
+from src.backend.helpers import get_event, ChildOperation
 from src.core.errors import Forbidden, DatabaseError
 
 moment_bp = Blueprint('moments', __name__, url_prefix='/api/events/<event_id>')
@@ -156,7 +156,8 @@ def get_images_to_moments(event_id):
 
 def _edit_moment_images(event, moment_id, image_ids, add: bool):
     """Helper: Add or remove images from a moment, return response with changes."""
-    updated_image_ids, detached_moments = event.models.edit_childs('moments', moment_id, child='images', child_ids=image_ids, add=add)
+    operation = ChildOperation.ADD if add else ChildOperation.REMOVE
+    updated_image_ids, detached_moments = event.models.edit_childs('moments', moment_id, child='images', child_ids=image_ids, operation=operation)
     changes = []
     if updated_image_ids:
         for detached_moment_id, detached_image_ids in detached_moments.items():
