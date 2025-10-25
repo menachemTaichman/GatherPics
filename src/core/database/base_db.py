@@ -23,37 +23,109 @@ class BaseDB(ABC):
     
     @classmethod
     def CONSTANTS(self) -> dict:
-        """Database constants."""
+        """
+        Database constants.
+        Returns:
+            dict: constants
+
+        Example:
+        {
+            'id_length': 36,
+        }
+        """
         return {}
 
     @classmethod
     @abstractmethod
     def STRUCTURE(self) -> dict:
-        """Database structure definition."""
+        """
+        Database structure definition.
+        Returns:
+            dict with table names as keys and table structures as values
+            the table structure is a dict with the following keys:
+            - primary_key: str or list of primary key fields
+            - accessible_table: accessible table name
+            - fields: list of fields to be returned by the get_entities query
+            - relations: dict with other_table_name as keys and relation info as values
+                - relation_table: relation table name
+                - fields_needed: list of fields needed to be returned by the get_childs query
+            - serializable: dict with field names as keys and field types as values, for all fields that need to be serialized
+        
+        Example:
+        {
+            'faces': {
+                'primary_key': 'face_id',
+                'accessible_table': 'faces',
+                'fields': ['face_name', 'bbox'],
+                'relations': {'images': {'relation_table': 'faces', 'fields_needed': ['date_taken']}},
+                'serializable': {'bbox': list},
+            },
+        }
+        """
         pass
     
     @classmethod
     @abstractmethod
     def TABLES(self) -> dict:
-        """Table schema definitions."""
+        """
+        Table schema definitions.
+        Returns:
+            dict with table names as keys and table schemas as values
+        
+        Example:
+        {
+            'faces': '''
+                face_id TEXT PRIMARY KEY NOT NULL,
+                face_name TEXT NOT NULL,
+                image_id TEXT NOT NULL,
+                bbox TEXT NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE SET NULL
+            '''
+        }
+        """
         pass
     
     @classmethod
     @abstractmethod
-    def INDEXES(self) -> list:
-        """Index definitions."""
+    def INDEXES(self) -> dict:
+        """
+        Index definitions.
+        Returns:
+            dict with index names as keys and index queries as values
+
+        Example:
+        {
+            'idx_faces_image_id': 'faces(image_id)',
+        }
+        """
         pass
     
     @classmethod
     @abstractmethod
     def VIEWS(self) -> dict:
-        """View definitions."""
+        """View definitions.
+        Returns:
+            dict with view names as keys and view queries as values
+
+        Example:
+        {
+            'v_faces': 'SELECT face_id, face_name, image_id, bbox FROM faces',
+        }
+        """
         pass
     
     @classmethod
     @abstractmethod
     def TRIGGERS(self) -> dict:
-        """Trigger definitions."""
+        """Trigger definitions.
+        Returns:
+            dict with trigger names as keys and trigger queries as values
+
+        Example:
+        {
+            'tr_faces_image_id': 'AFTER UPDATE ON faces UPDATE images SET date_taken = NEW.date_taken WHERE image_id = NEW.image_id',
+        }
+        """
         pass
 
     @staticmethod
@@ -172,8 +244,8 @@ class BaseDB(ABC):
                 conn.execute(f'CREATE TABLE IF NOT EXISTS {table} ({schema})')
             
             # Create indexes
-            for index_sql in cls.INDEXES():
-                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_sql}')
+            for index_name, index_query in cls.INDEXES().items():
+                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
             
             # Create views
             for view_name, view_sql in cls.VIEWS().items():
@@ -181,7 +253,7 @@ class BaseDB(ABC):
             
             # Create triggers
             for trigger_name, trigger_sql in cls.TRIGGERS().items():
-                conn.execute(trigger_sql)
+                conn.execute(f'CREATE TRIGGER IF NOT EXISTS {trigger_name} {trigger_sql}')
             
             conn.commit()
         finally:

@@ -223,21 +223,21 @@ class EventDB(BaseDB):
     
     @classmethod
     def INDEXES(self) -> list:
-        return [
-            'idx_images_moment_id ON images(moment_id)',
-            'idx_images_upload_id ON images(upload_id)',
-            'idx_images_date_taken ON images(date_taken)',
-            'idx_faces_image_id ON faces(image_id)',
-            'idx_faces_group_id ON faces(group_id)',
-            'idx_faces_group_id_image_id ON faces(group_id, image_id)',
-            'idx_groups_representative_face ON groups(representative_face)',
-            'idx_moments_representative_image ON moments(representative_image)',
-            'idx_albums_representative_image ON albums(representative_image)',
-            'idx_profiles_public_access_code ON profiles(public_access_code)',
-            'idx_uploads_profile_id ON uploads(profile_id)',
-            'idx_uploads_status ON uploads(status)',
-            'idx_uploads_started_at ON uploads(started_at)',
-        ]
+        return {
+            'idx_images_moment_id': 'images(moment_id)',
+            'idx_images_upload_id': 'images(upload_id)',
+            'idx_images_date_taken': 'images(date_taken)',
+            'idx_faces_image_id': 'faces(image_id)',
+            'idx_faces_group_id': 'faces(group_id)',
+            'idx_faces_group_id_image_id': 'faces(group_id, image_id)',
+            'idx_groups_representative_face': 'groups(representative_face)',
+            'idx_moments_representative_image': 'moments(representative_image)',
+            'idx_albums_representative_image': 'albums(representative_image)',
+            'idx_profiles_public_access_code': 'profiles(public_access_code)',
+            'idx_uploads_profile_id': 'uploads(profile_id)',
+            'idx_uploads_status': 'uploads(status)',
+            'idx_uploads_started_at': 'uploads(started_at)',
+        }
     
     @classmethod
     def VIEWS(self) -> dict:
@@ -481,680 +481,643 @@ class EventDB(BaseDB):
         return {
             # accessible_faces
             'trg_update_accessible_faces': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_faces
-            INSTEAD OF UPDATE ON accessible_faces
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF UPDATE ON accessible_faces
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                UPDATE faces
-                SET group_id = NEW.group_id
-                WHERE face_id = OLD.face_id;
-            END;
+                    UPDATE faces
+                    SET group_id = NEW.group_id
+                    WHERE face_id = OLD.face_id;
+                END;
             """,
             'trg_delete_accessible_faces': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_faces
-            INSTEAD OF DELETE ON accessible_faces
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF DELETE ON accessible_faces
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                DELETE FROM faces
-                WHERE face_id = OLD.face_id;
-            END;
+                    DELETE FROM faces
+                    WHERE face_id = OLD.face_id;
+                END;
             """,
             'trg_insert_accessible_faces': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_faces
-            INSTEAD OF INSERT ON accessible_faces
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
-                END;
+                INSTEAD OF INSERT ON accessible_faces
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
+                    END;
 
-                INSERT INTO faces (face_id, image_id, group_id, width, height, left, top)
-                VALUES (NEW.face_id, NEW.image_id, NEW.group_id, NEW.width, NEW.height, NEW.left, NEW.top);
-            END;
+                    INSERT INTO faces (face_id, image_id, group_id, width, height, left, top)
+                    VALUES (NEW.face_id, NEW.image_id, NEW.group_id, NEW.width, NEW.height, NEW.left, NEW.top);
+                END;
             """,
 
             # accessible_images
             'trg_update_accessible_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_images
-            INSTEAD OF UPDATE ON accessible_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF UPDATE ON accessible_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                UPDATE images
-                SET moment_id = NEW.moment_id
-                WHERE image_id = OLD.image_id;
-            END;
+                    UPDATE images
+                    SET moment_id = NEW.moment_id
+                    WHERE image_id = OLD.image_id;
+                END;
             """,
             'trg_delete_accessible_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_images
-            INSTEAD OF DELETE ON accessible_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to delete images')
-                END;
+                INSTEAD OF DELETE ON accessible_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to delete images')
+                    END;
 
-                DELETE FROM images
-                WHERE image_id = OLD.image_id;
-            END;
+                    DELETE FROM images
+                    WHERE image_id = OLD.image_id;
+                END;
             """,
             'trg_insert_accessible_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_images
-            INSTEAD OF INSERT ON accessible_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
-                END;
+                INSTEAD OF INSERT ON accessible_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
+                    END;
 
-                INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id, upload_id)
-                VALUES (NEW.image_id, NEW.date_taken, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id, NEW.upload_id);
-            END;
+                    INSERT INTO images (image_id, date_taken, label, file_size, width, height, moment_id, upload_id)
+                    VALUES (NEW.image_id, NEW.date_taken, NEW.label, NEW.file_size, NEW.width, NEW.height, NEW.moment_id, NEW.upload_id);
+                END;
             """,
 
             # accessible_groups
             'trg_update_accessible_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_groups
-            INSTEAD OF UPDATE ON accessible_groups
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF UPDATE ON accessible_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                UPDATE groups
-                SET label = NEW.label,
-                    representative_face = NEW.representative_face
-                WHERE group_id = OLD.group_id;
-            END;
+                    UPDATE groups
+                    SET label = NEW.label,
+                        representative_face = NEW.representative_face
+                    WHERE group_id = OLD.group_id;
+                END;
             """,
             'trg_delete_accessible_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_groups
-            INSTEAD OF DELETE ON accessible_groups
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF DELETE ON accessible_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                DELETE FROM groups
-                WHERE group_id = OLD.group_id;
-            END;
+                    DELETE FROM groups
+                    WHERE group_id = OLD.group_id;
+                END;
             """,
             'trg_insert_accessible_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_groups
-            INSTEAD OF INSERT ON accessible_groups
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF INSERT ON accessible_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                INSERT INTO groups (group_id, label, representative_face)
-                VALUES (NEW.group_id, NEW.label, NEW.representative_face);
-            END;
+                    INSERT INTO groups (group_id, label, representative_face)
+                    VALUES (NEW.group_id, NEW.label, NEW.representative_face);
+                END;
             """,
 
             # accessible_moments
             'trg_update_accessible_moments': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_moments
-            INSTEAD OF UPDATE ON accessible_moments
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF UPDATE ON accessible_moments
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                UPDATE moments
-                SET label = NEW.label,
-                    description = NEW.description,
-                    start = NEW.start,
-                    end = NEW.end,
-                    representative_image = NEW.representative_image
-                WHERE moment_id = OLD.moment_id;
-            END;
+                    UPDATE moments
+                    SET label = NEW.label,
+                        description = NEW.description,
+                        start = NEW.start,
+                        end = NEW.end,
+                        representative_image = NEW.representative_image
+                    WHERE moment_id = OLD.moment_id;
+                END;
             """,
             'trg_delete_accessible_moments': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_moments
-            INSTEAD OF DELETE ON accessible_moments
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF DELETE ON accessible_moments
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                DELETE FROM moments
-                WHERE moment_id = OLD.moment_id;
-            END;
+                    DELETE FROM moments
+                    WHERE moment_id = OLD.moment_id;
+                END;
             """,
             'trg_insert_accessible_moments': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_moments
-            INSTEAD OF INSERT ON accessible_moments
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF INSERT ON accessible_moments
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                INSERT INTO moments (moment_id, label, description, start, end, representative_image)
-                VALUES (NEW.moment_id, NEW.label, NEW.description, NEW.start, NEW.end, NEW.representative_image);
-            END;
+                    INSERT INTO moments (moment_id, label, description, start, end, representative_image)
+                    VALUES (NEW.moment_id, NEW.label, NEW.description, NEW.start, NEW.end, NEW.representative_image);
+                END;
             """,
 
             # accessible_albums
             'trg_update_accessible_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_albums
-            INSTEAD OF UPDATE ON accessible_albums
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF UPDATE ON accessible_albums
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                UPDATE albums
-                SET label = NEW.label,
-                    description = NEW.description,
-                    representative_image = NEW.representative_image
-                WHERE album_id = OLD.album_id;
-            END;
+                    UPDATE albums
+                    SET label = NEW.label,
+                        description = NEW.description,
+                        representative_image = NEW.representative_image
+                    WHERE album_id = OLD.album_id;
+                END;
             """,
             'trg_delete_accessible_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_albums
-            INSTEAD OF DELETE ON accessible_albums
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF DELETE ON accessible_albums
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                DELETE FROM albums
-                WHERE album_id = OLD.album_id;
-            END;
+                    DELETE FROM albums
+                    WHERE album_id = OLD.album_id;
+                END;
             """,
             'trg_insert_accessible_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_albums
-            INSTEAD OF INSERT ON accessible_albums
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                INSTEAD OF INSERT ON accessible_albums
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
+                    INSERT INTO albums (album_id, label, description, representative_image)
+                    VALUES (NEW.album_id, NEW.label, NEW.description, NEW.representative_image);
                 END;
-                INSERT INTO albums (album_id, label, description, representative_image)
-                VALUES (NEW.album_id, NEW.label, NEW.description, NEW.representative_image);
-            END;
             """,
 
             # accessible_albums_images
             'trg_insert_accessible_albums_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_albums_images
-            INSTEAD OF INSERT ON accessible_albums_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF INSERT ON accessible_albums_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                INSERT OR IGNORE INTO albums_images (album_id, image_id)
-                SELECT accessible_albums.album_id, accessible_images.image_id
-                FROM accessible_albums
-                JOIN accessible_images
-                WHERE accessible_albums.album_id = NEW.album_id
-                AND accessible_images.image_id = NEW.image_id;
-            END;
+                    INSERT OR IGNORE INTO albums_images (album_id, image_id)
+                    SELECT accessible_albums.album_id, accessible_images.image_id
+                    FROM accessible_albums
+                    JOIN accessible_images
+                    WHERE accessible_albums.album_id = NEW.album_id
+                    AND accessible_images.image_id = NEW.image_id;
+                END;
             """,
             'trg_delete_accessible_albums_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_albums_images
-            INSTEAD OF DELETE ON accessible_albums_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_edit') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                END;
+                INSTEAD OF DELETE ON accessible_albums_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                    END;
 
-                DELETE FROM albums_images
-                WHERE album_id = OLD.album_id
-                AND image_id = OLD.image_id;
-            END;
+                    DELETE FROM albums_images
+                    WHERE album_id = OLD.album_id
+                    AND image_id = OLD.image_id;
+                END;
             """,
 
             # accessible_profiles
             'trg_insert_accessible_profiles': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profiles
-            INSTEAD OF INSERT ON accessible_profiles
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
-                        RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
-                    WHEN NEW.all_images = 1 and cur_profile('all_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot create profile with all_images=1 if current profile does not have all_images=1')
-                    WHEN NEW.all_groups = 1 and cur_profile('all_groups') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1')
-                    WHEN NEW.all_albums = 1 and cur_profile('all_albums') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
+                INSTEAD OF INSERT ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
+                        WHEN NEW.all_images = 1 and cur_profile('all_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with all_images=1 if current profile does not have all_images=1')
+                        WHEN NEW.all_groups = 1 and cur_profile('all_groups') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1')
+                        WHEN NEW.all_albums = 1 and cur_profile('all_albums') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
+                    END;
+
+                    INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_groups, all_albums, is_public, public_access_code)
+                    VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_groups, NEW.all_albums, NEW.is_public, CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END);
+
+                    -- Create the profile_images and profile_albums tables
+                    INSERT INTO profile_images (profile_id, image_id, accessible)
+                    SELECT NEW.profile_id, image_id, accessible
+                    FROM profile_images
+                    WHERE profile_id = cur_profile('profile_id');
+
+                    INSERT INTO profile_groups (profile_id, group_id, accessible)
+                    SELECT NEW.profile_id, group_id, accessible
+                    FROM profile_groups
+                    WHERE profile_id = cur_profile('profile_id');
+                    
+                    INSERT INTO profile_albums (profile_id, album_id, accessible)
+                    SELECT NEW.profile_id, album_id, accessible
+                    FROM profile_albums
+                    WHERE profile_id = cur_profile('profile_id');
+
                 END;
-
-                INSERT INTO profiles (profile_id, hierarchy_rank, can_upload_and_delete_images, can_edit, all_images, all_groups, all_albums, is_public, public_access_code)
-                VALUES (NEW.profile_id, NEW.hierarchy_rank, NEW.can_upload_and_delete_images, NEW.can_edit, NEW.all_images, NEW.all_groups, NEW.all_albums, NEW.is_public, CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END);
-
-                -- Create the profile_images and profile_albums tables
-                INSERT INTO profile_images (profile_id, image_id, accessible)
-                SELECT NEW.profile_id, image_id, accessible
-                FROM profile_images
-                WHERE profile_id = cur_profile('profile_id');
-
-                INSERT INTO profile_groups (profile_id, group_id, accessible)
-                SELECT NEW.profile_id, group_id, accessible
-                FROM profile_groups
-                WHERE profile_id = cur_profile('profile_id');
-                
-                INSERT INTO profile_albums (profile_id, album_id, accessible)
-                SELECT NEW.profile_id, album_id, accessible
-                FROM profile_albums
-                WHERE profile_id = cur_profile('profile_id');
-
-            END;
             """,
             'trg_update_accessible_profiles': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_profiles
-            INSTEAD OF UPDATE ON accessible_profiles
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit profile with higher or equal rank')
-                    WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot set profile rank higher or equal to own rank')
-                    WHEN NEW.all_images = 1 AND cur_profile('all_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1')
-                    WHEN NEW.all_groups = 1 AND cur_profile('all_groups') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
-                    WHEN NEW.all_albums = 1 AND cur_profile('all_albums') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
+                INSTEAD OF UPDATE ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile with higher or equal rank')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot set profile rank higher or equal to own rank')
+                        WHEN NEW.all_images = 1 AND cur_profile('all_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1')
+                        WHEN NEW.all_groups = 1 AND cur_profile('all_groups') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
+                        WHEN NEW.all_albums = 1 AND cur_profile('all_albums') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
+                    END;
+
+                    UPDATE profiles
+                    SET hierarchy_rank = NEW.hierarchy_rank,
+                        can_upload_and_delete_images = NEW.can_upload_and_delete_images,
+                        can_edit = NEW.can_edit,
+                        all_images = NEW.all_images,
+                        all_groups = NEW.all_groups,
+                        all_albums = NEW.all_albums,
+                        is_public = NEW.is_public,
+                        public_access_code = CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END
+                    WHERE profile_id = OLD.profile_id;
+
+                    DELETE FROM profile_images 
+                    WHERE profile_id = OLD.profile_id 
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_images <> OLD.all_images;
+
+                    INSERT INTO profile_images (profile_id, image_id, accessible)
+                    SELECT OLD.profile_id, image_id, accessible
+                    FROM profile_images 
+                    WHERE profile_id = cur_profile('profile_id')
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_images = 1 
+                    AND NEW.all_images <> OLD.all_images;
+
+                    DELETE FROM profile_groups 
+                    WHERE profile_id = OLD.profile_id 
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_groups <> OLD.all_groups;
+
+                    INSERT INTO profile_groups (profile_id, group_id, accessible)
+                    SELECT OLD.profile_id, group_id, accessible
+                    FROM profile_groups 
+                    WHERE profile_id = cur_profile('profile_id')
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_groups = 1
+                    AND NEW.all_groups <> OLD.all_groups;
+
+                    DELETE FROM profile_albums 
+                    WHERE profile_id = OLD.profile_id 
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_albums <> OLD.all_albums;
+
+                    INSERT INTO profile_albums (profile_id, album_id, accessible)
+                    SELECT OLD.profile_id, album_id, accessible
+                    FROM profile_albums 
+                    WHERE profile_id = cur_profile('profile_id')
+                    AND OLD.profile_id <> cur_profile('profile_id')
+                    AND NEW.all_albums = 1
+                    AND NEW.all_albums <> OLD.all_albums;
                 END;
-
-                UPDATE profiles
-                SET hierarchy_rank = NEW.hierarchy_rank,
-                    can_upload_and_delete_images = NEW.can_upload_and_delete_images,
-                    can_edit = NEW.can_edit,
-                    all_images = NEW.all_images,
-                    all_groups = NEW.all_groups,
-                    all_albums = NEW.all_albums,
-                    is_public = NEW.is_public,
-                    public_access_code = CASE WHEN NEW.is_public = 1 THEN NEW.public_access_code ELSE NULL END
-                WHERE profile_id = OLD.profile_id;
-
-                DELETE FROM profile_images 
-                WHERE profile_id = OLD.profile_id 
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_images <> OLD.all_images;
-
-                INSERT INTO profile_images (profile_id, image_id, accessible)
-                SELECT OLD.profile_id, image_id, accessible
-                FROM profile_images 
-                WHERE profile_id = cur_profile('profile_id')
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_images = 1 
-                AND NEW.all_images <> OLD.all_images;
-
-                DELETE FROM profile_groups 
-                WHERE profile_id = OLD.profile_id 
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_groups <> OLD.all_groups;
-
-                INSERT INTO profile_groups (profile_id, group_id, accessible)
-                SELECT OLD.profile_id, group_id, accessible
-                FROM profile_groups 
-                WHERE profile_id = cur_profile('profile_id')
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_groups = 1
-                AND NEW.all_groups <> OLD.all_groups;
-
-                DELETE FROM profile_albums 
-                WHERE profile_id = OLD.profile_id 
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_albums <> OLD.all_albums;
-
-                INSERT INTO profile_albums (profile_id, album_id, accessible)
-                SELECT OLD.profile_id, album_id, accessible
-                FROM profile_albums 
-                WHERE profile_id = cur_profile('profile_id')
-                AND OLD.profile_id <> cur_profile('profile_id')
-                AND NEW.all_albums = 1
-                AND NEW.all_albums <> OLD.all_albums;
-            END;
             """,
             'trg_delete_accessible_profiles': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_profiles
-            INSTEAD OF DELETE ON accessible_profiles
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot delete own profile')
-                    WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
-                        RAISE(ABORT, 'Permission denied: cannot delete profile with higher or equal rank')
-                END;
+                INSTEAD OF DELETE ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete own profile')
+                        WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete profile with higher or equal rank')
+                    END;
 
-                DELETE FROM profiles WHERE profile_id = OLD.profile_id;
-            END;
+                    DELETE FROM profiles WHERE profile_id = OLD.profile_id;
+                END;
             """,
 
             # accessible_profile_images
             'trg_insert_accessible_profile_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profile_images
-            INSTEAD OF INSERT ON accessible_profile_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN NEW.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS ( -- Check if image is accessible to current manager
-                        SELECT 1 FROM accessible_images WHERE image_id = NEW.image_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible image')
-                END;
+                INSTEAD OF INSERT ON accessible_profile_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS ( -- Check if image is accessible to current manager
+                            SELECT 1 FROM accessible_images WHERE image_id = NEW.image_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible image')
+                    END;
 
-                INSERT OR IGNORE INTO profile_images (profile_id, image_id, accessible)
-                VALUES (NEW.profile_id, NEW.image_id, NEW.accessible);
-            END;
+                    INSERT OR IGNORE INTO profile_images (profile_id, image_id, accessible)
+                    VALUES (NEW.profile_id, NEW.image_id, NEW.accessible);
+                END;
             """,
             'trg_delete_accessible_profile_images': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_profile_images
-            INSTEAD OF DELETE ON accessible_profile_images
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM accessible_images WHERE image_id = OLD.image_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible image')
-                END;
+                INSTEAD OF DELETE ON accessible_profile_images
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_images WHERE image_id = OLD.image_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible image')
+                    END;
 
-                DELETE FROM profile_images WHERE profile_id = OLD.profile_id AND image_id = OLD.image_id;
-            END;
+                    DELETE FROM profile_images WHERE profile_id = OLD.profile_id AND image_id = OLD.image_id;
+                END;
             """,
 
             # accessible_profile_groups
             'trg_insert_accessible_profile_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profile_groups
-            INSTEAD OF INSERT ON accessible_profile_groups
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN NEW.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS ( -- Check if group is accessible to current manager
-                        SELECT 1 FROM accessible_groups WHERE group_id = NEW.group_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible group')
-                END;
+                INSTEAD OF INSERT ON accessible_profile_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS ( -- Check if group is accessible to current manager
+                            SELECT 1 FROM accessible_groups WHERE group_id = NEW.group_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible group')
+                    END;
 
-                INSERT OR IGNORE INTO profile_groups (profile_id, group_id, accessible)
-                VALUES (NEW.profile_id, NEW.group_id, NEW.accessible);
-            END;
+                    INSERT OR IGNORE INTO profile_groups (profile_id, group_id, accessible)
+                    VALUES (NEW.profile_id, NEW.group_id, NEW.accessible);
+                END;
             """,
             'trg_delete_accessible_profile_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_profile_groups
-            INSTEAD OF DELETE ON accessible_profile_groups
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM accessible_groups WHERE group_id = OLD.group_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible group')
-                END;
+                INSTEAD OF DELETE ON accessible_profile_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_groups WHERE group_id = OLD.group_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible group')
+                    END;
 
-                DELETE FROM profile_groups WHERE profile_id = OLD.profile_id AND group_id = OLD.group_id;
-            END;
+                    DELETE FROM profile_groups WHERE profile_id = OLD.profile_id AND group_id = OLD.group_id;
+                END;
             """,
 
             # accessible_profile_albums
             'trg_insert_accessible_profile_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_profile_albums
-            INSTEAD OF INSERT ON accessible_profile_albums
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN NEW.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM accessible_albums WHERE album_id = NEW.album_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible album')
-                END;
+                INSTEAD OF INSERT ON accessible_profile_albums
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = NEW.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_albums WHERE album_id = NEW.album_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible album')
+                    END;
 
-                INSERT OR IGNORE INTO profile_albums (profile_id, album_id, accessible)
-                VALUES (NEW.profile_id, NEW.album_id, NEW.accessible);
-            END;
+                    INSERT OR IGNORE INTO profile_albums (profile_id, album_id, accessible)
+                    VALUES (NEW.profile_id, NEW.album_id, NEW.accessible);
+                END;
             """,
             'trg_delete_accessible_profile_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_profile_albums
-            INSTEAD OF DELETE ON accessible_profile_albums
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('hierarchy_rank') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: not a profiles manager')
-                    WHEN OLD.profile_id = cur_profile('profile_id') THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit own permissions')
-                    WHEN EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM accessible_albums WHERE album_id = OLD.album_id
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible album')
-                END;
+                INSTEAD OF DELETE ON accessible_profile_albums
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.profile_id = cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit own permissions')
+                        WHEN EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = OLD.profile_id AND hierarchy_rank >= cur_profile('hierarchy_rank')
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit permissions for profile with higher or equal rank')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_albums WHERE album_id = OLD.album_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible album')
+                    END;
 
-                DELETE FROM profile_albums WHERE profile_id = OLD.profile_id AND album_id = OLD.album_id;
-            END;
+                    DELETE FROM profile_albums WHERE profile_id = OLD.profile_id AND album_id = OLD.album_id;
+                END;
             """,
 
             # accessible_uploads
             'trg_insert_accessible_uploads': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_accessible_uploads
-            INSTEAD OF INSERT ON accessible_uploads
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = NEW.profile_id
-                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot access this profile')
-                END;
+                INSTEAD OF INSERT ON accessible_uploads
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = NEW.profile_id
+                            AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot access this profile')
+                    END;
 
-                INSERT OR IGNORE INTO uploads (profile_id, started_at, completed_at, status, images_count, faces_count, clusters_count, moments_count, errors, notes)
-                VALUES (NEW.profile_id, NEW.started_at, NEW.completed_at, NEW.status, NEW.images_count, NEW.faces_count, NEW.clusters_count, NEW.moments_count, NEW.errors, NEW.notes);
-                
-            END;
+                    INSERT OR IGNORE INTO uploads (profile_id, started_at, completed_at, status, images_count, faces_count, clusters_count, moments_count, errors, notes)
+                    VALUES (NEW.profile_id, NEW.started_at, NEW.completed_at, NEW.status, NEW.images_count, NEW.faces_count, NEW.clusters_count, NEW.moments_count, NEW.errors, NEW.notes);
+                    
+                END;
             """,
             'trg_delete_accessible_uploads': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_accessible_uploads
-            INSTEAD OF DELETE ON accessible_uploads
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = OLD.profile_id
-                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot access this profile')
-                END;
+                INSTEAD OF DELETE ON accessible_uploads
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = OLD.profile_id
+                            AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot access this profile')
+                    END;
 
-                DELETE FROM uploads WHERE upload_id = OLD.upload_id;
-            END;
+                    DELETE FROM uploads WHERE upload_id = OLD.upload_id;
+                END;
             """,
             'trg_update_accessible_uploads': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_accessible_uploads
-            INSTEAD OF UPDATE ON accessible_uploads
-            BEGIN
-                SELECT CASE
-                    WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
-                        RAISE(ABORT, 'Permission denied: cannot upload and delete images')
-                    WHEN NOT EXISTS (
-                        SELECT 1 FROM profiles
-                        WHERE profile_id = OLD.profile_id
-                        AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
-                    ) THEN
-                        RAISE(ABORT, 'Permission denied: cannot access this profile')
-                END;
+                INSTEAD OF UPDATE ON accessible_uploads
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE profile_id = OLD.profile_id
+                            AND (hierarchy_rank < cur_profile('hierarchy_rank') OR profile_id = cur_profile('profile_id'))
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot access this profile')
+                    END;
 
-                UPDATE uploads
-                SET
-                    completed_at = NEW.completed_at,
-                    status = NEW.status,
-                    images_count = NEW.images_count,
-                    faces_count = NEW.faces_count,
-                    clusters_count = NEW.clusters_count,
-                    moments_count = NEW.moments_count,
-                    errors = NEW.errors,
-                    notes = NEW.notes
-                WHERE upload_id = OLD.upload_id;
-            END;
+                    UPDATE uploads
+                    SET
+                        completed_at = NEW.completed_at,
+                        status = NEW.status,
+                        images_count = NEW.images_count,
+                        faces_count = NEW.faces_count,
+                        clusters_count = NEW.clusters_count,
+                        moments_count = NEW.moments_count,
+                        errors = NEW.errors,
+                        notes = NEW.notes
+                    WHERE upload_id = OLD.upload_id;
+                END;
             """,
 
             # ensure_profiles_policy
             'trg_insert_ensure_profiles_publicity': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_ensure_profiles_publicity
-            BEFORE INSERT ON profiles
-            BEGIN
-                SELECT CASE
-                    WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
-                        RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                BEFORE INSERT ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                    END;
                 END;
-            END;
-            """,
-            'trg_insert_ensure_profiles_public_access_code': """
-            CREATE TRIGGER IF NOT EXISTS trg_insert_ensure_profiles_public_access_code
-            AFTER INSERT ON profiles
-            BEGIN
-                UPDATE profiles
-                SET public_access_code = NULL
-                WHERE profile_id = NEW.profile_id
-                AND is_public = 0;
-            END;
-            """,
-            'trg_update_ensure_profiles_publicity': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_profiles_publicity
-            BEFORE UPDATE ON profiles
-            BEGIN
-                SELECT CASE
-                    WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
-                        RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                """,
+                'trg_insert_ensure_profiles_public_access_code': """
+                AFTER INSERT ON profiles
+                BEGIN
+                    UPDATE profiles
+                    SET public_access_code = NULL
+                    WHERE profile_id = NEW.profile_id
+                    AND is_public = 0;
                 END;
-            END;
+                """,
+                'trg_update_ensure_profiles_publicity': """
+                BEFORE UPDATE ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                    END;
+                END;
             """,
             'trg_update_ensure_profiles_public_access_code': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_profiles_public_access_code
-            AFTER UPDATE ON profiles
-            BEGIN
-                UPDATE profiles
-                SET public_access_code = NULL
-                WHERE profile_id = OLD.profile_id
-                AND is_public = 0;
-            END;
+                AFTER UPDATE ON profiles
+                BEGIN
+                    UPDATE profiles
+                    SET public_access_code = NULL
+                    WHERE profile_id = OLD.profile_id
+                    AND is_public = 0;
+                END;
             """,
 
             # ensure_default_albums
             'trg_update_ensure_default_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_default_albums
-            BEFORE UPDATE ON albums
-            BEGIN
-                SELECT CASE
-                    WHEN (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites') AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
-                        RAISE(ABORT, 'Policy error: cannot update default albums')
+                BEFORE UPDATE ON albums
+                BEGIN
+                    SELECT CASE
+                        WHEN (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites') AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
+                            RAISE(ABORT, 'Policy error: cannot update default albums')
+                    END;
                 END;
-            END;
             """,
             'trg_delete_ensure_default_albums': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_albums
-            BEFORE DELETE ON albums
-            BEGIN
-                SELECT CASE
-                    WHEN LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites' THEN
-                        RAISE(ABORT, 'Policy error: cannot delete default albums')
+                BEFORE DELETE ON albums
+                BEGIN
+                    SELECT CASE
+                        WHEN LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites' THEN
+                            RAISE(ABORT, 'Policy error: cannot delete default albums')
+                    END;
                 END;
-            END;
             """,
 
             # ensure_default_groups
             'trg_update_ensure_default_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_update_ensure_default_groups
-            BEFORE UPDATE ON groups
-            BEGIN
-                SELECT CASE
-                    WHEN LOWER(OLD.label) = 'unassociated' AND COALESCE(OLD.label, '') <> COALESCE(NEW.label, '') THEN
-                        RAISE(ABORT, 'Policy error: cannot update default group label')
-                    WHEN LOWER(NEW.label) = 'unassociated' AND COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '') THEN
-                        RAISE(ABORT, 'Policy error: cannot update default group representative face')
+                BEFORE UPDATE ON groups
+                BEGIN
+                    SELECT CASE
+                        WHEN LOWER(OLD.label) = 'unassociated' AND COALESCE(OLD.label, '') <> COALESCE(NEW.label, '') THEN
+                            RAISE(ABORT, 'Policy error: cannot update default group label')
+                        WHEN LOWER(NEW.label) = 'unassociated' AND COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '') THEN
+                            RAISE(ABORT, 'Policy error: cannot update default group representative face')
+                    END;
                 END;
-            END;
             """,
             'trg_delete_ensure_default_groups': """
-            CREATE TRIGGER IF NOT EXISTS trg_delete_ensure_default_groups
-            BEFORE DELETE ON groups
-            BEGIN
-                SELECT CASE
-                    WHEN LOWER(OLD.label) = 'unassociated' THEN
-                        RAISE(ABORT, 'Policy error: cannot delete default group')
+                BEFORE DELETE ON groups
+                BEGIN
+                    SELECT CASE
+                        WHEN LOWER(OLD.label) = 'unassociated' THEN
+                            RAISE(ABORT, 'Policy error: cannot delete default group')
+                    END;
                 END;
-            END;
             """,
         }
 

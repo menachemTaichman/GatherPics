@@ -621,7 +621,7 @@ export default function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/:eventUrl/:publicCode" element={<PublicAccessPage />} />
+              <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>
           </div>

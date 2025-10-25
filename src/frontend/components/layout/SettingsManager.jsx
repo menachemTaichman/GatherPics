@@ -284,7 +284,7 @@ export default function SettingsManager() {
         return;
       }
       
-      const publicUrl = `${window.location.origin}/${eventUrl}/${publicCode}`;
+      const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${publicCode}`;
       await navigator.clipboard.writeText(publicUrl);
       showToast('Public link copied to clipboard', 'success');
     } catch (error) {
@@ -300,7 +300,7 @@ export default function SettingsManager() {
       
       // Auto-copy the new link
       if (result.public_code) {
-        const publicUrl = `${window.location.origin}/${eventUrl}/${result.public_code}`;
+        const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${result.public_code}`;
         try {
           await navigator.clipboard.writeText(publicUrl);
           showToast('Public link copied to clipboard', 'success');
@@ -589,7 +589,7 @@ export default function SettingsManager() {
                                             <button
                                               onClick={() => handleCopyPublicLink(profile)}
                                               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                              title={`Copy public link: ${window.location.origin}/${eventUrl}/${profile.public_access_code}`}
+                                              title={`Copy public link: ${window.location.origin}/${eventUrl}/public-access/${profile.public_access_code}`}
                                             >
                                               <Link className="w-4 h-4 text-blue-600" />
                                             </button>

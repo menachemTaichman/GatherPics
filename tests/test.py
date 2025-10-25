@@ -44,13 +44,13 @@ def create_views_triggers_and_indexes():
 
     # import them again
     for view_name, view_query in db.VIEWS().items():
-        db.execute_query('CREATE VIEW if not exists ' + view_name + ' as ' + view_query)
+        db.execute_query(f'CREATE VIEW IF NOT EXISTS {view_name} AS {view_query}')
 
     for trigger_name, trigger_query in db.TRIGGERS().items():
-        db.execute_query(trigger_query)
+        db.execute_query(f'CREATE TRIGGER IF NOT EXISTS {trigger_name} {trigger_query}')
 
-    for index in db.INDEXES():
-        db.execute_query('CREATE INDEX if not exists ' + index)
+    for index_name, index_query in db.INDEXES().items():
+        db.execute_query(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
 
 def recreate_views_triggers_and_indexes():
     drop_views_triggers_and_indexes()
