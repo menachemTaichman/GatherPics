@@ -1049,8 +1049,8 @@ class EventDB(BaseDB):
                             RAISE(ABORT, 'Policy error: cannot set manager profile to public')
                     END;
                 END;
-                """,
-                'trg_insert_ensure_profiles_public_access_code': """
+            """,
+            'trg_insert_ensure_profiles_public_access_code': """
                 AFTER INSERT ON profiles
                 BEGIN
                     UPDATE profiles
@@ -1058,8 +1058,8 @@ class EventDB(BaseDB):
                     WHERE profile_id = NEW.profile_id
                     AND is_public = 0;
                 END;
-                """,
-                'trg_update_ensure_profiles_publicity': """
+            """,
+            'trg_update_ensure_profiles_publicity': """
                 BEFORE UPDATE ON profiles
                 BEGIN
                     SELECT CASE
