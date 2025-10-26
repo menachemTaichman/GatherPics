@@ -94,6 +94,52 @@ const TAB_ID = (() => {
 // Per-runtime channel id (unique even for duplicated tabs)
 const CHANNEL_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+// Centralized entity structure definition
+const ENTITY_STRUCTURE = {
+  images: {
+    relations: ['albums', 'faces', 'groups'],
+  },
+  groups: {
+    relations: ['images', 'faces'],
+  },
+  moments: {
+    relations: ['images'],
+  },
+  albums: {
+    relations: ['images'],
+  },
+  faces: {
+    relations: [],
+  },
+  profiles: {
+    relations: ['images', 'albums'],
+  },
+  uploads: {
+    relations: ['images', 'groups', 'moments'],
+  },
+  access_requests: {
+    relations: ['groups'],
+    relationTypes: {
+      groups: 'dict', // Store as dict with relation data (approved, closed_at, closed_by)
+    },
+  },
+};
+
+const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
+
+function getEntityType(entity) {
+  const normalized = normalizeEntityKey(entity);
+  return ENTITY_TYPES.includes(normalized) ? normalized : null;
+}
+
+function getRelationType(entityType, relationField) {
+  return ENTITY_STRUCTURE[entityType]?.relationTypes?.[relationField] || 'set';
+}
+
+function shouldStoreAsDict(entityType, relationField) {
+  return getRelationType(entityType, relationField) === 'dict';
+}
+
 function normalizeEntityKey(entity) {
   if (!entity) return entity;
   switch (String(entity)) {
@@ -116,21 +162,76 @@ function coerceToSet(val) {
   return new Set();
 }
 
+// Helper to normalize relations based on entity structure
+function normalizeRelations(entityType, data) {
+  const structure = ENTITY_STRUCTURE[entityType];
+  if (!structure) return data;
+  
+  const relations = structure.relations || [];
+  const normalized = { ...data };
+  
+  relations.forEach((rk) => {
+    if (rk in normalized) {
+      const isDict = shouldStoreAsDict(entityType, rk);
+      if (!isDict) {
+        normalized[rk] = coerceToSet(normalized[rk]);
+      }
+    }
+  });
+  
+  return normalized;
+}
+
+// Helper to preserve relation references when contents haven't changed
+function preserveRelations(entityType, before, merged) {
+  const structure = ENTITY_STRUCTURE[entityType];
+  if (!structure) return merged;
+  
+  const relations = structure.relations || [];
+  const result = { ...merged };
+  
+  relations.forEach((rk) => {
+    if (!before || !result[rk]) return;
+    
+    const isDict = shouldStoreAsDict(entityType, rk);
+    const beforeVal = before[rk];
+    const mergedVal = result[rk];
+    
+    if (isDict && beforeVal && mergedVal && 
+        typeof beforeVal === 'object' && typeof mergedVal === 'object' &&
+        !Array.isArray(beforeVal) && !Array.isArray(mergedVal) &&
+        !(beforeVal instanceof Set) && !(mergedVal instanceof Set)) {
+      if (shallowEqualPlainObject(beforeVal, mergedVal)) {
+        result[rk] = beforeVal;
+      }
+    } else if (!isDict && beforeVal instanceof Set && mergedVal instanceof Set) {
+      if (setsEqual(beforeVal, mergedVal)) {
+        result[rk] = beforeVal;
+      }
+    }
+  });
+  
+  return result;
+}
+
 function persistEntitiesSession(entities) {
   try {
-    const plain = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {}, access_requests: {} };
-    ['images','groups','moments','albums','faces','profiles','uploads','access_requests'].forEach((k) => {
-      const src = entities[k] || {};
+    const plain = {};
+    ENTITY_TYPES.forEach((entityType) => {
+      plain[entityType] = {};
+      const src = entities[entityType] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
         const e = src[id];
         const copy = { ...e };
         Object.keys(copy).forEach((fk) => {
-          if (copy[fk] instanceof Set) copy[fk] = Array.from(copy[fk]);
+          if (copy[fk] instanceof Set) {
+            copy[fk] = Array.from(copy[fk]);
+          }
         });
         out[id] = copy;
       });
-      plain[k] = out;
+      plain[entityType] = out;
     });
     sessionStorage.setItem('entities', JSON.stringify(plain));
   } catch {}
@@ -148,25 +249,40 @@ function hydrateEntitiesSession() {
 
   try {
     const raw = sessionStorage.getItem('entities');
-    const base = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {}, access_requests: {} };
+    const base = {};
+    ENTITY_TYPES.forEach((entityType) => {
+      base[entityType] = {};
+    });
     if (!raw) return base;
     const parsed = JSON.parse(raw);
-    const revived = { ...base };
-    ['images','groups','moments','albums','faces','profiles','uploads','access_requests'].forEach((k) => {
-      const src = parsed?.[k] || {};
+    const revived = {};
+    ENTITY_TYPES.forEach((entityType) => {
+      const src = parsed?.[entityType] || {};
       const out = {};
       Object.keys(src).forEach((id) => {
         const e = { ...src[id] };
         Object.keys(e).forEach((fk) => {
-          if (Array.isArray(e[fk])) e[fk] = new Set(e[fk].map(String));
+          if (Array.isArray(e[fk])) {
+            const relationType = getRelationType(entityType, fk);
+            if (relationType === 'dict') {
+              // Dict relations need special handling - keep as object if it already is
+              // This prevents converting back to Set
+            } else {
+              e[fk] = new Set(e[fk].map(String));
+            }
+          }
         });
         out[id] = e;
       });
-      revived[k] = out;
+      revived[entityType] = out;
     });
     return revived;
   } catch {
-    return { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {}, access_requests: {} };
+    const empty = {};
+    ENTITY_TYPES.forEach((entityType) => {
+      empty[entityType] = {};
+    });
+    return empty;
   }
 }
 
@@ -205,71 +321,49 @@ export const useDataStore = create((set, get) => {
     if (!entitiesDict || typeof entitiesDict !== 'object') return;
     const prevMap = nextEntities[childTypeKey] || {};
     let map = prevMap;
+    const structure = ENTITY_STRUCTURE[childTypeKey];
+    const relations = structure?.relations || [];
+    
     Object.keys(entitiesDict).forEach((id) => {
       const raw = entitiesDict[id] || {};
       const normalized = { id, ...raw };
       
-      // Handle dict-based child relations for access_requests.groups
-      if (childTypeKey === 'access_requests' && 'groups' in normalized && typeof normalized.groups === 'object' && !Array.isArray(normalized.groups)) {
-        // Keep groups as dict - don't convert to Set
-        // This allows components to access relation metadata
-      } else {
-        // Convert other relations to Sets as before
-        ['images','faces','albums'].forEach((rk) => {
-          if (rk in normalized) normalized[rk] = coerceToSet(normalized[rk]);
-        });
-      }
+      // Handle relations based on their types
+      relations.forEach((rk) => {
+        if (rk in normalized) {
+          const isDict = shouldStoreAsDict(childTypeKey, rk);
+          if (isDict && typeof normalized[rk] === 'object' && !Array.isArray(normalized[rk])) {
+            // Keep as dict
+          } else {
+            normalized[rk] = coerceToSet(normalized[rk]);
+          }
+        }
+      });
       
       const before = prevMap[id];
       const mergedCandidate = { ...(before || { id }), ...normalized };
       
-      // Preserve Set references when contents didn't change
-      ['images','faces','albums'].forEach((rk) => {
-        if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-          if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
+      // Preserve references when contents didn't change
+      relations.forEach((rk) => {
+        const isDict = shouldStoreAsDict(childTypeKey, rk);
+        if (isDict && before && before[rk] && mergedCandidate[rk] && 
+            typeof before[rk] === 'object' && typeof mergedCandidate[rk] === 'object' &&
+            !Array.isArray(before[rk]) && !Array.isArray(mergedCandidate[rk]) &&
+            !(before[rk] instanceof Set) && !(mergedCandidate[rk] instanceof Set)) {
+          if (shallowEqualPlainObject(before[rk], mergedCandidate[rk])) {
+            mergedCandidate[rk] = before[rk];
+          }
+        } else if (!isDict && before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
+          if (setsEqual(before[rk], mergedCandidate[rk])) {
+            mergedCandidate[rk] = before[rk];
+          }
         }
       });
-      
-      // Handle profile relations preservation
-      if (childTypeKey === 'profiles') {
-        ['images', 'albums'].forEach((rk) => {
-          if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-            if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
-          }
-        });
-      }
-      
-      // Handle upload relations preservation
-      if (childTypeKey === 'uploads') {
-        ['images', 'groups', 'moments'].forEach((rk) => {
-          if (before && before[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-            if (setsEqual(before[rk], mergedCandidate[rk])) mergedCandidate[rk] = before[rk];
-          }
-        });
-      }
-      
-      // Handle access_requests relations preservation
-      if (childTypeKey === 'access_requests') {
-        // For groups dict, preserve if unchanged
-        if (before && before.groups && mergedCandidate.groups && 
-            typeof before.groups === 'object' && typeof mergedCandidate.groups === 'object' &&
-            !Array.isArray(before.groups) && !Array.isArray(mergedCandidate.groups)) {
-          if (shallowEqualPlainObject(before.groups, mergedCandidate.groups)) {
-            mergedCandidate.groups = before.groups;
-          }
-        }
-      }
       
       const nextObj = before && shallowEqualObjects(before, mergedCandidate) ? before : mergedCandidate;
       if (nextObj !== before) {
         if (map === prevMap) map = { ...prevMap };
         map[id] = nextObj;
-      }
-      if (childTypeKey === 'images' || childTypeKey === 'groups') {
-        const replaced = nextObj !== before;
-        const diff = replaced ? objectDiffKeys(before, nextObj) : [];
-        const details = replaced ? objectDiffDetails(before, nextObj) : [];
-        
       }
     });
     if (map !== prevMap) nextEntities[childTypeKey] = map;
@@ -513,44 +607,9 @@ export const useDataStore = create((set, get) => {
             // Gate only inserts unless ignoreScope=true
             if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
             const prev = prevMap[id] || { id };
-            const mergedCandidate = { ...prev, ...it };
-            ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-            });
-            // Handle profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            // Handle upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            // Preserve set refs when contents equal
-            ['images','faces','albums'].forEach((rk) => {
-              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-              }
-            });
-            // Preserve profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
-            // Preserve upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
+            const merged = { ...prev, ...it };
+            const normalized = normalizeRelations(key, merged);
+            const mergedCandidate = preserveRelations(key, prev, normalized);
             const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
             if (nextObj !== prev) {
               if (map === prevMap) map = { ...prevMap };
@@ -579,43 +638,9 @@ export const useDataStore = create((set, get) => {
             if (!id) return;
             if (!prevMap[id]) return; // update-only
             const prev = prevMap[id];
-            const mergedCandidate = { ...prev, ...it };
-            ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-            });
-            // Handle profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            // Handle upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            ['images','faces','albums'].forEach((rk) => {
-              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-              }
-            });
-            // Preserve profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
-            // Preserve upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
+            const merged = { ...prev, ...it };
+            const normalized = normalizeRelations(key, merged);
+            const mergedCandidate = preserveRelations(key, prev, normalized);
             const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
             if (nextObj !== prev) {
               if (map === prevMap) map = { ...prevMap };
@@ -646,44 +671,9 @@ export const useDataStore = create((set, get) => {
             // Gate only inserts unless ignoreScope=true
             if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
             const prev = prevMap[id] || { id };
-            const mergedCandidate = { ...prev, ...it };
-            ['images', 'faces', 'albums'].forEach((rk) => {
-              if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-            });
-            // Handle profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            // Handle upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (rk in mergedCandidate) mergedCandidate[rk] = coerceToSet(mergedCandidate[rk]);
-              });
-            }
-            // Preserve set refs when contents equal
-            ['images','faces','albums'].forEach((rk) => {
-              if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-              }
-            });
-            // Preserve profile relations
-            if (key === 'profiles') {
-              ['images', 'albums'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
-            // Preserve upload relations
-            if (key === 'uploads') {
-              ['images', 'groups', 'moments'].forEach((rk) => {
-                if (prev && prev[rk] instanceof Set && mergedCandidate[rk] instanceof Set) {
-                  if (setsEqual(prev[rk], mergedCandidate[rk])) mergedCandidate[rk] = prev[rk];
-                }
-              });
-            }
+            const merged = { ...prev, ...it };
+            const normalized = normalizeRelations(key, merged);
+            const mergedCandidate = preserveRelations(key, prev, normalized);
             const nextObj = shallowEqualObjects(prev, mergedCandidate) ? prev : mergedCandidate;
             if (nextObj !== prev) {
               if (map === prevMap) map = { ...prevMap };
@@ -704,6 +694,7 @@ export const useDataStore = create((set, get) => {
           const parentKey = normalizeEntityKey(parentType);
           if (!parentKey) return;
           const field = normalizeEntityKey(childType).replace(/s$/, 's');
+          const isDictRelation = shouldStoreAsDict(parentKey, field);
 
           // Apply child entity upserts when 'entities' dict is provided (local only, ignore scopes)
           if (ch.entities && (ch.type === CHANGE_TYPES.RELATION_SET || ch.type === CHANGE_TYPES.RELATION_ADD)) {
@@ -719,52 +710,63 @@ export const useDataStore = create((set, get) => {
             if (!allowed) return;
           }
 
-          // RELATION_MOVE unsupported in v4
-
           const parent = ensureEntity(parentKey, parentId);
-          const current = coerceToSet(parent[field]);
-          const beforeSize = current.size;
-          let beforeKeysSample = [];
-          try { beforeKeysSample = Array.from(current).slice(0, 5); } catch {}
+          let beforeSize = 0;
+          let beforeValue = null;
+          
+          if (isDictRelation) {
+            beforeValue = parent[field];
+            beforeSize = beforeValue && typeof beforeValue === 'object' && !Array.isArray(beforeValue) ? Object.keys(beforeValue).length : 0;
+          } else {
+            const current = coerceToSet(parent[field]);
+            beforeValue = current;
+            beforeSize = current.size;
+          }
 
           if (ch.type === CHANGE_TYPES.RELATION_SET) {
-            // Prefer entities dict keys when present
-            const ids = ch.entities ? Object.keys(ch.entities).map(String) : (ch.ids || []).map(String);
-            const nextSet = coerceToSet(ids);
-            if (setsEqual(current, nextSet)) {
-              // No change; skip saveBack
-            } else {
-              parent[field] = nextSet;
-            }
-            if (parentKey === 'groups' && field === 'images') {
-              const afterSize = parent[field].size;
-              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, changed: beforeSize !== afterSize });
-            }
-          } else if (ch.type === CHANGE_TYPES.RELATION_ADD) {
-            // If relationData is provided, store it directly instead of creating a Set
-            if (ch.relationData) {
+            if (isDictRelation && ch.relationData) {
+              // Store relationData directly as dict
               parent[field] = ch.relationData;
             } else {
-              const set = new Set(current);
+              // Regular Set relation
+              const ids = ch.entities ? Object.keys(ch.entities).map(String) : (ch.ids || []).map(String);
+              const nextSet = coerceToSet(ids);
+              if (!setsEqual(beforeValue instanceof Set ? beforeValue : coerceToSet(beforeValue), nextSet)) {
+                parent[field] = nextSet;
+              }
+            }
+          } else if (ch.type === CHANGE_TYPES.RELATION_ADD) {
+            if (isDictRelation && ch.relationData) {
+              // Merge relationData into existing dict
+              const existing = parent[field] && typeof parent[field] === 'object' && !Array.isArray(parent[field]) ? parent[field] : {};
+              const merged = { ...existing, ...ch.relationData };
+              parent[field] = merged;
+            } else {
+              // Regular Set addition
+              const set = coerceToSet(beforeValue);
               const ids = ch.entities ? Object.keys(ch.entities).map(String) : (ch.ids || []).map(String);
               ids.forEach((id) => set.add(String(id)));
-              if (!setsEqual(current, set)) parent[field] = set;
+              if (!setsEqual(coerceToSet(beforeValue), set)) parent[field] = set;
             }
-            if (parentKey === 'groups' && field === 'images') {
-              const afterSize = ch.relationData ? Object.keys(ch.relationData).length : parent[field].size;
-              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, delta: afterSize - beforeSize });
-            }
-            
           } else if (ch.type === CHANGE_TYPES.RELATION_REMOVE) {
-            const set = new Set(current);
-            (ch.ids || []).forEach((id) => set.delete(String(id)));
-            if (!setsEqual(current, set)) parent[field] = set;
-            if (parentKey === 'groups' && field === 'images') {
-              const afterSize = set.size;
-              relationSummaries.push({ type: ch.type, relation: ch.relation, parentId, beforeSize, afterSize, delta: afterSize - beforeSize });
+            if (isDictRelation) {
+              // Remove keys from dict
+              const existing = parent[field] && typeof parent[field] === 'object' && !Array.isArray(parent[field]) ? parent[field] : {};
+              const filtered = {};
+              Object.keys(existing).forEach((key) => {
+                if (!(ch.ids || []).includes(key)) {
+                  filtered[key] = existing[key];
+                }
+              });
+              parent[field] = Object.keys(filtered).length > 0 ? filtered : {};
+            } else {
+              // Regular Set removal
+              const set = new Set(beforeValue instanceof Set ? beforeValue : coerceToSet(beforeValue));
+              (ch.ids || []).forEach((id) => set.delete(String(id)));
+              if (!setsEqual(coerceToSet(beforeValue), set)) parent[field] = set;
             }
-            
           }
+          
           saveBack(parentKey, parentId, parent);
           if (effBroadcast) {
             outgoing.push(ch);
@@ -829,7 +831,10 @@ export const useDataStore = create((set, get) => {
     setSelectedImages: (selectedImages) => set({ selectedImages }),
     setImageViewer: (imageViewer) => set({ imageViewer }),
     clearData: () => {
-      const empty = { images: {}, groups: {}, moments: {}, albums: {}, faces: {}, profiles: {}, uploads: {} };
+      const empty = {};
+      ENTITY_TYPES.forEach((entityType) => {
+        empty[entityType] = {};
+      });
       persistEntitiesSession(empty);
       set({
         selectedImages: new Set(),
