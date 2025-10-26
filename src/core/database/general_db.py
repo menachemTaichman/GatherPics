@@ -125,6 +125,7 @@ class GeneralDB(BaseDB):
                 can_create_events INTEGER DEFAULT 0,
                 restricted_to_event TEXT DEFAULT NULL,
                 UNIQUE (label, restricted_to_event)
+                FOREIGN KEY (restricted_to_event) REFERENCES events(event_id) ON DELETE SET NULL
             ''',
             'profiles_events': '''
                 profile_id TEXT NOT NULL,
@@ -164,16 +165,16 @@ class GeneralDB(BaseDB):
         }
     
     @classmethod
-    def INDEXES(self) -> list:
-        return [
-            'idx_profiles_label ON profiles(label)',
-            'idx_profiles_restricted_to_event ON profiles(restricted_to_event)',
-            'idx_profiles_events_profile_id ON profiles_events(profile_id)',
-            'idx_profiles_events_event_id ON profiles_events(event_id)',
-            'idx_refresh_tokens_profile_id ON refresh_tokens(profile_id)',
-            'idx_refresh_tokens_token ON refresh_tokens(token)',
-            'idx_events_url ON events(url)',
-        ]
+    def INDEXES(self) -> dict:
+        return {
+            'idx_profiles_label': 'profiles(label)',
+            'idx_profiles_restricted_to_event': 'profiles(restricted_to_event)',
+            'idx_profiles_events_profile_id': 'profiles_events(profile_id)',
+            'idx_profiles_events_event_id': 'profiles_events(event_id)',
+            'idx_refresh_tokens_profile_id': 'refresh_tokens(profile_id)',
+            'idx_refresh_tokens_token': 'refresh_tokens(token)',
+            'idx_events_url': 'events(url)',
+        }
     
     @classmethod
     def VIEWS(self) -> dict:
@@ -181,7 +182,46 @@ class GeneralDB(BaseDB):
     
     @classmethod
     def TRIGGERS(self) -> dict:
-        return {}
+        return {
+            # ensure_profiles_unique
+            'trg_ensure_profiles_unique_insert': """
+                BEFORE INSERT ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM profiles
+                            WHERE
+                                label = NEW.label
+                                AND (
+                                    COALESCE(restricted_to_event, '') = COALESCE(NEW.restricted_to_event, '')
+                                    OR restricted_to_event IS NULL
+                                )
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: Profile label already exists')
+                    END;
+                END;
+            """,
+            'trg_ensure_profiles_unique_update': """
+                BEFORE UPDATE ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM profiles p
+                            WHERE
+                                p.label = NEW.label
+                                AND (
+                                    (p.restricted_to_event IS NOT NULL AND p.restricted_to_event = NEW.restricted_to_event)
+                                    OR p.restricted_to_event IS NULL
+                                )
+                                AND p.profile_id <> OLD.profile_id
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: Profile label already exists')
+                    END;
+                END;
+            """,
+        }
 
     @classmethod
     def create_db(cls) -> str:

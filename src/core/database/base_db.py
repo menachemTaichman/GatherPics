@@ -43,6 +43,7 @@ class BaseDB(ABC):
         Returns:
             dict with table names as keys and table structures as values
             the table structure is a dict with the following keys:
+            - original_table: original table name if it is a view. default is the table name.
             - primary_key: str or list of primary key fields
             - accessible_table: accessible table name
             - fields: list of fields to be returned by the get_entities query
@@ -159,6 +160,11 @@ class BaseDB(ABC):
             return value_str
 
     @classmethod
+    def get_original_table(cls, table: str) -> str:
+        """Get the original table name for a table."""
+        return cls.STRUCTURE()[table].get('original_table', table)
+
+    @classmethod
     def get_id_field(cls, table: str, remove_parent: str | None = None) -> str:
         """Get the ID field(s) for a table."""
         id_field = cls.STRUCTURE()[table].get('primary_key', '')
@@ -178,7 +184,7 @@ class BaseDB(ABC):
     def is_auto_increment(cls, table: str) -> bool:
         """Check if the table has an auto increment field."""
 
-        return 'AUTOINCREMENT' in cls.TABLES()[table]
+        return 'AUTOINCREMENT' in cls.TABLES()[cls.get_original_table(table)]
 
     @staticmethod
     def _get_fields(fields: list[str] | None, table: str | None = None) -> str:
@@ -427,7 +433,7 @@ class BaseDB(ABC):
 
         self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
 
-        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {table} ORDER BY rowid DESC LIMIT 1', (), ReturnFormat.VALUE)
+        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {self.get_original_table(table)} ORDER BY rowid DESC LIMIT 1', (), ReturnFormat.VALUE)
 
     def update(self, table: str, where: dict, fields: dict) -> list:
         """Update rows matching WHERE clause and return their primary keys (if defined)."""

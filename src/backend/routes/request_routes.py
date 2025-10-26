@@ -91,6 +91,8 @@ def create_access_request(event_id):
     data = request.json or {}
     
     try:
+        # request_id = event.models.create_access_request(data['applicant_name'], data.get('applicant_email'), data.get('applicant_phone'), data.get('details'), data.get('group_ids'))
+
         request_data = {
             'profile_id': get_jwt_identity(),
             'applicant_name': data['applicant_name'],
@@ -99,13 +101,10 @@ def create_access_request(event_id):
             'details': data.get('details'),
             'applicant_profile_id': data.get('applicant_profile_id'),
         }
-        
-        request_id = event.models.add('access_requests', request_data)
-        
+        request_id = event.models.add('my_access_requests', request_data)
         # Add groups to the request
         if data['group_ids'] and isinstance(data['group_ids'], list):
-            event.models.edit_childs('access_requests', request_id, 'groups', data['group_ids'], operation=ChildOperation.ADD)
-        
+            event.models.edit_childs('my_access_requests', request_id, 'groups', data['group_ids'], operation=ChildOperation.ADD)
         # Return the created request (both as access_request and my_access_request for the creator)
         created_request = event.models.get_entities('my_access_requests', [request_id])
         changes = [{
@@ -123,6 +122,7 @@ def create_access_request(event_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+# TODO: remove this route
 @request_bp.route("/requests/<int:request_id>", methods=["PATCH"])
 @require_auth
 def update_request(event_id, request_id):
@@ -247,8 +247,8 @@ def approve_request(event_id, request_id):
     try:
         group_ids = data.get('group_ids')  # None means approve all
         close = data.get('close', False)
-        closed_details = data.get('closed_details')
-        profile_name = data.get('profile_name')
+        closed_details = data.get('closedDetails')
+        profile_name = data.get('profileName')
         
         general_models = get_general_models()
         applicant_profile_id = general_models.toggle_access_request(event_id, request_id, True, group_ids, close, closed_details, profile_name)

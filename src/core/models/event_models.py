@@ -371,6 +371,38 @@ class EventModels(BaseModels):
         valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
+    # TODO: investigate public profile requests
+    def create_access_request(
+        self,
+        applicant_name: str | None = None,
+        applicant_email: str | None = None,
+        applicant_phone: str | None = None,
+        details: str | None = None,
+        group_ids: list[str] | None = None
+    ) -> str:
+        """Create an access request."""
+        request_data = {
+            'requested_at': datetime.now(),
+            'applicant_name': applicant_name,
+            'applicant_email': applicant_email,
+            'applicant_phone': applicant_phone,
+            'details': details,
+        }
+        request_id = self.add('access_requests', request_data)
+        if self.get_current_profile()['is_public'] == 1:
+            query = f"""
+                INSERT INTO access_requests_groups (access_request_id, group_id)
+                SELECT g.group_id, ?
+                FROM accessible_groups_helper g
+                WHERE g.group_id IN ({','.join(['?'] * len(group_ids))})
+                AND g.is_accessible = 0
+            """
+            self.db.execute_query(query, [request_id] + group_ids)
+            return request_id
+
+        self.edit_childs('my_access_requests', request_id, child='groups', child_ids=group_ids, operation=ChildOperation.ADD)
+        return request_id
+
     def toggle_access_request(
         self,
         access_request_id: str,
@@ -390,11 +422,11 @@ class EventModels(BaseModels):
             closed_details: details of the closed request to add to the closed details list
             applicant_profile_id: applicant profile id, if None, use the existing applicant profile id
         """
-        if not access_request:
-            raise ValueError(f"Access request not found for id {access_request_id}")
         if applicant_profile_id:
             self.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         access_request = self.get_entities('access_requests', access_request_id)
+        if not access_request:
+            raise ValueError(f"Access request not found for id {access_request_id}")
         applicant_profile_id = access_request['applicant_profile_id']
         if approve and not applicant_profile_id:
             raise ValueError(f"Applicant profile id not found for access request {access_request_id}")            
@@ -407,7 +439,7 @@ class EventModels(BaseModels):
         data = {'approved': approve, 'closed_at': datetime.now()}
         if not close:
             data['closed_details'] = closed_details
-        self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data=data)
+        self.edit_childs('access_requests', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data=data)
 
         if close:
             self.edit('access_requests', access_request_id, {'is_closed': True, 'closed_at': datetime.now(), 'closed_details': closed_details})

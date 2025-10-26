@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, AlertCircle, Save } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, AlertCircle, Check, Save } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, imagesAPI } from '../../utils/apiService';
-import { useGroupsList } from '../../utils/dataManager';
+import { useGroupsList, useRequestById } from '../../utils/dataManager';
 import { getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -45,19 +45,22 @@ export default function RequestDetailModal({
   urlHelpers
 }) {
   const [loading, setLoading] = useState(false);
-  const [selectedGroups, setSelectedGroups] = useState(new Set());
+  const [groupActions, setGroupActions] = useState({}); // { groupId: 'approve' | 'deny' | null }
   const [closeRequest, setCloseRequest] = useState(false);
   const [profileName, setProfileName] = useState('');
-  const [actionType, setActionType] = useState(''); // 'approve' or 'deny'
   
   const { showToast } = useToast();
   const permissions = usePermissions();
   const allGroups = useGroupsList();
+  const storeRequest = useRequestById(request?.access_request_id || request?.id);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-detail-modal';
 
   const requestId = request?.access_request_id || request?.id;
+  
+  // Use the request from the store (which has up-to-date relation data) if available, otherwise fall back to prop
+  const requestData = storeRequest || request;
 
   // Fetch request details when modal opens
   useEffect(() => {
@@ -94,13 +97,12 @@ export default function RequestDetailModal({
 
   // Initialize form data
   useEffect(() => {
-    if (isOpen && request) {
-      setProfileName(request.applicant_name || '');
-      setSelectedGroups(new Set());
+    if (isOpen && requestData) {
+      setProfileName(requestData.applicant_name || '');
+      setGroupActions({});
       setCloseRequest(false);
-      setActionType('');
     }
-  }, [isOpen, request]);
+  }, [isOpen, requestData]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: modalId,
@@ -109,53 +111,72 @@ export default function RequestDetailModal({
     enableFocusTrapping: true
   });
 
-  const handleGroupToggle = (groupId) => {
-    setSelectedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupId)) {
-        newSet.delete(groupId);
+  const handleGroupAction = (groupId, action) => {
+    setGroupActions(prev => {
+      const newActions = { ...prev };
+      if (newActions[groupId] === action) {
+        delete newActions[groupId];
       } else {
-        newSet.add(groupId);
+        newActions[groupId] = action;
       }
-      return newSet;
+      return newActions;
     });
   };
 
   const handleApproveAll = () => {
-    if (!request?.groups) return;
-    
-    const pendingGroups = Object.keys(request.groups).filter(
-      groupId => request.groups[groupId].approved === null
-    );
-    setSelectedGroups(new Set(pendingGroups));
-    setActionType('approve');
+    if (!requestData?.groups) return;
+    const actions = {};
+    Object.keys(requestData.groups).forEach(groupId => {
+      if (requestData.groups[groupId].approved === null) {
+        actions[groupId] = 'approve';
+      }
+    });
+    setGroupActions(actions);
   };
 
   const handleDenyAll = () => {
-    if (!request?.groups) return;
+    if (!requestData?.groups) return;
+    const actions = {};
+    Object.keys(requestData.groups).forEach(groupId => {
+      if (requestData.groups[groupId].approved === null) {
+        actions[groupId] = 'deny';
+      }
+    });
+    setGroupActions(actions);
+  };
+
+  const handleApprovePending = () => {
+    if (!requestData?.groups) return;
+    const actions = {};
+    Object.keys(requestData.groups).forEach(groupId => {
+      if (requestData.groups[groupId].approved === null) {
+        actions[groupId] = 'approve';
+      }
+    });
+    setGroupActions(actions);
+  };
+
+  const handleDenyPending = () => {
+    if (!requestData?.groups) return;
+    const actions = {};
+    Object.keys(requestData.groups).forEach(groupId => {
+      if (requestData.groups[groupId].approved === null) {
+        actions[groupId] = 'deny';
+      }
+    });
+    setGroupActions(actions);
+  };
+
+  const handleApplyChanges = async () => {
+    const approvedGroups = Object.keys(groupActions).filter(id => groupActions[id] === 'approve');
+    const deniedGroups = Object.keys(groupActions).filter(id => groupActions[id] === 'deny');
     
-    const pendingGroups = Object.keys(request.groups).filter(
-      groupId => request.groups[groupId].approved === null
-    );
-    setSelectedGroups(new Set(pendingGroups));
-    setActionType('deny');
-  };
-
-  const handleApproveSelected = () => {
-    setActionType('approve');
-  };
-
-  const handleDenySelected = () => {
-    setActionType('deny');
-  };
-
-  const handleSubmit = async () => {
-    if (selectedGroups.size === 0) {
-      showToast('Please select at least one group', 'error');
+    if (approvedGroups.length === 0 && deniedGroups.length === 0) {
+      showToast('Please select at least one action', 'error');
       return;
     }
 
-    if (actionType === 'approve' && !request.applicant_profile_id && !profileName.trim()) {
+    if (approvedGroups.length > 0 && !requestData.applicant_profile_id && !profileName.trim()) {
       showToast('Profile name is required for new profiles', 'error');
       return;
     }
@@ -163,34 +184,102 @@ export default function RequestDetailModal({
     setLoading(true);
     
     try {
-      const groupIds = Array.from(selectedGroups);
       const requestId = request.access_request_id || request.id;
       
-      if (actionType === 'approve') {
+      if (approvedGroups.length > 0) {
         await requestsAPI.approve(
           requestId,
-          groupIds,
+          approvedGroups,
           closeRequest,
           null,
           profileName.trim() || null,
           eventUrl
         );
-        showToast('Request approved successfully', 'success');
-      } else if (actionType === 'deny') {
+      }
+      
+      if (deniedGroups.length > 0) {
         await requestsAPI.deny(
           requestId,
-          groupIds,
+          deniedGroups,
           closeRequest,
           null,
           eventUrl
         );
-        showToast('Request denied successfully', 'success');
       }
       
+      showToast('Changes applied successfully', 'success');
       onClose();
     } catch (error) {
-      console.error('Failed to process request:', error);
-      showToast(formatErrorMessage('process request', error), 'error');
+      console.error('Failed to apply changes:', error);
+      showToast(formatErrorMessage('apply changes', error), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveRequest = async () => {
+    const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
+      groupId => requestData.groups[groupId].approved === null
+    ) : [];
+    
+    if (allPendingGroups.length === 0) {
+      showToast('No pending groups to approve', 'error');
+      return;
+    }
+
+    if (!requestData.applicant_profile_id && !profileName.trim()) {
+      showToast('Profile name is required for new profiles', 'error');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const requestId = request.access_request_id || request.id;
+      await requestsAPI.approve(
+        requestId,
+        allPendingGroups,
+        closeRequest,
+        null,
+        profileName.trim() || null,
+        eventUrl
+      );
+      showToast('Request approved successfully', 'success');
+      onClose();
+    } catch (error) {
+      console.error('Failed to approve request:', error);
+      showToast(formatErrorMessage('approve request', error), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDenyRequest = async () => {
+    const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
+      groupId => requestData.groups[groupId].approved === null
+    ) : [];
+    
+    if (allPendingGroups.length === 0) {
+      showToast('No pending groups to deny', 'error');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const requestId = request.access_request_id || request.id;
+      await requestsAPI.deny(
+        requestId,
+        allPendingGroups,
+        closeRequest,
+        null,
+        eventUrl
+      );
+      showToast('Request denied successfully', 'success');
+      onClose();
+    } catch (error) {
+      console.error('Failed to deny request:', error);
+      showToast(formatErrorMessage('deny request', error), 'error');
     } finally {
       setLoading(false);
     }
@@ -202,10 +291,10 @@ export default function RequestDetailModal({
     }
   };
 
-  if (!isOpen || !request) return null;
+  if (!isOpen || !requestData) return null;
 
-  const pendingGroups = request.groups ? Object.keys(request.groups).filter(
-    groupId => request.groups[groupId].approved === null
+  const pendingGroups = requestData.groups ? Object.keys(requestData.groups).filter(
+    groupId => requestData.groups[groupId].approved === null
   ) : [];
 
   const canApprove = permissions.isProfilesManager && pendingGroups.length > 0;
@@ -252,26 +341,26 @@ export default function RequestDetailModal({
                   <div className="flex items-center space-x-3">
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{request.applicant_name}</p>
+                      <p className="text-sm font-medium text-gray-900">{requestData.applicant_name}</p>
                       <p className="text-xs text-gray-500">Applicant Name</p>
                     </div>
                   </div>
                   
-                  {request.applicant_email && (
+                  {requestData.applicant_email && (
                     <div className="flex items-center space-x-3">
                       <Mail className="w-5 h-5 text-gray-400" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{request.applicant_email}</p>
+                        <p className="text-sm font-medium text-gray-900">{requestData.applicant_email}</p>
                         <p className="text-xs text-gray-500">Email Address</p>
                       </div>
                     </div>
                   )}
                   
-                  {request.applicant_phone && (
+                  {requestData.applicant_phone && (
                     <div className="flex items-center space-x-3">
                       <Phone className="w-5 h-5 text-gray-400" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{request.applicant_phone}</p>
+                        <p className="text-sm font-medium text-gray-900">{requestData.applicant_phone}</p>
                         <p className="text-xs text-gray-500">Phone Number</p>
                       </div>
                     </div>
@@ -280,16 +369,16 @@ export default function RequestDetailModal({
                   <div className="flex items-center space-x-3">
                     <Clock className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{formatDateTime(request.requested_at)}</p>
+                      <p className="text-sm font-medium text-gray-900">{formatDateTime(requestData.requested_at)}</p>
                       <p className="text-xs text-gray-500">Requested At</p>
                     </div>
                   </div>
                   
-                  {request.details && (
+                  {requestData.details && (
                     <div className="flex items-start space-x-3">
                       <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{request.details}</p>
+                        <p className="text-sm font-medium text-gray-900">{requestData.details}</p>
                         <p className="text-xs text-gray-500">Details</p>
                       </div>
                     </div>
@@ -298,7 +387,7 @@ export default function RequestDetailModal({
               </div>
 
               {/* Profile Name for New Profiles */}
-              {!request.applicant_profile_id && (
+              {!requestData.applicant_profile_id && (
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-4">New Profile</h3>
                   <div>
@@ -324,49 +413,103 @@ export default function RequestDetailModal({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900">Groups</h3>
-                {canApprove && (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleApproveAll}
-                      className="px-3 py-1.5 bg-green-100 text-green-700 text-sm rounded-lg hover:bg-green-200 transition-colors font-medium"
-                    >
-                      Approve All
-                    </button>
-                    <button
-                      onClick={handleDenyAll}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors font-medium"
-                    >
-                      Deny All
-                    </button>
-                  </div>
-                )}
               </div>
               
+              {canApprove && (
+                <>
+                  {/* All groups actions */}
+                  <div className="flex items-center space-x-3">
+                    <div className="w-16 flex items-center space-x-1">
+                      <span className="text-xs text-gray-500 font-medium">All:</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={handleApproveAll}
+                        className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors group"
+                      >
+                        <Check className="w-4 h-4 text-green-700 group-hover:scale-110 transition-transform" />
+                      </button>
+                      <button
+                        onClick={handleDenyAll}
+                        className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors group"
+                      >
+                        <X className="w-4 h-4 text-red-700 group-hover:scale-110 transition-transform" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Pending groups only actions */}
+                  <div className="flex items-center space-x-3">
+                    <div className="w-16 flex items-center space-x-1">
+                      <span className="text-xs text-gray-500 font-medium">Pending:</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={handleApprovePending}
+                        className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors group"
+                      >
+                        <Check className="w-4 h-4 text-green-700 group-hover:scale-110 transition-transform" />
+                      </button>
+                      <button
+                        onClick={handleDenyPending}
+                        className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors group"
+                      >
+                        <X className="w-4 h-4 text-red-700 group-hover:scale-110 transition-transform" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+              
+              <div className="h-px bg-gray-200" />
+              
               <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
-                {request.groups && Object.keys(request.groups).length > 0 ? (
+                {requestData.groups && Object.keys(requestData.groups).length > 0 ? (
                   <div className="divide-y divide-gray-200">
-                    {Object.entries(request.groups).map(([groupId, groupData]) => {
-                      const group = allGroups.find(g => g.group_id === groupId);
+                    {Object.entries(requestData.groups).map(([groupId, groupData]) => {
+                      // Try to find group by ID (normalized) or by group_id (raw from backend)
+                      const group = allGroups.find(g => (g.id || g.group_id) === groupId);
                       const statusInfo = getGroupStatus(groupData);
                       const StatusIcon = statusInfo.icon;
                       const isPending = groupData.approved === null;
-                      const isSelected = selectedGroups.has(groupId);
                       const isAccessible = group?.is_accessible !== false;
+                      const action = groupActions[groupId];
+                      const isApproved = action === 'approve';
+                      const isDenied = action === 'deny';
                       
                       return (
-                        <label
-                          key={groupId || `request-group-${index}`}
-                          className={`flex items-center space-x-3 p-3 hover:bg-gray-50 cursor-pointer ${
+                        <div
+                          key={groupId}
+                          className={`flex items-center space-x-3 p-3 hover:bg-gray-50 ${
                             !isAccessible ? 'opacity-50' : ''
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleGroupToggle(groupId)}
-                            disabled={!isPending || !isAccessible || !canApprove}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
-                          />
+                          <div className="w-16 flex items-center justify-center">
+                            {canApprove && isPending && isAccessible && (
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleGroupAction(groupId, 'approve')}
+                                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                                    isApproved 
+                                      ? 'bg-green-600 text-white shadow-sm' 
+                                      : 'bg-green-100 hover:bg-green-200 text-green-700'
+                                  }`}
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleGroupAction(groupId, 'deny')}
+                                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                                    isDenied 
+                                      ? 'bg-red-600 text-white shadow-sm' 
+                                      : 'bg-red-100 hover:bg-red-200 text-red-700'
+                                  }`}
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           <div className="flex items-center space-x-3 flex-1">
                             {group?.representative_face && group?.id ? (
                               <img
@@ -407,7 +550,7 @@ export default function RequestDetailModal({
                             statusInfo.color === 'red' ? 'text-red-600' :
                             'text-yellow-600'
                           }`} />
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
@@ -420,7 +563,12 @@ export default function RequestDetailModal({
               </div>
               
               <p className="text-xs text-gray-500">
-                Selected {selectedGroups.size} group{selectedGroups.size !== 1 ? 's' : ''}
+                {Object.keys(groupActions).length > 0 && (
+                  <span>
+                    {Object.values(groupActions).filter(a => a === 'approve').length} approved, {' '}
+                    {Object.values(groupActions).filter(a => a === 'deny').length} denied
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -430,51 +578,53 @@ export default function RequestDetailModal({
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={closeRequest}
-                  onChange={(e) => setCloseRequest(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Close request (deny remaining groups)</span>
-              </label>
+              <span className="text-sm text-gray-700">Close request:</span>
+              <button
+                onClick={() => setCloseRequest(!closeRequest)}
+                className={`w-10 h-6 rounded-full relative transition-colors ${closeRequest ? 'bg-blue-600' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-0.5 ${closeRequest ? 'left-5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all`} />
+              </button>
+              <span className="text-xs text-gray-500">(deny remaining)</span>
             </div>
             
             <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={loading}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              
               {canApprove && (
                 <>
                   <button
-                    onClick={handleDenySelected}
-                    disabled={loading || selectedGroups.size === 0}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                    onClick={handleApplyChanges}
+                    disabled={loading || Object.keys(groupActions).length === 0}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
-                    {loading && actionType === 'deny' && (
+                    {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <XCircle className="w-4 h-4" />
-                    <span>Deny Selected</span>
+                    <Save className="w-4 h-4" />
+                    <span>Apply Changes</span>
                   </button>
                   
                   <button
-                    onClick={handleApproveSelected}
-                    disabled={loading || selectedGroups.size === 0}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                    onClick={handleDenyRequest}
+                    disabled={loading || pendingGroups.length === 0}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
-                    {loading && actionType === 'approve' && (
+                    {loading && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    <XCircle className="w-4 h-4" />
+                    <span>Deny Request</span>
+                  </button>
+                  
+                  <button
+                    onClick={handleApproveRequest}
+                    disabled={loading || pendingGroups.length === 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
                     <CheckCircle className="w-4 h-4" />
-                    <span>Approve Selected</span>
+                    <span>Approve Request</span>
                   </button>
                 </>
               )}

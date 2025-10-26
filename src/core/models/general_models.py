@@ -119,9 +119,11 @@ class GeneralModels(BaseModels):
 
         profile = self.get_entities('profiles', profile_id)
         restricted_to_event_id = profile.get('restricted_to_event')
-        if only_remove_from_event_id and not restricted_to_event_id:
-            self.remove_profile_from_event(profile_id, only_remove_from_event_id)
-        else:
+        event_id = only_remove_from_event_id or restricted_to_event_id
+        if event_id:
+            self.remove_profile_from_event(profile_id, event_id)
+        
+        if not only_remove_from_event_id:
             self.delete('profiles', profile_id)
 
     def get_profile_password(self, profile_id: str) -> str:
@@ -221,7 +223,7 @@ class GeneralModels(BaseModels):
         if not event:
             raise Forbidden('Profile does not have permission to toggle this access request')
 
-        access_request = event.get_entities('access_requests', access_request_id)
+        access_request = event.models.get_entities('access_requests', access_request_id)
         if not access_request:
             raise Forbidden('Access request not found')
         
@@ -249,7 +251,7 @@ class GeneralModels(BaseModels):
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
         """Remove a profile from an event in the general DB and sync to event DB."""
-        if not self.profile_context['profile_id'] in self.get_childs('profiles', profile_id, 'events', return_ids=True):
+        if self.profile_context['profile_id'] not in self.get_childs('events', event_id, 'profiles', return_ids=True):
             raise Forbidden('Profile does not have permissions in this event')
         
         if not self.is_managable_profile(profile_id):

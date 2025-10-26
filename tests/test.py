@@ -13,10 +13,9 @@ event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
 profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
 general_models = GeneralModels(profile_id=profile_id)
 event = Event(event_id, profile_id=profile_id)
+db = event.models.db
 
-def drop_views_triggers_and_indexes():
-    db = event.models.db
-
+def drop_views_triggers_and_indexes(db: BaseDB):
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
     views = db.execute_query('SELECT name FROM sqlite_master WHERE type="view"')
     triggers = db.execute_query('SELECT name FROM sqlite_master WHERE type="trigger"')
@@ -40,8 +39,7 @@ def drop_views_triggers_and_indexes():
         except Exception as e:
             print(f'Error dropping index {index[0]}: {e}')
 
-def create_views_triggers_and_indexes():
-    db = event.models.db
+def create_views_triggers_and_indexes(db: BaseDB):
 
     # import them again
     for view_name, view_query in db.VIEWS().items():
@@ -53,9 +51,9 @@ def create_views_triggers_and_indexes():
     for index_name, index_query in db.INDEXES().items():
         db.execute_query(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
 
-def recreate_views_triggers_and_indexes():
-    drop_views_triggers_and_indexes()
-    create_views_triggers_and_indexes()
+def recreate_views_triggers_and_indexes(db: BaseDB):
+    drop_views_triggers_and_indexes(db)
+    create_views_triggers_and_indexes(db)
 
 def recreate_tables_with_data(db: BaseDB):
     TABLES = db.TABLES()
@@ -93,7 +91,7 @@ def recreate_tables_with_data(db: BaseDB):
 
     # ------------------------------------------------------
 
-    drop_views_triggers_and_indexes()
+    drop_views_triggers_and_indexes(db)
     db.execute_query('PRAGMA foreign_keys = OFF;')
 
     # שלב 1️⃣ – גיבוי כל הטבלאות
@@ -168,7 +166,7 @@ def recreate_tables_with_data(db: BaseDB):
     for table_name in creation_order:
         db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
     db.execute_query('PRAGMA foreign_keys = ON;')
-    create_views_triggers_and_indexes()
+    create_views_triggers_and_indexes(db)
 
     print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
 
@@ -274,54 +272,28 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
+#recreate_views_triggers_and_indexes(db)
+# recreate_views_triggers_and_indexes(general_models.db)
+event = Event(event_id, profile_id='1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2')
+request_data = {
+    'profile_id': '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2',
+    'applicant_name': 'm',
+    'applicant_email': 'm',
+    'applicant_phone': None,
+    'details': None,
+    'applicant_profile_id': None
+}
+request_id = event.models.add('my_access_requests', request_data)
+access_requests = event.models.db.execute_query('SELECT * FROM access_requests;', return_format=ReturnFormat.LIST_DICTS)
 
-# access_requests = '''
-# access_request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-# profile_id TEXT,
-# requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-# profile_label_requested TEXT NOT NULL,
-# profile_password_requested TEXT NOT NULL,
-# email TEXT NOT NULL,
-# details TEXT,
-# is_closed BOOLEAN DEFAULT 0,
-# closed_at DATETIME,
-# closed_by TEXT,
-# closed_details TEXT,
-# profile_id_created TEXT NOT NULL,
-# FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
-# FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL,
-# FOREIGN KEY (profile_id_created) REFERENCES profiles(profile_id) ON DELETE SET NULL
-# '''
-# access_requests_groups = '''
-# access_request_id INTEGER NOT NULL,
-# group_id TEXT NOT NULL,
-# approved BOOLEAN DEFAULT NULL,
-# closed_at DATETIME,
-# closed_by TEXT,
-# FOREIGN KEY (access_request_id) REFERENCES access_requests(access_request_id) ON DELETE CASCADE,
-# FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE,
-# FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL,
-# PRIMARY KEY (access_request_id, group_id)
-# '''
-# drop_views_triggers_and_indexes()
-# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests")
-# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests_groups")
-# event.models.db.execute_query(f"CREATE TABLE access_requests ({access_requests})")
-# event.models.db.execute_query(f"CREATE TABLE access_requests_groups ({access_requests_groups})")
-# create_views_triggers_and_indexes()
-
-# access_requests = EventDB.TABLES()['access_requests']
-# access_requests_groups = EventDB.TABLES()['access_requests_groups']
-# drop_views_triggers_and_indexes()
-# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests_groups")
-# event.models.db.execute_query(f"DROP TABLE IF EXISTS access_requests")
-# event.models.db.execute_query(f"CREATE TABLE access_requests ({access_requests})")
-# event.models.db.execute_query(f"CREATE TABLE access_requests_groups ({access_requests_groups})")
-# create_views_triggers_and_indexes()
-
-# recreate_views_triggers_and_indexes()
-
-access_request_id = 1
-result = event.models.get_childs('access_requests', access_request_id, 'groups')
-print(result)
+print(access_requests)
+print('--------------------------------')
+general_profiles = general_models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
+event_profiles = event.models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
+main1_id = general_models.db.execute_query('SELECT profile_id FROM profiles WHERE label = ?;', ('Main Manager1', ), return_format=ReturnFormat.VALUE)
+general_models.delete_profile(main1_id)
+general_models.toggle_access_request(event_id, 1, True, group_ids=["18d71ffd-59d3-49df-9983-8d051888e912"], profile_name="Main Manager1")
+event.models.db.execute_query('DELETE FROM profiles_events WHERE profile_id = ?;', (main1_id, ))
+print(general_profiles)
+print(event_profiles)
 print('--------------------------------')
