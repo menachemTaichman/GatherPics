@@ -4,9 +4,9 @@ import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Ale
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { requestsAPI, groupsAPI } from '../../utils/apiService';
+import { requestsAPI, imagesAPI } from '../../utils/apiService';
 import { useGroupsList } from '../../utils/dataManager';
-import { useApplyScopes, getRepresentativeUrl } from '../../utils/storeUtils';
+import { getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -57,44 +57,40 @@ export default function RequestDetailModal({
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-detail-modal';
 
-  // Fetch groups data when modal opens
+  const requestId = request?.access_request_id || request?.id;
+
+  // Fetch request details when modal opens
   useEffect(() => {
-    if (isOpen) {
-      const fetchGroups = async () => {
+    if (isOpen && requestId) {
+      setLoading(true);
+      const fetchRequestDetails = async () => {
         try {
-          await groupsAPI.getAll(eventUrl);
+          await requestsAPI.getById(requestId, eventUrl);
         } catch (error) {
-          console.error('Failed to load groups:', error);
+          console.error('Failed to fetch request details:', error);
+        } finally {
+          setLoading(false);
         }
       };
-      fetchGroups();
+      fetchRequestDetails();
     }
-  }, [isOpen, eventUrl]);
+  }, [isOpen, requestId, eventUrl]);
 
-  // Apply scopes for groups access and request operations
-  useApplyScopes([
-    { entity: 'all', id: 'groups' },
-    { entity: 'access_request', id: request?.access_request_id }
-  ].filter(scope => scope.id));
-
-  // Register modal when opened
+  // Register modal when opened (this also applies scopes, so no need for useApplyScopes)
   useEffect(() => {
     if (isOpen) {
       registerModal({ 
         id: modalId, 
         type: 'popup',
         allowOutsideScroll: true,
-        scopes: [
-          { entity: 'all', id: 'groups' },
-          { entity: 'access_request', id: request?.access_request_id }
-        ].filter(scope => scope.id)
+        scopes: requestId ? [{ entity: 'access_request', id: requestId }] : []
       });
       
       return () => {
         unregisterModal(modalId);
       };
     }
-  }, [isOpen, registerModal, unregisterModal]);
+  }, [isOpen, registerModal, unregisterModal, requestId]);
 
   // Initialize form data
   useEffect(() => {
@@ -168,10 +164,11 @@ export default function RequestDetailModal({
     
     try {
       const groupIds = Array.from(selectedGroups);
+      const requestId = request.access_request_id || request.id;
       
       if (actionType === 'approve') {
         await requestsAPI.approve(
-          request.access_request_id,
+          requestId,
           groupIds,
           closeRequest,
           null,
@@ -181,7 +178,7 @@ export default function RequestDetailModal({
         showToast('Request approved successfully', 'success');
       } else if (actionType === 'deny') {
         await requestsAPI.deny(
-          request.access_request_id,
+          requestId,
           groupIds,
           closeRequest,
           null,
@@ -348,7 +345,7 @@ export default function RequestDetailModal({
               <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
                 {request.groups && Object.keys(request.groups).length > 0 ? (
                   <div className="divide-y divide-gray-200">
-                    {Object.entries(request.groups).map(([groupId, groupData], index) => {
+                    {Object.entries(request.groups).map(([groupId, groupData]) => {
                       const group = allGroups.find(g => g.group_id === groupId);
                       const statusInfo = getGroupStatus(groupData);
                       const StatusIcon = statusInfo.icon;

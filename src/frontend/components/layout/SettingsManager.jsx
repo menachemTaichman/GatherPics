@@ -63,7 +63,7 @@ export default function SettingsManager() {
       } else if (activeTab === 'account' && currentProfile?.id) {
         scopes = [
           { entity: 'profile', id: String(currentProfile.id) },
-          { entity: 'all', id: 'access_requests' }
+          { entity: 'all', id: 'my_access_requests' }
         ];
       }
       
@@ -94,7 +94,7 @@ export default function SettingsManager() {
       : isOpen && activeTab === 'account' && currentProfile?.id
       ? [
           { entity: 'profile', id: String(currentProfile.id) },
-          { entity: 'all', id: 'access_requests' }
+          { entity: 'all', id: 'my_access_requests' }
         ]
       : []
   );
@@ -103,8 +103,11 @@ export default function SettingsManager() {
   useEffect(() => {
     if (isOpen && activeTab === 'profiles' && eventUrl) {
       fetchProfiles();
+      if (permissions.isProfilesManager) {
+        fetchOpenRequestsCount();
+      }
     }
-  }, [isOpen, activeTab, eventUrl]);
+  }, [isOpen, activeTab, eventUrl, permissions.isProfilesManager]);
 
   // Fetch current profile when account tab is opened
   useEffect(() => {
@@ -113,12 +116,6 @@ export default function SettingsManager() {
     }
   }, [isOpen, activeTab, eventUrl, currentProfile?.id]);
 
-  // Fetch open requests count when profiles tab is opened
-  useEffect(() => {
-    if (isOpen && activeTab === 'profiles' && eventUrl && permissions.isProfilesManager) {
-      fetchOpenRequestsCount();
-    }
-  }, [isOpen, activeTab, eventUrl, permissions.isProfilesManager]);
 
   const fetchCurrentProfile = async () => {
     try {
@@ -147,6 +144,7 @@ export default function SettingsManager() {
       setOpenRequestsCount(0);
     }
   };
+
 
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
@@ -398,7 +396,7 @@ export default function SettingsManager() {
     if (!requestToDelete) return;
 
     try {
-      await requestsAPI.delete(requestToDelete.access_request_id, eventUrl);
+      await requestsAPI.deleteMyRequest(requestToDelete.access_request_id, eventUrl);
       showToast(`Request deleted`, 'success');
     } catch (error) {
       console.error('Failed to delete request:', error);

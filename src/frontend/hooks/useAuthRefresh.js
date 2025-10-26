@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/authContext';
 
 /**
@@ -13,17 +13,23 @@ import { useAuth } from '../contexts/authContext';
  */
 export function useAuthRefresh(fetchDataFn, dependencies = []) {
   const { isAuthenticated } = useAuth();
+  const fetchDataFnRef = useRef(fetchDataFn);
+  
+  // Keep the ref updated with the latest function
+  useEffect(() => {
+    fetchDataFnRef.current = fetchDataFn;
+  }, [fetchDataFn]);
   
   useEffect(() => {
     // Fetch data if authenticated
-    if (isAuthenticated && typeof fetchDataFn === 'function') {
-      fetchDataFn();
+    if (isAuthenticated && typeof fetchDataFnRef.current === 'function') {
+      fetchDataFnRef.current();
     }
     
     // Listen for login event
     const handleAuthLogin = () => {
-      if (typeof fetchDataFn === 'function') {
-        fetchDataFn();
+      if (typeof fetchDataFnRef.current === 'function') {
+        fetchDataFnRef.current();
       }
     };
     
@@ -39,7 +45,7 @@ export function useAuthRefresh(fetchDataFn, dependencies = []) {
       window.removeEventListener('auth:login', handleAuthLogin);
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, [isAuthenticated, fetchDataFn, ...dependencies]);
+  }, [isAuthenticated, ...dependencies]);
 }
 
 

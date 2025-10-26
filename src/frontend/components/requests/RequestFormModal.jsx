@@ -66,8 +66,16 @@ export default function RequestFormModal({
     }
   }, [isOpen, eventUrl]);
 
-  // Apply scopes for groups access
-  useApplyScopes([{ entity: 'all', id: 'groups' }]);
+  // Apply scopes for groups access and my_access_request
+  const currentRequestId = request?.access_request_id;
+  useApplyScopes(
+    currentRequestId 
+      ? [
+          { entity: 'all', id: 'groups' },
+          { entity: 'my_access_request', id: currentRequestId }
+        ]
+      : [{ entity: 'all', id: 'groups' }]
+  );
 
   // Register modal when opened
   useEffect(() => {
@@ -107,7 +115,8 @@ export default function RequestFormModal({
           applicant_email: '',
           applicant_phone: '',
           details: '',
-          group_ids: []
+          group_ids: [],
+          applicant_profile_id: currentProfile?.is_public ? null : (currentProfile?.id || currentProfile?.profile_id)
         });
         setSelectedGroups(new Set());
       }
@@ -267,12 +276,12 @@ export default function RequestFormModal({
         applicant_phone: formData.applicant_phone.trim() || null,
         details: formData.details.trim() || null,
         group_ids: Array.from(selectedGroups),
-        applicant_profile_id: formData.requestType === 'own' ? (currentProfile?.id || currentProfile?.profile_id) : null
+        applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null
       };
 
       if (request) {
-        // Update existing request
-        await requestsAPI.update(request.access_request_id, submitData, eventUrl);
+        // Update existing request (using my-requests route)
+        await requestsAPI.updateMyRequest(request.access_request_id, submitData, eventUrl);
         showToast('Request updated successfully', 'success');
       } else {
         // Create new request

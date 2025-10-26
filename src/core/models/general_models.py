@@ -211,11 +211,11 @@ class GeneralModels(BaseModels):
         
         self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
-    def toggle_access_request(self, event_id: str,access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
+    def toggle_access_request(self, event_id: str, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
         """
         Toggle an access request.
         Returns:
-            applicant_profile_id if the access request is approved, None otherwise
+            applicant_profile_id if new profile is created, None otherwise
         """
         event = Event(event_id, self.profile_context['profile_id'])
         if not event:
@@ -224,13 +224,14 @@ class GeneralModels(BaseModels):
         access_request = event.get_entities('access_requests', access_request_id)
         if not access_request:
             raise Forbidden('Access request not found')
-        if not access_request['applicant_profile_id']:
+        
+        applicant_profile_id = None
+        if approve and not access_request['applicant_profile_id']:
             label = profile_name or access_request['applicant_name']
             password = secrets.token_urlsafe(6)
             applicant_profile_id = self.create_profile(label, password, 0, event_id=event_id)
-            event.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         
-        event.toggle_access_request(access_request_id, approve, group_ids, close, closed_details)
+        event.toggle_access_request(access_request_id, approve, group_ids, close, closed_details, applicant_profile_id)
         return applicant_profile_id
 
     # Profile-Event management

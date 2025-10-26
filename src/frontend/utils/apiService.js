@@ -732,8 +732,11 @@ export const profilesAPI = {
   // Get all profiles
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/profiles`);
-    return response.data;
+    const key = `PROFILES_GET_ALL:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/profiles`);
+      return response.data;
+    });
   },
   
   // Get profile by ID (with scopes for relations)
@@ -944,12 +947,16 @@ export const profilesAPI = {
   // Get current profile data
   getCurrentProfile: async (eventUrl = null) => {
     const params = {};
+    let eventId = null;
     if (eventUrl) {
-      const eventId = await getEventIdForApi(eventUrl);
+      eventId = await getEventIdForApi(eventUrl);
       params.event_id = eventId;
     }
-    const response = await api.get('/api/profiles/current', { params });
-    return response.data;
+    const key = `GET_CURRENT_PROFILE:${eventId || 'no-event'}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get('/api/profiles/current', { params });
+      return response.data;
+    });
   },
   
   // Get archived access for current profile
@@ -968,8 +975,11 @@ export const profilesAPI = {
   
   // Get current profile preferences
   getPreferences: async () => {
-    const response = await api.get('/api/profiles/current/preferences');
-    return response.data;
+    const key = 'GET_PROFILE_PREFERENCES';
+    return await withDedupe(key, async () => {
+      const response = await api.get('/api/profiles/current/preferences');
+      return response.data;
+    });
   },
   
   // Update a single preference
@@ -1011,8 +1021,11 @@ export const uploadsAPI = {
   // Get all uploads
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/uploads`);
-    return response.data;
+    const key = `UPLOADS_GET_ALL:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/uploads`);
+      return response.data;
+    });
   },
   
   // Get upload by ID
@@ -1044,21 +1057,19 @@ export const uploadsAPI = {
 
 // Requests API
 export const requestsAPI = {
-  // Get all requests
+  // ==================== MANAGER ROUTES ====================
+  
+  // Get all requests (for managers)
   getAll: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/requests`);
-    return response.data;
+    const key = `REQUESTS_GET_ALL:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/requests`);
+      return response.data;
+    });
   },
   
-  // Get open requests count
-  getOpenCount: async (eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.get(`/api/events/${eventId}/requests/open-count`);
-    return response.data;
-  },
-  
-  // Get request by ID
+  // Get request by ID (for managers)
   getById: async (requestId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `REQUEST_GET_BY_ID:${eventId}:${requestId}`;
@@ -1069,25 +1080,66 @@ export const requestsAPI = {
     return result;
   },
   
-  // Create request
+  // Delete request (for managers)
+  delete: async (requestId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/requests/${requestId}`);
+    return response.data;
+  },
+  
+  // ==================== USER ROUTES (my requests) ====================
+  
+  // Get all my requests
+  getMyRequests: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/my-requests`);
+    return response.data;
+  },
+  
+  // Get open requests count (for managers)
+  getOpenCount: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/requests`);
+    return {
+      count: response.data?.changes?.[0]?.items?.filter(r => !r.is_closed).length || 0
+    };
+  },
+  
+  // Get my request by ID
+  getMyRequestById: async (requestId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `MY_REQUEST_GET_BY_ID:${eventId}:${requestId}`;
+    const result = await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/my-requests/${requestId}`);
+      return response.data;
+    });
+    return result;
+  },
+  
+  // Create request (POST to /requests endpoint)
   create: async (data, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/requests`, data);
     return response.data;
   },
   
-  // Update request
-  update: async (requestId, data, eventUrl) => {
+  // Update my request
+  updateMyRequest: async (requestId, data, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.patch(`/api/events/${eventId}/requests/${requestId}`, data);
+    const response = await api.patch(`/api/events/${eventId}/my-requests/${requestId}`, data);
     return response.data;
   },
   
-  // Delete request
-  delete: async (requestId, eventUrl) => {
+  // Delete my request
+  deleteMyRequest: async (requestId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/requests/${requestId}`);
+    const response = await api.delete(`/api/events/${eventId}/my-requests/${requestId}`);
     return response.data;
+  },
+  
+  // Legacy method for backwards compatibility
+  update: async (requestId, data, eventUrl) => {
+    return await requestsAPI.updateMyRequest(requestId, data, eventUrl);
   },
   
   // Approve request

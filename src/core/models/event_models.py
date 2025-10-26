@@ -371,21 +371,32 @@ class EventModels(BaseModels):
         valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
-    def toggle_access_request(self, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None):
+    def toggle_access_request(
+        self,
+        access_request_id: str,
+        approve: bool,
+        group_ids: list[str] | None = None,
+        close: bool = False,
+        closed_details: str | None = None,
+        applicant_profile_id: str | None = None
+    ) -> None:
         """
-        Approve an access request for a group.
+        Approve or deny an access request for a group.
         Args:
             access_request_id: access request id
             approve: if True, approve the access request, if False, reject the access request
-            group_ids: list of group ids to approve, if None, approve all groups
-            close: if True, deny all other groups requests access of this access request
+            group_ids: list of group ids to approve or deny, if None, apply to all groups
+            close: if True, deny all left groups requests access of this access request
             closed_details: details of the closed request to add to the closed details list
+            applicant_profile_id: applicant profile id, if None, use the existing applicant profile id
         """
-        access_request = self.get_entities('access_requests', access_request_id)
         if not access_request:
             raise ValueError(f"Access request not found for id {access_request_id}")
+        if applicant_profile_id:
+            self.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
+        access_request = self.get_entities('access_requests', access_request_id)
         applicant_profile_id = access_request['applicant_profile_id']
-        if not applicant_profile_id:
+        if approve and not applicant_profile_id:
             raise ValueError(f"Applicant profile id not found for access request {access_request_id}")            
         
         if group_ids is None:
@@ -393,34 +404,17 @@ class EventModels(BaseModels):
 
         accessible_groups = self.get_entities('groups', group_ids)
         group_ids = [group_id for group_id in group_ids if accessible_groups[group_id].get('is_accessible')]
-        self.edit_accessibility(applicant_profile_id, 'groups', group_ids, set_accessible=approve)
-        self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data={'approved': approve, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
+        data = {'approved': approve, 'closed_at': datetime.now()}
+        if not close:
+            data['closed_details'] = closed_details
+        self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=group_ids, operation=ChildOperation.UPDATE, data=data)
 
         if close:
-            groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
-            if groups_left:
-                self.edit_accessibility(applicant_profile_id, 'groups', groups_left, set_accessible=False)
-                self.edit_childs('access_requests_groups', access_request_id, child='groups', child_ids=groups_left, operation=ChildOperation.UPDATE, data={'approved': False, 'closed_at': datetime.now(), 'closed_by': self.get_current_profile()['profile_id']})
-
-            groups_left = self.db.execute_query('SELECT group_id FROM accessible_access_requests_groups WHERE access_request_id = ? AND approved IS NULL', (access_request_id,), return_format=ReturnFormat.LIST_VALUES)
-            if groups_left:
-                raise ValueError(f"Failed to close access request {access_request_id} for groups {groups_left}")
+            self.edit('access_requests', access_request_id, {'is_closed': True, 'closed_at': datetime.now(), 'closed_details': closed_details})
 
     def get_open_requests_count(self) -> int:
         """Get count of open requests for current profile."""
-        # TODO: move it to the database
-        query = '''
-            SELECT COUNT(aar.access_request_id) 
-            FROM accessible_access_requests aar
-            LEFT JOIN
-            (accessible_access_requests_groups aarg
-            INNER JOIN accessible_groups ag
-            ON aarg.group_id = ag.group_id AND ag.is_accessible = 1)
-            ON aar.access_request_id = aarg.access_request_id
-            GROUP BY aar.access_request_id
-            HAVING COUNT(aarg.group_id) > 0 OR aar.is_closed = 0
-        '''
-        return self.db.execute_query(query, return_format=ReturnFormat.VALUE) or 0
+        return self.db.execute_query('SELECT COUNT(*) FROM accessible_access_requests aar', return_format=ReturnFormat.VALUE) or 0
 
     # -------- Public Access Code helpers --------
     def generate_public_access_code(self, profile_id: str) -> str:

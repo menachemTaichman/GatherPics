@@ -72,22 +72,20 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     }));
   }, []);
 
-  // Use requests from store or placeholders when not authenticated
-  const currentRequests = isAuthenticated ? storeRequests : placeholderRequests;
-
-  const fetchRequests = useCallback(async () => {
+  // Fetch requests data with auto-refresh on auth changes
+  const loadRequests = useCallback(async () => {
     if (!eventUrl) return;
     try {
       await requestsAPI.getAll(eventUrl);
-    } catch (error) {
-      console.error('Failed to fetch requests:', error);
-      showToast(formatErrorMessage('fetch requests', error), 'error');
+    } catch (e) {
+      console.error('Failed to load requests', e);
     }
-  }, [eventUrl, showToast]);
+  }, [eventUrl]);
+  
+  useAuthRefresh(loadRequests, [eventUrl]);
 
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+  // Use requests from store or placeholders when not authenticated
+  const currentRequests = isAuthenticated ? storeRequests : placeholderRequests;
 
   const handleViewRequest = (request) => {
     setSelectedRequest(request);
@@ -102,7 +100,8 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     if (!deleteRequest) return;
 
     try {
-      await requestsAPI.delete(deleteRequest.access_request_id, eventUrl);
+      const requestId = deleteRequest.access_request_id || deleteRequest.id;
+      await requestsAPI.delete(requestId, eventUrl);
       showToast('Request deleted successfully', 'success');
     } catch (error) {
       console.error('Failed to delete request:', error);
@@ -115,8 +114,6 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const handleCloseDetailModal = () => {
     setShowDetailModal(false);
     setSelectedRequest(null);
-    // Refresh requests after any changes
-    fetchRequests();
   };
 
   // Sort requests by requested_at descending (newest first)

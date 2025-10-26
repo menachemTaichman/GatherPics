@@ -105,6 +105,26 @@ class EventDB(BaseDB):
                 'accessible_table': 'accessible_access_requests_groups',
                 'fields': ['approved', 'closed_at', 'closed_by'],
             },
+            'my_access_requests': {
+                'primary_key': 'access_request_id',
+                'accessible_table': 'accessible_my_access_requests',
+                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
+                'relations': {
+                    'groups': {
+                        'relation_table': 'my_access_requests_groups',
+                        'fields_needed': ['label', 'representative_face'],
+                        'relation_table_fields': ['approved', 'closed_at', 'closed_by']
+                    },
+                },
+                'serializable': {
+                    'closed_details': list,
+                }
+            },
+            'my_access_requests_groups': {
+                'primary_key': ['access_request_id', 'group_id'],
+                'accessible_table': 'accessible_my_access_requests_groups',
+                'fields': ['approved', 'closed_at', 'closed_by'],
+            },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
                 'accessible_table': 'accessible_groups_images',
@@ -527,16 +547,45 @@ class EventDB(BaseDB):
                 INNER JOIN accessible_moments m ON i.moment_id = m.moment_id
                 GROUP BY u.upload_id, m.moment_id
             ''',
-            'accessible_access_requests': '''
-                SELECT ar.*,
-                COUNT(ag.group_id) AS groups_count,
-                COALESCE(SUM(ag.approved), 0) AS groups_approved_count
+            'access_requests_groups_details': '''
+                SELECT arg.*,
+                agh.is_accessible
+                FROM access_requests_groups arg
+                INNER JOIN accessible_groups_helper agh ON arg.group_id = agh.group_id
+            ''',
+            'access_requests_details': '''
+                SELECT
+                    ar.*,
+                    COUNT(argd.group_id) AS groups_count,
+                    SUM(argd.is_accessible) AS accessible_groups_count
                 FROM access_requests ar
-                LEFT JOIN access_requests_groups ag ON ar.access_request_id = ag.access_request_id
-                LEFT JOIN profiles p ON ar.profile_id = p.profile_id
-                WHERE ((p.profile_id = cur_profile('profile_id') OR p.hierarchy_rank < cur_profile('hierarchy_rank'))
-                OR (ar.profile_id IS NULL AND cur_profile('hierarchy_rank') > 0))
+                LEFT JOIN access_requests_groups_details argd ON ar.access_request_id = argd.access_request_id
+                GROUP BY ar.access_request_id
+            ''',
+            'my_access_requests': '''
+                SELECT ard.*
+                FROM access_requests_details ard
+                WHERE ard.profile_id = cur_profile('profile_id')
                 AND cur_profile('is_public') = 0
+            ''',
+            'accessible_my_access_requests': '''
+                SELECT mar.*
+                FROM my_access_requests mar;
+            ''',
+            'my_access_requests_groups': '''
+                SELECT argd.*
+                FROM access_requests_groups_details argd
+                INNER JOIN my_access_requests mar ON argd.access_request_id = mar.access_request_id;
+            ''',
+            'accessible_my_access_requests_groups': '''
+                SELECT marg.*
+                FROM my_access_requests_groups marg
+            ''',
+            'accessible_access_requests': '''
+                SELECT ard.*
+                FROM access_requests_details ard
+                INNER JOIN accessible_profiles ap ON ard.profile_id = ap.profile_id AND ap.profile_id <> cur_profile('profile_id')
+                WHERE ard.accessible_groups_count > 0
             ''',
             'accessible_access_requests_groups': '''
                 SELECT ag.*
@@ -1127,40 +1176,133 @@ class EventDB(BaseDB):
                 END;
             """,
 
-            # accessible_access_requests
-            'trg_insert_accessible_access_requests': """
-                INSTEAD OF INSERT ON accessible_access_requests
+            # accessible_my_access_requests
+            'trg_insert_accessible_my_access_requests': """
+                INSTEAD OF INSERT ON accessible_my_access_requests
                 BEGIN
                     SELECT CASE
-                    WHEN NEW.profile_id <> cur_profile('profile_id') AND cur_profile('hierarchy_rank') <
-                        (SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.profile_id)
+                    WHEN NEW.profile_id <> cur_profile('profile_id') OR (NEW.applicant_profile_id IS NOT NULL AND NEW.applicant_profile_id <> cur_profile('profile_id')) THEN
+                        RAISE(ABORT, 'Permission denied: cannot create access request for another profile')
+                    WHEN
+                        cur_profile('is_public') = 1 AND (
+                            NEW.applicant_name IS NULL
+                            OR NEW.applicant_email IS NULL
+                        )
                     THEN
-                        RAISE(ABORT, 'Permission denied: the profile is not accessible to the current profile')
-                    WHEN NEW.applicant_profile_id IS NOT NULL AND NEW.applicant_profile_id <> cur_profile('profile_id') AND cur_profile('hierarchy_rank') <
-                        COALESCE((SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.applicant_profile_id), 0)
-                    THEN
-                        RAISE(ABORT, 'Permission denied: the profile is not accessible to the current profile')
-                    WHEN COALESCE((SELECT is_public FROM profiles WHERE profile_id = NEW.applicant_profile_id), 0) = 1 THEN
-                        RAISE(ABORT, 'Permission denied: cannot create access request for public applicant profile')
+                        RAISE(ABORT, 'Permission denied: access request by public profile is only allowed for another profile with name and email required')
                     END;
+
                     INSERT INTO access_requests
                     (profile_id, requested_at, applicant_name, applicant_email, applicant_phone, details, applicant_profile_id)
                     VALUES (
                         NEW.profile_id,
-                        NEW.requested_at,
-                        NEW.applicant_name,
-                        NEW.applicant_email,
-                        NEW.applicant_phone,
+                        COALESCE(NEW.requested_at, CURRENT_TIMESTAMP),
+                        CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_name ELSE NULL END,
+                        CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_email ELSE NULL END,
+                        CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_phone ELSE NULL END,
                         NEW.details,
-                        NEW.applicant_profile_id
+                        CASE WHEN cur_profile('is_public') = 0 THEN NEW.applicant_profile_id ELSE NEW.profile_id END
                     );
+                END;
+            """,
+            'trg_update_accessible_my_access_requests': """
+                INSTEAD OF UPDATE ON accessible_my_access_requests
+                BEGIN
+                    SELECT CASE
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot update access request for another profile')
+                        WHEN OLD.is_closed = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot update closed access request')
+                    END;
+
+                    UPDATE access_requests SET
+                        applicant_name = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_name ELSE NULL END,
+                        applicant_email = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_email ELSE NULL END,
+                        applicant_phone = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_phone ELSE NULL END,
+                        details = NEW.details
+                    WHERE access_request_id = OLD.access_request_id;
+                END;
+            """,
+            'trg_delete_accessible_my_access_requests': """
+                INSTEAD OF DELETE ON accessible_my_access_requests
+                BEGIN
+                    SELECT CASE
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete access request for another profile')
+                        WHEN OLD.is_closed = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete closed access request')
+                    END;
+
+                    DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id;
+                END;
+            """,
+
+            # accessible_my_access_requests_groups
+            'trg_insert_accessible_my_access_requests_groups': """
+                INSTEAD OF INSERT ON accessible_my_access_requests_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit access request for another profile')
+                        WHEN (SELECT is_closed FROM access_requests WHERE access_request_id = NEW.access_request_id) = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit closed access request')
+                    END;
+
+                    INSERT INTO access_requests_groups
+                    (access_request_id, group_id)
+                    SELECT NEW.access_request_id, agh.group_id
+                    FROM accessible_groups_helper agh
+                    WHERE agh.group_id = NEW.group_id
+                    AND agh.is_accessible = 0;
+                END;
+            """,
+            'trg_delete_accessible_my_access_requests_groups': """
+                INSTEAD OF DELETE ON accessible_my_access_requests_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit access request for another profile')
+                        WHEN (SELECT is_closed FROM access_requests WHERE access_request_id = OLD.access_request_id) = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit closed access request')
+                    END;
+
+                    DELETE FROM access_requests_groups WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
+                END;
+            """,
+
+            # accessible_access_requests
+            'trg_update_accessible_access_requests': """
+                INSTEAD OF UPDATE ON accessible_access_requests
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') < (
+                            SELECT hierarchy_rank FROM profiles WHERE profile_id = OLD.profile_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the profile is not accessible to the current profile')
+                        WHEN OLD.is_closed = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit closed access request')
+                    END;
+
+                    UPDATE access_requests SET
+                        applicant_profile_id = NEW.applicant_profile_id,
+                        is_closed = NEW.is_closed,
+                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
+                        closed_details = NEW.closed_details
+                    WHERE access_request_id = OLD.access_request_id;
+                
+                    UPDATE accessible_access_requests_groups SET
+                        approved = 0
+                    WHERE access_request_id = OLD.access_request_id
+                    AND approved IS NULL
+                    AND NEW.is_closed = 1;
+
                 END;
             """,
             'trg_delete_accessible_access_requests': """
                 INSTEAD OF DELETE ON accessible_access_requests
                 BEGIN
                     SELECT CASE
-                        WHEN OLD.profile_id <> cur_profile('profile_id') AND cur_profile('hierarchy_rank') < (
+                        WHEN cur_profile('hierarchy_rank') < (
                             SELECT hierarchy_rank FROM profiles WHERE profile_id = OLD.profile_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible to the current profile')
@@ -1169,75 +1311,8 @@ class EventDB(BaseDB):
                     DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id;
                 END;
             """,
-            'trg_update_accessible_access_requests': """
-                INSTEAD OF UPDATE ON accessible_access_requests
-                BEGIN
-                    SELECT CASE
-                        WHEN 
-                            OLD.profile_id <> cur_profile('profile_id')
-                            AND cur_profile('hierarchy_rank') < 
-                                (SELECT hierarchy_rank FROM profiles WHERE profile_id = OLD.profile_id)
-                        THEN
-                            RAISE(ABORT, 'Permission denied: the profile is not accessible to the current profile')
-                    END;
-
-                    UPDATE access_requests SET
-                        applicant_name = NEW.applicant_name,
-                        applicant_email = NEW.applicant_email,
-                        applicant_phone = NEW.applicant_phone,
-                        details = NEW.details,
-                        is_closed = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.is_closed ELSE NEW.is_closed END,
-                        closed_at = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.closed_at ELSE NEW.closed_at END,
-                        closed_by = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.closed_by ELSE NEW.closed_by END,
-                        closed_details = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.closed_details ELSE NEW.closed_details END,
-                        applicant_profile_id = CASE WHEN OLD.profile_id = cur_profile('profile_id') THEN OLD.applicant_profile_id ELSE NEW.applicant_profile_id END
-                    WHERE access_request_id = OLD.access_request_id;
-
-                    UPDATE access_requests_groups SET
-                        approved = 0,
-                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
-                        closed_by = cur_profile('profile_id')
-                    WHERE access_request_id = OLD.access_request_id
-                    AND approved IS NULL
-                    AND EXISTS (
-                        SELECT 1 FROM access_requests ar
-                        WHERE ar.access_request_id = OLD.access_request_id
-                        AND ar.is_closed = 1
-                    );
-                END;
-            """,
 
             # accessible_access_requests_groups
-            'trg_insert_accessible_access_requests_groups': """
-                INSTEAD OF INSERT ON accessible_access_requests_groups
-                BEGIN
-                    SELECT CASE
-                        WHEN NOT EXISTS (
-                            SELECT 1 FROM accessible_access_requests aar
-                            WHERE aar.access_request_id = NEW.access_request_id
-                        ) THEN
-                            RAISE(ABORT, 'Permission denied: cannot grant access to an inaccessible access request')
-                    END;
-
-                    INSERT INTO access_requests_groups
-                    (access_request_id, group_id)
-                    VALUES (NEW.access_request_id, NEW.group_id);
-                END;
-            """,
-            'trg_delete_accessible_access_requests_groups': """
-                INSTEAD OF DELETE ON accessible_access_requests_groups
-                BEGIN
-                    SELECT CASE
-                        WHEN NOT EXISTS (
-                            SELECT 1 FROM accessible_access_requests aar
-                            WHERE aar.access_request_id = OLD.access_request_id
-                        ) THEN
-                            RAISE(ABORT, 'Permission denied: cannot revoke access to an inaccessible access request')
-                    END;
-
-                    DELETE FROM access_requests_groups WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
-                END;
-            """,
             'trg_update_accessible_access_requests_groups': """
                 INSTEAD OF UPDATE ON accessible_access_requests_groups
                 BEGIN
@@ -1247,7 +1322,7 @@ class EventDB(BaseDB):
                             WHERE aar.access_request_id = OLD.access_request_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: cannot update permissions for an inaccessible access request')
-                        WHEN NOT EXISTS (
+                        WHEN NEW.approved = 1 AND NOT EXISTS (
                             SELECT 1 FROM accessible_groups_helper ag
                             WHERE ag.group_id = OLD.group_id
                             AND ag.is_accessible = 1
@@ -1260,6 +1335,41 @@ class EventDB(BaseDB):
                         closed_at = CASE WHEN NEW.approved IS NOT NULL THEN COALESCE(NEW.closed_at, CURRENT_TIMESTAMP) ELSE OLD.closed_at END,
                         closed_by = CASE WHEN NEW.approved IS NOT NULL THEN cur_profile('profile_id') ELSE OLD.closed_by END
                     WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
+                
+                    INSERT INTO profile_groups (profile_id, group_id, accessible)
+                    SELECT
+                        aar.profile_id,
+                        OLD.group_id,
+                        CASE WHEN ap.all_groups = 0 AND NEW.approved = 1 THEN 1 ELSE 0 END
+                    FROM accessible_access_requests aar
+                    INNER JOIN accessible_profiles ap ON ap.profile_id = aar.profile_id
+                    LEFT JOIN profile_groups pg ON pg.profile_id = aar.profile_id AND pg.group_id = OLD.group_id
+                    WHERE pg.profile_id IS NULL AND NEW.approved IS NOT NULL
+                    AND ((ap.all_groups = 0 AND NEW.approved = 1) OR (ap.all_groups = 1 AND NEW.approved = 0));
+                
+                    DELETE FROM profile_groups
+                    WHERE profile_id = OLD.profile_id AND group_id = OLD.group_id
+                    AND EXISTS (
+                        SELECT 1
+                        FROM accessible_profiles ap
+                        INNER JOIN accessible_access_requests aar
+                            ON aar.profile_id = ap.profile_id
+                            AND aar.access_request_id = OLD.access_request_id
+                        WHERE
+                            ap.all_groups = 1 AND NEW.approved = 1
+                            OR (ap.all_groups = 0 AND NEW.approved = 0)
+                    );
+
+                    UPDATE access_requests SET
+                        is_closed = 1,
+                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
+                        closed_by = cur_profile('profile_id')
+                    WHERE access_request_id = OLD.access_request_id
+                    AND NOT EXISTS (
+                        SELECT 1 FROM access_requests_groups arg
+                        WHERE arg.access_request_id = OLD.access_request_id
+                        AND arg.approved IS NULL
+                    );
                 END;
             """,
 
@@ -1298,6 +1408,49 @@ class EventDB(BaseDB):
                     SET public_access_code = NULL
                     WHERE profile_id = OLD.profile_id
                     AND is_public = 0;
+                END;
+            """,
+
+            # ensure_access_requests_groups_validity
+            'trg_update_profile_ensure_access_requests_groups_validity': """
+                AFTER UPDATE ON profiles
+                BEGIN
+                    UPDATE accessible_access_requests_groups SET
+                        approved = 1,
+                        closed_at = CURRENT_TIMESTAMP,
+                        closed_by = cur_profile('profile_id'),
+                        details = 'Indirect approval by setting all_groups = 1'
+                    WHERE (profile_id = NEW.profile_id
+                    AND approved IS NULL)
+                    AND (OLD.all_groups = 0 AND NEW.all_groups = 1);
+                END;
+            """,
+            'trg_insert_profile_groups_ensure_access_requests_groups_validity': """
+                AFTER INSERT ON profile_groups
+                BEGIN
+                    UPDATE accessible_access_requests_groups SET
+                        approved = 1,
+                        closed_at = CURRENT_TIMESTAMP,
+                        closed_by = cur_profile('profile_id'),
+                        details = 'Indirect approval by adding group to profile'
+                    WHERE (profile_id = NEW.profile_id
+                    AND group_id = NEW.group_id)
+                    AND (approved IS NULL
+                    AND (SELECT all_groups FROM profiles p WHERE p.profile_id = NEW.profile_id) = 0);
+                END;
+            """,
+            'trg_delete_profile_groups_ensure_access_requests_groups_validity': """
+                AFTER DELETE ON profile_groups
+                BEGIN
+                    UPDATE accessible_access_requests_groups SET
+                        approved = 1,
+                        closed_at = CURRENT_TIMESTAMP,
+                        closed_by = cur_profile('profile_id'),
+                        details = 'Indirect approval by adding group to profile'
+                    WHERE (profile_id = OLD.profile_id
+                    AND group_id = OLD.group_id)
+                    AND (approved IS NULL
+                    AND (SELECT all_groups FROM profiles p WHERE p.profile_id = OLD.profile_id) = 1);
                 END;
             """,
 
