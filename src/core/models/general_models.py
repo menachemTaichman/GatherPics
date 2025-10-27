@@ -42,12 +42,11 @@ class GeneralModels(BaseModels):
     
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a profile exists."""
-        if table == 'profiles' and exclude_id and 'restricted_to_event' not in fields:
-            profile = self.get_entities('profiles', exclude_id)
-            if not profile:
-                profile = {}
-
-            fields['restricted_to_event'] = profile.get('restricted_to_event', None)
+        if table == 'profiles' and 'restricted_to_event' in fields:
+            within_event = super().is_exists(table, fields, exclude_id)
+            if within_event:
+                return within_event
+            fields['restricted_to_event'] = None
 
         return super().is_exists(table, fields, exclude_id)
 

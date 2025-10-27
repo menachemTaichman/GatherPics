@@ -199,10 +199,14 @@ def check_profile_name():
     data = request.json or {}
     label = data.get('label', '')
     exclude_profile_id = data.get('exclude_profile_id', None)
+    restricted_to_event_id = data.get('restricted_to_event_id', None)
     if not label:
         return jsonify({"error": "Label is required"}), 400
     
-    conflict_profile_id = general_models.is_exists('profiles', {'label': label}, exclude_id=exclude_profile_id)
+    fields = {'label': label}
+    if restricted_to_event_id:
+        fields['restricted_to_event'] = restricted_to_event_id
+    conflict_profile_id = general_models.is_exists('profiles', fields, exclude_id=exclude_profile_id)
 
     return jsonify({"conflict": bool(conflict_profile_id)})
 

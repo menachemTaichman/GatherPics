@@ -751,10 +751,15 @@ export const profilesAPI = {
   },
   
   // Check if profile name exists
-  checkName: async (label, excludeProfileId) => {
-    const response = await api.post(`/api/events/profiles/check-name`, {
+  checkName: async (label, excludeProfileId, restrictedToEventUrl) => {
+    let restrictedToEventId = null;
+    if (restrictedToEventUrl) {
+      restrictedToEventId = await getEventIdForApi(restrictedToEventUrl);
+    }
+    const response = await api.post(`/api/profiles/check-name`, {
       label,
-      exclude_profile_id: excludeProfileId
+      exclude_profile_id: excludeProfileId,
+      restricted_to_event_id: restrictedToEventId
     });
     return response.data;
   },

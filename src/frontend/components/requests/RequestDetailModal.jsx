@@ -123,47 +123,97 @@ export default function RequestDetailModal({
     });
   };
 
+  const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
+    groupId => requestData.groups[groupId].approved === null
+  ) : [];
+
   const handleApproveAll = () => {
-    if (!requestData?.groups) return;
-    const actions = {};
-    Object.keys(requestData.groups).forEach(groupId => {
-      if (requestData.groups[groupId].approved === null) {
-        actions[groupId] = 'approve';
-      }
-    });
-    setGroupActions(actions);
+    // Same as handleApprovePending - they do the same thing
+    handleApprovePending();
   };
 
   const handleDenyAll = () => {
-    if (!requestData?.groups) return;
-    const actions = {};
-    Object.keys(requestData.groups).forEach(groupId => {
-      if (requestData.groups[groupId].approved === null) {
-        actions[groupId] = 'deny';
-      }
-    });
-    setGroupActions(actions);
+    // Same as handleDenyPending - they do the same thing
+    handleDenyPending();
   };
 
   const handleApprovePending = () => {
     if (!requestData?.groups) return;
-    const actions = {};
-    Object.keys(requestData.groups).forEach(groupId => {
-      if (requestData.groups[groupId].approved === null) {
+    const actions = { ...groupActions };
+    const allSelected = allPendingGroups.every(groupId => groupActions[groupId] === 'approve');
+    
+    if (allSelected) {
+      // Cancel all
+      allPendingGroups.forEach(groupId => {
+        delete actions[groupId];
+      });
+    } else {
+      // Set all to approve
+      allPendingGroups.forEach(groupId => {
         actions[groupId] = 'approve';
-      }
-    });
+      });
+    }
     setGroupActions(actions);
   };
 
   const handleDenyPending = () => {
     if (!requestData?.groups) return;
-    const actions = {};
-    Object.keys(requestData.groups).forEach(groupId => {
-      if (requestData.groups[groupId].approved === null) {
+    const actions = { ...groupActions };
+    const allSelected = allPendingGroups.every(groupId => groupActions[groupId] === 'deny');
+    
+    if (allSelected) {
+      // Cancel all
+      allPendingGroups.forEach(groupId => {
+        delete actions[groupId];
+      });
+    } else {
+      // Set all to deny
+      allPendingGroups.forEach(groupId => {
         actions[groupId] = 'deny';
-      }
-    });
+      });
+    }
+    setGroupActions(actions);
+  };
+
+  const handleApproveNotSelected = () => {
+    if (!requestData?.groups) return;
+    const actions = { ...groupActions };
+    // Get pending groups that don't have an action yet
+    const notSelectedGroups = allPendingGroups.filter(groupId => !groupActions[groupId]);
+    const allSelected = notSelectedGroups.length > 0 && notSelectedGroups.every(groupId => groupActions[groupId] === 'approve');
+    
+    if (allSelected && notSelectedGroups.length > 0) {
+      // Cancel all
+      allPendingGroups.forEach(groupId => {
+        delete actions[groupId];
+      });
+    } else {
+      // Set all not-selected to approve
+      notSelectedGroups.forEach(groupId => {
+        actions[groupId] = 'approve';
+      });
+    }
+    setGroupActions(actions);
+  };
+
+  const handleDenyNotSelected = () => {
+    if (!requestData?.groups) return;
+    const actions = { ...groupActions };
+    // Get pending groups that don't have an action yet
+    const notSelectedGroups = allPendingGroups.filter(groupId => !groupActions[groupId]);
+    const allSelected = notSelectedGroups.length > 0 && notSelectedGroups.every(groupId => groupActions[groupId] === 'deny');
+    
+    if (allSelected && notSelectedGroups.length > 0) {
+      // Cancel all
+      allPendingGroups.forEach(groupId => {
+        delete actions[groupId];
+      });
+    } else {
+      // Set all not-selected to deny
+      notSelectedGroups.forEach(groupId => {
+        actions[groupId] = 'deny';
+      });
+    }
     setGroupActions(actions);
   };
 
@@ -299,6 +349,24 @@ export default function RequestDetailModal({
 
   const canApprove = permissions.isProfilesManager && pendingGroups.length > 0;
 
+  // Check state of all buttons
+  const getAllPendingActionState = () => {
+    if (!requestData?.groups) return null;
+    const pendingGroups = Object.keys(requestData.groups).filter(
+      groupId => requestData.groups[groupId].approved === null
+    );
+    if (pendingGroups.length === 0) return null;
+    
+    const actions = pendingGroups.map(id => groupActions[id]);
+    const allApproved = actions.every(a => a === 'approve');
+    const allDenied = actions.every(a => a === 'deny');
+    
+    if (allApproved) return 'approve';
+    if (allDenied) return 'deny';
+    if (actions.some(a => a === 'approve' || a === 'deny')) return 'mixed';
+    return null;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <motion.div
@@ -410,62 +478,85 @@ export default function RequestDetailModal({
             </div>
 
             {/* Groups Selection */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Groups</h3>
-              </div>
+            <div className="space-y-3">
+              <h3 className="text-lg font-medium text-gray-900">Groups</h3>
               
               {canApprove && (
-                <>
-                  {/* All groups actions */}
-                  <div className="flex items-center space-x-3">
-                    <div className="w-16 flex items-center space-x-1">
-                      <span className="text-xs text-gray-500 font-medium">All:</span>
+                <div className="space-y-0">
+                  {/* "All pending" row */}
+                  <div className="flex items-center px-3 py-1">
+                    <div className="flex-1">
+                      <span className="text-xs text-gray-500 font-medium">All pending:</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={handleApproveAll}
-                        className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors group"
-                      >
-                        <Check className="w-4 h-4 text-green-700 group-hover:scale-110 transition-transform" />
-                      </button>
-                      <button
-                        onClick={handleDenyAll}
-                        className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors group"
-                      >
-                        <X className="w-4 h-4 text-red-700 group-hover:scale-110 transition-transform" />
-                      </button>
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      {(() => {
+                        const state = getAllPendingActionState();
+                        return (
+                          <>
+                            {/* Spacer to align with status icon column in group rows */}
+                            <div className="w-5 h-5" />
+                            <button
+                              onClick={handleApprovePending}
+                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                                state === 'approve' 
+                                  ? 'bg-green-600 text-white shadow-sm' 
+                                  : state === 'mixed'
+                                  ? 'bg-yellow-500 text-white shadow-sm'
+                                  : 'bg-green-100 hover:bg-green-200 text-green-700'
+                              }`}
+                              title="Approve all pending"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={handleDenyPending}
+                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                                state === 'deny' 
+                                  ? 'bg-red-600 text-white shadow-sm' 
+                                  : state === 'mixed'
+                                  ? 'bg-yellow-500 text-white shadow-sm'
+                                  : 'bg-red-100 hover:bg-red-200 text-red-700'
+                              }`}
+                              title="Deny all pending"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                   
-                  {/* Pending groups only actions */}
-                  <div className="flex items-center space-x-3">
-                    <div className="w-16 flex items-center space-x-1">
-                      <span className="text-xs text-gray-500 font-medium">Pending:</span>
+                  {/* "All not selected" row */}
+                  <div className="flex items-center px-3 py-1">
+                    <div className="flex-1">
+                      <span className="text-xs text-gray-500 font-medium">All not selected:</span>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      {/* Spacer to align with status icon column in group rows */}
+                      <div className="w-5 h-5" />
                       <button
-                        onClick={handleApprovePending}
-                        className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors group"
+                        onClick={handleApproveNotSelected}
+                        className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors text-green-700"
+                        title="Approve all not selected"
                       >
-                        <Check className="w-4 h-4 text-green-700 group-hover:scale-110 transition-transform" />
+                        <Check className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={handleDenyPending}
-                        className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors group"
+                        onClick={handleDenyNotSelected}
+                        className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors text-red-700"
+                        title="Deny all not selected"
                       >
-                        <X className="w-4 h-4 text-red-700 group-hover:scale-110 transition-transform" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                </>
+                </div>
               )}
-              
-              <div className="h-px bg-gray-200" />
               
               <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
                 {requestData.groups && Object.keys(requestData.groups).length > 0 ? (
-                  <div className="divide-y divide-gray-200">
+                  <div className="divide-y divide-gray-100">
                     {Object.entries(requestData.groups).map(([groupId, groupData]) => {
                       // Try to find group by ID (normalized) or by group_id (raw from backend)
                       const group = allGroups.find(g => (g.id || g.group_id) === groupId);
@@ -480,13 +571,45 @@ export default function RequestDetailModal({
                       return (
                         <div
                           key={groupId}
-                          className={`flex items-center space-x-3 p-3 hover:bg-gray-50 ${
+                          className={`flex items-center p-3 hover:bg-gray-50 ${
                             !isAccessible ? 'opacity-50' : ''
                           }`}
                         >
-                          <div className="w-16 flex items-center justify-center">
-                            {canApprove && isPending && isAccessible && (
+                          {/* Left: Avatar and info */}
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            {group?.representative_face && group?.id ? (
+                              <img
+                                src={`${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face}`}
+                                alt={group.label}
+                                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                                <User className="w-4 h-4 text-gray-500" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2">
+                                <p className="text-sm font-medium text-gray-900 truncate">{group?.label || 'Unknown'}</p>
+                                {!isAccessible && (
+                                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 flex-shrink-0">
+                                    Not accessible
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Right: Status icon and buttons */}
+                          <div className="flex items-center space-x-2 flex-shrink-0">
+                            <StatusIcon className={`w-5 h-5 ${
+                              statusInfo.color === 'blue' ? 'text-blue-600' :
+                              statusInfo.color === 'green' ? 'text-green-600' :
+                              statusInfo.color === 'red' ? 'text-red-600' :
+                              'text-yellow-600'
+                            }`} />
+                            {canApprove && isPending && isAccessible && (
+                              <>
                                 <button
                                   onClick={() => handleGroupAction(groupId, 'approve')}
                                   className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
@@ -507,49 +630,9 @@ export default function RequestDetailModal({
                                 >
                                   <X className="w-4 h-4" />
                                 </button>
-                              </div>
+                              </>
                             )}
                           </div>
-                          <div className="flex items-center space-x-3 flex-1">
-                            {group?.representative_face && group?.id ? (
-                              <img
-                                src={`${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face}`}
-                                alt={group.label}
-                                className="w-8 h-8 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                <User className="w-4 h-4 text-gray-500" />
-                              </div>
-                            )}
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2">
-                                <p className="text-sm font-medium text-gray-900">{group?.label || 'Unknown'}</p>
-                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                  statusInfo.color === 'blue' ? 'bg-blue-100 text-blue-700' :
-                                  statusInfo.color === 'green' ? 'bg-green-100 text-green-700' :
-                                  statusInfo.color === 'red' ? 'bg-red-100 text-red-700' :
-                                  'bg-yellow-100 text-yellow-700'
-                                }`}>
-                                  {statusInfo.status}
-                                </span>
-                                {!isAccessible && (
-                                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
-                                    Not accessible
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-gray-500">
-                                {group?.images_count || 0} image{(group?.images_count || 0) !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <StatusIcon className={`w-5 h-5 ${
-                            statusInfo.color === 'blue' ? 'text-blue-600' :
-                            statusInfo.color === 'green' ? 'text-green-600' :
-                            statusInfo.color === 'red' ? 'text-red-600' :
-                            'text-yellow-600'
-                          }`} />
                         </div>
                       );
                     })}
@@ -560,16 +643,20 @@ export default function RequestDetailModal({
                     <p className="text-sm">No groups in this request</p>
                   </div>
                 )}
-              </div>
+                </div>
               
-              <p className="text-xs text-gray-500">
-                {Object.keys(groupActions).length > 0 && (
-                  <span>
-                    {Object.values(groupActions).filter(a => a === 'approve').length} approved, {' '}
-                    {Object.values(groupActions).filter(a => a === 'deny').length} denied
-                  </span>
-                )}
-              </p>
+              <div className="min-h-[20px]">
+                <p className="text-xs text-gray-500">
+                  {Object.keys(groupActions).length > 0 ? (
+                    <span>
+                      {Object.values(groupActions).filter(a => a === 'approve').length} approved, {' '}
+                      {Object.values(groupActions).filter(a => a === 'deny').length} denied
+                    </span>
+                  ) : (
+                    <span className="invisible">Placeholder</span>
+                  )}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -594,37 +681,37 @@ export default function RequestDetailModal({
                   <button
                     onClick={handleApplyChanges}
                     disabled={loading || Object.keys(groupActions).length === 0}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    title="Apply Changes"
                   >
                     {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <Save className="w-4 h-4" />
-                    <span>Apply Changes</span>
+                    {!loading && <Save className="w-5 h-5" />}
                   </button>
                   
                   <button
                     onClick={handleDenyRequest}
                     disabled={loading || pendingGroups.length === 0}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="w-10 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    title="Deny Request"
                   >
                     {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <XCircle className="w-4 h-4" />
-                    <span>Deny Request</span>
+                    {!loading && <XCircle className="w-5 h-5" />}
                   </button>
                   
                   <button
                     onClick={handleApproveRequest}
                     disabled={loading || pendingGroups.length === 0}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="w-10 h-10 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    title="Approve Request"
                   >
                     {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Approve Request</span>
+                    {!loading && <CheckCircle className="w-5 h-5" />}
                   </button>
                 </>
               )}

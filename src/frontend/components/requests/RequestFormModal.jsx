@@ -143,15 +143,13 @@ export default function RequestFormModal({
   const filteredAndSortedGroups = useMemo(() => {
     return allGroups
       .filter(group => {
-        // Filter out groups that are not associated with the current profile
-        // For now, show all groups - this can be customized based on business logic
+        // Show only groups that are not accessible (is_accessible === false/0)
+        const isNotAccessible = group.is_accessible === false || group.is_accessible === 0;
+        
         const label = group.label || `Person ${group.id}`;
         const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
         
-        // Filter out groups that are already associated with the current profile
-        // This would need to be implemented based on your business logic
-        // For now, we'll show all groups
-        return matchesSearch;
+        return isNotAccessible && matchesSearch;
       })
       .sort((a, b) => {
         let aValue, bValue;

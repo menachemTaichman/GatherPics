@@ -590,7 +590,7 @@ class EventDB(BaseDB):
                 SELECT ard.*
                 FROM access_requests_details ard
                 INNER JOIN accessible_profiles ap ON ard.profile_id = ap.profile_id AND ap.profile_id <> cur_profile('profile_id')
-                WHERE ard.accessible_groups_count > 0
+                WHERE ard.accessible_groups_count > 0 OR ard.groups_count = 0
             ''',
             'accessible_access_requests_groups': '''
                 SELECT ag.*
