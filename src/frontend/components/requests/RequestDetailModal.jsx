@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, AlertCircle, Check, Save } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, AlertCircle, Check, Save, AlertTriangle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { requestsAPI, imagesAPI } from '../../utils/apiService';
+import { requestsAPI, imagesAPI, profilesAPI } from '../../utils/apiService';
 import { useGroupsList, useRequestById } from '../../utils/dataManager';
 import { getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -48,6 +48,7 @@ export default function RequestDetailModal({
   const [groupActions, setGroupActions] = useState({}); // { groupId: 'approve' | 'deny' | null }
   const [closeRequest, setCloseRequest] = useState(false);
   const [profileName, setProfileName] = useState('');
+  const [nameConflict, setNameConflict] = useState(false);
   
   const { showToast } = useToast();
   const permissions = usePermissions();
@@ -95,12 +96,34 @@ export default function RequestDetailModal({
     }
   }, [isOpen, registerModal, unregisterModal, requestId]);
 
-  // Initialize form data
+  // Check name conflict with debounce (similar to EditProfileModal)
+  const checkNameConflict = async (label) => {
+    if (!label || !label.trim()) {
+      setNameConflict(false);
+      return;
+    }
+
+    try {
+      const result = await profilesAPI.checkName(label.trim(), null, eventUrl);
+      setNameConflict(result.conflict || false);
+    } catch (error) {
+      console.error('Error checking name conflict:', error);
+      setNameConflict(false);
+    }
+  };
+
+  // Initialize form data and check name conflict if needed
   useEffect(() => {
     if (isOpen && requestData) {
       setProfileName(requestData.applicant_name || '');
       setGroupActions({});
       setCloseRequest(false);
+      setNameConflict(false);
+      
+      // Check name conflict when modal opens (if applicant_profile_id is null and name exists)
+      if (!requestData.applicant_profile_id && requestData.applicant_name) {
+        checkNameConflict(requestData.applicant_name);
+      }
     }
   }, [isOpen, requestData]);
 
@@ -226,9 +249,15 @@ export default function RequestDetailModal({
       return;
     }
 
-    if (approvedGroups.length > 0 && !requestData.applicant_profile_id && !profileName.trim()) {
-      showToast('Profile name is required for new profiles', 'error');
-      return;
+    if (approvedGroups.length > 0 && !requestData.applicant_profile_id) {
+      if (!profileName || !profileName.trim()) {
+        showToast('Profile name is required for new profiles', 'error');
+        return;
+      }
+      if (nameConflict) {
+        showToast('Cannot save: Profile name already exists', 'error');
+        return;
+      }
     }
 
     setLoading(true);
@@ -277,9 +306,15 @@ export default function RequestDetailModal({
       return;
     }
 
-    if (!requestData.applicant_profile_id && !profileName.trim()) {
-      showToast('Profile name is required for new profiles', 'error');
-      return;
+    if (!requestData.applicant_profile_id) {
+      if (!profileName || !profileName.trim()) {
+        showToast('Profile name is required for new profiles', 'error');
+        return;
+      }
+      if (nameConflict) {
+        showToast('Cannot save: Profile name already exists', 'error');
+        return;
+      }
     }
 
     setLoading(true);
@@ -465,13 +500,31 @@ export default function RequestDetailModal({
                     <input
                       type="text"
                       value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setProfileName(value);
+                        if (!requestData.applicant_profile_id) {
+                          // Debounce name conflict check
+                          if (checkNameConflict._timeout) clearTimeout(checkNameConflict._timeout);
+                          checkNameConflict._timeout = setTimeout(() => {
+                            checkNameConflict(value);
+                          }, 300);
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        nameConflict ? 'border-red-500' : 'border-gray-300'
+                      }`}
                       placeholder="Enter profile name"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       This will be the name of the new profile created when approved
                     </p>
+                    {nameConflict && (
+                      <div className="flex items-center space-x-1 text-red-500 text-xs mt-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>Name exists</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -557,7 +610,23 @@ export default function RequestDetailModal({
               <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
                 {requestData.groups && Object.keys(requestData.groups).length > 0 ? (
                   <div className="divide-y divide-gray-100">
-                    {Object.entries(requestData.groups).map(([groupId, groupData]) => {
+                    {Object.entries(requestData.groups).sort(([idA, dataA], [idB, dataB]) => {
+                      // Sort by status first: pending (null) = 0, approved (true) = 1, denied (false) = 2
+                      const statusA = dataA.approved === null ? 0 : (dataA.approved ? 1 : 2);
+                      const statusB = dataB.approved === null ? 0 : (dataB.approved ? 1 : 2);
+                      
+                      if (statusA !== statusB) {
+                        return statusA - statusB;
+                      }
+                      
+                      // Then sort by label
+                      const groupA = allGroups.find(g => (g.id || g.group_id) === idA);
+                      const groupB = allGroups.find(g => (g.id || g.group_id) === idB);
+                      const labelA = groupA?.label || '';
+                      const labelB = groupB?.label || '';
+                      
+                      return labelA.localeCompare(labelB);
+                    }).map(([groupId, groupData]) => {
                       // Try to find group by ID (normalized) or by group_id (raw from backend)
                       const group = allGroups.find(g => (g.id || g.group_id) === groupId);
                       const statusInfo = getGroupStatus(groupData);

@@ -272,8 +272,11 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-# recreate_views_triggers_and_indexes(db)
+recreate_views_triggers_and_indexes(db)
 # recreate_views_triggers_and_indexes(general_models.db)
+
+# general_models.delete_profile('968736b5-2da4-41a6-bafc-3c9b201581ea')
+general_models.toggle_access_request(event_id, 8, True, group_ids=["18d71ffd-59d3-49df-9983-8d051888e912"])
 
 result = general_models.is_exists('profiles', {'label': 'Event Manager'}, exclude_id='162f6184-00a8-47f7-9895-f1fd8cbc93c5')
 print(result)
@@ -305,8 +308,8 @@ event.models.db.execute_query(query, params)
 
 # print(access_requests)
 # print('--------------------------------')
-# general_profiles = general_models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
-# event_profiles = event.models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
+general_profiles = general_models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
+event_profiles = event.models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
 # main1_id = general_models.db.execute_query('SELECT profile_id FROM profiles WHERE label = ?;', ('Main Manager1', ), return_format=ReturnFormat.VALUE)
 # general_models.delete_profile(main1_id)
 # general_models.toggle_access_request(event_id, 1, True, group_ids=["18d71ffd-59d3-49df-9983-8d051888e912"], profile_name="Main Manager1")

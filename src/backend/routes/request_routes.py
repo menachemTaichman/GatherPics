@@ -245,7 +245,7 @@ def approve_request(event_id, request_id):
     
     data = request.json or {}
     try:
-        group_ids = data.get('group_ids')  # None means approve all
+        group_ids = data.get('groupIds')  # None means approve all
         close = data.get('close', False)
         closed_details = data.get('closedDetails')
         profile_name = data.get('profileName')

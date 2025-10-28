@@ -597,6 +597,10 @@ class EventDB(BaseDB):
                 FROM access_requests_groups ag
                 INNER JOIN accessible_access_requests ar ON ag.access_request_id = ar.access_request_id
             ''',
+            'ensure_access_requests_closed': '''
+                SELECT *
+                FROM access_requests
+            ''',
         }
     
     @classmethod
@@ -1349,47 +1353,35 @@ class EventDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot update approved access request group')
                     END;
 
-                    UPDATE access_requests_groups SET
-                        approved = NEW.approved,
-                        closed_at = CASE WHEN NEW.approved IS NOT NULL THEN COALESCE(NEW.closed_at, CURRENT_TIMESTAMP) ELSE OLD.closed_at END,
-                        closed_by = CASE WHEN NEW.approved IS NOT NULL THEN cur_profile('profile_id') ELSE OLD.closed_by END
-                    WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
-                
                     INSERT INTO profile_groups (profile_id, group_id, accessible)
                     SELECT
-                        aar.profile_id,
-                        OLD.group_id,
-                        CASE WHEN ap.all_groups = 0 AND NEW.approved = 1 THEN 1 ELSE 0 END
+                        aar.applicant_profile_id as profile_id,
+                        OLD.group_id as group_id,
+                        CASE WHEN ap.all_groups = 0 AND NEW.approved = 1 THEN 1 ELSE 0 END as accessible
                     FROM accessible_access_requests aar
-                    INNER JOIN accessible_profiles ap ON ap.profile_id = aar.profile_id
-                    LEFT JOIN profile_groups pg ON pg.profile_id = aar.profile_id AND pg.group_id = OLD.group_id
+                    INNER JOIN accessible_profiles ap
+                        ON ap.profile_id = aar.applicant_profile_id
+                        AND aar.access_request_id = OLD.access_request_id
+                    LEFT JOIN profile_groups pg ON pg.profile_id = aar.applicant_profile_id AND pg.group_id = OLD.group_id
                     WHERE pg.profile_id IS NULL AND NEW.approved IS NOT NULL
                     AND ((ap.all_groups = 0 AND NEW.approved = 1) OR (ap.all_groups = 1 AND NEW.approved = 0));
                 
                     DELETE FROM profile_groups
-                    WHERE profile_id = (SELECT ar.profile_id FROM access_requests ar WHERE OLD.access_request_id = ar.access_request_id)
+                    WHERE profile_id = (SELECT ar.applicant_profile_id FROM access_requests ar WHERE OLD.access_request_id = ar.access_request_id)
                     AND group_id = OLD.group_id
                     AND EXISTS (
                         SELECT 1
                         FROM accessible_profiles ap
                         INNER JOIN accessible_access_requests aar
-                            ON aar.profile_id = ap.profile_id
+                            ON aar.applicant_profile_id = ap.profile_id
                             AND aar.access_request_id = OLD.access_request_id
                         WHERE
                             ap.all_groups = 1 AND NEW.approved = 1
                             OR (ap.all_groups = 0 AND NEW.approved = 0)
                     );
 
-                    UPDATE access_requests SET
-                        is_closed = 1,
-                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
-                        closed_by = cur_profile('profile_id')
-                    WHERE access_request_id = OLD.access_request_id
-                    AND NOT EXISTS (
-                        SELECT 1 FROM access_requests_groups arg
-                        WHERE arg.access_request_id = OLD.access_request_id
-                        AND arg.approved IS NULL
-                    );
+                    INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
+                    VALUES (OLD.access_request_id, NEW.closed_at);
                 END;
             """,
 
@@ -1432,51 +1424,84 @@ class EventDB(BaseDB):
             """,
 
             # ensure_access_requests_groups_validity
+            'trg_ensure_access_requests_closed': """
+                INSTEAD OF INSERT ON ensure_access_requests_closed
+                BEGIN
+                    UPDATE access_requests SET
+                        is_closed = 1,
+                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
+                        closed_by = cur_profile('profile_id')
+                    WHERE access_request_id = COALESCE(NEW.access_request_id, access_request_id)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM access_requests_groups arg
+                        WHERE arg.access_request_id = access_requests.access_request_id
+                        AND arg.approved IS NULL
+                    );
+                END;
+            """,
             'trg_update_profile_ensure_access_requests_groups_validity': """
                 AFTER UPDATE ON profiles
                 BEGIN
-                    UPDATE accessible_access_requests_groups SET
+                    UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
                         closed_by = cur_profile('profile_id'),
                         closed_details = 'Indirect approval by setting all_groups = 1'
                     WHERE (
-                        (SELECT ar.profile_id FROM access_requests ar WHERE accessible_access_requests_groups.access_request_id = ar.access_request_id)
+                        (SELECT ar.applicant_profile_id FROM access_requests ar WHERE access_requests_groups.access_request_id = ar.access_request_id)
                         = NEW.profile_id
                     AND approved IS NULL)
                     AND (OLD.all_groups = 0 AND NEW.all_groups = 1);
+
+                    INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
+                    VALUES (NULL, NULL);
                 END;
             """,
             'trg_insert_profile_groups_ensure_access_requests_groups_validity': """
                 AFTER INSERT ON profile_groups
                 BEGIN
-                    UPDATE accessible_access_requests_groups SET
+                    UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
                         closed_by = cur_profile('profile_id'),
                         closed_details = 'Indirect approval by adding group to profile'
-                    WHERE (SELECT ar.profile_id FROM access_requests ar WHERE accessible_access_requests_groups.access_request_id = ar.access_request_id)
-                    = NEW.profile_id
-                    AND (approved IS NULL
-                    AND (SELECT all_groups FROM profiles p WHERE p.profile_id = NEW.profile_id) = 0);
+                    WHERE
+                        group_id = NEW.group_id
+                        AND (
+                            SELECT ar.applicant_profile_id
+                            FROM access_requests ar
+                            INNER JOIN profiles p ON p.profile_id = ar.applicant_profile_id
+                            WHERE ar.access_request_id = access_requests_groups.access_request_id
+                            AND p.all_groups = 0
+                        ) = NEW.profile_id
+                        AND approved IS NULL
+                    ;
+
+                    INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
+                    VALUES (NULL, NULL);
                 END;
             """,
             'trg_delete_profile_groups_ensure_access_requests_groups_validity': """
                 AFTER DELETE ON profile_groups
                 BEGIN
-                    UPDATE accessible_access_requests_groups SET
+                    UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
                         closed_by = cur_profile('profile_id'),
                         closed_details = 'Indirect approval by adding group to profile'
-                    WHERE (OLD.profile_id = (SELECT ar.profile_id FROM access_requests ar WHERE accessible_access_requests_groups.access_request_id = ar.access_request_id)
-                    AND group_id = OLD.group_id)
-                    AND (approved IS NULL
-                    AND (
-                        SELECT all_groups
-                        FROM profiles p
-                        WHERE p.profile_id = (SELECT ar.profile_id FROM access_requests ar WHERE accessible_access_requests_groups.access_request_id = ar.access_request_id))
-                    = 1);
+                    WHERE (
+                        OLD.profile_id = (
+                            SELECT ar.applicant_profile_id
+                            FROM access_requests ar
+                            INNER JOIN profiles p ON p.profile_id = ar.applicant_profile_id
+                            WHERE ar.access_request_id = access_requests_groups.access_request_id
+                            AND p.all_groups = 1
+                        )
+                        AND group_id = OLD.group_id
+                    ) AND approved IS NULL;
+
+                    INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
+                    VALUES (NULL, NULL);
                 END;
             """,
 

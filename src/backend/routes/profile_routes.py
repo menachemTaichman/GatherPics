@@ -98,16 +98,22 @@ def get_event_profile(event_id, profile_id):
         'items': event.models.get_entities('profiles', [profile_id])
     },
     {
-        'type': 'RELATION_ADD',
+        'type': 'RELATION_SET',
         'relation': 'profile.images',
         'parentId': profile_id,
         'entities': event.models.get_childs('profiles', profile_id, 'images')
     },
     {
-        'type': 'RELATION_ADD',
+        'type': 'RELATION_SET',
         'relation': 'profile.albums',
         'parentId': profile_id,
         'entities': event.models.get_childs('profiles', profile_id, 'albums')
+    },
+    {
+        'type': 'RELATION_SET',
+        'relation': 'profile.groups',
+        'parentId': profile_id,
+        'entities': event.models.get_childs('profiles', profile_id, 'groups')
     }
     ]
     return jsonify({"changes": changes})
@@ -191,7 +197,7 @@ def check_groups_from_profile(event_id, profile_id):
     len_accessible = len(event.models.get_childs('profiles', profile_id, 'groups', group_ids, return_ids=True, within=not have_all))
     return jsonify({"len_accessible": len_accessible, "len_inaccessible": len(group_ids) - len_accessible})
 
-@profile_bp.route("/api/events/profiles/check-name", methods=["POST"])
+@profile_bp.route("/api/profiles/check-name", methods=["POST"])
 @require_auth
 def check_profile_name():
     """Check if a profile name already exists."""
