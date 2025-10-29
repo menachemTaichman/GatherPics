@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText, Eye } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -8,7 +8,7 @@ import { profilesAPI, requestsAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useProfilesList, useRequestsList } from '../../utils/dataManager';
+import { useProfilesList, useRequestsList, useMyRequestsList } from '../../utils/dataManager';
 import { useApplyScopes } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -56,22 +56,10 @@ export default function SettingsManager() {
   // Register modal when opened, unregister when closed
   useEffect(() => {
     if (isOpen) {
-      // Apply scopes based on active tab
-      let scopes = [];
-      if (activeTab === 'profiles') {
-        scopes = [{ entity: 'all', id: 'profiles' }];
-      } else if (activeTab === 'account' && currentProfile?.id) {
-        scopes = [
-          { entity: 'profile', id: String(currentProfile.id) },
-          { entity: 'all', id: 'my_access_requests' }
-        ];
-      }
-      
       registerModal({ 
         id: modalId, 
         type: 'popup',
-        allowOutsideScroll: true,
-        scopes
+        allowOutsideScroll: true
       });
       
       // Listen for logout to auto-close modal
@@ -85,15 +73,16 @@ export default function SettingsManager() {
         window.removeEventListener('auth:logout', handleAuthLogout);
       };
     }
-  }, [isOpen, activeTab, registerModal, unregisterModal, currentProfile?.id]);
+  }, [isOpen, registerModal, unregisterModal]);
 
   // Apply scopes based on active tab
+  const profileId = currentProfile?.id || currentProfile?.profile_id;
   useApplyScopes(
     isOpen && activeTab === 'profiles' 
       ? [{ entity: 'all', id: 'profiles' }] 
-      : isOpen && activeTab === 'account' && currentProfile?.id
+      : isOpen && activeTab === 'account' && profileId
       ? [
-          { entity: 'profile', id: String(currentProfile.id) },
+          { entity: 'profile', id: String(profileId) },
           { entity: 'all', id: 'my_access_requests' }
         ]
       : []
@@ -111,18 +100,31 @@ export default function SettingsManager() {
 
   // Fetch current profile when account tab is opened
   useEffect(() => {
-    if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.id) {
+    if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.profile_id) {
       fetchCurrentProfile();
+      fetchMyRequests();
     }
-  }, [isOpen, activeTab, eventUrl, currentProfile?.id]);
+  }, [isOpen, activeTab, eventUrl, currentProfile?.id, permissions.enable_requests]);
 
 
   const fetchCurrentProfile = async () => {
     try {
-      await profilesAPI.getById(currentProfile.id, eventUrl);
-      // Changes are automatically applied by apiService interceptor
+      const profileId = currentProfile?.id || currentProfile?.profile_id;
+      if (profileId) {
+        await profilesAPI.getById(profileId, eventUrl);
+        // Changes are automatically applied by apiService interceptor
+      }
     } catch (error) {
       console.error('Failed to fetch current profile:', error);
+    }
+  };
+
+  const fetchMyRequests = async () => {
+    try {
+      await requestsAPI.getMyRequests(eventUrl);
+      // Changes are automatically applied by apiService interceptor
+    } catch (error) {
+      console.error('Failed to fetch my requests:', error);
     }
   };
 
@@ -383,7 +385,11 @@ export default function SettingsManager() {
   };
 
   const handleEditRequest = (request) => {
-    setEditingRequest(request);
+    // Try both id and access_request_id
+    const requestId = request?.id || request?.access_request_id;
+    // Ensure the request has an id field for the modal
+    const requestWithId = request ? { ...request, access_request_id: requestId || request.id } : null;
+    setEditingRequest(requestWithId);
     setShowRequestFormModal(true);
   };
 
@@ -395,8 +401,16 @@ export default function SettingsManager() {
   const handleConfirmDeleteRequest = async () => {
     if (!requestToDelete) return;
 
+    // Try both id and access_request_id
+    const requestId = requestToDelete?.id || requestToDelete?.access_request_id;
+    if (!requestId) {
+      console.error('Cannot delete request: no ID found', requestToDelete);
+      showToast('Cannot delete request: ID not found', 'error');
+      return;
+    }
+
     try {
-      await requestsAPI.deleteMyRequest(requestToDelete.access_request_id, eventUrl);
+      await requestsAPI.deleteMyRequest(requestId, eventUrl);
       showToast(`Request deleted`, 'success');
     } catch (error) {
       console.error('Failed to delete request:', error);
@@ -407,8 +421,7 @@ export default function SettingsManager() {
   };
 
   // Get user's requests
-  const allRequests = useRequestsList();
-  const userRequests = allRequests.filter(req => req.profile_id === (currentProfile?.id || currentProfile?.profile_id));
+  const userRequests = useMyRequestsList();
 
   return (
     <>
@@ -572,22 +585,27 @@ export default function SettingsManager() {
                             </div>
                             
                             {currentProfile?.is_public ? (
-                              <div className="text-center py-4">
+                              <div key="public-profile-message" className="text-center py-4">
                                 <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                 <p className="text-sm text-gray-500">Public profiles can only create requests for new profiles</p>
                               </div>
                             ) : userRequests.length === 0 ? (
-                              <div className="text-center py-4">
+                              <div key="no-requests-message" className="text-center py-4">
                                 <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                 <p className="text-sm text-gray-500">No requests yet</p>
                               </div>
                             ) : (
-                              <div className="space-y-2">
-                                {userRequests.map((request) => (
-                                  <div
-                                    key={request.access_request_id}
-                                    className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
-                                  >
+                              <div key="requests-list" className="space-y-2">
+                                {userRequests.map((request, index) => {
+                                  // Try both id and access_request_id (normalization might use either)
+                                  const requestKey = request?.id || request?.access_request_id || `request-${index}`;
+                                  const requestId = request?.id || request?.access_request_id;
+                                  
+                                  return (
+                                    <div
+                                      key={requestKey}
+                                      className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
+                                    >
                                     <div className="flex items-center space-x-3">
                                       <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                                         <FileText className="w-5 h-5 text-blue-600" />
@@ -596,15 +614,27 @@ export default function SettingsManager() {
                                         <div className="flex items-center space-x-2">
                                           <p className="font-medium text-gray-900">{request.applicant_name}</p>
                                           <span className={`px-2 py-1 text-xs rounded-full ${
-                                            request.is_closed 
-                                              ? (request.groups_approved_count === request.groups_count ? 'bg-green-100 text-green-700' : 
-                                                 request.groups_approved_count === 0 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700')
-                                              : 'bg-blue-100 text-blue-700'
+                                            (() => {
+                                              const status = request.status || 'pending';
+                                              const statusConfig = {
+                                                pending: 'bg-blue-100 text-blue-700',
+                                                approved: 'bg-green-100 text-green-700',
+                                                rejected: 'bg-red-100 text-red-700',
+                                                mixed: 'bg-yellow-100 text-yellow-700'
+                                              };
+                                              return statusConfig[status] || statusConfig.pending;
+                                            })()
                                           }`}>
-                                            {request.is_closed 
-                                              ? (request.groups_approved_count === request.groups_count ? 'Approved' : 
-                                                 request.groups_approved_count === 0 ? 'Denied' : 'Partial')
-                                              : 'Pending'}
+                                            {(() => {
+                                              const status = request.status || 'pending';
+                                              const statusConfig = {
+                                                pending: 'Pending',
+                                                approved: 'Approved',
+                                                rejected: 'Rejected',
+                                                mixed: 'Mixed'
+                                              };
+                                              return statusConfig[status] || statusConfig.pending;
+                                            })()}
                                           </span>
                                         </div>
                                         <p className="text-xs text-gray-500">
@@ -613,23 +643,40 @@ export default function SettingsManager() {
                                       </div>
                                     </div>
                                     <div className="flex items-center space-x-1">
-                                      <button
-                                        onClick={() => handleEditRequest(request)}
-                                        className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                        title="Edit request"
-                                      >
-                                        <Edit2 className="w-4 h-4 text-blue-600" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteRequest(request)}
-                                        className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                        title="Delete request"
-                                      >
-                                        <Trash2 className="w-4 h-4 text-red-600" />
-                                      </button>
+                                      {(() => {
+                                        const status = request.status || 'pending';
+                                        const isClosed = status !== 'pending';
+                                        return isClosed ? (
+                                          <button
+                                            onClick={() => handleEditRequest(request)}
+                                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                            title="View request"
+                                          >
+                                            <Eye className="w-4 h-4 text-blue-600" />
+                                          </button>
+                                        ) : (
+                                          <>
+                                            <button
+                                              onClick={() => handleEditRequest(request)}
+                                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                              title="Edit request"
+                                            >
+                                              <Edit2 className="w-4 h-4 text-blue-600" />
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteRequest(request)}
+                                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                              title="Delete request"
+                                            >
+                                              <Trash2 className="w-4 h-4 text-red-600" />
+                                            </button>
+                                          </>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

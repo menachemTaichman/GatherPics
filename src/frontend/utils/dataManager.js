@@ -123,6 +123,12 @@ const ENTITY_STRUCTURE = {
       groups: 'dict', // Store as dict with relation data (approved, closed_at, closed_by)
     },
   },
+  my_access_requests: {
+    relations: ['groups'],
+    relationTypes: {
+      groups: 'dict', // Store as dict with relation data (approved, closed_at, closed_by)
+    },
+  },
 };
 
 const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
@@ -151,6 +157,7 @@ function normalizeEntityKey(entity) {
     case 'profile': return 'profiles';
     case 'upload': return 'uploads';
     case 'access_request': return 'access_requests';
+    case 'my_access_request': return 'my_access_requests';
     default: return entity;
   }
 }
@@ -945,6 +952,17 @@ export const selectors = {
       return lastArr;
     };
   })(),
+  myAccessRequestsAll: (() => {
+    let lastRef = null;
+    let lastArr = [];
+    return (state) => {
+      const ref = state.entities?.my_access_requests || null;
+      if (ref === lastRef) return lastArr;
+      lastRef = ref;
+      lastArr = Object.values(ref || {});
+      return lastArr;
+    };
+  })(),
   groupImages: (state, groupId) => {
     const group = state.entities?.groups?.[groupId];
     const ids = Array.from(group?.images || []);
@@ -1057,6 +1075,14 @@ export function useRequestsList() {
 
 export function useRequestById(requestId) {
   return useDataStore((state) => (requestId ? state.entities?.access_requests?.[requestId] || null : null));
+}
+
+export function useMyRequestsList() {
+  return useDataStore((state) => selectors.myAccessRequestsAll(state));
+}
+
+export function useMyRequestById(requestId) {
+  return useDataStore((state) => (requestId ? state.entities?.my_access_requests?.[requestId] || null : null));
 }
 
  

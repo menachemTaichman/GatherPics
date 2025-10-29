@@ -272,48 +272,13 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-recreate_views_triggers_and_indexes(db)
-# recreate_views_triggers_and_indexes(general_models.db)
 
-# general_models.delete_profile('968736b5-2da4-41a6-bafc-3c9b201581ea')
-general_models.toggle_access_request(event_id, 8, True, group_ids=["18d71ffd-59d3-49df-9983-8d051888e912"])
+recreate_views_triggers_and_indexes(event.models.db)
 
-result = general_models.is_exists('profiles', {'label': 'Event Manager'}, exclude_id='162f6184-00a8-47f7-9895-f1fd8cbc93c5')
-print(result)
-print('--------------------------------')
-
-# result = db.execute_query('SELECT * FROM accessible_access_requests_groups;')
-# print(result)
-# print('--------------------------------')
-
-event = Event(event_id, profile_id='1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2')
-# request_data = {
-#     'profile_id': '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2',
-#     'applicant_name': 'm',
-#     'applicant_email': 'm',
-#     'applicant_phone': None,
-#     'details': None,
-#     'applicant_profile_id': None
-# }
-# groups_ids = ['8f965866-ec14-4b61-95d8-79bae649dad4','275d589e-9673-49d1-bc93-aa427dcada15']
-
-# request_id = event.models.add('my_access_requests', request_data)
-# Add groups to the request
-query = 'INSERT OR IGNORE INTO accessible_my_access_requests_groups (access_request_id, group_id) VALUES (?, ?),(?, ?)'
-params = [6, '275d589e-9673-49d1-bc93-aa427dcada15', 6, '8f965866-ec14-4b61-95d8-79bae649dad4']
-event.models.db.execute_query(query, params)
-
-# if groups_ids and isinstance(groups_ids, list):
-#     event.models.edit_childs('my_access_requests', request_id, 'groups', groups_ids, operation=ChildOperation.ADD)
-
-# print(access_requests)
-# print('--------------------------------')
-general_profiles = general_models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
-event_profiles = event.models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
-# main1_id = general_models.db.execute_query('SELECT profile_id FROM profiles WHERE label = ?;', ('Main Manager1', ), return_format=ReturnFormat.VALUE)
-# general_models.delete_profile(main1_id)
-# general_models.toggle_access_request(event_id, 1, True, group_ids=["18d71ffd-59d3-49df-9983-8d051888e912"], profile_name="Main Manager1")
-# event.models.db.execute_query('DELETE FROM profiles_events WHERE profile_id = ?;', (main1_id, ))
-# print(general_profiles)
-# print(event_profiles)
-# print('--------------------------------')
+request_id = 3
+group_ids = ["8f965866-ec14-4b61-95d8-79bae649dad4", "b7731fb3-4644-4b06-884d-f964940bb17e"]
+profile_id = '12b40e1b-4bf2-4b01-80b7-9f1f2ab62a23'
+event = Event(event_id, profile_id=profile_id)
+event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
+result = None
+print()

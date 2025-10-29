@@ -90,7 +90,7 @@ class EventDB(BaseDB):
             'access_requests': {
                 'primary_key': 'access_request_id',
                 'accessible_table': 'accessible_access_requests',
-                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
+                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'status', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
                 'relations': {
                     'groups': {
                         'relation_table': 'access_requests_groups',
@@ -111,7 +111,7 @@ class EventDB(BaseDB):
                 'original_table': 'access_requests',
                 'primary_key': 'access_request_id',
                 'accessible_table': 'accessible_my_access_requests',
-                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
+                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'status', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
                 'relations': {
                     'groups': {
                         'relation_table': 'my_access_requests_groups',
@@ -267,7 +267,7 @@ class EventDB(BaseDB):
                 access_request_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 profile_id TEXT NOT NULL,
                 requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                applicant_name TEXT NOT NULL,
+                applicant_name TEXT,
                 applicant_email TEXT,
                 applicant_phone TEXT,
                 details TEXT,
@@ -562,7 +562,26 @@ class EventDB(BaseDB):
                 SELECT
                     ar.*,
                     COUNT(argd.group_id) AS groups_count,
-                    SUM(argd.is_accessible) AS accessible_groups_count
+                    SUM(argd.is_accessible) AS accessible_groups_count,
+                    CASE 
+                        WHEN
+                            ar.is_closed = 0
+                        THEN
+                            "pending"
+                        ELSE
+                            (CASE
+                                WHEN
+                                    COALESCE(SUM(argd.approved), 0) = COUNT(argd.group_id)
+                                THEN
+                                    "approved"
+                                WHEN
+                                    COALESCE(SUM(argd.approved), 0) = 0
+                                THEN
+                                    "rejected"
+                                ELSE
+                                    "mixed"
+                            END)
+                    END AS status
                 FROM access_requests ar
                 LEFT JOIN access_requests_groups_details argd ON ar.access_request_id = argd.access_request_id
                 GROUP BY ar.access_request_id
@@ -1261,6 +1280,12 @@ class EventDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot edit access request for another profile')
                         WHEN (SELECT is_closed FROM access_requests WHERE access_request_id = NEW.access_request_id) = 1 THEN
                             RAISE(ABORT, 'Permission denied: cannot edit closed access request')
+                        WHEN NEW.group_id = (
+                            SELECT group_id
+                            FROM groups
+                            WHERE LOWER(label) = 'unassociated'
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: cannot add unassociated group to access request')
                     END;
 
                     INSERT INTO access_requests_groups
@@ -1380,6 +1405,14 @@ class EventDB(BaseDB):
                             OR (ap.all_groups = 0 AND NEW.approved = 0)
                     );
 
+                    UPDATE access_requests_groups SET
+                        approved = NEW.approved,
+                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
+                        closed_by = cur_profile('profile_id')
+                    WHERE access_request_id = OLD.access_request_id
+                    AND group_id = OLD.group_id
+                    AND approved IS NULL;
+
                     INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
                     VALUES (OLD.access_request_id, NEW.closed_at);
                 END;
@@ -1445,8 +1478,7 @@ class EventDB(BaseDB):
                     UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
-                        closed_by = cur_profile('profile_id'),
-                        closed_details = 'Indirect approval by setting all_groups = 1'
+                        closed_by = cur_profile('profile_id')
                     WHERE (
                         (SELECT ar.applicant_profile_id FROM access_requests ar WHERE access_requests_groups.access_request_id = ar.access_request_id)
                         = NEW.profile_id
@@ -1463,8 +1495,7 @@ class EventDB(BaseDB):
                     UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
-                        closed_by = cur_profile('profile_id'),
-                        closed_details = 'Indirect approval by adding group to profile'
+                        closed_by = cur_profile('profile_id')
                     WHERE
                         group_id = NEW.group_id
                         AND (
@@ -1487,8 +1518,7 @@ class EventDB(BaseDB):
                     UPDATE access_requests_groups SET
                         approved = 1,
                         closed_at = CURRENT_TIMESTAMP,
-                        closed_by = cur_profile('profile_id'),
-                        closed_details = 'Indirect approval by adding group to profile'
+                        closed_by = cur_profile('profile_id')
                     WHERE (
                         OLD.profile_id = (
                             SELECT ar.applicant_profile_id

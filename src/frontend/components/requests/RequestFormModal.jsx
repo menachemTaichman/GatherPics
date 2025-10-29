@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, groupsAPI } from '../../utils/apiService';
-import { useGroupsList } from '../../utils/dataManager';
+import { useGroupsList, useMyRequestById } from '../../utils/dataManager';
 import { useApplyScopes, getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
 import { usePreference } from '../../hooks/useSettings';
-import { setPreference, getImageCount } from '../../utils/settings';
+import { setPreference } from '../../utils/settings';
 import { toggleSortOrder } from '../../utils/sorting';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 
@@ -33,12 +33,11 @@ export default function RequestFormModal({
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoadingGroups, setIsLoadingGroups] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1); // 1 = details, 2 = groups
+  const [currentStep, setCurrentStep] = useState(1); // 1 = profile details (only for new), 2 = groups + details
   const [lastSelectedIndex, setLastSelectedIndex] = useState(-1);
+  const [initialGroups, setInitialGroups] = useState(new Set()); // Track initial groups for edit mode
   
   // Sort preferences
-  const sortBy = usePreference('GroupsGallery.sortBy', 'name');
-  const setSortBy = (value) => setPreference('GroupsGallery.sortBy', value);
   const sortOrder = usePreference('GroupsGallery.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('GroupsGallery.sortDir', value);
   
@@ -66,10 +65,30 @@ export default function RequestFormModal({
     }
   }, [isOpen, eventUrl]);
 
-  // Apply scopes for groups access and my_access_request
-  const currentRequestId = request?.access_request_id;
+  // State for loading request data
+  const [isLoadingRequest, setIsLoadingRequest] = useState(false);
+  
+  // Try both id and access_request_id (normalization might use either)
+  const requestId = useMemo(() => 
+    request ? (request?.id || request?.access_request_id) : null,
+    [request?.id, request?.access_request_id]
+  );
+  
+  // Get request from store (which is updated by API interceptor)
+  const storeRequest = useMyRequestById(requestId);
+  
+  // Use store request if available (has full data), otherwise use request prop
+  const requestData = storeRequest || request;
+  
+  // Apply scopes for groups access and my_access_request - stabilize the ID
+  const currentRequestId = useMemo(() => 
+    requestData ? (requestData?.id || requestData?.access_request_id) : null,
+    [requestData?.id, requestData?.access_request_id]
+  );
+  const isEditing = !!(currentRequestId);
+  
   useApplyScopes(
-    currentRequestId 
+    currentRequestId && isEditing
       ? [
           { entity: 'all', id: 'groups' },
           { entity: 'my_access_request', id: currentRequestId }
@@ -77,14 +96,35 @@ export default function RequestFormModal({
       : [{ entity: 'all', id: 'groups' }]
   );
 
+  // Fetch request data when editing
+  useEffect(() => {
+    if (!isOpen || !requestId) {
+      return;
+    }
+    
+    // Always fetch fresh data when modal opens for editing to ensure we have the latest data
+    // The API interceptor will update the store, and useMyRequestById will reactively update
+    const fetchRequestData = async () => {
+      setIsLoadingRequest(true);
+      try {
+        await requestsAPI.getMyRequestById(requestId, eventUrl);
+      } catch (error) {
+        console.error('Failed to load request:', error);
+        showToast(formatErrorMessage('load request', error), 'error');
+      } finally {
+        setIsLoadingRequest(false);
+      }
+    };
+    fetchRequestData();
+  }, [isOpen, requestId, eventUrl]);
+
   // Register modal when opened
   useEffect(() => {
     if (isOpen) {
       registerModal({ 
         id: modalId, 
         type: 'popup',
-        allowOutsideScroll: true,
-        scopes: [{ entity: 'all', id: 'groups' }]
+        allowOutsideScroll: true
       });
       
       return () => {
@@ -93,37 +133,85 @@ export default function RequestFormModal({
     }
   }, [isOpen, registerModal, unregisterModal]);
 
+  // Stabilize request data fields for effect dependencies to avoid infinite loops
+  const requestDataId = useMemo(() => requestData?.id || requestData?.access_request_id, [requestData?.id, requestData?.access_request_id]);
+  // Stabilize groups object reference - only recreate if groups actually change
+  const requestDataGroupsKeys = useMemo(() => {
+    const groups = requestData?.groups;
+    if (!groups) return null;
+    return Object.keys(groups).sort().join(',');
+  }, [requestData?.groups]);
+  const requestDataGroups = requestData?.groups;
+  const requestDataApplicantName = requestData?.applicant_name;
+  const requestDataApplicantEmail = requestData?.applicant_email;
+  const requestDataApplicantPhone = requestData?.applicant_phone;
+  const requestDataDetails = requestData?.details;
+  const requestDataApplicantProfileId = requestData?.applicant_profile_id;
+  
+  // Stabilize storeRequest presence check
+  const hasStoreRequest = !!storeRequest;
+
   // Initialize form data
   useEffect(() => {
-    if (isOpen) {
-      if (request) {
-        // Editing existing request
-        setFormData({
-          requestType: request.applicant_profile_id ? 'own' : 'new',
-          applicant_name: request.applicant_name || '',
-          applicant_email: request.applicant_email || '',
-          applicant_phone: request.applicant_phone || '',
-          details: request.details || '',
-          group_ids: request.groups ? Object.keys(request.groups) : []
-        });
-        setSelectedGroups(new Set(request.groups ? Object.keys(request.groups) : []));
-      } else {
-        // Creating new request
-        setFormData({
-          requestType: currentProfile?.is_public ? 'new' : 'own',
-          applicant_name: currentProfile?.is_public ? '' : (currentProfile?.label || ''),
-          applicant_email: '',
-          applicant_phone: '',
-          details: '',
-          group_ids: [],
-          applicant_profile_id: currentProfile?.is_public ? null : (currentProfile?.id || currentProfile?.profile_id)
-        });
-        setSelectedGroups(new Set());
-      }
-      setSearchTerm('');
-      setCurrentStep(1); // Reset to step 1 when modal opens
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen, request, currentProfile]);
+    
+    // When editing, wait for store request to be loaded if still loading
+    if (requestId && !hasStoreRequest && isLoadingRequest) {
+      // Still loading, don't initialize yet
+      return;
+    }
+    
+    if (requestData && requestDataId) {
+      // Editing existing request (my-requests) – treat as 'own' by default
+      const groupIds = requestDataGroups ? Object.keys(requestDataGroups) : [];
+      setFormData({
+        requestType: 'own',
+        applicant_name: requestDataApplicantName || '',
+        applicant_email: requestDataApplicantEmail || '',
+        applicant_phone: requestDataApplicantPhone || '',
+        details: requestDataDetails || '',
+        group_ids: groupIds,
+        applicant_profile_id: requestDataApplicantProfileId || (currentProfile?.id || currentProfile?.profile_id) || null
+      });
+      setSelectedGroups(new Set(groupIds));
+      setInitialGroups(new Set(groupIds)); // Store initial groups for calculating diff
+    } else {
+      // Creating new request - automatically determine type based on profile
+      const requestType = currentProfile?.is_public ? 'new' : 'own';
+      setFormData({
+        requestType: requestType,
+        applicant_name: requestType === 'new' ? '' : (currentProfile?.label || ''),
+        applicant_email: '',
+        applicant_phone: '',
+        details: '',
+        group_ids: [],
+        applicant_profile_id: requestType === 'own' ? (currentProfile?.id || currentProfile?.profile_id) : null
+      });
+      setSelectedGroups(new Set());
+      setInitialGroups(new Set()); // No initial groups for new requests
+    }
+    setSearchTerm('');
+    // For 'own' requests, go directly to groups step (step 2). For 'new', start at step 1
+    const calculatedRequestType = requestData && requestDataId ? 'own' : (currentProfile?.is_public ? 'new' : 'own');
+    setCurrentStep(calculatedRequestType === 'own' ? 2 : 1);
+  }, [
+    isOpen, 
+    requestId,
+    requestDataId,
+    isLoadingRequest,
+    hasStoreRequest,
+    requestDataGroupsKeys,
+    requestDataApplicantName,
+    requestDataApplicantEmail,
+    requestDataApplicantPhone,
+    requestDataDetails,
+    requestDataApplicantProfileId,
+    currentProfile?.id,
+    currentProfile?.is_public,
+    currentProfile?.label
+  ]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: modalId,
@@ -146,21 +234,18 @@ export default function RequestFormModal({
         // Show only groups that are not accessible (is_accessible === false/0)
         const isNotAccessible = group.is_accessible === false || group.is_accessible === 0;
         
+        // Filter out unassociated groups
+        const isUnassociated = group.label && group.label.toLowerCase() === 'unassociated';
+        
         const label = group.label || `Person ${group.id}`;
         const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
         
-        return isNotAccessible && matchesSearch;
+        return isNotAccessible && !isUnassociated && matchesSearch;
       })
       .sort((a, b) => {
-        let aValue, bValue;
-        
-        if (sortBy === 'name') {
-          aValue = a.label || `Person ${a.id}`;
-          bValue = b.label || `Person ${b.id}`;
-        } else {
-          aValue = getImageCount(a);
-          bValue = getImageCount(b);
-        }
+        // Only sort by name
+        const aValue = a.label || `Person ${a.id}`;
+        const bValue = b.label || `Person ${b.id}`;
         
         if (sortOrder === 'asc') {
           return aValue > bValue ? 1 : -1;
@@ -174,7 +259,7 @@ export default function RequestFormModal({
         }
         return unique;
       }, []);
-  }, [allGroups, searchTerm, sortBy, sortOrder]);
+  }, [allGroups, searchTerm, sortOrder]);
 
   const handleGroupToggle = (groupId, event) => {
     const groupIndex = filteredAndSortedGroups.findIndex(g => g.id === groupId);
@@ -215,7 +300,7 @@ export default function RequestFormModal({
   };
 
   const handleNextStep = () => {
-    // Validate step 1 before proceeding
+    // Validate step 1 before proceeding (only for 'new' request type)
     if (currentStep === 1) {
       if (formData.requestType === 'new') {
         if (!formData.applicant_name.trim()) {
@@ -230,6 +315,27 @@ export default function RequestFormModal({
     }
     setCurrentStep(2);
   };
+  
+  // Handle Enter key
+  const handleKeyDown = (e) => {
+    // If in textarea and Shift+Enter, allow default (newline)
+    if (e.target.tagName === 'TEXTAREA' && e.shiftKey) {
+      return; // Allow default behavior for Shift+Enter in textarea
+    }
+    
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (currentStep === 1) {
+        // On step 1, go to next step if valid
+        handleNextStep();
+      } else if (currentStep === 2) {
+        // On step 2, submit if valid
+        if (selectedGroups.size > 0 && !loading && !isClosed) {
+          handleSubmit(e);
+        }
+      }
+    }
+  };
 
 
   const handlePrevStep = () => {
@@ -243,8 +349,72 @@ export default function RequestFormModal({
     return true; // For "myself" requests, no required fields
   };
 
+  // Check if request is closed (read-only mode)
+  const isClosed = requestData ? (requestData?.status && requestData.status !== 'pending') : false;
+  
+  // Split groups by status (always calculate for both open and closed requests)
+  const groupEntries = requestData?.groups ? Object.entries(requestData.groups) : [];
+  const approvedGroups = groupEntries.filter(([groupId, groupData]) => {
+    const approved = groupData.approved;
+    return approved === true || approved === 1;
+  });
+  const deniedGroups = groupEntries.filter(([groupId, groupData]) => {
+    const approved = groupData.approved;
+    return approved === false || approved === 0;
+  });
+  
+  // Sort approved and denied groups by label
+  const sortByLabel = ([idA], [idB]) => {
+    const groupA = allGroups.find(g => (g.id || g.group_id) === idA);
+    const groupB = allGroups.find(g => (g.id || g.group_id) === idB);
+    const labelA = groupA?.label || '';
+    const labelB = groupB?.label || '';
+    return labelA.localeCompare(labelB);
+  };
+  approvedGroups.sort(sortByLabel);
+  deniedGroups.sort(sortByLabel);
+  
+  const getGroupDisplayName = (groupId) => {
+    const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+    if (!group) return 'Unknown';
+    const id = group.id || group.group_id || '';
+    return group.label || `Person ${id}`;
+  };
+
+  // Calculate count of selectable groups (excluding already approved/denied groups)
+  const selectableGroupsCount = useMemo(() => {
+    let count = 0;
+    selectedGroups.forEach(groupId => {
+      // Find matching group entry (handle both string and number IDs)
+      const groupEntry = groupEntries.find(([id]) => {
+        const entryId = String(id);
+        const selectedId = String(groupId);
+        return entryId === selectedId;
+      });
+      
+      if (groupEntry) {
+        const [, groupData] = groupEntry;
+        const approved = groupData.approved;
+        // Only count groups that haven't been processed yet (not approved and not denied)
+        if (approved !== true && approved !== 1 && approved !== false && approved !== 0) {
+          count++;
+        }
+      } else {
+        // New group not yet in request data, count it
+        count++;
+      }
+    });
+    return count;
+  }, [selectedGroups, groupEntries]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent submission if closed
+    if (isClosed) {
+      showToast('Cannot modify closed requests', 'error');
+      return;
+    }
     
     // Validate groups selection
     if (selectedGroups.size === 0) {
@@ -273,16 +443,29 @@ export default function RequestFormModal({
         applicant_email: formData.applicant_email.trim() || null,
         applicant_phone: formData.applicant_phone.trim() || null,
         details: formData.details.trim() || null,
-        group_ids: Array.from(selectedGroups),
         applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null
       };
 
       if (request) {
         // Update existing request (using my-requests route)
-        await requestsAPI.updateMyRequest(request.access_request_id, submitData, eventUrl);
+        const requestId = request?.id || request?.access_request_id;
+        if (!requestId) {
+          showToast('Cannot update request: ID not found', 'error');
+          return;
+        }
+        
+        // Calculate groups to add and remove
+        const groupsToAdd = Array.from(selectedGroups).filter(id => !initialGroups.has(id));
+        const groupsToRemove = Array.from(initialGroups).filter(id => !selectedGroups.has(id));
+        
+        submitData.groups_to_add = groupsToAdd;
+        submitData.groups_to_remove = groupsToRemove;
+        
+        await requestsAPI.updateMyRequest(requestId, submitData, eventUrl);
         showToast('Request updated successfully', 'success');
       } else {
         // Create new request
+        submitData.group_ids = Array.from(selectedGroups);
         await requestsAPI.create(submitData, eventUrl);
         showToast('Request created successfully', 'success');
       }
@@ -326,8 +509,12 @@ export default function RequestFormModal({
                 {request ? 'Edit Request' : 'Create Request'}
               </h2>
               <div className="flex items-center space-x-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${currentStep >= 1 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-                <span className="text-sm text-gray-600">Details</span>
+                {formData.requestType === 'new' && (
+                  <>
+                    <div className={`w-2 h-2 rounded-full ${currentStep >= 1 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                    <span className="text-sm text-gray-600">Profile</span>
+                  </>
+                )}
                 <div className={`w-2 h-2 rounded-full ${currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
                 <span className="text-sm text-gray-600">Groups</span>
               </div>
@@ -343,48 +530,11 @@ export default function RequestFormModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
+        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6">
-            {/* Step 1: Details */}
+            {/* Step 1: Profile Details (only for new profile requests) */}
             {currentStep === 1 && (
               <>
-                {/* Request Type - Only show for non-public profiles */}
-                {!currentProfile?.is_public && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">Request Type</label>
-                    <div className="space-y-2">
-                      <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="requestType"
-                          value="own"
-                          checked={formData.requestType === 'own'}
-                          onChange={(e) => handleInputChange('requestType', e.target.value)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                        />
-                        <div className="flex items-center space-x-2">
-                          <User className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-700">For myself</span>
-                        </div>
-                      </label>
-                      <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="requestType"
-                          value="new"
-                          checked={formData.requestType === 'new'}
-                          onChange={(e) => handleInputChange('requestType', e.target.value)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                        />
-                        <div className="flex items-center space-x-2">
-                          <Users className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-700">For new profile</span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                )}
-
                 {/* Applicant Name - Only show for new profile requests */}
                 {formData.requestType === 'new' && (
                   <div>
@@ -394,8 +544,9 @@ export default function RequestFormModal({
                     <input
                       type="text"
                       value={formData.applicant_name}
-                      onChange={(e) => handleInputChange('applicant_name', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={(e) => !isClosed && handleInputChange('applicant_name', e.target.value)}
+                      readOnly={isClosed}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                       placeholder="Enter profile name"
                       required
                     />
@@ -413,8 +564,9 @@ export default function RequestFormModal({
                       <input
                         type="email"
                         value={formData.applicant_email}
-                        onChange={(e) => handleInputChange('applicant_email', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => !isClosed && handleInputChange('applicant_email', e.target.value)}
+                        readOnly={isClosed}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                         placeholder="Enter email address"
                         required
                       />
@@ -428,51 +580,125 @@ export default function RequestFormModal({
                       <input
                         type="tel"
                         value={formData.applicant_phone}
-                        onChange={(e) => handleInputChange('applicant_phone', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => !isClosed && handleInputChange('applicant_phone', e.target.value)}
+                        readOnly={isClosed}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                         placeholder="Enter phone number"
                       />
                     </div>
                   </>
                 )}
 
-                {/* Details */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <FileText className="w-4 h-4 inline mr-1" />
-                    Details
-                  </label>
-                  <textarea
-                    value={formData.details}
-                    onChange={(e) => handleInputChange('details', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Additional information about the request"
-                  />
-                </div>
               </>
             )}
 
-            {/* Step 2: Groups Selection */}
+            {/* Step 2: Groups Selection + Details */}
             {currentStep === 2 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  <Users className="w-4 h-4 inline mr-1" />
-                  Select Groups *
-                </label>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    <Users className="w-4 h-4 inline mr-1" />
+                    Select Groups *
+                  </label>
                 
-                {/* Loading state */}
-                {isLoadingGroups && (
-                  <div className="text-center py-8">
-                    <div className="inline-flex items-center space-x-2 text-gray-500">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                      <span>Loading groups...</span>
-                    </div>
+                {/* Show approved/denied lists when closed, otherwise show selectable grid */}
+                {isClosed ? (
+                  <div className="space-y-4">
+                    {/* Approved Groups List */}
+                    {approvedGroups.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                          <span>Approved</span>
+                        </h4>
+                        <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                          {approvedGroups.map(([groupId]) => {
+                            const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                            return (
+                              <div
+                                key={groupId}
+                                className="flex-shrink-0"
+                                title={getGroupDisplayName(groupId)}
+                              >
+                                <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-green-500 bg-green-100 flex items-center justify-center">
+                                  {ImageComponent(
+                                    group?.representative_face && group?.id 
+                                      ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                      : null,
+                                    {
+                                      width: 32,
+                                      height: 32,
+                                      className: 'w-full h-full object-cover',
+                                      alt: getGroupDisplayName(groupId),
+                                      iconType: 'person'
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Denied Groups List */}
+                    {deniedGroups.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                          <XCircle className="w-4 h-4 text-red-600" />
+                          <span>Denied</span>
+                        </h4>
+                        <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                          {deniedGroups.map(([groupId]) => {
+                            const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                            return (
+                              <div
+                                key={groupId}
+                                className="flex-shrink-0"
+                                title={getGroupDisplayName(groupId)}
+                              >
+                                <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-red-500 bg-red-100 flex items-center justify-center">
+                                  {ImageComponent(
+                                    group?.representative_face && group?.id 
+                                      ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                      : null,
+                                    {
+                                      width: 32,
+                                      height: 32,
+                                      className: 'w-full h-full object-cover',
+                                      alt: getGroupDisplayName(groupId),
+                                      iconType: 'person'
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {approvedGroups.length === 0 && deniedGroups.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-sm">No groups in this request</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                
-                {/* Search and Sort Controls */}
-                {!isLoadingGroups && (
+                ) : (
+                  <>
+                    {/* Loading state */}
+                    {isLoadingGroups && (
+                      <div className="text-center py-8">
+                        <div className="inline-flex items-center space-x-2 text-gray-500">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                          <span>Loading groups...</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Search and Sort Controls */}
+                    {!isLoadingGroups && (
                   <>
                     <div className="mb-4 flex flex-col sm:flex-row gap-3">
                       {/* Search */}
@@ -489,14 +715,6 @@ export default function RequestFormModal({
                       
                       {/* Sort Controls */}
                       <div className="flex gap-2">
-                        <select
-                          value={sortBy}
-                          onChange={(e) => setSortBy(e.target.value)}
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="name">Sort by Name</option>
-                          <option value="count">Sort by Count</option>
-                        </select>
                         <button
                           type="button"
                           onClick={handleToggleSortOrder}
@@ -555,10 +773,109 @@ export default function RequestFormModal({
                     </div>
                     
                     <p className="text-xs text-gray-500 mt-2">
-                      Selected {selectedGroups.size} group{selectedGroups.size !== 1 ? 's' : ''}
+                      Selected {selectableGroupsCount} group{selectableGroupsCount !== 1 ? 's' : ''}
                     </p>
+                      </>
+                    )}
+
+                    {/* Approved and Denied Groups List - Show below grid for open requests */}
+                    {(approvedGroups.length > 0 || deniedGroups.length > 0) && (
+                      <div className="mt-4 space-y-4">
+                        {/* Approved Groups List */}
+                        {approvedGroups.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span>Approved</span>
+                            </h4>
+                            <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                              {approvedGroups.map(([groupId]) => {
+                                const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                                return (
+                                  <div
+                                    key={groupId}
+                                    className="flex-shrink-0"
+                                    title={getGroupDisplayName(groupId)}
+                                  >
+                                    <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-green-500 bg-green-100 flex items-center justify-center">
+                                      {ImageComponent(
+                                        group?.representative_face && group?.id 
+                                          ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                          : null,
+                                        {
+                                          width: 32,
+                                          height: 32,
+                                          className: 'w-full h-full object-cover',
+                                          alt: getGroupDisplayName(groupId),
+                                          iconType: 'person'
+                                        }
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Denied Groups List */}
+                        {deniedGroups.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                              <XCircle className="w-4 h-4 text-red-600" />
+                              <span>Denied</span>
+                            </h4>
+                            <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                              {deniedGroups.map(([groupId]) => {
+                                const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                                return (
+                                  <div
+                                    key={groupId}
+                                    className="flex-shrink-0"
+                                    title={getGroupDisplayName(groupId)}
+                                  >
+                                    <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-red-500 bg-red-100 flex items-center justify-center">
+                                      {ImageComponent(
+                                        group?.representative_face && group?.id 
+                                          ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                          : null,
+                                        {
+                                          width: 32,
+                                          height: 32,
+                                          className: 'w-full h-full object-cover',
+                                          alt: getGroupDisplayName(groupId),
+                                          iconType: 'person'
+                                        }
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
+                </div>
+                
+                {/* Details field at bottom of groups step */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FileText className="w-4 h-4 inline mr-1" />
+                    Details
+                  </label>
+                  <textarea
+                    value={formData.details}
+                    onChange={(e) => !isClosed && handleInputChange('details', e.target.value)}
+                    readOnly={isClosed}
+                    onKeyDown={handleKeyDown}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
+                    placeholder="Additional information about the request"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -569,13 +886,13 @@ export default function RequestFormModal({
           <div className="flex justify-between items-center">
             {/* Step Navigation */}
             <div className="flex items-center space-x-3">
-              {currentStep === 2 && (
+              {currentStep === 2 && formData.requestType === 'new' && (
                 <button
                   type="button"
                   onClick={handlePrevStep}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  Back to Details
+                  Back to Profile
                 </button>
               )}
             </div>
@@ -595,23 +912,25 @@ export default function RequestFormModal({
                 <button
                   type="button"
                   onClick={handleNextStep}
-                  disabled={!canProceedToGroups()}
+                  disabled={!canProceedToGroups() || isClosed}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next: Select Groups
                 </button>
               ) : (
-                <button
-                  type="submit"
-                  onClick={handleSubmit}
-                  disabled={loading || selectedGroups.size === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
-                >
-                  {loading && (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  <span>{request ? 'Update Request' : 'Create Request'}</span>
-                </button>
+                !isClosed && (
+                  <button
+                    type="submit"
+                    onClick={handleSubmit}
+                    disabled={loading || selectedGroups.size === 0}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    {loading && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    <span>{request ? 'Update Request' : 'Create Request'}</span>
+                  </button>
+                )
               )}
             </div>
           </div>

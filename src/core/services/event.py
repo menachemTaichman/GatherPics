@@ -56,13 +56,12 @@ class Event():
     def toggle_access_request(
         self,
         access_request_id: str,
-        approve: bool,
-        group_ids: list[str] | None = None,
-        close: bool = False,
+        approved_group_ids: list[str] | None = None,
+        denied_group_ids: list[str] | None = None,
         closed_details: str | None = None,
         applicant_profile_id: str | None = None
     ) -> str | None:
-        return self.models.toggle_access_request(access_request_id, approve, group_ids, close, closed_details, applicant_profile_id)
+        self.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""

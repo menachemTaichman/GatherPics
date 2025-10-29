@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, AlertCircle, Check, Save, AlertTriangle } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -9,6 +9,7 @@ import { useGroupsList, useRequestById } from '../../utils/dataManager';
 import { getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
+import { ImageComponent } from '../../hooks/useImage.jsx';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -28,9 +29,11 @@ function formatDateTime(dateString) {
 }
 
 function getGroupStatus(groupData) {
-  if (groupData.approved === true) {
+  const approved = groupData.approved;
+  // Handle both boolean and numeric values (backend stores 1/0)
+  if (approved === true || approved === 1) {
     return { status: 'approved', color: 'green', icon: CheckCircle };
-  } else if (groupData.approved === false) {
+  } else if (approved === false || approved === 0) {
     return { status: 'denied', color: 'red', icon: XCircle };
   } else {
     return { status: 'pending', color: 'blue', icon: Clock };
@@ -46,9 +49,11 @@ export default function RequestDetailModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [groupActions, setGroupActions] = useState({}); // { groupId: 'approve' | 'deny' | null }
-  const [closeRequest, setCloseRequest] = useState(false);
+  const [closedDetails, setClosedDetails] = useState('');
   const [profileName, setProfileName] = useState('');
   const [nameConflict, setNameConflict] = useState(false);
+  const [hoveredGroup, setHoveredGroup] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   
   const { showToast } = useToast();
   const permissions = usePermissions();
@@ -117,7 +122,7 @@ export default function RequestDetailModal({
     if (isOpen && requestData) {
       setProfileName(requestData.applicant_name || '');
       setGroupActions({});
-      setCloseRequest(false);
+      setClosedDetails('');
       setNameConflict(false);
       
       // Check name conflict when modal opens (if applicant_profile_id is null and name exists)
@@ -146,33 +151,21 @@ export default function RequestDetailModal({
     });
   };
 
-  const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
-    groupId => requestData.groups[groupId].approved === null
-  ) : [];
-
-  const handleApproveAll = () => {
-    // Same as handleApprovePending - they do the same thing
-    handleApprovePending();
-  };
-
-  const handleDenyAll = () => {
-    // Same as handleDenyPending - they do the same thing
-    handleDenyPending();
-  };
 
   const handleApprovePending = () => {
-    if (!requestData?.groups) return;
+    if (pendingGroups.length === 0) return;
     const actions = { ...groupActions };
-    const allSelected = allPendingGroups.every(groupId => groupActions[groupId] === 'approve');
+    const pendingGroupIds = pendingGroups.map(([groupId]) => groupId);
+    const allSelected = pendingGroupIds.every(groupId => groupActions[groupId] === 'approve');
     
     if (allSelected) {
       // Cancel all
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         delete actions[groupId];
       });
     } else {
       // Set all to approve
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         actions[groupId] = 'approve';
       });
     }
@@ -180,18 +173,19 @@ export default function RequestDetailModal({
   };
 
   const handleDenyPending = () => {
-    if (!requestData?.groups) return;
+    if (pendingGroups.length === 0) return;
     const actions = { ...groupActions };
-    const allSelected = allPendingGroups.every(groupId => groupActions[groupId] === 'deny');
+    const pendingGroupIds = pendingGroups.map(([groupId]) => groupId);
+    const allSelected = pendingGroupIds.every(groupId => groupActions[groupId] === 'deny');
     
     if (allSelected) {
       // Cancel all
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         delete actions[groupId];
       });
     } else {
       // Set all to deny
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         actions[groupId] = 'deny';
       });
     }
@@ -199,15 +193,16 @@ export default function RequestDetailModal({
   };
 
   const handleApproveNotSelected = () => {
-    if (!requestData?.groups) return;
+    if (pendingGroups.length === 0) return;
     const actions = { ...groupActions };
+    const pendingGroupIds = pendingGroups.map(([groupId]) => groupId);
     // Get pending groups that don't have an action yet
-    const notSelectedGroups = allPendingGroups.filter(groupId => !groupActions[groupId]);
+    const notSelectedGroups = pendingGroupIds.filter(groupId => !groupActions[groupId]);
     const allSelected = notSelectedGroups.length > 0 && notSelectedGroups.every(groupId => groupActions[groupId] === 'approve');
     
     if (allSelected && notSelectedGroups.length > 0) {
       // Cancel all
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         delete actions[groupId];
       });
     } else {
@@ -220,15 +215,16 @@ export default function RequestDetailModal({
   };
 
   const handleDenyNotSelected = () => {
-    if (!requestData?.groups) return;
+    if (pendingGroups.length === 0) return;
     const actions = { ...groupActions };
+    const pendingGroupIds = pendingGroups.map(([groupId]) => groupId);
     // Get pending groups that don't have an action yet
-    const notSelectedGroups = allPendingGroups.filter(groupId => !groupActions[groupId]);
+    const notSelectedGroups = pendingGroupIds.filter(groupId => !groupActions[groupId]);
     const allSelected = notSelectedGroups.length > 0 && notSelectedGroups.every(groupId => groupActions[groupId] === 'deny');
     
     if (allSelected && notSelectedGroups.length > 0) {
       // Cancel all
-      allPendingGroups.forEach(groupId => {
+      pendingGroupIds.forEach(groupId => {
         delete actions[groupId];
       });
     } else {
@@ -241,15 +237,15 @@ export default function RequestDetailModal({
   };
 
   const handleApplyChanges = async () => {
-    const approvedGroups = Object.keys(groupActions).filter(id => groupActions[id] === 'approve');
-    const deniedGroups = Object.keys(groupActions).filter(id => groupActions[id] === 'deny');
+    const approvedGroupIds = Object.keys(groupActions).filter(id => groupActions[id] === 'approve');
+    const deniedGroupIds = Object.keys(groupActions).filter(id => groupActions[id] === 'deny');
     
-    if (approvedGroups.length === 0 && deniedGroups.length === 0) {
+    if (approvedGroupIds.length === 0 && deniedGroupIds.length === 0) {
       showToast('Please select at least one action', 'error');
       return;
     }
 
-    if (approvedGroups.length > 0 && !requestData.applicant_profile_id) {
+    if (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) {
       if (!profileName || !profileName.trim()) {
         showToast('Profile name is required for new profiles', 'error');
         return;
@@ -265,26 +261,14 @@ export default function RequestDetailModal({
     try {
       const requestId = request.access_request_id || request.id;
       
-      if (approvedGroups.length > 0) {
-        await requestsAPI.approve(
+      await requestsAPI.toggle(
           requestId,
-          approvedGroups,
-          closeRequest,
-          null,
-          profileName.trim() || null,
+        approvedGroupIds.length > 0 ? approvedGroupIds : null,
+        deniedGroupIds.length > 0 ? deniedGroupIds : null,
+        closedDetails.trim() || null,
+        (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) ? profileName.trim() : null,
           eventUrl
         );
-      }
-      
-      if (deniedGroups.length > 0) {
-        await requestsAPI.deny(
-          requestId,
-          deniedGroups,
-          closeRequest,
-          null,
-          eventUrl
-        );
-      }
       
       showToast('Changes applied successfully', 'success');
       onClose();
@@ -296,79 +280,6 @@ export default function RequestDetailModal({
     }
   };
 
-  const handleApproveRequest = async () => {
-    const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
-      groupId => requestData.groups[groupId].approved === null
-    ) : [];
-    
-    if (allPendingGroups.length === 0) {
-      showToast('No pending groups to approve', 'error');
-      return;
-    }
-
-    if (!requestData.applicant_profile_id) {
-      if (!profileName || !profileName.trim()) {
-        showToast('Profile name is required for new profiles', 'error');
-        return;
-      }
-      if (nameConflict) {
-        showToast('Cannot save: Profile name already exists', 'error');
-        return;
-      }
-    }
-
-    setLoading(true);
-    
-    try {
-      const requestId = request.access_request_id || request.id;
-      await requestsAPI.approve(
-        requestId,
-        allPendingGroups,
-        closeRequest,
-        null,
-        profileName.trim() || null,
-        eventUrl
-      );
-      showToast('Request approved successfully', 'success');
-      onClose();
-    } catch (error) {
-      console.error('Failed to approve request:', error);
-      showToast(formatErrorMessage('approve request', error), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDenyRequest = async () => {
-    const allPendingGroups = requestData?.groups ? Object.keys(requestData.groups).filter(
-      groupId => requestData.groups[groupId].approved === null
-    ) : [];
-    
-    if (allPendingGroups.length === 0) {
-      showToast('No pending groups to deny', 'error');
-      return;
-    }
-
-    setLoading(true);
-    
-    try {
-      const requestId = request.access_request_id || request.id;
-      await requestsAPI.deny(
-        requestId,
-        allPendingGroups,
-        closeRequest,
-        null,
-        eventUrl
-      );
-      showToast('Request denied successfully', 'success');
-      onClose();
-    } catch (error) {
-      console.error('Failed to deny request:', error);
-      showToast(formatErrorMessage('deny request', error), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleClose = () => {
     if (!loading) {
@@ -376,23 +287,81 @@ export default function RequestDetailModal({
     }
   };
 
-  if (!isOpen || !requestData) return null;
+  const handleMouseEnter = (groupId, event) => {
+    setHoveredGroup(groupId);
+    setTooltipPosition({ x: event.clientX, y: event.clientY });
+  };
 
-  const pendingGroups = requestData.groups ? Object.keys(requestData.groups).filter(
-    groupId => requestData.groups[groupId].approved === null
-  ) : [];
+  const handleMouseMove = (event) => {
+    if (hoveredGroup) {
+      setTooltipPosition({ x: event.clientX, y: event.clientY });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredGroup(null);
+  };
+
+  // Global mouse tracking for tooltip positioning
+  useEffect(() => {
+    const handleGlobalMouseMove = (event) => {
+      if (hoveredGroup) {
+        setTooltipPosition({ x: event.clientX, y: event.clientY });
+      }
+    };
+
+    if (hoveredGroup) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+    };
+  }, [hoveredGroup]);
+
+  // Split groups by status
+  const groupEntries = requestData?.groups ? Object.entries(requestData.groups) : [];
+  const pendingGroups = groupEntries.filter(([groupId, groupData]) => {
+    const approved = groupData.approved;
+    return approved === null || approved === undefined;
+  });
+  const approvedGroups = groupEntries.filter(([groupId, groupData]) => {
+    const approved = groupData.approved;
+    return approved === true || approved === 1;
+  });
+  const deniedGroups = groupEntries.filter(([groupId, groupData]) => {
+    const approved = groupData.approved;
+    return approved === false || approved === 0;
+  });
+
+  // Sort each list by label
+  const sortByLabel = ([idA], [idB]) => {
+    const groupA = allGroups.find(g => (g.id || g.group_id) === idA);
+    const groupB = allGroups.find(g => (g.id || g.group_id) === idB);
+    const labelA = groupA?.label || '';
+    const labelB = groupB?.label || '';
+    return labelA.localeCompare(labelB);
+  };
+  pendingGroups.sort(sortByLabel);
+  approvedGroups.sort(sortByLabel);
+  deniedGroups.sort(sortByLabel);
+
+  const getGroupDisplayName = (groupId) => {
+    const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+    if (!group) return 'Unknown';
+    const id = group.id || group.group_id || '';
+    return group.label || `Person ${id}`;
+  };
+
+  if (!isOpen || !requestData) return null;
 
   const canApprove = permissions.isProfilesManager && pendingGroups.length > 0;
 
   // Check state of all buttons
   const getAllPendingActionState = () => {
-    if (!requestData?.groups) return null;
-    const pendingGroups = Object.keys(requestData.groups).filter(
-      groupId => requestData.groups[groupId].approved === null
-    );
     if (pendingGroups.length === 0) return null;
     
-    const actions = pendingGroups.map(id => groupActions[id]);
+    const actions = pendingGroups.map(([id]) => groupActions[id]);
     const allApproved = actions.every(a => a === 'approve');
     const allDenied = actions.every(a => a === 'deny');
     
@@ -528,20 +497,42 @@ export default function RequestDetailModal({
                   </div>
                 </div>
               )}
+
+              {/* Closed Details */}
+              {canApprove && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Closed Details</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Details (optional)
+                    </label>
+                    <textarea
+                      value={closedDetails}
+                      onChange={(e) => setClosedDetails(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter details about closing this request"
+                      rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Optional details that will be added to the request's closed details list
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Groups Selection */}
-            <div className="space-y-3">
-              <h3 className="text-lg font-medium text-gray-900">Groups</h3>
+            <div className="space-y-2">
+              <h3 className="text-lg font-medium text-gray-900">People</h3>
               
               {canApprove && (
                 <div className="space-y-0">
                   {/* "All pending" row */}
-                  <div className="flex items-center px-3 py-1">
+                  <div className="flex items-center px-2 py-0.5">
                     <div className="flex-1">
                       <span className="text-xs text-gray-500 font-medium">All pending:</span>
                     </div>
-                    <div className="flex items-center space-x-2 flex-shrink-0">
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
                       {(() => {
                         const state = getAllPendingActionState();
                         return (
@@ -581,11 +572,11 @@ export default function RequestDetailModal({
                   </div>
                   
                   {/* "All not selected" row */}
-                  <div className="flex items-center px-3 py-1">
+                  <div className="flex items-center px-2 py-0.5">
                     <div className="flex-1">
                       <span className="text-xs text-gray-500 font-medium">All not selected:</span>
                     </div>
-                    <div className="flex items-center space-x-2 flex-shrink-0">
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
                       {/* Spacer to align with status icon column in group rows */}
                       <div className="w-5 h-5" />
                       <button
@@ -607,31 +598,16 @@ export default function RequestDetailModal({
                 </div>
               )}
               
-              <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
-                {requestData.groups && Object.keys(requestData.groups).length > 0 ? (
+              {/* Pending Groups List */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-1">Pending</h4>
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                  {pendingGroups.length > 0 ? (
                   <div className="divide-y divide-gray-100">
-                    {Object.entries(requestData.groups).sort(([idA, dataA], [idB, dataB]) => {
-                      // Sort by status first: pending (null) = 0, approved (true) = 1, denied (false) = 2
-                      const statusA = dataA.approved === null ? 0 : (dataA.approved ? 1 : 2);
-                      const statusB = dataB.approved === null ? 0 : (dataB.approved ? 1 : 2);
-                      
-                      if (statusA !== statusB) {
-                        return statusA - statusB;
-                      }
-                      
-                      // Then sort by label
-                      const groupA = allGroups.find(g => (g.id || g.group_id) === idA);
-                      const groupB = allGroups.find(g => (g.id || g.group_id) === idB);
-                      const labelA = groupA?.label || '';
-                      const labelB = groupB?.label || '';
-                      
-                      return labelA.localeCompare(labelB);
-                    }).map(([groupId, groupData]) => {
-                      // Try to find group by ID (normalized) or by group_id (raw from backend)
+                      {pendingGroups.map(([groupId, groupData]) => {
                       const group = allGroups.find(g => (g.id || g.group_id) === groupId);
                       const statusInfo = getGroupStatus(groupData);
                       const StatusIcon = statusInfo.icon;
-                      const isPending = groupData.approved === null;
                       const isAccessible = group?.is_accessible !== false;
                       const action = groupActions[groupId];
                       const isApproved = action === 'approve';
@@ -644,7 +620,6 @@ export default function RequestDetailModal({
                             !isAccessible ? 'opacity-50' : ''
                           }`}
                         >
-                          {/* Left: Avatar and info */}
                           <div className="flex items-center space-x-3 flex-1 min-w-0">
                             {group?.representative_face && group?.id ? (
                               <img
@@ -658,26 +633,12 @@ export default function RequestDetailModal({
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2">
                                 <p className="text-sm font-medium text-gray-900 truncate">{group?.label || 'Unknown'}</p>
-                                {!isAccessible && (
-                                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 flex-shrink-0">
-                                    Not accessible
-                                  </span>
-                                )}
-                              </div>
                             </div>
                           </div>
                           
-                          {/* Right: Status icon and buttons */}
                           <div className="flex items-center space-x-2 flex-shrink-0">
-                            <StatusIcon className={`w-5 h-5 ${
-                              statusInfo.color === 'blue' ? 'text-blue-600' :
-                              statusInfo.color === 'green' ? 'text-green-600' :
-                              statusInfo.color === 'red' ? 'text-red-600' :
-                              'text-yellow-600'
-                            }`} />
-                            {canApprove && isPending && isAccessible && (
+                              {canApprove && isAccessible && (
                               <>
                                 <button
                                   onClick={() => handleGroupAction(groupId, 'approve')}
@@ -709,10 +670,89 @@ export default function RequestDetailModal({
                 ) : (
                   <div className="p-4 text-center text-gray-500">
                     <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm">No groups in this request</p>
-                  </div>
-                )}
+                      <p className="text-sm">No pending groups</p>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* Approved Groups List */}
+              {approvedGroups.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center space-x-1.5">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span>Approved</span>
+                  </h4>
+                  <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                    {approvedGroups.map(([groupId]) => {
+                      const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                      return (
+                        <div
+                          key={groupId}
+                          className="flex-shrink-0 relative group"
+                          onMouseEnter={(event) => handleMouseEnter(groupId, event)}
+                          onMouseLeave={handleMouseLeave}
+                          onMouseMove={handleMouseMove}
+                        >
+                          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-green-500 bg-green-100 flex items-center justify-center">
+                            {ImageComponent(
+                              group?.representative_face && group?.id 
+                                ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                : null,
+                              {
+                                width: 32,
+                                height: 32,
+                                className: 'w-full h-full object-cover',
+                                alt: getGroupDisplayName(groupId),
+                                iconType: 'person'
+                              }
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Denied Groups List */}
+              {deniedGroups.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center space-x-1.5">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    <span>Denied</span>
+                  </h4>
+                  <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                    {deniedGroups.map(([groupId]) => {
+                      const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                      return (
+                        <div
+                          key={groupId}
+                          className="flex-shrink-0 relative group"
+                          onMouseEnter={(event) => handleMouseEnter(groupId, event)}
+                          onMouseLeave={handleMouseLeave}
+                          onMouseMove={handleMouseMove}
+                        >
+                          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-red-500 bg-red-100 flex items-center justify-center">
+                            {ImageComponent(
+                              group?.representative_face && group?.id 
+                                ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                : null,
+                              {
+                                width: 32,
+                                height: 32,
+                                className: 'w-full h-full object-cover',
+                                alt: getGroupDisplayName(groupId),
+                                iconType: 'person'
+                              }
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               
               <div className="min-h-[20px]">
                 <p className="text-xs text-gray-500">
@@ -730,61 +770,44 @@ export default function RequestDetailModal({
           </div>
         </div>
 
+        {/* Floating Tooltip */}
+        <AnimatePresence>
+          {hoveredGroup && (
+            <motion.div 
+              key={`tooltip-${hoveredGroup}`}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.15 }}
+              className="fixed px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg pointer-events-none whitespace-nowrap z-[60]"
+              style={{
+                left: `${tooltipPosition.x + 15}px`,
+                top: `${tooltipPosition.y - 15}px`,
+              }}
+            >
+              <div className="font-medium">
+                {getGroupDisplayName(hoveredGroup)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-700">Close request:</span>
-              <button
-                onClick={() => setCloseRequest(!closeRequest)}
-                className={`w-10 h-6 rounded-full relative transition-colors ${closeRequest ? 'bg-blue-600' : 'bg-gray-300'}`}
-              >
-                <span className={`absolute top-0.5 ${closeRequest ? 'left-5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all`} />
-              </button>
-              <span className="text-xs text-gray-500">(deny remaining)</span>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              {canApprove && (
-                <>
+          <div className="flex items-center justify-end">
+            {canApprove && (
                   <button
                     onClick={handleApplyChanges}
                     disabled={loading || Object.keys(groupActions).length === 0}
-                    className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                    title="Apply Changes"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
                     {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    {!loading && <Save className="w-5 h-5" />}
+                {!loading && <Save className="w-4 h-4" />}
+                <span>Apply Changes</span>
                   </button>
-                  
-                  <button
-                    onClick={handleDenyRequest}
-                    disabled={loading || pendingGroups.length === 0}
-                    className="w-10 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                    title="Deny Request"
-                  >
-                    {loading && (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    )}
-                    {!loading && <XCircle className="w-5 h-5" />}
-                  </button>
-                  
-                  <button
-                    onClick={handleApproveRequest}
-                    disabled={loading || pendingGroups.length === 0}
-                    className="w-10 h-10 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                    title="Approve Request"
-                  >
-                    {loading && (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    )}
-                    {!loading && <CheckCircle className="w-5 h-5" />}
-                  </button>
-                </>
               )}
-            </div>
           </div>
         </div>
       </motion.div>

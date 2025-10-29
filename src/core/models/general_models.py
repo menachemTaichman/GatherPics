@@ -212,7 +212,7 @@ class GeneralModels(BaseModels):
         
         self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
-    def toggle_access_request(self, event_id: str, access_request_id: str, approve: bool, group_ids: list[str] | None = None, close: bool = False, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
+    def toggle_access_request(self, event_id: str, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
         """
         Toggle an access request.
         Returns:
@@ -222,17 +222,20 @@ class GeneralModels(BaseModels):
         if not event:
             raise Forbidden('Profile does not have permission to toggle this access request')
 
+        if not approved_group_ids and not denied_group_ids:
+            raise Forbidden('At least one group must be approved or denied')
+
         access_request = event.models.get_entities('access_requests', access_request_id)
         if not access_request:
             raise Forbidden('Access request not found')
         
         applicant_profile_id = None
-        if approve and not access_request['applicant_profile_id']:
+        if approved_group_ids and not access_request['applicant_profile_id']:
             label = profile_name or access_request['applicant_name']
             password = secrets.token_urlsafe(6)
             applicant_profile_id = self.create_profile(label, password, 0, event_id=event_id)
         
-        event.toggle_access_request(access_request_id, approve, group_ids, close, closed_details, applicant_profile_id)
+        event.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
         return applicant_profile_id
 
     # Profile-Event management

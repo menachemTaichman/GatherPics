@@ -122,40 +122,6 @@ def create_access_request(event_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-# TODO: remove this route
-@request_bp.route("/requests/<int:request_id>", methods=["PATCH"])
-@require_auth
-def update_request(event_id, request_id):
-    """Update an access request."""
-    event = get_event(event_id)
-    if not event.models.is_accessible('access_requests', request_id):
-        return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
-        
-    data = request.json or {}
-    try:
-        allowed_fields = {'is_closed', 'closed_details', 'closed_at'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        
-        if sanitized:
-            event.models.edit('access_requests', request_id, sanitized)
-            updated_request = event.models.get_entities('access_requests', [request_id])
-            changes = [{
-                'type': 'UPDATE',
-                'entity': 'access_request',
-                'items': updated_request
-            }]
-            
-            response = {"success": True, "changes": changes}
-        else:
-            response = {"success": False}
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
 @request_bp.route("/my-requests/<int:request_id>", methods=["PATCH"])
 @require_auth
 def update_my_request(event_id, request_id):
@@ -169,16 +135,31 @@ def update_my_request(event_id, request_id):
         
         if sanitized:
             event.models.edit('access_requests', request_id, sanitized)
-            updated_request = event.models.get_entities('my_access_requests', [request_id])
-            changes = [{
-                'type': 'UPDATE',
-                'entity': 'my_access_request',
-                'items': updated_request
-            }]
-            
-            response = {"success": True, "changes": changes}
-        else:
-            response = {"success": False}
+
+        # Handle groups to add
+        if 'groups_to_add' in data and isinstance(data['groups_to_add'], list) and len(data['groups_to_add']) > 0:
+            event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_add'], operation=ChildOperation.ADD)
+        
+        # Handle groups to remove
+        if 'groups_to_remove' in data and isinstance(data['groups_to_remove'], list) and len(data['groups_to_remove']) > 0:
+            event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_remove'], operation=ChildOperation.REMOVE)
+        
+        updated_request = event.models.get_entities('my_access_requests', [request_id])
+        groups, relation_data = event.models.get_childs('my_access_requests', request_id, 'groups')
+
+        changes = [{
+            'type': 'UPDATE',
+            'entity': 'my_access_request',
+            'items': updated_request
+        }, {
+            'type': 'RELATION_SET',
+            'relation': 'my_access_request.groups',
+            'parentId': request_id,
+            'entities': groups,
+            'relationData': relation_data
+        }]
+        
+        response = {"success": True, "changes": changes}
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
@@ -235,23 +216,30 @@ def delete_my_request(event_id, request_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@request_bp.route("/requests/<int:request_id>/approve", methods=["POST"])
+@request_bp.route("/requests/<int:request_id>/toggle", methods=["POST"])
 @require_auth
-def approve_request(event_id, request_id):
-    """Approve an access request (partial or full)."""
+def toggle_request(event_id, request_id):
+    """Toggle access request (approve/deny groups)."""
     event = get_event(event_id)
     if not event.models.is_accessible('access_requests', request_id):
         return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
     
     data = request.json or {}
     try:
-        group_ids = data.get('groupIds')  # None means approve all
-        close = data.get('close', False)
+        approved_group_ids = data.get('groupsApproved') or []
+        denied_group_ids = data.get('groupsDenied') or []
         closed_details = data.get('closedDetails')
         profile_name = data.get('profileName')
         
         general_models = get_general_models()
-        applicant_profile_id = general_models.toggle_access_request(event_id, request_id, True, group_ids, close, closed_details, profile_name)
+        applicant_profile_id = general_models.toggle_access_request(
+            event_id, 
+            request_id,
+            approved_group_ids=approved_group_ids,
+            denied_group_ids=denied_group_ids,
+            closed_details=closed_details,
+            profile_name=profile_name
+        )
         
         # Return updated request
         updated_request = event.models.get_entities('access_requests', [request_id])
@@ -274,40 +262,6 @@ def approve_request(event_id, request_id):
                 'items': event.models.get_entities('profiles', [applicant_profile_id])
             })
         
-        return jsonify({'success': True, 'changes': changes})
-        
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@request_bp.route("/requests/<int:request_id>/deny", methods=["POST"])
-@require_auth
-def deny_request(event_id, request_id):
-    """Deny an access request (partial or full)."""
-    event = get_event(event_id)
-    data = request.json or {}
-    try:
-        group_ids = data.get('group_ids')  # None means deny all
-        close = data.get('close', False)
-        closed_details = data.get('closed_details')
-        general_models = get_general_models()
-        general_models.toggle_access_request(event_id, request_id, False, group_ids, close, closed_details)
-        updated_request = event.models.get_entities('access_requests', [request_id])
-        groups, relation_data = event.models.get_childs('access_requests', request_id, 'groups')
-        changes = [{
-            'type': 'UPDATE',
-            'entity': 'access_request',
-            'items': updated_request
-        },{
-            'type': 'RELATION_SET',
-            'relation': 'access_request.groups',
-            'parentId': request_id,
-            'entities': groups,
-            'relationData': relation_data
-        }]
         return jsonify({'success': True, 'changes': changes})
         
     except Forbidden as e:

@@ -30,20 +30,16 @@ function formatDateTime(dateString) {
 }
 
 function getRequestStatus(request) {
-  if (!request.is_closed) {
-    return { status: 'pending', color: 'blue', icon: Clock };
-  }
+  const status = request.status || 'pending';
   
-  const approvedCount = request.groups_approved_count || 0;
-  const totalCount = request.groups_count || 0;
+  const statusConfig = {
+    pending: { status: 'pending', color: 'blue', icon: Clock },
+    approved: { status: 'approved', color: 'green', icon: CheckCircle },
+    rejected: { status: 'rejected', color: 'red', icon: XCircle },
+    mixed: { status: 'mixed', color: 'yellow', icon: AlertCircle }
+  };
   
-  if (approvedCount === totalCount) {
-    return { status: 'approved', color: 'green', icon: CheckCircle };
-  } else if (approvedCount === 0) {
-    return { status: 'denied', color: 'red', icon: XCircle };
-  } else {
-    return { status: 'partial', color: 'yellow', icon: AlertCircle };
-  }
+  return statusConfig[status] || statusConfig.pending;
 }
 
 export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {

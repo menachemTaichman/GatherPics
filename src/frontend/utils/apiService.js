@@ -1111,11 +1111,14 @@ export const requestsAPI = {
   },
   
   // Get my request by ID
-  getMyRequestById: async (requestId, eventUrl) => {
+  getMyRequestById: async (requestId, eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const key = `MY_REQUEST_GET_BY_ID:${eventId}:${requestId}`;
+    // Include cache-busting param in key if present
+    const cacheKey = params._t ? `${eventId}:${requestId}:${params._t}` : `${eventId}:${requestId}`;
+    const key = `MY_REQUEST_GET_BY_ID:${cacheKey}`;
     const result = await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/my-requests/${requestId}`);
+      const queryString = params._t ? `?_t=${params._t}` : '';
+      const response = await api.get(`/api/events/${eventId}/my-requests/${requestId}${queryString}`);
       return response.data;
     });
     return result;
@@ -1141,25 +1144,17 @@ export const requestsAPI = {
     const response = await api.delete(`/api/events/${eventId}/my-requests/${requestId}`);
     return response.data;
   },
-  
-  // Legacy method for backwards compatibility
-  update: async (requestId, data, eventUrl) => {
-    return await requestsAPI.updateMyRequest(requestId, data, eventUrl);
-  },
-  
-  // Approve request
-  approve: async (requestId, groupIds, close, closedDetails, profileName, eventUrl) => {
+    
+  // Toggle request (approve/deny groups)
+  toggle: async (requestId, groupsApproved, groupsDenied, closedDetails, profileName, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const data = { groupIds, close, closedDetails, profileName };
-    const response = await api.post(`/api/events/${eventId}/requests/${requestId}/approve`, data);
-    return response.data;
-  },
-  
-  // Deny request
-  deny: async (requestId, groupIds, close, closedDetails, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const data = { groupIds, close, closedDetails };
-    const response = await api.post(`/api/events/${eventId}/requests/${requestId}/deny`, data);
+    const data = { 
+      groupsApproved: groupsApproved || [],
+      groupsDenied: groupsDenied || [],
+      closedDetails: closedDetails || null,
+      profileName: profileName || null
+    };
+    const response = await api.post(`/api/events/${eventId}/requests/${requestId}/toggle`, data);
     return response.data;
   },
   
