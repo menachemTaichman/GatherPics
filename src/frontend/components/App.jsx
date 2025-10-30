@@ -18,6 +18,9 @@ import { initializePreferences } from '../utils/settings';
 import { ToastProvider, useToast } from '../contexts/ToastContext';
 import { AuthProvider, useAuth } from '../contexts/authContext';
 import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
+import RequestFormModal from './requests/RequestFormModal.jsx';
+import { RequestDetailModal } from './requests';
+import { requestsAPI } from '../utils/apiService';
 
 // Cache for events list to prevent duplicate requests
 let eventsCache = null;
@@ -288,6 +291,8 @@ function AppContent({ eventUrl }) {
   const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
   const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const [openMyRequestId, setOpenMyRequestId] = useState(null);
+  const [openManagerRequest, setOpenManagerRequest] = useState({ id: null, data: null });
 
   // Auto-show login modal when on protected route and not authenticated
   useEffect(() => {
@@ -316,6 +321,34 @@ function AppContent({ eventUrl }) {
 
     fetchCurrentProfile();
   }, [isAuthenticated, eventUrl]);
+
+  // Listen for my-requests:open to show RequestFormModal
+  useEffect(() => {
+    const handler = (ev) => {
+      const rid = ev?.detail?.requestId;
+      if (rid) setOpenMyRequestId(rid);
+    };
+    window.addEventListener('my-requests:open', handler);
+    return () => window.removeEventListener('my-requests:open', handler);
+  }, []);
+
+  // Listen for requests:open-detail (manager) to show RequestDetailModal globally
+  useEffect(() => {
+    const handler = async (ev) => {
+      const rid = ev?.detail?.requestId;
+      if (!rid || !eventUrl) return;
+      try {
+        const res = await requestsAPI.getById(rid, eventUrl);
+        const items = res?.changes?.[0]?.items || [];
+        const req = items[0] || { id: rid, access_request_id: rid };
+        setOpenManagerRequest({ id: rid, data: req });
+      } catch {
+        setOpenManagerRequest({ id: rid, data: { id: rid, access_request_id: rid } });
+      }
+    };
+    window.addEventListener('requests:open-detail', handler);
+    return () => window.removeEventListener('requests:open-detail', handler);
+  }, [eventUrl]);
 
   // Get event name from eventData (resolved by useEventUrls)
   const eventName = eventData?.name || '';
@@ -611,6 +644,24 @@ function AppContent({ eventUrl }) {
 
       {/* Toast Notification */}
       <Toast toast={toast} />
+      {openMyRequestId && (
+        <RequestFormModal
+          isOpen={!!openMyRequestId}
+          onClose={() => setOpenMyRequestId(null)}
+          request={{ id: openMyRequestId }}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+        />
+      )}
+      {openManagerRequest.id && (
+        <RequestDetailModal
+          isOpen={!!openManagerRequest.id}
+          onClose={() => setOpenManagerRequest({ id: null, data: null })}
+          request={openManagerRequest.data}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+        />
+      )}
     </>
   );
 }

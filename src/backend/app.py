@@ -16,6 +16,8 @@ from src.backend.routes import (
     upload_bp,
     file_bp,
     request_bp,
+    notification_bp,
+    event_bp,
 )
 
 app = Flask(__name__)
@@ -41,6 +43,8 @@ app.register_blueprint(profile_bp)
 app.register_blueprint(upload_bp)
 app.register_blueprint(file_bp)
 app.register_blueprint(request_bp)
+app.register_blueprint(notification_bp)
+app.register_blueprint(event_bp)
 
 # Error Handlers
 @app.errorhandler(400)

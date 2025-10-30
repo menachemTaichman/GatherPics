@@ -7,6 +7,8 @@ from src.backend.routes.profile_routes import profile_bp
 from src.backend.routes.upload_routes import upload_bp
 from src.backend.routes.file_routes import file_bp
 from src.backend.routes.request_routes import request_bp
+from src.backend.routes.notification_routes import notification_bp
+from src.backend.routes.event_routes import event_bp
 
 __all__ = [
     'auth_bp',
@@ -18,5 +20,7 @@ __all__ = [
     'upload_bp',
     'file_bp',
     'request_bp',
+    'notification_bp',
+    'event_bp',
 ]
 

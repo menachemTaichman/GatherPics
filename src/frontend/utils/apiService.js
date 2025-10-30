@@ -220,6 +220,22 @@ export const urlHelpers = {
   },
 };
 
+// Resolve event URL by event ID (cached; single-event route only)
+let __eventsIndexById = null;
+export async function getEventUrlById(eventId) {
+  if (!eventId) return null;
+  if (__eventsIndexById && __eventsIndexById[eventId]) return __eventsIndexById[eventId];
+  try {
+    const res = await api.get(`/api/events/${eventId}/url`);
+    const url = res?.data?.url || null;
+    if (url) {
+      __eventsIndexById = { ...( __eventsIndexById || {} ), [eventId]: url };
+      return url;
+    }
+  } catch {}
+  return null;
+}
+
 // Normalization helpers to provide consistent id fields and camelCase refs
 function normalizeFace(face) {
   if (!face || typeof face !== 'object') return face;
@@ -1158,6 +1174,30 @@ export const requestsAPI = {
     return response.data;
   },
   
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getMy: async () => {
+    const response = await api.get(`/api/notifications/my`);
+    return response.data || {};
+  },
+  markAllRead: async () => {
+    const response = await api.patch(`/api/notifications/my/mark-all-read`);
+    return response.data || {};
+  },
+  delete: async (notificationId) => {
+    const response = await api.delete(`/api/notifications/my/${notificationId}`);
+    return response.data || {};
+  },
+  getUnreadCount: async () => {
+    const response = await api.get(`/api/notifications/my/unread-count`);
+    return response.data || {};
+  },
+  getTotalCount: async () => {
+    const response = await api.get(`/api/notifications/my/total-count`);
+    return response.data || {};
+  },
 };
 
 // Optimistic update helpers

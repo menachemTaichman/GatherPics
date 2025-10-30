@@ -115,6 +115,23 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     setSelectedRequest(null);
   };
 
+  // Listen for external open-detail events (from notifications)
+  useEffect(() => {
+    const handler = async (ev) => {
+      const rid = ev?.detail?.requestId;
+      if (!rid) return;
+      try {
+        const res = await requestsAPI.getById(rid, eventUrl);
+        const items = res?.changes?.[0]?.items || [];
+        const req = items[0] || { id: rid, access_request_id: rid };
+        setSelectedRequest(req);
+        setShowDetailModal(true);
+      } catch {}
+    };
+    window.addEventListener('requests:open-detail', handler);
+    return () => window.removeEventListener('requests:open-detail', handler);
+  }, [eventUrl]);
+
   // Sorting similar to UploadsGallery
   const sortedRequests = useMemo(() => {
     if (!isAuthenticated) return currentRequests;

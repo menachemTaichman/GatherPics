@@ -371,36 +371,38 @@ class EventModels(BaseModels):
         valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
-    def create_access_request(
-        self,
-        applicant_name: str | None = None,
-        applicant_email: str | None = None,
-        applicant_phone: str | None = None,
-        details: str | None = None,
-        group_ids: list[str] | None = None
-    ) -> str:
-        """Create an access request."""
-        request_data = {
-            'requested_at': datetime.now(),
-            'applicant_name': applicant_name,
-            'applicant_email': applicant_email,
-            'applicant_phone': applicant_phone,
-            'details': details,
-        }
-        request_id = self.add('access_requests', request_data)
-        if self.get_current_profile()['is_public'] == 1:
-            query = f"""
-                INSERT INTO access_requests_groups (access_request_id, group_id)
-                SELECT g.group_id, ?
-                FROM accessible_groups_helper g
-                WHERE g.group_id IN ({','.join(['?'] * len(group_ids))})
-                AND g.is_accessible = 0
+    def get_access_request_managers(self, access_request_id: str, exclude_ids: list[str] = None) -> list[str]:
+        """
+        Get the managers of an access request.
+        Args:
+            access_request_id: access request id
+            exclude_ids: list of profile ids to exclude
+        Returns:
+            list of manager profile ids
+        """
+        query = f"""
+            SELECT p.profile_id
+            FROM profiles p
+            WHERE EXISTS (
+                SELECT 1
+                FROM access_requests_groups aar
+                LEFT JOIN profile_groups pg
+                ON pg.profile_id = p.profile_id
+                AND pg.group_id = aar.group_id
+                WHERE aar.access_request_id = ?
+                AND (
+                    (p.all_groups = 1 AND pg.group_id IS NULL)
+                    OR (p.all_groups = 0 AND pg.group_id IS NOT NULL)
+                )
+            )
+        """
+        params = [access_request_id]
+        if exclude_ids:
+            query += f"""
+                AND p.profile_id NOT IN ({','.join(['?'] * len(exclude_ids))})
             """
-            self.db.execute_query(query, [request_id] + group_ids)
-            return request_id
-
-        self.edit_childs('my_access_requests', request_id, child='groups', child_ids=group_ids, operation=ChildOperation.ADD)
-        return request_id
+            params.extend(exclude_ids)
+        return self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
 
     def toggle_access_request(
         self,
@@ -409,7 +411,7 @@ class EventModels(BaseModels):
         denied_group_ids: list[str] | None = None,
         closed_details: str | None = None,
         applicant_profile_id: str | None = None
-    ):
+    ) -> str | None:
         """
         Approve or deny an access request for groups.
         Args:
@@ -418,6 +420,8 @@ class EventModels(BaseModels):
             denied_group_ids: list of group ids to deny
             closed_details: details of the closed request to add to the closed details list
             applicant_profile_id: applicant profile id, if None, use the existing applicant profile id
+        Returns:
+            applicant profile id if the request was not completely rejected, None otherwise
         """
         if applicant_profile_id:
             self.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
@@ -449,9 +453,7 @@ class EventModels(BaseModels):
             closed_details = self.db.serialize_value(list, access_request['closed_details'] + [closed_details])
             self.db.execute_query(query, (closed_details, access_request_id))
 
-    def get_open_requests_count(self) -> int:
-        """Get count of open requests for current profile."""
-        return self.db.execute_query('SELECT COUNT(*) FROM accessible_access_requests aar', return_format=ReturnFormat.VALUE) or 0
+        return applicant_profile_id
 
     # -------- Public Access Code helpers --------
     def generate_public_access_code(self, profile_id: str) -> str:

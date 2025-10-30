@@ -1,9 +1,15 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Settings, Clock, User, ShoppingBag, Home, Album, Upload } from 'lucide-react';
+import { Users, Settings, Clock, User, ShoppingBag, Home, Album, Upload, Bell } from 'lucide-react';
 import { SettingsManager, BucketDrawer } from './';
 import useBucketStore from '../../utils/bucketStore';
 import { usePermissions } from '../../hooks/usePermissions';
+import NotificationsDropdown from '../notifications/NotificationsDropdown.jsx';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { profilesAPI } from '../../utils/apiService';
+import { getCurrentProfile } from '../../utils/profileService';
+import { useDataStore } from '../../utils/dataManager';
+import { useAuth } from '../../contexts/authContext';
 
 export default function Header() {
   const location = useLocation();
@@ -13,6 +19,61 @@ export default function Header() {
   const permissions = usePermissions();
 
   const getEventPath = (path) => `/${eventUrl}${path}`;
+
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifButtonRef, setNotifButtonRef] = useState(null);
+  const { isAuthenticated } = useAuth();
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    return () => { unmountedRef.current = true; };
+  }, []);
+
+  // Local counts sourced from current_profile
+  const [notifCounts, setNotifCounts] = useState({ unreadCount: 0, totalCount: 0 });
+  // Synchronous fallback from cached profile
+  const cachedProfile = getCurrentProfile() || {};
+  const effectiveCounts = {
+    totalCount: Number(notifCounts?.totalCount || cachedProfile?.total_notifications || 0),
+    unreadCount: Number(notifCounts?.unreadCount || cachedProfile?.unread_notifications || 0),
+  };
+
+  // No debug logs
+
+  // Fetch counts once per (eventUrl, isAuthenticated) combo
+  const lastFetchSigRef = useRef('');
+  useEffect(() => {
+    const sig = `${eventUrl || ''}|${isAuthenticated ? '1' : '0'}`;
+    if (!isAuthenticated) return;
+    if (lastFetchSigRef.current === sig) {
+      return;
+    }
+    lastFetchSigRef.current = sig;
+    (async () => {
+      try {
+        const res = await profilesAPI.getCurrentProfile(eventUrl);
+        const p = res?.profile || getCurrentProfile() || {};
+        const totalNum = Number(p.total_notifications || 0);
+        const unreadNum = Number(p.unread_notifications || 0);
+        if (!unmountedRef.current) setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+      } catch (e) {
+        // fallback to local cache
+        const p = getCurrentProfile() || {};
+        const totalNum = Number(p.total_notifications || 0);
+        const unreadNum = Number(p.unread_notifications || 0);
+        if (!unmountedRef.current) setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+      }
+    })();
+  }, [eventUrl, isAuthenticated]);
+
+  useEffect(() => {
+    const closeOnOutside = (e) => {
+      if (notifOpen) setNotifOpen(false);
+    };
+    if (notifOpen) {
+      document.addEventListener('click', closeOnOutside);
+      return () => document.removeEventListener('click', closeOnOutside);
+    }
+  }, [notifOpen]);
 
   return (
     <motion.header 
@@ -134,10 +195,32 @@ export default function Header() {
             )}
 
             <SettingsManager />
+
+            {/* Notifications Button - last after settings */}
+            {(effectiveCounts?.totalCount || 0) > 0 && (
+              <button
+                ref={setNotifButtonRef}
+                onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${notifOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
+                title="Notifications"
+              >
+                <div className="relative">
+                  <Bell className="w-4 h-4" />
+                  {(effectiveCounts?.unreadCount || 0) > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+                      {effectiveCounts.unreadCount}
+                    </span>
+                  )}
+                </div>
+              </button>
+            )}
           </nav>
         </div>
       </div>
       <BucketDrawer />
+      {notifOpen && notifButtonRef && (
+        <NotificationsDropdown buttonRef={notifButtonRef} isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+      )}
     </motion.header>
   );
 } 

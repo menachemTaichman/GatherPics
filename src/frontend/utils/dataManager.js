@@ -129,6 +129,9 @@ const ENTITY_STRUCTURE = {
       groups: 'dict', // Store as dict with relation data (approved, closed_at, closed_by)
     },
   },
+  my_notifications: {
+    relations: [],
+  },
 };
 
 const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
@@ -158,6 +161,7 @@ function normalizeEntityKey(entity) {
     case 'upload': return 'uploads';
     case 'access_request': return 'access_requests';
     case 'my_access_request': return 'my_access_requests';
+    case 'my_notification': return 'my_notifications';
     default: return entity;
   }
 }
@@ -322,6 +326,9 @@ export const useDataStore = create((set, get) => {
 
     // Entities persisted per-tab in sessionStorage
     entities: hydrateEntitiesSession(),
+
+    // Notifications meta
+    notificationsMeta: { unreadCount: 0, totalCount: 0 },
   };
 
   const applyUpsertsFromEntitiesDict = (childTypeKey, entitiesDict, nextEntities) => {
@@ -848,10 +855,13 @@ export const useDataStore = create((set, get) => {
         imageViewer: { show: false, image: null, index: 0 },
         loading: false,
         error: null,
-        entities: empty
+        entities: empty,
+        notificationsMeta: { unreadCount: 0, totalCount: 0 }
       });
     },
 
+    // Notifications meta
+    setNotificationsMeta: (meta) => set((state) => ({ notificationsMeta: { ...(state.notificationsMeta || {}), ...(meta || {}) } })),
   };
 });
 

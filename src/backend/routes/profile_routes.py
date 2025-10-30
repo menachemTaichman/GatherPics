@@ -77,6 +77,8 @@ def get_current_profile():
 
     general_models = get_general_models(profile_id)
     profile_general = general_models.profile_context
+    profile_general['total_notifications'] = general_models.count_my_total_notifications()
+    profile_general['unread_notifications'] = general_models.count_my_unread_notifications()
     profile = {**profile_event, **profile_general}
 
     return jsonify({"profile": profile})

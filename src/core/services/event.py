@@ -53,16 +53,6 @@ class Event():
     def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, label: str | None = None, hierarchy_rank: int = 0):
         self.models.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
 
-    def toggle_access_request(
-        self,
-        access_request_id: str,
-        approved_group_ids: list[str] | None = None,
-        denied_group_ids: list[str] | None = None,
-        closed_details: str | None = None,
-        applicant_profile_id: str | None = None
-    ) -> str | None:
-        self.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
-
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
         if not self.profile_context['can_upload_and_delete_images']:

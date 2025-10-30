@@ -116,6 +116,9 @@ class GeneralDB(BaseDB):
                 'primary_key': 'id',
                 'accessible_table': 'accessible_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
+                'serializable': {
+                    'data': dict,
+                }
             },
             'my_notifications': {
                 'primary_key': 'id',
@@ -204,6 +207,7 @@ class GeneralDB(BaseDB):
             'idx_refresh_tokens_token': 'refresh_tokens(token)',
             'idx_events_url': 'events(url)',
             'idx_notifications_profile_id': 'notifications(profile_id)',
+            'idx_notifications_message': 'notifications(message)',
             'idx_notifications_read': 'notifications(read)',
             'idx_notifications_created_at': 'notifications(created_at)',
             'idx_notifications_type': 'notifications(type)',
@@ -357,16 +361,6 @@ class GeneralDB(BaseDB):
             'trg_accessible_notifications_insert': """
                 INSTEAD OF INSERT ON accessible_notifications
                 BEGIN
-                    SELECT CASE
-                        WHEN cur_profile('hierarchy_rank') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: not a profiles manager')
-                        WHEN
-                            cur_profile('hierarchy_rank') <=
-                            (SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.profile_id)
-                        THEN
-                            RAISE(ABORT, 'Permission denied: the profile is not accessible')
-                    END;
-
                     INSERT INTO notifications (profile_id, message, created_at, read, type, data)
                     VALUES (NEW.profile_id, NEW.message, NEW.created_at, NEW.read, NEW.type, NEW.data);
                 END;

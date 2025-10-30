@@ -88,6 +88,7 @@ def get_my_request(event_id, request_id):
 def create_access_request(event_id):
     """Create a new access request."""
     event = get_event(event_id)
+    general_models = get_general_models()
     data = request.json or {}
     
     try:
@@ -105,6 +106,7 @@ def create_access_request(event_id):
         # Add groups to the request
         if data['group_ids'] and isinstance(data['group_ids'], list):
             event.models.edit_childs('my_access_requests', request_id, 'groups', data['group_ids'], operation=ChildOperation.ADD)
+            general_models.ensure_access_request_notifications(event, request_id)
         # Return the created request (both as access_request and my_access_request for the creator)
         created_request = event.models.get_entities('my_access_requests', [request_id])
         changes = [{
@@ -128,6 +130,7 @@ def create_access_request(event_id):
 def update_my_request(event_id, request_id):
     """Update current user's own request."""
     event = get_event(event_id)
+    general_models = get_general_models()
         
     data = request.json or {}
     try:
@@ -137,14 +140,20 @@ def update_my_request(event_id, request_id):
         if sanitized:
             event.models.edit('access_requests', request_id, sanitized)
 
+        edited = False
         # Handle groups to add
         if 'groups_to_add' in data and isinstance(data['groups_to_add'], list) and len(data['groups_to_add']) > 0:
             event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_add'], operation=ChildOperation.ADD)
-        
+            edited = True
+
         # Handle groups to remove
         if 'groups_to_remove' in data and isinstance(data['groups_to_remove'], list) and len(data['groups_to_remove']) > 0:
             event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_remove'], operation=ChildOperation.REMOVE)
-        
+            edited = True
+            
+        if edited:
+            general_models.ensure_access_request_notifications(event, request_id)
+            
         updated_request = event.models.get_entities('my_access_requests', [request_id])
         groups, relation_data = event.models.get_childs('my_access_requests', request_id, 'groups')
 

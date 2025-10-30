@@ -210,6 +210,27 @@ class GeneralModels(BaseModels):
         
         self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
+    def ensure_access_request_notifications(self, event: Event, request_id: str):
+        """
+        Ensure access request notifications are created for the managers of the access request.
+        """
+        query = f'''
+            SELECT n.profile_id
+            FROM notifications n
+            WHERE n.type = 'access_request'
+            AND n.data->>'access_request_id' = ?
+            AND n.data->>'event_id' = ?
+        '''
+        exclude_ids = self.db.execute_query(query, (request_id, event.event_id), return_format=ReturnFormat.LIST_VALUES)
+        managers = event.models.get_access_request_managers(request_id, exclude_ids)
+        for manager in managers:
+            self.add('notifications', {
+                'profile_id': manager,
+                'message': 'A new access request was created',
+                'type': 'access_request',
+                'data': {'access_request_id': request_id, 'event_id': event.event_id}
+            })
+
     def toggle_access_request(self, event_id: str, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
         """
         Toggle an access request.
@@ -233,7 +254,15 @@ class GeneralModels(BaseModels):
             password = secrets.token_urlsafe(6)
             applicant_profile_id = self.create_profile(label, password, 0, event_id=event_id)
         
-        event.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
+        applicant_profile_id = event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
+        if applicant_profile_id:
+            self.add('notifications', {
+                'profile_id': applicant_profile_id,
+                'message': 'Your access request was processed',
+                'type': 'access_request',
+                'data': {'access_request_id': access_request_id, 'event_id': event.event_id}
+            })
+
         return applicant_profile_id
 
     # Profile-Event management
@@ -329,6 +358,11 @@ class GeneralModels(BaseModels):
         query = f'SELECT {fields} FROM events WHERE url = ?'
         return self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
 
+    def get_event_url(self, event_id: str) -> str | None:
+        """Get event URL by event ID."""
+        query = 'SELECT url FROM events WHERE event_id = ?'
+        return self.db.execute_query(query, (event_id,), return_format=ReturnFormat.VALUE)
+
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process images for an event."""
         event = Event(event_id, self.profile_context['profile_id'])
@@ -415,3 +449,29 @@ class GeneralModels(BaseModels):
             params = (profile_id,)
 
         self.db.execute_query(query, params)
+
+    # Notifications helpers
+    def count_my_unread_notifications(self) -> int:
+        """Count my unread notifications."""
+        query = """
+            SELECT COUNT(*) FROM my_notifications WHERE read = 0
+        """
+        return int(self.db.execute_query(query, (), return_format=ReturnFormat.VALUE) or 0)
+
+    def count_my_total_notifications(self) -> int:
+        """Count my total notifications (for hiding bell when 0)."""
+        query = """
+            SELECT COUNT(*) FROM my_notifications
+        """
+        return int(self.db.execute_query(query, (), return_format=ReturnFormat.VALUE) or 0)
+
+    def mark_all_my_notifications_read(self, read_at: str) -> list[str]:
+        """
+        Mark all of my unread notifications as read.
+        Returns:
+            list of notification ids that were marked as read
+        """
+        query = 'SELECT id FROM my_notifications WHERE read = 0'
+        notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
+        self.edit('my_notifications', notification_ids, {'read': 1, 'read_at': read_at})
+        return notification_ids
