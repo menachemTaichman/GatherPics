@@ -512,42 +512,18 @@ export default function SettingsManager() {
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
-                        {/* Current Profile Section */}
-                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-100">
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Profile</h3>
-                          
-                          <div className="flex items-center space-x-3">
-                            {/* Profile Name - Read Only */}
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                              <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
-                                {currentProfile?.label || 'Not set'}
-                              </div>
-                            </div>
-
-                            {/* Hierarchy Rank - Read Only */}
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Rank</label>
-                              <div className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
-                                {currentProfile?.hierarchy_rank || 0}
-                              </div>
-                            </div>
-
-                            {/* Change Password Button - Only show if not public */}
-                            {!currentProfile?.is_public && (
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
-                                <button
-                                  onClick={() => setShowChangePasswordModal(true)}
-                                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 whitespace-nowrap"
-                                  title="Change password"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                  <span>Change Password</span>
-                                </button>
-                              </div>
-                            )}
+                        {/* Current Profile Section (compact with sign out) */}
+                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                          <div className="text-base text-gray-700">
+                            Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
                           </div>
+                          <button
+                            onClick={handleSignOut}
+                            className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            <span>Sign Out</span>
+                          </button>
                         </div>
 
                         {/* Include Archived */}
@@ -695,16 +671,7 @@ export default function SettingsManager() {
                           </div>
                         </PermissionGate>
 
-                        {/* Sign Out */}
-                        <div className="pt-4 border-t border-gray-200">
-                          <button
-                            onClick={handleSignOut}
-                            className="w-full px-4 py-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium flex items-center justify-center space-x-2 border border-red-200"
-                          >
-                            <LogOut className="w-4 h-4" />
-                            <span>Sign Out</span>
-                          </button>
-                        </div>
+                        
                       </motion.div>
                     )}
 

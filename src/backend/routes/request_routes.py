@@ -113,7 +113,8 @@ def create_access_request(event_id):
             'items': created_request
         }]
         
-        return jsonify({'success': True, 'changes': changes})
+        # Include the new request id explicitly so clients can reference it immediately
+        return jsonify({'success': True, 'access_request_id': request_id, 'changes': changes})
         
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403

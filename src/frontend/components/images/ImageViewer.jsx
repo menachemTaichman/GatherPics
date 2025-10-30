@@ -126,12 +126,11 @@ function ImageViewerActions({
         </PermissionGate>
 
         {/* Add to album */}
-        <PermissionGate requires="canEdit">
-          <AlbumQuickAddButton 
-            {...imageActions.albumQuickAddProps}
-            dropdownDirection="down"
-          />
-        </PermissionGate>
+        {permissions.canEdit && (
+          <PermissionGate requires="canEdit">
+            <AlbumQuickAddButton {...imageActions.albumQuickAddProps} dropdownDirection="down" />
+          </PermissionGate>
+        )}
 
         {/* Add to bucket / Remove from bucket */}
         <button
@@ -231,6 +230,7 @@ function ImageViewerActions({
 }
 
 function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected }) {
+  const permissions = usePermissions(); // <-- add this near the top of the component
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
@@ -1421,7 +1421,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               {/* Albums and Faces Info with resizable split */}
               <div ref={sectionsRef} className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
                 {/* Albums Panel */}
-                {albumsList && albumsList.length > 0 && (
+                {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
                   <div className="flex flex-col min-h-0">
                     <div className="flex items-center justify-between px-4 pt-4">
                       <h3 className="font-semibold text-gray-900">Albums ({albumsList.length})</h3>
@@ -1493,7 +1493,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 )}
 
                 {/* Resizer */}
-                {albumsList && albumsList.length > 0 && albumsOpen && facesOpen && (
+                {(permissions.has_albums || permissions.canEdit) && permissions.has_groups && albumsList && albumsList.length > 0 && albumsOpen && facesOpen && (
                   <div
                     className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mx-4 flex-shrink-0"
                     onMouseDown={startResize}
@@ -1502,77 +1502,79 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 )}
 
                 {/* Faces Panel */}
-                <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
-                  <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="font-semibold text-gray-900">Faces ({facesList.length})</h3>
+                {permissions.has_groups && (
+                  <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
+                    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                      <div className="flex items-center space-x-2">
+                        <h3 className="font-semibold text-gray-900">Faces ({facesList.length})</h3>
+                        <button
+                          onClick={() => {
+                            if (showRectangles) {
+                              setSelectedFaceIndex(null);
+                            }
+                            setShowRectangles(v => !v);
+                          }}
+                          className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
+                          title={showRectangles ? 'Hide face tags' : 'Show face tags'}
+                        >
+                          {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                       <button
-                        onClick={() => {
-                          if (showRectangles) {
-                            setSelectedFaceIndex(null);
-                          }
-                          setShowRectangles(v => !v);
-                        }}
-                        className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
-                        title={showRectangles ? 'Hide face tags' : 'Show face tags'}
+                        onClick={() => setFacesOpen(v => !v)}
+                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                        title={facesOpen ? 'Hide faces' : 'Show faces'}
                       >
-                        {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
-                    <button
-                      onClick={() => setFacesOpen(v => !v)}
-                      className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
-                      title={facesOpen ? 'Hide faces' : 'Show faces'}
-                    >
-                      {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {facesOpen && (
-                    <div className="faces-list-container overflow-y-auto">
-                      <div className="px-4">
-                        {facesList.length === 0 ? (
-                          <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {facesList.map((face, index) => (
-                              <div
-                                key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
-                                className={`flex items-center space-x-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                                onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
-                              >
-                                {ImageComponent(
-                                  face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
-                                  {
-                                    width: 40,
-                                    height: 40,
-                                    className: 'w-10 h-10 object-cover rounded-full',
-                                    alt: getGroupLabel(face),
-                                    iconType: 'person'
-                                  }
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-gray-900 truncate">
-                                    {getGroupLabel(face) || '\u00A0'}
-                                  </p>
+                    {facesOpen && (
+                      <div className="faces-list-container overflow-y-auto">
+                        <div className="px-4">
+                          {facesList.length === 0 ? (
+                            <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {facesList.map((face, index) => (
+                                <div
+                                  key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
+                                  className={`flex items-center space-x-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                  onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
+                                >
+                                  {ImageComponent(
+                                    face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
+                                    {
+                                      width: 40,
+                                      height: 40,
+                                      className: 'w-10 h-10 object-cover rounded-full',
+                                      alt: getGroupLabel(face),
+                                      iconType: 'person'
+                                    }
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-gray-900 truncate">
+                                      {getGroupLabel(face) || '\u00A0'}
+                                    </p>
+                                  </div>
+                                  {!face.isPlaceholder && (
+                                    <a
+                                      href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
+                                      onClick={(e) => handlePersonLinkClick(e, face)}
+                                      className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                                      title="Go to person page"
+                                    >
+                                      <User className="w-4 h-4 text-gray-600" />
+                                    </a>
+                                  )}
                                 </div>
-                                {!face.isPlaceholder && (
-                                  <a
-                                    href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
-                                    onClick={(e) => handlePersonLinkClick(e, face)}
-                                    className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                    title="Go to person page"
-                                  >
-                                    <User className="w-4 h-4 text-gray-600" />
-                                  </a>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
         )}

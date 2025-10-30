@@ -183,7 +183,7 @@ export default function FloatingSelectionControls({
           )}
           
           {/* Add to Album */}
-          {showAlbum && (
+          {showAlbum && permissions.canEdit && (
             <PermissionGate requires="canEdit">
               <AlbumQuickAddButton 
                 selectedImages={Array.from(selectedImages)} 

@@ -72,6 +72,10 @@ export default function RequestFormModal({
 
   // State for loading request data
   const [isLoadingRequest, setIsLoadingRequest] = useState(false);
+  // Public submission view state (after creating from a public profile)
+  const [createdRequestId, setCreatedRequestId] = useState(null);
+  const [createdRequest, setCreatedRequest] = useState(null);
+  const [isLoadingCreatedRequest, setIsLoadingCreatedRequest] = useState(false);
   
   // Try both id and access_request_id (normalization might use either)
   const requestId = useMemo(() => 
@@ -218,11 +222,36 @@ export default function RequestFormModal({
     currentProfile?.label
   ]);
 
+  // Custom keyboard handler integrated with modal focus manager
+  const handleRequestModalKeys = (e) => {
+    if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
+      if (currentStep === 1) {
+        if (canProceedToGroups()) {
+          handleNextStep();
+        }
+        return true;
+      }
+      if (currentStep === 2) {
+        if (selectedGroups.size > 0 && !loading && !isClosed && !isPublicSubmissionView) {
+          // Call submit logic directly
+          handleSubmit({ preventDefault: () => {} });
+        }
+        return true;
+      }
+      if (currentStep === 3) {
+        handleClose();
+        return true;
+      }
+    }
+    return false;
+  };
+
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
-    enableFocusTrapping: true
+    enableFocusTrapping: true,
+    customKeyHandler: handleRequestModalKeys
   });
 
   const handleInputChange = (field, value) => {
@@ -328,17 +357,37 @@ export default function RequestFormModal({
       return; // Allow default behavior for Shift+Enter in textarea
     }
     
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
       e.preventDefault();
       if (currentStep === 1) {
         // On step 1, go to next step if valid
         handleNextStep();
       } else if (currentStep === 2) {
         // On step 2, submit if valid
-        if (selectedGroups.size > 0 && !loading && !isClosed) {
+        if (selectedGroups.size > 0 && !loading && !isClosed && !isPublicSubmissionView) {
           handleSubmit(e);
         }
+      } else if (currentStep === 3) {
+        // On submitted step, Enter closes modal
+        handleClose();
       }
+    }
+  };
+
+  // Route form submit by step to ensure Enter behaves correctly in all browsers
+  const handleFormSubmit = (e) => {
+    if (currentStep === 1) {
+      e.preventDefault();
+      handleNextStep();
+      return;
+    }
+    if (currentStep === 2) {
+      return handleSubmit(e);
+    }
+    if (currentStep === 3) {
+      e.preventDefault();
+      handleClose();
+      return;
     }
   };
 
@@ -356,6 +405,7 @@ export default function RequestFormModal({
 
   // Check if request is closed (read-only mode)
   const isClosed = requestData ? (requestData?.status && requestData.status !== 'pending') : false;
+  const isPublicSubmissionView = !!createdRequestId;
   
   // Split groups by status (always calculate for both open and closed requests)
   const groupEntries = requestData?.groups ? Object.entries(requestData.groups) : [];
@@ -471,8 +521,28 @@ export default function RequestFormModal({
       } else {
         // Create new request
         submitData.group_ids = Array.from(selectedGroups);
-        await requestsAPI.create(submitData, eventUrl);
+        const result = await requestsAPI.create(submitData, eventUrl);
         showToast('Request created successfully', 'success');
+
+        // If submitted from a public profile, keep modal open and show created request section
+        if (formData.requestType === 'new') {
+          const newId = result?.id || result?.access_request_id;
+          if (newId) {
+            setCreatedRequestId(newId);
+            setCurrentStep(3);
+            setIsLoadingCreatedRequest(true);
+            try {
+              const fresh = await requestsAPI.getMyRequestById(newId, eventUrl, { _t: Date.now() });
+              setCreatedRequest(fresh?.request || fresh);
+            } catch (err) {
+              // Fallback to minimal data if fetch fails
+              setCreatedRequest({ ...(result?.request || result), access_request_id: newId, id: newId, details: submitData.details, groups: Object.fromEntries(Array.from(selectedGroups).map(id => [String(id), { approved: null }])) });
+            } finally {
+              setIsLoadingCreatedRequest(false);
+            }
+          }
+          return; // Do not close modal in public flow
+        }
       }
       
       onClose();
@@ -522,6 +592,12 @@ export default function RequestFormModal({
                 )}
                 <div className={`w-2 h-2 rounded-full ${currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
                 <span className="text-sm text-gray-600">Groups</span>
+                {currentStep >= 3 && (
+                  <>
+                    <div className={`w-2 h-2 rounded-full ${currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                    <span className="text-sm text-gray-600">Submitted</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -535,8 +611,53 @@ export default function RequestFormModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
+        <form onSubmit={handleFormSubmit} onKeyDown={handleKeyDown} className="flex-1 overflow-y-auto p-6">
+          {currentStep === 3 ? (
+            <div className="space-y-4">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-start gap-3 mb-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <p className="text-sm text-gray-700">
+                    This information will not be accessible until the request is approved.
+                  </p>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="w-32 text-gray-500">Request ID</span>
+                    <span className="font-medium">{createdRequestId}</span>
+                  </div>
+                  <div className="flex items-start">
+                    <span className="w-32 text-gray-500">Groups</span>
+                    <div className="flex-1">
+                      {isLoadingCreatedRequest ? (
+                        <span className="text-gray-500">Loading…</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(() => {
+                            const groupsObj = (createdRequest?.groups) || Object.fromEntries(Array.from(selectedGroups).map(id => [String(id), { approved: null }]));
+                            const ids = Object.keys(groupsObj);
+                            if (ids.length === 0) return <span className="text-gray-500">None</span>;
+                            return ids.map((gid) => {
+                              const group = allGroups.find(g => String(g.id || g.group_id) === String(gid));
+                              const label = group?.label || `Person ${gid}`;
+                              return (
+                                <span key={gid} className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-800">{label}</span>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start">
+                    <span className="w-32 text-gray-500">Details</span>
+                    <span className="whitespace-pre-line flex-1">{createdRequest?.details || formData.details || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
             {/* Step 1: Profile Details (only for new profile requests) */}
             {currentStep === 1 && (
               <>
@@ -549,8 +670,8 @@ export default function RequestFormModal({
                     <input
                       type="text"
                       value={formData.applicant_name}
-                      onChange={(e) => !isClosed && handleInputChange('applicant_name', e.target.value)}
-                      readOnly={isClosed}
+                      onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_name', e.target.value)}
+                      readOnly={isClosed || isPublicSubmissionView}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                       placeholder="Enter profile name"
                       required
@@ -569,8 +690,8 @@ export default function RequestFormModal({
                       <input
                         type="email"
                         value={formData.applicant_email}
-                        onChange={(e) => !isClosed && handleInputChange('applicant_email', e.target.value)}
-                        readOnly={isClosed}
+                        onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_email', e.target.value)}
+                        readOnly={isClosed || isPublicSubmissionView}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                         placeholder="Enter email address"
                         required
@@ -585,8 +706,8 @@ export default function RequestFormModal({
                       <input
                         type="tel"
                         value={formData.applicant_phone}
-                        onChange={(e) => !isClosed && handleInputChange('applicant_phone', e.target.value)}
-                        readOnly={isClosed}
+                        onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_phone', e.target.value)}
+                        readOnly={isClosed || isPublicSubmissionView}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                         placeholder="Enter phone number"
                       />
@@ -607,7 +728,7 @@ export default function RequestFormModal({
                   </label>
                 
                 {/* Show approved/denied lists when closed, otherwise show selectable grid */}
-                {isClosed ? (
+                {(isClosed || isPublicSubmissionView) ? (
                   <div className="space-y-4">
                     {/* Approved Groups List */}
                     {approvedGroups.length > 0 && (
@@ -873,8 +994,8 @@ export default function RequestFormModal({
                   </label>
                   <textarea
                     value={formData.details}
-                    onChange={(e) => !isClosed && handleInputChange('details', e.target.value)}
-                    readOnly={isClosed}
+                    onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('details', e.target.value)}
+                    readOnly={isClosed || isPublicSubmissionView}
                     onKeyDown={handleKeyDown}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
@@ -921,6 +1042,7 @@ export default function RequestFormModal({
               </div>
             )}
           </div>
+          )}
         </form>
 
         {/* Footer */}
@@ -941,26 +1063,37 @@ export default function RequestFormModal({
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={loading}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
-              >
-                Cancel
-              </button>
+              {currentStep !== 3 && (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={loading}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              )}
+              {currentStep === 3 && (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Close
+                </button>
+              )}
               
               {currentStep === 1 ? (
                 <button
                   type="button"
                   onClick={handleNextStep}
-                  disabled={!canProceedToGroups() || isClosed}
+                  disabled={!canProceedToGroups() || isClosed || isPublicSubmissionView}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next: Select Groups
                 </button>
               ) : (
-                !isClosed && (
+                (currentStep === 2 && !isClosed && !isPublicSubmissionView) && (
                   <button
                     type="submit"
                     onClick={handleSubmit}

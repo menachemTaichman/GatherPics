@@ -68,7 +68,8 @@ export default function Header() {
               </Link>
             )}
 
-            {permissions.has_albums && (
+            {/* Albums Navigation */}
+            {(permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit) && (
               <Link
                 to={getEventPath('/albums')}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
