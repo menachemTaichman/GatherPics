@@ -67,7 +67,7 @@ class EventDB(BaseDB):
             'uploads': {
                 'primary_key': 'upload_id',
                 'accessible_table': 'accessible_uploads',
-                'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id'],
+                'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
                     'groups': {'relation_table': 'uploads_groups', 'fields_needed': ['label', 'representative_face', 'faces_count']},
@@ -80,7 +80,7 @@ class EventDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums', 'is_public', 'public_access_code'],
+                'fields': ['label', 'hierarchy_rank', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums', 'is_public', 'public_access_code'],
                 'relations': {
                     'images': {'relation_table': 'profile_images', 'fields_needed': ['date_taken']},
                     'groups': {'relation_table': 'profile_groups', 'fields_needed': ['label']},
@@ -90,7 +90,25 @@ class EventDB(BaseDB):
             'access_requests': {
                 'primary_key': 'access_request_id',
                 'accessible_table': 'accessible_access_requests',
-                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'status', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
+                'fields': [
+                    'profile_id',
+                    'requested_at',
+                    'applicant_name',
+                    'applicant_email',
+                    'applicant_phone',
+                    'details',
+                    'status',
+                    'is_closed',
+                    'closed_at',
+                    'closed_by',
+                    'closed_details',
+                    'applicant_profile_id',
+                    'profile_label',
+                    'approved_groups_count',
+                    'pending_groups_count',
+                    'rejected_groups_count',
+                    'accessible_groups_count',
+                ],
                 'relations': {
                     'groups': {
                         'relation_table': 'access_requests_groups',
@@ -111,7 +129,21 @@ class EventDB(BaseDB):
                 'original_table': 'access_requests',
                 'primary_key': 'access_request_id',
                 'accessible_table': 'accessible_my_access_requests',
-                'fields': ['profile_id', 'requested_at', 'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'status', 'is_closed', 'closed_at', 'closed_by', 'closed_details', 'applicant_profile_id'],
+                'fields': [
+                    'profile_id',
+                    'requested_at',
+                    'applicant_name',
+                    'applicant_email',
+                    'applicant_phone',
+                    'details',
+                    'status',
+                    'is_closed',
+                    'closed_at',
+                    'closed_by',
+                    'closed_details',
+                    'applicant_profile_id',
+                    'profile_label',
+                ],
                 'relations': {
                     'groups': {
                         'relation_table': 'my_access_requests_groups',
@@ -216,6 +248,7 @@ class EventDB(BaseDB):
             ''',
             'profiles': '''
                 profile_id TEXT PRIMARY KEY NOT NULL,
+                label TEXT,
                 hierarchy_rank INTEGER DEFAULT 0,
                 can_upload_and_delete_images BOOLEAN DEFAULT 0,
                 can_edit BOOLEAN DEFAULT 0,
@@ -456,6 +489,7 @@ class EventDB(BaseDB):
             ''',
             'current_profile': '''
                 SELECT profile_id,
+                    p.label,
                     hierarchy_rank,
                     can_upload_and_delete_images,
                     can_edit,
@@ -475,13 +509,14 @@ class EventDB(BaseDB):
                 LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
                 LEFT JOIN accessible_images i
                 LEFT JOIN accessible_groups g
-                LEFT JOIN accessible_albums a
+                LEFT JOIN accessible_albums a ON (LOWER(a.label) <> 'archive' AND LOWER(a.label) <> 'favorites')
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             ''',
             'profiles_details': '''
                 SELECT
                     profile_id,
+                    label,
                     hierarchy_rank,
                     can_upload_and_delete_images,
                     can_edit,
@@ -514,8 +549,10 @@ class EventDB(BaseDB):
             ''',
             'uploads_details': '''
                 SELECT
-                    u.*
+                    u.*,
+                    p.label AS profile_label
                 FROM uploads u
+                INNER JOIN profiles p ON u.profile_id = p.profile_id
             ''',
             'accessible_uploads': '''
                 SELECT u.*
@@ -561,28 +598,33 @@ class EventDB(BaseDB):
             'access_requests_details': '''
                 SELECT
                     ar.*,
+                    p.label AS profile_label,
                     COUNT(argd.group_id) AS groups_count,
-                    SUM(argd.is_accessible) AS accessible_groups_count,
+                    COALESCE(SUM(argd.is_accessible), 0) AS accessible_groups_count,
+                    COALESCE(SUM(argd.approved), 0) AS approved_groups_count,
+                    SUM(1 - COALESCE(argd.approved, 1)) AS rejected_groups_count,
+                    SUM(argd.approved IS NULL) AS pending_groups_count,
                     CASE 
                         WHEN
                             ar.is_closed = 0
                         THEN
-                            "pending"
+                            'pending'
                         ELSE
                             (CASE
                                 WHEN
                                     COALESCE(SUM(argd.approved), 0) = COUNT(argd.group_id)
                                 THEN
-                                    "approved"
+                                    'approved'
                                 WHEN
                                     COALESCE(SUM(argd.approved), 0) = 0
                                 THEN
-                                    "rejected"
+                                    'rejected'
                                 ELSE
-                                    "mixed"
+                                    'mixed'
                             END)
                     END AS status
                 FROM access_requests ar
+                INNER JOIN profiles p ON ((ar.profile_id = p.profile_id AND ar.applicant_profile_id IS NULL) OR ar.applicant_profile_id = p.profile_id)
                 LEFT JOIN access_requests_groups_details argd ON ar.access_request_id = argd.access_request_id
                 GROUP BY ar.access_request_id
             ''',
@@ -1330,18 +1372,9 @@ class EventDB(BaseDB):
                     END;
 
                     UPDATE access_requests SET
-                        applicant_profile_id = NEW.applicant_profile_id,
-                        is_closed = NEW.is_closed,
-                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
-                        closed_details = NEW.closed_details
+                        applicant_profile_id = NEW.applicant_profile_id
                     WHERE access_request_id = OLD.access_request_id;
                 
-                    UPDATE accessible_access_requests_groups SET
-                        approved = 0
-                    WHERE access_request_id = OLD.access_request_id
-                    AND approved IS NULL
-                    AND NEW.is_closed = 1;
-
                 END;
             """,
             'trg_delete_accessible_access_requests': """
@@ -1418,7 +1451,7 @@ class EventDB(BaseDB):
                 END;
             """,
 
-            # ensure_profiles_policy
+            # ensure_profiles_publicity_policy
             'trg_insert_ensure_profiles_publicity': """
                 BEFORE INSERT ON profiles
                 BEGIN
@@ -1481,7 +1514,7 @@ class EventDB(BaseDB):
                         closed_by = cur_profile('profile_id')
                     WHERE (
                         (SELECT ar.applicant_profile_id FROM access_requests ar WHERE access_requests_groups.access_request_id = ar.access_request_id)
-                        = NEW.profile_id
+                        = OLD.profile_id
                     AND approved IS NULL)
                     AND (OLD.all_groups = 0 AND NEW.all_groups = 1);
 
@@ -1579,6 +1612,19 @@ class EventDB(BaseDB):
         }
 
     @classmethod
+    def current_profile_fields(cls) -> dict:
+        return {
+            'profile_id': '',
+            'hierarchy_rank': 0,
+            'can_upload_and_delete_images': False,
+            'can_edit': False,
+            'all_images': False,
+            'all_groups': False,
+            'all_albums': False,
+            'is_public': False,
+        }
+
+    @classmethod
     def create_db(cls, db_path: str) -> tuple[str, str, str]:
         """Create a new event database with all tables and initial data.
         Returns:
@@ -1608,7 +1654,7 @@ class EventDB(BaseDB):
         return archive_album_id, favorites_album_id, unassociated_group_id
 
     def __init__(self, db_path: str, profile_id: str | None = None, public_code: str | None = None):
-        super().__init__(db_path)
+        super().__init__(db_path, profile_id)
         if not profile_id:
             if not public_code:
                 raise Forbidden('Access denied: no profile ID or public code provided')
@@ -1621,44 +1667,4 @@ class EventDB(BaseDB):
                 else:
                     raise Forbidden(f'Access denied: public access code {public_code} is invalid')
 
-        self.profile_id = profile_id
-    
-    @property
-    def profile_id(self) -> str:
-        """Get the current profile id for access control."""
-        return self._profile_context['profile_id']
-
-    @profile_id.setter
-    def profile_id(self, profile_id: str):
-        """Set the current profile id for access control."""
-        
-        fields = {
-            'profile_id': '',
-            'hierarchy_rank': 0,
-            'can_upload_and_delete_images': False,
-            'can_edit': False,
-            'all_images': False,
-            'all_groups': False,
-            'all_albums': False,
-            'is_public': False,
-        }
-        profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.DICT)
-
-        if not profile:
-            raise Exception(f'Profile {profile_id} not found')
-        
-        self._profile_context = {}
-        for field, default_val in fields.items():
-            val = profile.get(field, default_val)
-            self._profile_context[field] = val
-
-    @property
-    def profile_context(self) -> dict:
-        return self._profile_context
-
-    @contextmanager
-    def get_connection(self):
-        """Context manager for database connections with profile context."""
-        with super().get_connection() as conn:
-            conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
-            yield conn
+            self.profile_id = profile_id

@@ -50,8 +50,8 @@ class Event():
         """Get the current profile context."""
         return self.models.db.profile_context
 
-    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0):
-        self.models.sync_profile_to_event_db(profile_id, upsert=upsert, hierarchy_rank=hierarchy_rank)
+    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, label: str | None = None, hierarchy_rank: int = 0):
+        self.models.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
 
     def toggle_access_request(
         self,

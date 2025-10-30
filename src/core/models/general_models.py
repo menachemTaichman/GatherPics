@@ -10,7 +10,7 @@ class GeneralModels(BaseModels):
     """Models manager for general database operations."""
 
     def __init__(self, profile_id: str | None = None):
-        self.db = GeneralDB()
+        self.db = GeneralDB(profile_id)
         self.profile_id = profile_id
 
     @property
@@ -122,7 +122,7 @@ class GeneralModels(BaseModels):
         if event_id:
             self.remove_profile_from_event(profile_id, event_id)
         
-        if not only_remove_from_event_id:
+        if not only_remove_from_event_id or restricted_to_event_id:
             self.delete('profiles', profile_id)
 
     def get_profile_password(self, profile_id: str) -> str:
@@ -142,17 +142,15 @@ class GeneralModels(BaseModels):
         self.edit('profiles', profile_id, {'password': password})
         self.revoke_all_refresh_tokens(profile_id)
     
-    def update_profile(self, profile_id: str, data: dict):
-        """
-        Update the profile data.
-        Allowed fields: label
-        """
+    def update_profile_label(self, profile_id: str, label: str):
+        """Update the label for a profile."""
         if not self.is_managable_profile(profile_id):
-            raise Forbidden('Profile does not have permission to update this profile')
+            raise Forbidden('Profile does not have permission to update this profile label')
 
-        data = {k: v for k, v in data.items() if k in ['label']}
-        
-        self.edit('profiles', profile_id, data)
+        self.edit('profiles', profile_id, {'label': label})
+        event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
+        for event_id in event_ids:
+            self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
 
     def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
         """Update the hierarchy rank for a profile."""
@@ -271,10 +269,13 @@ class GeneralModels(BaseModels):
 
         event = Event(event_id, self.profile_id)
         hierarchy_rank = -1
+        label = None
         if upsert:
-            hierarchy_rank = self.get_entities('profiles', profile_id).get('hierarchy_rank')
+            profile = self.get_entities('profiles', profile_id)
+            hierarchy_rank = profile.get('hierarchy_rank')
+            label = profile.get('label')
         
-        event.sync_profile_to_event_db(profile_id, upsert=upsert, hierarchy_rank=hierarchy_rank)
+        event.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
         
     # Event management
     def create_event(self, name: str, date: str, event_manager: str, url: str) -> str:

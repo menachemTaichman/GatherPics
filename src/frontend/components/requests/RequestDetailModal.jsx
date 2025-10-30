@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,6 +10,7 @@ import { getRepresentativeUrl } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import { getPreference, setPreference } from '../../utils/settings';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -54,9 +55,17 @@ export default function RequestDetailModal({
   const [nameConflict, setNameConflict] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [notifyByEmailPref, setNotifyByEmailPref] = useState(() => getPreference('RequestDetailModal.notifyByEmail') ?? true);
+  const [notifyByEmail, setNotifyByEmail] = useState(notifyByEmailPref);
+  // Track whether we are creating a new profile (to indicate in the mail)
+  const [newProfileCreated, setNewProfileCreated] = useState(false);
   
   const { showToast } = useToast();
   const permissions = usePermissions();
+  // Tooltip state
+  const [showNotesTooltip, setShowNotesTooltip] = useState(false);
+  const [notesTooltipPos, setNotesTooltipPos] = useState({ left: 0, top: 0 });
+  const notesIconRef = useRef(null);
   const allGroups = useGroupsList();
   const storeRequest = useRequestById(request?.access_request_id || request?.id);
   
@@ -129,6 +138,26 @@ export default function RequestDetailModal({
       if (!requestData.applicant_profile_id && requestData.applicant_name) {
         checkNameConflict(requestData.applicant_name);
       }
+    }
+  }, [isOpen, requestData]);
+
+  // If the dialog opens, re-sync with latest preference
+  useEffect(() => {
+    if (isOpen) {
+      setNotifyByEmail(getPreference('RequestDetailModal.notifyByEmail') ?? true);
+    }
+  }, [isOpen]);
+
+  // When the user toggles the checkbox, save to preferences
+  const handleNotifyByEmailChange = (checked) => {
+    setNotifyByEmail(checked);
+    setPreference('RequestDetailModal.notifyByEmail', checked);
+  };
+
+  // Track if new profile is created based on applicant_profile_id being null before approve
+  useEffect(() => {
+    if (isOpen && requestData) {
+      setNewProfileCreated(!requestData.applicant_profile_id);
     }
   }, [isOpen, requestData]);
 
@@ -261,17 +290,55 @@ export default function RequestDetailModal({
     try {
       const requestId = request.access_request_id || request.id;
       
-      await requestsAPI.toggle(
-          requestId,
+      const toggleResult = await requestsAPI.toggle(
+        requestId,
         approvedGroupIds.length > 0 ? approvedGroupIds : null,
         deniedGroupIds.length > 0 ? deniedGroupIds : null,
         closedDetails.trim() || null,
         (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) ? profileName.trim() : null,
-          eventUrl
-        );
+        eventUrl
+      );
       
       showToast('Changes applied successfully', 'success');
       onClose();
+      // After closing: if notifyByEmail, open Gmail tab
+      if (notifyByEmail && requestData.applicant_email) {
+        setTimeout(() => {
+          const lines = [];
+          lines.push(`Access Request Processed`);
+          lines.push(`Requested by: ${requestData.profile_label || requestData.applicant_name || 'N/A'}`);
+          lines.push(`Email: ${requestData.applicant_email}`);
+          if (requestData.applicant_phone) lines.push(`Phone: ${requestData.applicant_phone}`);
+          lines.push(`Requested At: ${formatDateTime(requestData.requested_at)}`);
+          // People access header
+          if ((approvedGroupIds && approvedGroupIds.length) || (deniedGroupIds && deniedGroupIds.length)) {
+            lines.push('');
+            lines.push('People access:');
+          }
+          if (approvedGroupIds?.length > 0) lines.push(`✅ Approved: ${approvedGroupIds.map(id => getGroupDisplayName(id)).join(', ')}`);
+          if (deniedGroupIds?.length > 0) lines.push(`❌ Denied: ${deniedGroupIds.map(id => getGroupDisplayName(id)).join(', ')}`);
+          if (closedDetails) {
+            lines.push('');
+            lines.push(`Manager Notes: ${closedDetails}`);
+          }
+          // New profile details from toggle API response
+          const createdProfile = (toggleResult && (toggleResult.new_profile || toggleResult.created_profile || toggleResult.profile)) || null;
+          if (createdProfile) {
+            lines.push('');
+            lines.push('New Profile Created:');
+            if (createdProfile.label || createdProfile.name) lines.push(`- Name: ${createdProfile.label || createdProfile.name}`);
+            if (createdProfile.password) lines.push(`- Password: ${createdProfile.password}`);
+          } else if (newProfileCreated && approvedGroupIds.length > 0) {
+            // Fallback message if API did not include details for some reason
+            lines.push('');
+            lines.push('New Profile Created for the requester.');
+          }
+          const subject = encodeURIComponent('Your access request status');
+          const body = encodeURIComponent(lines.join('\n'));
+          const mailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(requestData.applicant_email)}&su=${subject}&body=${body}`;
+          window.open(mailUrl, '_blank','noopener');
+        }, 450); // Slight delay ensures modal closes first
+      }
     } catch (error) {
       console.error('Failed to apply changes:', error);
       showToast(formatErrorMessage('apply changes', error), 'error');
@@ -410,13 +477,15 @@ export default function RequestDetailModal({
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Request Information</h3>
                 <div className="space-y-4">
+                  {(requestData.profile_label) && (
                   <div className="flex items-center space-x-3">
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{requestData.applicant_name}</p>
+                      <p className="text-sm font-medium text-gray-900">{requestData.profile_label}</p>
                       <p className="text-xs text-gray-500">Applicant Name</p>
                     </div>
                   </div>
+                  )}
                   
                   {requestData.applicant_email && (
                     <div className="flex items-center space-x-3">
@@ -453,6 +522,45 @@ export default function RequestDetailModal({
                         <p className="text-sm font-medium text-gray-900">{requestData.details}</p>
                         <p className="text-xs text-gray-500">Details</p>
                       </div>
+                    </div>
+                  )}
+                  {/* Manager Response Notes block, always if closed_details exists */}
+                  {Array.isArray(requestData.closed_details) && requestData.closed_details.length > 0 && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <span className="flex items-center gap-1 group relative text-xs font-semibold text-blue-700">
+                        <AlertCircle
+                          className="w-4 h-4 text-blue-500 cursor-pointer"
+                          ref={notesIconRef}
+                          onMouseEnter={e => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setNotesTooltipPos({
+                              left: rect.left,
+                              top: rect.bottom + 8
+                            });
+                            setShowNotesTooltip(true);
+                          }}
+                          onMouseLeave={() => setShowNotesTooltip(false)}
+                        />
+                        <span
+                          onMouseEnter={e => {
+                            // Allow hover when moving from icon to label (optional)
+                            if (notesIconRef.current) {
+                              const rect = notesIconRef.current.getBoundingClientRect();
+                              setNotesTooltipPos({ left: rect.left, top: rect.bottom + 8 });
+                              setShowNotesTooltip(true);
+                            }
+                          }}
+                          onMouseLeave={() => setShowNotesTooltip(false)}
+                        >Manager Response Notes</span>
+                        {showNotesTooltip &&
+                          <span
+                            className="fixed px-5 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-pre-line min-w-[250px] max-w-[400px] text-left pointer-events-auto z-[10000]"
+                            style={{ left: notesTooltipPos.left, top: notesTooltipPos.top }}
+                          >
+                            {requestData.closed_details.map((detail, idx) => `${idx + 1}. ${detail}`).join('\n')}
+                          </span>
+                        }
+                      </span>
                     </div>
                   )}
                 </div>
@@ -599,7 +707,8 @@ export default function RequestDetailModal({
               )}
               
               {/* Pending Groups List */}
-              <div>
+              {(!requestData.closed_at) && (
+                <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-1">Pending</h4>
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
                   {pendingGroups.length > 0 ? (
@@ -675,6 +784,7 @@ export default function RequestDetailModal({
                   )}
                 </div>
               </div>
+              )}
 
               {/* Approved Groups List */}
               {approvedGroups.length > 0 && (
@@ -793,21 +903,33 @@ export default function RequestDetailModal({
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <div className="flex items-center justify-end">
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex flex-row items-center justify-between">
+          {requestData.applicant_email && !requestData.closed_at ? (
+            <label className="relative inline-flex items-center cursor-pointer mr-5 select-none">
+              <input
+                type="checkbox"
+                checked={notifyByEmail}
+                onChange={e => handleNotifyByEmailChange(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"></div>
+              <span className="ml-3 text-sm font-medium text-gray-700">Notify requester by email</span>
+            </label>
+          ) : <div />}
+          <div className="flex items-center justify-end flex-1">
             {canApprove && (
-                  <button
-                    onClick={handleApplyChanges}
-                    disabled={loading || Object.keys(groupActions).length === 0}
+              <button
+                onClick={handleApplyChanges}
+                disabled={loading || Object.keys(groupActions).length === 0}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                  >
-                    {loading && (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    )}
+              >
+                {loading && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
                 {!loading && <Save className="w-4 h-4" />}
                 <span>Apply Changes</span>
-                  </button>
-              )}
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

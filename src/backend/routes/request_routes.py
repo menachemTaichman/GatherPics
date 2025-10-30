@@ -261,6 +261,9 @@ def toggle_request(event_id, request_id):
                 'entity': 'profile',
                 'items': event.models.get_entities('profiles', [applicant_profile_id])
             })
+            label = general_models.get_entities('profiles', applicant_profile_id).get('label')
+            password = general_models.get_profile_password(applicant_profile_id)
+            return jsonify({'success': True, 'changes': changes, 'new_profile': {'label': label, 'password': password}})
         
         return jsonify({'success': True, 'changes': changes})
         

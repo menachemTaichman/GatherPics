@@ -332,14 +332,14 @@ class EventModels(BaseModels):
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     # -------- Profiles helpers --------
-    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, hierarchy_rank: int = 0) -> None:
+    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, label: str | None = None, hierarchy_rank: int = 0) -> None:
         """Sync profile to event db."""
         if upsert:
             query = f"""
-                INSERT INTO profiles (profile_id, hierarchy_rank) VALUES (?, ?)
-                ON CONFLICT (profile_id) DO UPDATE SET hierarchy_rank = ?
+                INSERT INTO profiles (profile_id, label, hierarchy_rank) VALUES (?, ?, ?)
+                ON CONFLICT (profile_id) DO UPDATE SET label = ?, hierarchy_rank = ?
             """
-            self.db.execute_query(query, (profile_id, hierarchy_rank, hierarchy_rank))
+            self.db.execute_query(query, (profile_id, label, hierarchy_rank, label, hierarchy_rank))
         else:
             query = f"""
                 DELETE FROM profiles WHERE profile_id = ?
@@ -371,7 +371,6 @@ class EventModels(BaseModels):
         valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
-    # TODO: investigate public profile requests
     def create_access_request(
         self,
         applicant_name: str | None = None,

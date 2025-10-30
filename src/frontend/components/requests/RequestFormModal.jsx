@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown, AlertCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -48,6 +48,11 @@ export default function RequestFormModal({
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-form-modal';
 
+  // Tooltip state
+  const [showNotesTooltip, setShowNotesTooltip] = useState(false);
+  const [notesTooltipPos, setNotesTooltipPos] = useState({ left: 0, top: 0 });
+  const notesIconRef = useRef(null);
+  
   // Fetch groups data when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -876,6 +881,43 @@ export default function RequestFormModal({
                     placeholder="Additional information about the request"
                   />
                 </div>
+                {Array.isArray(requestData?.closed_details) && requestData.closed_details.length > 0 && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="flex items-center gap-1 group relative text-xs font-semibold text-blue-700">
+                      <AlertCircle
+                        className="w-4 h-4 text-blue-500 cursor-pointer"
+                        ref={notesIconRef}
+                        onMouseEnter={e => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setNotesTooltipPos({
+                            left: rect.left,
+                            top: rect.bottom + 8
+                          });
+                          setShowNotesTooltip(true);
+                        }}
+                        onMouseLeave={() => setShowNotesTooltip(false)}
+                      />
+                      <span
+                        onMouseEnter={e => {
+                          if (notesIconRef.current) {
+                            const rect = notesIconRef.current.getBoundingClientRect();
+                            setNotesTooltipPos({ left: rect.left, top: rect.bottom + 8 });
+                            setShowNotesTooltip(true);
+                          }
+                        }}
+                        onMouseLeave={() => setShowNotesTooltip(false)}
+                      >Manager Response Notes</span>
+                      {showNotesTooltip &&
+                        <span
+                          className="fixed px-5 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-pre-line min-w-[250px] max-w-[400px] text-left pointer-events-auto z-[10000]"
+                          style={{ left: notesTooltipPos.left, top: notesTooltipPos.top }}
+                        >
+                          {requestData.closed_details.map((detail, idx) => `${idx + 1}. ${detail}`).join('\n')}
+                        </span>
+                      }
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

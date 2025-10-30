@@ -1,7 +1,8 @@
 import sqlite3
 import os
 import uuid
-from src.core.database.base_db import BaseDB
+from contextlib import contextmanager
+from src.core.database.base_db import BaseDB, ReturnFormat
 from src.core.config import DATA_ROOT
 
 DB_PATH = os.path.join(DATA_ROOT, 'general.db')
@@ -61,6 +62,13 @@ class GeneralDB(BaseDB):
                 'UploadDetail': {
                     'mode': (str, 'groups'),
                     'sortDir': (str, 'asc')
+                },
+                'RequestsGallery': {
+                    'sortDir': (str, 'desc'),
+                    'sortBy': (str, 'requested_at')
+                },
+                'RequestsDetail': {
+                    'sortDir': (str, 'asc')
                 }
             }
         }
@@ -70,7 +78,7 @@ class GeneralDB(BaseDB):
         return {
             'events': {
                 'primary_key': 'event_id',
-                'accessible_table': 'events',
+                'accessible_table': 'accessible_events',
                 'fields': ['name', 'date', 'url', 'images_count_limit', 'image_size_limit_bytes'],
                 'relations': {
                     'profiles': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
@@ -78,7 +86,7 @@ class GeneralDB(BaseDB):
             },
             'profiles': {
                 'primary_key': 'profile_id',
-                'accessible_table': 'profiles',
+                'accessible_table': 'accessible_profiles',
                 'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
                 'relations': {
                     'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
@@ -86,7 +94,7 @@ class GeneralDB(BaseDB):
             },
             'profiles_events': {
                 'primary_key': ['profile_id', 'event_id'],
-                'accessible_table': 'profiles_events',
+                'accessible_table': 'accessible_profiles_events',
                 'fields': ['can_delete'],
             },
             'profiles_preferences': {
@@ -103,7 +111,17 @@ class GeneralDB(BaseDB):
                 'primary_key': 'id',
                 'accessible_table': 'settings',
                 'fields': ['developer_id', 'image_size_limit_bytes', 'images_count_limit'],
-            }
+            },
+            'notifications': {
+                'primary_key': 'id',
+                'accessible_table': 'accessible_notifications',
+                'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
+            },
+            'my_notifications': {
+                'primary_key': 'id',
+                'accessible_table': 'accessible_my_notifications',
+                'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
+            },
         }
     
     @classmethod
@@ -161,7 +179,18 @@ class GeneralDB(BaseDB):
                 image_size_limit_bytes INTEGER DEFAULT 0,
                 images_count_limit INTEGER DEFAULT 0,
                 FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL
-            '''
+            ''',
+            'notifications': '''
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                read INTEGER DEFAULT 0,
+                read_at DATETIME,
+                type TEXT,
+                data TEXT,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE
+            ''',
         }
     
     @classmethod
@@ -174,15 +203,242 @@ class GeneralDB(BaseDB):
             'idx_refresh_tokens_profile_id': 'refresh_tokens(profile_id)',
             'idx_refresh_tokens_token': 'refresh_tokens(token)',
             'idx_events_url': 'events(url)',
+            'idx_notifications_profile_id': 'notifications(profile_id)',
+            'idx_notifications_read': 'notifications(read)',
+            'idx_notifications_created_at': 'notifications(created_at)',
+            'idx_notifications_type': 'notifications(type)',
         }
     
     @classmethod
     def VIEWS(self) -> dict:
-        return {}
+        return {
+            'accessible_events': """
+                SELECT * FROM events
+            """,
+            'accessible_profiles': """
+                SELECT * FROM profiles p
+                WHERE
+                    cur_profile('profile_id') = p.profile_id 
+                    OR p.hierarchy_rank < cur_profile('hierarchy_rank')
+            """,
+            'accessible_profiles_events': """
+                SELECT * FROM profiles_events pe
+                INNER JOIN accessible_profiles ap ON pe.profile_id = ap.profile_id
+            """,
+            'my_notifications': """
+                SELECT * FROM notifications
+                WHERE profile_id = cur_profile('profile_id')
+            """,
+            'accessible_my_notifications': """
+                SELECT * FROM my_notifications
+            """,
+            'accessible_notifications': """
+                SELECT * FROM notifications
+                INNER JOIN accessible_profiles ap ON notifications.profile_id = ap.profile_id
+            """,
+        }
     
     @classmethod
     def TRIGGERS(self) -> dict:
         return {
+            # accessible_profiles
+            'trg_accessible_profiles_insert': """
+                INSTEAD OF INSERT ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
+                        WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile with can_create_events=1 if current profile does not have can_create_events=1')
+                        WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile to a different event than the current profile')
+                    END;
+
+                    INSERT INTO profiles (profile_id, label, password, hierarchy_rank, can_create_events, restricted_to_event)
+                    VALUES (NEW.profile_id, NEW.label, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event);
+                END;
+            """,
+            'trg_accessible_profiles_update': """
+                INSTEAD OF UPDATE ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot update profile with higher or equal rank')
+                        WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
+                        WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
+                            RAISE(ABORT, 'Permission denied: cannot update profile to a different event than the current profile')
+                    END;
+
+                    UPDATE profiles SET
+                        label = NEW.label,
+                        password = NEW.password,
+                        hierarchy_rank = NEW.hierarchy_rank,
+                        can_create_events = NEW.can_create_events,
+                        restricted_to_event = NEW.restricted_to_event
+                    WHERE profile_id = OLD.profile_id;
+                END;
+            """,
+            'trg_accessible_profiles_delete': """
+                INSTEAD OF DELETE ON accessible_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete profile with higher or equal rank')
+                        WHEN cur_profile('restricted_to_event') IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(OLD.restricted_to_event, '') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete profile from a different event than the current profile')
+                    END;
+
+                    DELETE FROM profiles
+                    WHERE profile_id = OLD.profile_id;
+                END;
+            """,
+            # accessible_profiles_events
+            'trg_accessible_profiles_events_insert': """
+                INSTEAD OF INSERT ON accessible_profiles_events
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
+                        WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
+                            RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
+                        WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_delete=1 if current profile does not have can_delete=1')
+                    END;
+
+                    INSERT INTO profiles_events (profile_id, event_id, can_delete)
+                    VALUES (NEW.profile_id, NEW.event_id, NEW.can_delete);
+                END;
+            """,
+            'trg_accessible_profiles_events_update': """
+                INSTEAD OF UPDATE ON accessible_profiles_events 
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
+                        WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
+                            RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
+                        WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_delete=1 if current profile does not have can_delete=1')
+                    END;
+
+                    UPDATE profiles_events SET
+                        can_delete = NEW.can_delete
+                    WHERE profile_id = OLD.profile_id AND event_id = OLD.event_id;
+                END;
+            """,
+            'trg_accessible_profiles_events_delete': """
+                INSTEAD OF DELETE ON accessible_profiles_events
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN OLD.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete profile event with higher or equal rank')
+                        WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = OLD.event_id) THEN
+                            RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
+                    END;
+
+                    DELETE FROM profiles_events
+                    WHERE profile_id = OLD.profile_id AND event_id = OLD.event_id;
+                END;
+            """,
+            # notifications
+            'trg_accessible_notifications_insert': """
+                INSTEAD OF INSERT ON accessible_notifications
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN
+                            cur_profile('hierarchy_rank') <=
+                            (SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.profile_id)
+                        THEN
+                            RAISE(ABORT, 'Permission denied: the profile is not accessible')
+                    END;
+
+                    INSERT INTO notifications (profile_id, message, created_at, read, type, data)
+                    VALUES (NEW.profile_id, NEW.message, NEW.created_at, NEW.read, NEW.type, NEW.data);
+                END;
+            """,
+            'trg_accessible_notifications_update': """
+                INSTEAD OF UPDATE ON accessible_notifications
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN
+                            cur_profile('hierarchy_rank') <=
+                            (SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.profile_id)
+                        THEN
+                            RAISE(ABORT, 'Permission denied: the profile is not accessible')
+                    END;
+
+                    UPDATE notifications SET
+                        message = NEW.message,
+                        created_at = NEW.created_at,
+                        read = NEW.read,
+                        type = NEW.type,
+                        data = NEW.data
+                    WHERE id = OLD.id;
+                END;
+            """,
+            'trg_accessible_notifications_delete': """
+                INSTEAD OF DELETE ON accessible_notifications
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('hierarchy_rank') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN
+                            cur_profile('hierarchy_rank') <=
+                            (SELECT hierarchy_rank FROM profiles WHERE profile_id = OLD.profile_id)
+                        THEN
+                            RAISE(ABORT, 'Permission denied: the profile is not accessible')
+                    END;
+
+                    DELETE FROM notifications
+                    WHERE id = OLD.id;
+                END;
+            """,
+            
+            # my_notifications
+            'trg_accessible_my_notifications_update': """
+                INSTEAD OF UPDATE ON accessible_my_notifications
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> OLD.profile_id THEN
+                            RAISE(ABORT, 'Permission denied: the notifification is not accessible')
+                    END;
+
+                    UPDATE notifications SET
+                        read = NEW.read,
+                        read_at = COALESCE(NEW.read_at, CURRENT_TIMESTAMP)
+                    WHERE id = OLD.id;
+                END;
+            """,
+            'trg_accessible_my_notifications_delete': """
+                INSTEAD OF DELETE ON accessible_my_notifications
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> OLD.profile_id THEN
+                            RAISE(ABORT, 'Permission denied: the notifification is not accessible')
+                    END;
+
+                    DELETE FROM notifications
+                    WHERE id = OLD.id;
+                END;
+            """,
+
             # ensure_profiles_unique
             'trg_ensure_profiles_unique_insert': """
                 BEFORE INSERT ON profiles
@@ -224,6 +480,15 @@ class GeneralDB(BaseDB):
         }
 
     @classmethod
+    def current_profile_fields(cls) -> dict:
+        return {
+            'profile_id': '',
+            'hierarchy_rank': 0,
+            'can_create_events': False,
+            'restricted_to_event': None,
+        }
+
+    @classmethod
     def create_db(cls) -> str:
         """
         Create a new general database with all tables and initial data.
@@ -251,11 +516,12 @@ class GeneralDB(BaseDB):
         
         return developer_id
    
-    def __init__(self):
+    def __init__(self, profile_id: str | None = None):
         """Initialize general database connection."""
         db_path = DB_PATH
-        super().__init__(db_path)
         # Ensure database file exists
         if not os.path.exists(db_path):
-            self.create_general_db(db_path)
-    
+            # self.create_db(db_path)
+            raise Exception('General database file does not exist')
+
+        super().__init__(db_path, profile_id)

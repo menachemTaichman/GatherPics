@@ -1,3 +1,4 @@
+from cmath import rect
 from flask.config import T
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
@@ -14,6 +15,7 @@ profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
 general_models = GeneralModels(profile_id=profile_id)
 event = Event(event_id, profile_id=profile_id)
 db = event.models.db
+general_db = general_models.db
 
 def drop_views_triggers_and_indexes(db: BaseDB):
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
@@ -273,12 +275,3 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes(event.models.db)
-
-request_id = 3
-group_ids = ["8f965866-ec14-4b61-95d8-79bae649dad4", "b7731fb3-4644-4b06-884d-f964940bb17e"]
-profile_id = '12b40e1b-4bf2-4b01-80b7-9f1f2ab62a23'
-event = Event(event_id, profile_id=profile_id)
-event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
-result = None
-print()

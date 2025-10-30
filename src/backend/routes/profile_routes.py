@@ -7,6 +7,56 @@ from src.core.errors import Forbidden, DatabaseError
 
 profile_bp = Blueprint('profiles', __name__)
 
+# genral profile endpoints
+@profile_bp.route("/api/profiles", methods=["GET"])
+@require_auth
+def get_profiles():
+    general_models = get_general_models()
+    profiles = general_models.get_entities('profiles')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': profiles
+    }]
+    return jsonify({"changes": changes})
+
+@profile_bp.route("/api/profiles/<profile_id>", methods=["GET"])
+@require_auth
+def get_profile(profile_id):
+    general_models = get_general_models()
+    profile = general_models.get_entities('profiles', [profile_id])
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': profile
+    }]
+    return jsonify({"changes": changes})
+
+@profile_bp.route("/api/profiles/<profile_id>/password", methods=["GET"])
+@require_auth
+def get_profile_password(profile_id):
+    general_models = get_general_models()
+    try:
+        return jsonify({"password": general_models.get_profile_password(profile_id)})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+
+@profile_bp.route("/api/profiles/<profile_id>/password", methods=["PUT"])
+@require_auth
+def update_profile_password(profile_id):
+    general_models = get_general_models()
+    data = request.json or {}
+    password = data.get('password', '')
+    try:
+        general_models.edit('profiles', profile_id, {'password': password})
+        return jsonify({"success": True})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 # Current profile endpoints
 @profile_bp.route("/api/profiles/current", methods=["GET"])
 @require_auth
@@ -21,6 +71,7 @@ def get_current_profile():
         event = get_event(event_id)
         profile_event = event.models.get_current_profile()
         profile_event.pop('profile_id')
+        profile_event.pop('label')
     else:
         profile_event = {}
 
@@ -73,19 +124,12 @@ def update_current_profile_preferences():
 @require_auth
 def get_event_profiles(event_id):
     event = get_event(event_id)
-    general_models = get_general_models()
     profiles = event.models.get_entities('profiles')
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
         'items': profiles
     }]
-    profiles = general_models.get_entities('profiles', list(profiles.keys()))
-    changes.append({
-        'type': 'UPSERT',
-        'entity': 'profile',
-        'items': profiles
-    })
     return jsonify({"changes": changes})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>", methods=["GET"])
@@ -131,31 +175,6 @@ def get_favorites_access(event_id):
     """Get favorites access for the current profile."""
     event = get_event(event_id)
     return jsonify({"favorites_access": bool(event.models.get_favorites_album())})
-
-@profile_bp.route("/api/profiles/<profile_id>/password", methods=["GET"])
-@require_auth
-def get_profile_password(profile_id):
-    general_models = get_general_models()
-    try:
-        return jsonify({"password": general_models.get_profile_password(profile_id)})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-
-@profile_bp.route("/api/profiles/<profile_id>/password", methods=["PUT"])
-@require_auth
-def update_profile_password(profile_id):
-    general_models = get_general_models()
-    data = request.json or {}
-    password = data.get('password', '')
-    try:
-        general_models.edit('profiles', profile_id, {'password': password})
-        return jsonify({"success": True})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
 
 # Check endpoints
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/images/check", methods=["POST"])
@@ -314,16 +333,8 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
     general_models = get_general_models()
 
     if 'label' in data.keys():
-        label = data['label']
-        if not label:
-            raise ValueError("Label is required")
-
-        if general_models.is_exists('profiles', {'label': label}, exclude_id = profile_id):
-            raise ValueError("Profile with this label already exists")
-
-        general_models.update_profile(profile_id, {'label': label})
+        general_models.update_profile_label(profile_id, data['label'])
     
-
     if 'hierarchy_rank' in data.keys():
         general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
 

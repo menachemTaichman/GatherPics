@@ -130,6 +130,12 @@ class BaseDB(ABC):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def current_profile_fields(self) -> dict:
+        """Get the current profile fields."""
+        return {}
+
     @staticmethod
     def serialize_value(value_type: type, value: Any) -> str:
         """Convert a Python value to a string for database storage."""
@@ -270,20 +276,44 @@ class BaseDB(ABC):
         
         return db_path
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, profile_id: str | None = None):
         """Initialize database connection."""
         self.db_path = db_path
         if not os.path.exists(self.db_path):
             file_name = os.path.basename(self.db_path)
             raise FileNotFoundError(f"Database file not found: {file_name}")
 
+        self.profile_id = profile_id
+
+    @property
+    def profile_id(self) -> str | None:
+        """Get the current profile id for access control."""
+        return self._profile_context.get('profile_id')
+
+    @profile_id.setter
+    def profile_id(self, profile_id: str | None):
+        """Set the current profile id for access control."""
+        
+        profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.DICT)
+
+        self._profile_context = {}
+        if profile:
+            for field, default_val in self.current_profile_fields().items():
+                val = profile.get(field, default_val)
+                self._profile_context[field] = val
+
+    @property
+    def profile_context(self) -> dict:
+        return self._profile_context
+
     @contextmanager
     def get_connection(self):
-        """Context manager for database connections."""
+        """Context manager for database connections with profile context."""
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA foreign_keys = ON")
         
         try:
+            conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
             yield conn
         finally:
             conn.close()
