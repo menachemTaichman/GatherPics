@@ -31,10 +31,8 @@ export function AuthProvider({ children }) {
             const pathParts = window.location.pathname.split('/').filter(Boolean);
             const eventUrl = pathParts[0] || null;
             
-            const result = await profilesAPI.getCurrentProfile(eventUrl);
-            if (result.profile) {
-              setCurrentProfile(result.profile);
-            }
+            await profilesAPI.getCurrentProfile(eventUrl);
+            // currentProfile updated via changes in response interceptor
           } catch (error) {
             console.error('Failed to fetch current profile:', error);
           }
@@ -110,28 +108,21 @@ export function AuthProvider({ children }) {
       // Listen for login signal from other tabs
       if (e.key === 'auth:login' && e.newValue) {
         // Token is already in localStorage (shared), fetch fresh profile with event context
-        try {
-          const pathParts = window.location.pathname.split('/').filter(Boolean);
-          const eventUrl = pathParts[0] || null;
-          
-          profilesAPI.getCurrentProfile(eventUrl).then(result => {
-            if (result.profile) {
-              setCurrentProfile(result.profile);
-            }
-          }).catch(() => {
-            // Fallback to cached profile
+        (async () => {
+          try {
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            const eventUrl = pathParts[0] || null;
+            
+            await profilesAPI.getCurrentProfile(eventUrl);
+            // currentProfile updated via changes in response interceptor
+          } catch (error) {
+            // Fallback to cached profile if API fails
             const profile = getCurrentProfile();
             if (profile) {
-              setCurrentProfile(profile);
+              // Keep existing cached profile if API fails
             }
-          });
-        } catch (error) {
-          // Fallback to cached profile
-          const profile = getCurrentProfile();
-          if (profile) {
-            setCurrentProfile(profile);
           }
-        }
+        })();
         // Sync login to this tab
         setIsAuthenticated(true);
         setShowLoginModal(false);
@@ -159,10 +150,8 @@ export function AuthProvider({ children }) {
         const pathParts = window.location.pathname.split('/').filter(Boolean);
         const eventUrl = pathParts[0] || null;
         
-        const profileResult = await profilesAPI.getCurrentProfile(eventUrl);
-        if (profileResult.profile) {
-          setCurrentProfile(profileResult.profile);
-        }
+        await profilesAPI.getCurrentProfile(eventUrl);
+        // currentProfile updated via changes in response interceptor
       } catch (error) {
         // Fallback to profile from login result
         if (result.profile) {

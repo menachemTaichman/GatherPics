@@ -32,22 +32,29 @@ Endpoints may return a `changes` array. The interceptor forwards them to `store.
 Supported change types:
 ```
 // Insert or update (gated by scopes). Defaults: ignoreScope=false, broadcast=true
-{ type: 'UPSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
+{ type: 'UPSERT', entity: 'images'|'groups'|'moments'|'albums'|'localStorage', items: [ { id, ...partial }, ... ] | { [id]: { ...partial } }, ignoreScope?, broadcast? }
 
 // Update-only (never inserts). Defaults: ignoreScope=true, broadcast=true
-{ type: 'UPDATE', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
+{ type: 'UPDATE', entity: 'images'|'groups'|'moments'|'albums'|'localStorage', items: [ { id, ...partial }, ... ] | { [id]: { ...partial } }, ignoreScope?, broadcast? }
 
 // Insert-only (skip if exists). Defaults: ignoreScope=true, broadcast=false
 { type: 'INSERT', entity: 'images'|'groups'|'moments'|'albums', items: [ { id, ...partial }, ... ], ignoreScope?, broadcast? }
 
 // Remove entities by id. Defaults: ignoreScope=true, broadcast=true
-{ type: 'REMOVE', entity: 'images'|'groups'|'moments'|'albums', ids: [string,...], ignoreScope?, broadcast? }
+{ type: 'REMOVE', entity: 'images'|'groups'|'moments'|'albums'|'localStorage', ids: [string,...], ignoreScope?, broadcast? }
 
 // Relation mutations on parent. Defaults: ignoreScope=false, broadcast=true
 { type: 'RELATION_ADD'|'RELATION_REMOVE'|'RELATION_SET', relation: 'group.images'|'moment.images'|'album.images'|'image.groups'|'image.moments'|'image.faces'..., parentId, ids?,
   // Optional child entities to upsert locally (labels, etc.)
   entities?: { [childId]: Partial<ChildEntity> }, ignoreScope?, broadcast? }
 ```
+
+**localStorage entity:**
+- Special entity type for updating localStorage values (e.g., `currentProfile`, `preferences`)
+- For `localStorage` entity, `id` is the localStorage key (e.g., `'currentProfile'`, `'preferences'`)
+- UPDATE merges into existing localStorage value, UPSERT replaces entire value, REMOVE deletes the key
+- Changes to `localStorage` entity are never broadcasted (localStorage is per-origin, shared across tabs)
+- Format: `{ type: 'UPDATE', entity: 'localStorage', items: { 'currentProfile': { total_notifications: 2, ... } } }`
 
 Scope gating rules:
 - UPSERT/INSERT apply only if allowed by scopes unless `ignoreScope=true`.

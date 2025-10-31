@@ -10,6 +10,7 @@ import { profilesAPI } from '../../utils/apiService';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useDataStore } from '../../utils/dataManager';
 import { useAuth } from '../../contexts/authContext';
+import { usePendingRequestsCount } from '../../utils/storeUtils';
 
 export default function Header() {
   const location = useLocation();
@@ -36,6 +37,7 @@ export default function Header() {
     totalCount: Number(notifCounts?.totalCount || cachedProfile?.total_notifications || 0),
     unreadCount: Number(notifCounts?.unreadCount || cachedProfile?.unread_notifications || 0),
   };
+  const effectivePendingRequestsCount = usePendingRequestsCount();
 
   // No debug logs
 
@@ -50,17 +52,22 @@ export default function Header() {
     lastFetchSigRef.current = sig;
     (async () => {
       try {
-        const res = await profilesAPI.getCurrentProfile(eventUrl);
-        const p = res?.profile || getCurrentProfile() || {};
+        await profilesAPI.getCurrentProfile(eventUrl);
+        // currentProfile updated via changes, read from localStorage
+        const p = getCurrentProfile() || {};
         const totalNum = Number(p.total_notifications || 0);
         const unreadNum = Number(p.unread_notifications || 0);
-        if (!unmountedRef.current) setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+        if (!unmountedRef.current) {
+          setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+        }
       } catch (e) {
         // fallback to local cache
         const p = getCurrentProfile() || {};
         const totalNum = Number(p.total_notifications || 0);
         const unreadNum = Number(p.unread_notifications || 0);
-        if (!unmountedRef.current) setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+        if (!unmountedRef.current) {
+          setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+        }
       }
     })();
   }, [eventUrl, isAuthenticated]);

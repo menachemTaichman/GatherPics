@@ -362,7 +362,7 @@ class GeneralDB(BaseDB):
                 INSTEAD OF INSERT ON accessible_notifications
                 BEGIN
                     INSERT INTO notifications (profile_id, message, created_at, read, type, data)
-                    VALUES (NEW.profile_id, NEW.message, NEW.created_at, NEW.read, NEW.type, NEW.data);
+                    VALUES (NEW.profile_id, NEW.message, COALESCE(NEW.created_at, CURRENT_TIMESTAMP), COALESCE(NEW.read, 0), NEW.type, NEW.data);
                 END;
             """,
             'trg_accessible_notifications_update': """
@@ -380,8 +380,7 @@ class GeneralDB(BaseDB):
 
                     UPDATE notifications SET
                         message = NEW.message,
-                        created_at = NEW.created_at,
-                        read = NEW.read,
+                        read = COALESCE(NEW.read, read),
                         type = NEW.type,
                         data = NEW.data
                     WHERE id = OLD.id;
@@ -415,7 +414,7 @@ class GeneralDB(BaseDB):
                     END;
 
                     UPDATE notifications SET
-                        read = NEW.read,
+                        read = COALESCE(NEW.read, read),
                         read_at = COALESCE(NEW.read_at, CURRENT_TIMESTAMP)
                     WHERE id = OLD.id;
                 END;

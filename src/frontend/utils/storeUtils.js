@@ -1,5 +1,5 @@
 // Store utils: read the guide at docs/STORE_USAGE.md for patterns and examples.
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { useDataStore } from './dataManager';
 import { sortImages, sortGroups, sortByField, filterImages } from './sorting';
 
@@ -348,6 +348,51 @@ export function useMomentsForUpload(uploadId) {
 export function getRepresentativeUrl(urlHelpers, entity, id) {
   const url = urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl(entity, id) : null;
   return url;
+}
+
+// Stable pending requests count from currentProfile
+export function usePendingRequestsCount() {
+  const readCount = () => {
+    try {
+      const stored = localStorage.getItem('currentProfile');
+      if (stored) {
+        const profile = JSON.parse(stored);
+        return Number(profile.pending_access_requests_count || 0);
+      }
+    } catch {}
+    return 0;
+  };
+
+  const [pendingCount, setPendingCount] = useState(() => readCount());
+
+  useEffect(() => {
+    const updateCount = () => {
+      const count = readCount();
+      setPendingCount((prev) => prev !== count ? count : prev);
+    };
+
+    // Listen for storage events (cross-tab)
+    const handleStorageChange = (e) => {
+      if (e.key === 'currentProfile') {
+        updateCount();
+      }
+    };
+
+    // Listen for custom events (same-tab updates via apiService)
+    const handleCustomEvent = () => {
+      updateCount();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('localStorage:currentProfile', handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorage:currentProfile', handleCustomEvent);
+    };
+  }, []);
+
+  return pendingCount;
 }
 
 

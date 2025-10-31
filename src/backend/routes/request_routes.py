@@ -194,6 +194,13 @@ def delete_request(event_id, request_id):
             'type': 'REMOVE',
             'entity': 'access_request',
             'ids': [request_id]
+        },
+        {
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': event.models.get_current_profile()
+            }
         }]
         return jsonify(response)
     except Forbidden as e:
@@ -265,6 +272,14 @@ def toggle_request(event_id, request_id):
             'entities': groups,
             'relationData': relation_data
         }]
+        changes.append({
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': event.models.get_current_profile()
+            }
+        })
+        
         if applicant_profile_id:
             changes.append({
                 'type': 'UPSERT',

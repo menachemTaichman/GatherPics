@@ -488,7 +488,7 @@ class EventDB(BaseDB):
                 WHERE LOWER(aa.label) != 'archive' and LOWER(aa.label) != 'favorites'
             ''',
             'current_profile': '''
-                SELECT profile_id,
+                SELECT p.profile_id,
                     p.label,
                     hierarchy_rank,
                     can_upload_and_delete_images,
@@ -503,13 +503,15 @@ class EventDB(BaseDB):
                     CASE WHEN COUNT(i.image_id) > 0 OR all_images = 1 THEN 1 ELSE 0 END as has_images,
                     CASE WHEN SUM(g.is_accessible) > 0 OR all_groups = 1 THEN 1 ELSE 0 END as has_groups,
                     CASE WHEN COUNT(a.album_id) > 0 OR all_albums = 1 THEN 1 ELSE 0 END as has_albums,
-                    CASE WHEN SUM(g.is_accessible) <> COUNT(g.group_id) THEN 1 ELSE 0 END as enable_requests
+                    CASE WHEN SUM(g.is_accessible) <> COUNT(g.group_id) THEN 1 ELSE 0 END as enable_new_requests,
+                    COUNT(DISTINCT aar.access_request_id) as pending_access_requests_count
                 FROM profiles p
                 LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
                 LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
                 LEFT JOIN accessible_images i
                 LEFT JOIN accessible_groups g
                 LEFT JOIN accessible_albums a ON (LOWER(a.label) <> 'archive' AND LOWER(a.label) <> 'favorites')
+                LEFT JOIN accessible_access_requests aar ON aar.is_closed = 0
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             ''',

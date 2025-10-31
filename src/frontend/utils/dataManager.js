@@ -162,6 +162,8 @@ function normalizeEntityKey(entity) {
     case 'access_request': return 'access_requests';
     case 'my_access_request': return 'my_access_requests';
     case 'my_notification': return 'my_notifications';
+    case 'local_storage': return 'localStore';
+    case 'localStorage': return 'localStore';
     default: return entity;
   }
 }
@@ -600,11 +602,72 @@ export const useDataStore = create((set, get) => {
 
       changes.forEach((ch) => {
         if (!ch || !ch.type) return;
+        const entityKey = normalizeEntityKey(ch.entity);
         const { ignoreScope: effIgnoreScope, broadcast: effBroadcast } = resolveFlags(ch);
         typeCounts[ch.type] = (typeCounts[ch.type] || 0) + 1;
 
+        // Handle localStorage updates (don't broadcast - localStorage is per-origin)
+        if (entityKey === 'localStore') {
+          if (ch.type === CHANGE_TYPES.REMOVE) {
+            // REMOVE uses ids array
+            const ids = ch.ids || [];
+            ids.forEach((storageKey) => {
+              if (!storageKey) return;
+              try {
+                localStorage.removeItem(String(storageKey));
+              } catch (e) {
+                console.warn('Failed to remove from localStorage:', e);
+              }
+            });
+          } else {
+            // UPSERT/UPDATE use items
+            const items = Array.isArray(ch.items)
+              ? ch.items
+              : (ch.items && typeof ch.items === 'object')
+                ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
+                : [];
+            
+            items.forEach((it) => {
+              if (!it || !it.id) return;
+              const storageKey = it.id;
+              
+              if (ch.type === CHANGE_TYPES.UPSERT) {
+                // Replace entire value
+                try {
+                  const value = { ...it };
+                  delete value.id;
+                  localStorage.setItem(storageKey, JSON.stringify(value));
+                  // Dispatch custom event for same-tab updates
+                  if (storageKey === 'currentProfile') {
+                    window.dispatchEvent(new Event('localStorage:currentProfile'));
+                  }
+                } catch (e) {
+                  console.warn('Failed to update localStorage:', e);
+                }
+              } else if (ch.type === CHANGE_TYPES.UPDATE) {
+                // Merge into existing value
+                try {
+                  const existingRaw = localStorage.getItem(storageKey);
+                  const existing = existingRaw ? JSON.parse(existingRaw) : {};
+                  const merged = { ...existing, ...it };
+                  delete merged.id;
+                  localStorage.setItem(storageKey, JSON.stringify(merged));
+                  // Dispatch custom event for same-tab updates
+                  if (storageKey === 'currentProfile') {
+                    window.dispatchEvent(new Event('localStorage:currentProfile'));
+                  }
+                } catch (e) {
+                  console.warn('Failed to update localStorage:', e);
+                }
+              }
+            });
+          }
+          // Don't broadcast - localStorage is per-origin, not per-tab
+          return;
+        }
+
         if (ch.type === CHANGE_TYPES.UPSERT) {
-          const key = normalizeEntityKey(ch.entity);
+          const key = entityKey;
           if (!key) return;
           const items = Array.isArray(ch.items)
             ? ch.items
@@ -637,7 +700,7 @@ export const useDataStore = create((set, get) => {
         }
 
         if (ch.type === CHANGE_TYPES.UPDATE) {
-          const key = normalizeEntityKey(ch.entity);
+          const key = entityKey;
           if (!key) return;
           const items = Array.isArray(ch.items)
             ? ch.items
@@ -668,7 +731,7 @@ export const useDataStore = create((set, get) => {
         }
 
         if (ch.type === CHANGE_TYPES.INSERT) {
-          const key = normalizeEntityKey(ch.entity);
+          const key = entityKey;
           if (!key) return;
           const items = Array.isArray(ch.items)
             ? ch.items
@@ -789,7 +852,7 @@ export const useDataStore = create((set, get) => {
         }
 
         if (ch.type === CHANGE_TYPES.REMOVE) {
-          const key = normalizeEntityKey(ch.entity);
+          const key = entityKey;
           if (!key) return;
           const ids = ch.ids || [];
           const map = { ...(nextEntities[key] || {}) };

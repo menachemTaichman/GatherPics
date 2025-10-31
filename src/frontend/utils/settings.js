@@ -135,13 +135,9 @@ export const initializePreferences = async (loadFromAPI = false) => {
     if (loadFromAPI) {
       // Try to load preferences from API
       try {
-        const result = await profilesAPI.getPreferences();
-        if (result.preferences) {
-          // Merge API preferences with defaults to ensure all keys exist
-          const merged = mergePreferences(DEFAULT_PREFERENCES, result.preferences);
-          setPreferences(merged);
-          return;
-        }
+        await profilesAPI.getPreferences();
+        // preferences updated via changes in response interceptor
+        return;
       } catch (error) {
         // If API fails (no permission, not logged in, etc.), fall back to local
         if (error.response?.status !== 403) {

@@ -35,11 +35,22 @@ def mark_all_read():
     try:
         read_at = datetime.now().isoformat()
         marked_ids = general_models.mark_all_my_notifications_read(read_at)
-        changes = [{
+        changes = []
+        # changes.append({
+        #     'type': 'UPDATE',
+        #     'entity': 'my_notification',
+        #     'items': general_models.get_entities('my_notifications', marked_ids)
+        # })
+        # Update current_profile notification counts in localStorage
+        changes.append({
             'type': 'UPDATE',
-            'entity': 'my_notification',
-            'items': general_models.get_entities('my_notifications', marked_ids)
-        }]
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': {
+                    'unread_notifications': general_models.count_my_unread_notifications()
+                }
+            }
+        })
         return jsonify({'success': True, 'changes': changes})
     except Forbidden as e:
         return jsonify({'error': str(e)}), 403
@@ -61,6 +72,15 @@ def delete_my_notification(notification_id):
             'entity': 'my_notification',
             'ids': [notification_id]
         }]
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': {
+                    'total_notifications': general_models.count_my_total_notifications()
+                }
+            }
+        })
         return jsonify({'success': True, 'changes': changes, 'deleted_ids': [notification_id]})
     except Forbidden as e:
         return jsonify({'error': str(e)}), 403

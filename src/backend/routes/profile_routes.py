@@ -81,7 +81,15 @@ def get_current_profile():
     profile_general['unread_notifications'] = general_models.count_my_unread_notifications()
     profile = {**profile_event, **profile_general}
 
-    return jsonify({"profile": profile})
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': profile
+        }
+    }]
+
+    return jsonify({"changes": changes})
 
 @profile_bp.route("/api/profiles/current/preferences", methods=["GET"])
 @require_auth
@@ -92,7 +100,14 @@ def get_current_profile_preferences():
     
     try:
         preferences = general_models.get_profile_preferences(profile_id)
-        return jsonify({"preferences": preferences})
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'preferences': preferences
+            }
+        }]
+        return jsonify({"changes": changes})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -113,7 +128,15 @@ def update_current_profile_preferences():
     
     try:
         general_models.update_profile_preferences(profile_id, preference_group, preference_key, preference_value)
-        return jsonify({"success": True})
+        preferences = general_models.get_profile_preferences(profile_id)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'preferences': preferences
+            }
+        }]
+        return jsonify({"success": True, "changes": changes})
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
     except DatabaseError as e:

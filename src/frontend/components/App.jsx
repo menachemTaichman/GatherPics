@@ -310,10 +310,8 @@ function AppContent({ eventUrl }) {
       
       try {
         // Fetch current profile with event-specific data
-        const result = await profilesAPI.getCurrentProfile(eventUrl);
-        if (result.profile) {
-          setCurrentProfile(result.profile);
-        }
+        await profilesAPI.getCurrentProfile(eventUrl);
+        // currentProfile updated via changes in response interceptor
       } catch (error) {
         console.error('Failed to fetch current profile for event:', error);
       }

@@ -15,6 +15,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const eventUrl = params.eventUrl;
   const permissions = usePermissions();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [unreadOnOpen, setUnreadOnOpen] = useState(new Set());
   // Subscribe to stable slices only to avoid unnecessary re-renders
   const entities = useDataStore((s) => s.entities);
@@ -65,7 +66,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   }, [isOpen, eventUrl, setScope]);
 
   const handleRefresh = async () => {
-    setLoading(true);
+    setRefreshing(true);
     try {
       // Keep scope and reload notifications; counts handled elsewhere
       setScope({ entity: 'all', id: 'my_notifications' });
@@ -74,7 +75,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     } catch (e) {
       // ignore
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -114,7 +115,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
           className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
           title="Refresh"
         >
-          <RefreshCw className={"w-4 h-4 " + (loading ? 'animate-spin' : '')} />
+          <RefreshCw className={"w-4 h-4 " + (refreshing ? 'animate-spin' : '')} />
         </button>
       </div>
       {notifications.length === 0 ? (

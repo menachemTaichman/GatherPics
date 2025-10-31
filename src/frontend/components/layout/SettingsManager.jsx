@@ -9,7 +9,7 @@ import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
 import { useProfilesList, useRequestsList, useMyRequestsList } from '../../utils/dataManager';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, usePendingRequestsCount } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../contexts/authContext';
@@ -32,6 +32,7 @@ export default function SettingsManager() {
   // Profile management state
   const currentProfile = getCurrentProfile();
   const allProfiles = useProfilesList();
+  const pendingRequestsCount = usePendingRequestsCount();
   const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
   const [currentProfileLabel, setCurrentProfileLabel] = useState('');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -48,7 +49,6 @@ export default function SettingsManager() {
   const [editingRequest, setEditingRequest] = useState(null);
   const [showDeleteRequestModal, setShowDeleteRequestModal] = useState(false);
   const [requestToDelete, setRequestToDelete] = useState(null);
-  const [openRequestsCount, setOpenRequestsCount] = useState(0);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'settings-manager';
@@ -93,7 +93,7 @@ export default function SettingsManager() {
     if (isOpen && activeTab === 'profiles' && eventUrl) {
       fetchProfiles();
       if (permissions.isProfilesManager) {
-        fetchOpenRequestsCount();
+        fetchCurrentProfile();
       }
     }
   }, [isOpen, activeTab, eventUrl, permissions.isProfilesManager]);
@@ -104,16 +104,13 @@ export default function SettingsManager() {
       fetchCurrentProfile();
       fetchMyRequests();
     }
-  }, [isOpen, activeTab, eventUrl, currentProfile?.id, permissions.enable_requests]);
+  }, [isOpen, activeTab, eventUrl, currentProfile?.id, permissions.enable_new_requests]);
 
 
   const fetchCurrentProfile = async () => {
     try {
-      const profileId = currentProfile?.id || currentProfile?.profile_id;
-      if (profileId) {
-        await profilesAPI.getById(profileId, eventUrl);
-        // Changes are automatically applied by apiService interceptor
-      }
+      await profilesAPI.getCurrentProfile(eventUrl);
+      // Changes are automatically applied by apiService interceptor
     } catch (error) {
       console.error('Failed to fetch current profile:', error);
     }
@@ -136,17 +133,6 @@ export default function SettingsManager() {
       console.error('Failed to fetch profiles:', error);
     }
   };
-
-  const fetchOpenRequestsCount = async () => {
-    try {
-      const result = await requestsAPI.getOpenCount(eventUrl);
-      setOpenRequestsCount(result.count || 0);
-    } catch (error) {
-      console.error('Failed to fetch open requests count:', error);
-      setOpenRequestsCount(0);
-    }
-  };
-
 
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
@@ -434,10 +420,17 @@ export default function SettingsManager() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700"
+        className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
         title="Settings"
       >
-        <Settings className="w-4 h-4" />
+        <div className="relative">
+          <Settings className="w-4 h-4" />
+          {pendingRequestsCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+              1
+            </span>
+          )}
+        </div>
       </button>
 
       <AnimatePresence>
@@ -479,11 +472,12 @@ export default function SettingsManager() {
                   <div className="flex space-x-1">
                     {tabs.map((tab) => {
                       const Icon = tab.icon;
+                      const showBadge = tab.id === 'profiles' && pendingRequestsCount > 0;
                       return (
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id)}
-                          className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                          className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors relative ${
                             activeTab === tab.id
                               ? 'border-primary-500 text-primary-600'
                               : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -491,6 +485,11 @@ export default function SettingsManager() {
                         >
                           <Icon className="w-4 h-4" />
                           <span className="font-medium">{tab.label}</span>
+                          {showBadge && (
+                            <span className="absolute -top-0.5 -right-0.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
+                              1
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -554,122 +553,120 @@ export default function SettingsManager() {
                         </PermissionGate>
 
                         {/* My Requests Section */}
-                        <PermissionGate requires="enable_requests">
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            {currentProfile?.is_public ? (
-                              // Elegant: centered, not full-width, soft blue, with subtle border and rounded, gentle hover
-                              <button
-                                onClick={handleCreateRequest}
-                                className="px-6 py-2 min-w-[180px] mx-auto block bg-blue-100 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-200 transition-colors font-medium flex items-center justify-center space-x-2 text-base shadow-sm"
-                              >
-                                <Plus className="w-5 h-5 mr-1" />
-                                <span>Create New Profile Request</span>
-                              </button>
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-between mb-4">
-                                  <h4 className="text-sm font-semibold text-gray-700">My Requests</h4>
+                        {(() => {
+                          const isPublic = currentProfile?.is_public === 1;
+                          const enableNewRequests = permissions.enable_new_requests;
+                          const hasRequests = userRequests.length > 0;
+                          const shouldShow = !isPublic && (enableNewRequests || hasRequests);
+                          
+                          if (!shouldShow) return null;
+                          
+                          return (
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-sm font-semibold text-gray-700">My Requests</h4>
+                                {enableNewRequests && (
                                   <button
                                     onClick={handleCreateRequest}
                                     className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1">
                                     <Plus className="w-4 h-4" />
                                     <span>Create Request</span>
                                   </button>
+                                )}
+                              </div>
+                              {userRequests.length === 0 ? (
+                                <div key="no-requests-message" className="text-center py-4">
+                                  <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-sm text-gray-500">No requests yet</p>
                                 </div>
-                                {userRequests.length === 0 ? (
-                                  <div key="no-requests-message" className="text-center py-4">
-                                    <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-500">No requests yet</p>
-                                  </div>
-                                ) : (
-                                  <div key="requests-list" className="space-y-2">
-                                    {sortedMyRequests.map((request, index) => {
-                                      // Try both id and access_request_id (normalization might use either)
-                                      const requestKey = request?.id || request?.access_request_id || `request-${index}`;
-                                      const requestId = request?.id || request?.access_request_id;
-                                      
-                                      return (
-                                        <div
-                                          key={requestKey}
-                                          className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
-                                        >
-                                        <div className="flex items-center space-x-3">
-                                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                            <FileText className="w-5 h-5 text-blue-600" />
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center space-x-2">
-                                              <p className="font-medium text-gray-900">{request.applicant_name}</p>
-                                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                                (() => {
-                                                  const status = request.status || 'pending';
-                                                  const statusConfig = {
-                                                    pending: 'bg-blue-100 text-blue-700',
-                                                    approved: 'bg-green-100 text-green-700',
-                                                    rejected: 'bg-red-100 text-red-700',
-                                                    mixed: 'bg-yellow-100 text-yellow-700'
-                                                  };
-                                                  return statusConfig[status] || statusConfig.pending;
-                                                })()
-                                              }`}>
-                                                {(() => {
-                                                  const status = request.status || 'pending';
-                                                  const statusConfig = {
-                                                    pending: 'Pending',
-                                                    approved: 'Approved',
-                                                    rejected: 'Rejected',
-                                                    mixed: 'Mixed'
-                                                  };
-                                                  return statusConfig[status] || statusConfig.pending;
-                                                })()}
-                                              </span>
-                                            </div>
-                                            <p className="text-xs text-gray-500">
-                                              {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {new Date(request.requested_at).toLocaleDateString()}
-                                            </p>
-                                          </div>
+                              ) : (
+                                <div key="requests-list" className="space-y-2">
+                                  {sortedMyRequests.map((request, index) => {
+                                    // Try both id and access_request_id (normalization might use either)
+                                    const requestKey = request?.id || request?.access_request_id || `request-${index}`;
+                                    const requestId = request?.id || request?.access_request_id;
+                                    
+                                    return (
+                                      <div
+                                        key={requestKey}
+                                        className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
+                                      >
+                                      <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                          <FileText className="w-5 h-5 text-blue-600" />
                                         </div>
-                                        <div className="flex items-center space-x-1">
-                                          {(() => {
-                                            const status = request.status || 'pending';
-                                            const isClosed = status !== 'pending';
-                                            return isClosed ? (
+                                        <div>
+                                          <div className="flex items-center space-x-2">
+                                            <p className="font-medium text-gray-900">{request.applicant_name}</p>
+                                            <span className={`px-2 py-1 text-xs rounded-full ${
+                                              (() => {
+                                                const status = request.status || 'pending';
+                                                const statusConfig = {
+                                                  pending: 'bg-blue-100 text-blue-700',
+                                                  approved: 'bg-green-100 text-green-700',
+                                                  rejected: 'bg-red-100 text-red-700',
+                                                  mixed: 'bg-yellow-100 text-yellow-700'
+                                                };
+                                                return statusConfig[status] || statusConfig.pending;
+                                              })()
+                                            }`}>
+                                              {(() => {
+                                                const status = request.status || 'pending';
+                                                const statusConfig = {
+                                                  pending: 'Pending',
+                                                  approved: 'Approved',
+                                                  rejected: 'Rejected',
+                                                  mixed: 'Mixed'
+                                                };
+                                                return statusConfig[status] || statusConfig.pending;
+                                              })()}
+                                            </span>
+                                          </div>
+                                          <p className="text-xs text-gray-500">
+                                            {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {new Date(request.requested_at).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center space-x-1">
+                                        {(() => {
+                                          const status = request.status || 'pending';
+                                          const isClosed = status !== 'pending';
+                                          return isClosed ? (
+                                            <button
+                                              onClick={() => handleEditRequest(request)}
+                                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                              title="View request"
+                                            >
+                                              <Eye className="w-4 h-4 text-blue-600" />
+                                            </button>
+                                          ) : (
+                                            <>
                                               <button
                                                 onClick={() => handleEditRequest(request)}
                                                 className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                                title="View request"
+                                                title="Edit request"
                                               >
-                                                <Eye className="w-4 h-4 text-blue-600" />
+                                                <Edit2 className="w-4 h-4 text-blue-600" />
                                               </button>
-                                            ) : (
-                                              <>
-                                                <button
-                                                  onClick={() => handleEditRequest(request)}
-                                                  className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                                  title="Edit request"
-                                                >
-                                                  <Edit2 className="w-4 h-4 text-blue-600" />
-                                                </button>
-                                                <button
-                                                  onClick={() => handleDeleteRequest(request)}
-                                                  className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                                  title="Delete request"
-                                                >
-                                                  <Trash2 className="w-4 h-4 text-red-600" />
-                                                </button>
-                                              </>
-                                            );
-                                          })()}
-                                        </div>
+                                              <button
+                                                onClick={() => handleDeleteRequest(request)}
+                                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                                title="Delete request"
+                                              >
+                                                <Trash2 className="w-4 h-4 text-red-600" />
+                                              </button>
+                                            </>
+                                          );
+                                        })()}
                                       </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </PermissionGate>
+                                    </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         
                       </motion.div>
@@ -691,23 +688,22 @@ export default function SettingsManager() {
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
                               <h3 className="text-sm font-semibold text-gray-700">Profiles</h3>
-                              {openRequestsCount > 0 && (
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <span className="text-xs font-medium text-blue-600">{openRequestsCount}</span>
-                                  </div>
-                                  <span className="text-xs text-gray-500">open requests</span>
-                                </div>
-                              )}
                             </div>
                             <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => urlHelpers.navigateToRequests()}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
-                              >
-                                <FileText className="w-4 h-4" />
-                                <span>View Requests</span>
-                              </button>
+                              <div className="relative inline-block">
+                                <button
+                                  onClick={() => urlHelpers.navigateToRequests()}
+                                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>View Requests</span>
+                                </button>
+                                {pendingRequestsCount > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
+                                    {pendingRequestsCount}
+                                  </span>
+                                )}
+                              </div>
                               <div className="relative">
                                 <button
                                   onMouseEnter={() => setShowPublicAccessTooltip(true)}
