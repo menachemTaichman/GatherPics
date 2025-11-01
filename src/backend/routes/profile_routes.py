@@ -65,21 +65,7 @@ def get_current_profile():
     event_id = request.args.get('event_id', None)
     
     general_models = get_general_models()
-    profile_id = get_jwt_identity()
-    
-    if event_id:
-        event = get_event(event_id)
-        profile_event = event.models.get_current_profile()
-        profile_event.pop('profile_id')
-        profile_event.pop('label')
-    else:
-        profile_event = {}
-
-    general_models = get_general_models(profile_id)
-    profile_general = general_models.profile_context
-    profile_general['total_notifications'] = general_models.count_my_total_notifications()
-    profile_general['unread_notifications'] = general_models.count_my_unread_notifications()
-    profile = {**profile_event, **profile_general}
+    profile = general_models.get_current_profile(event_id)
 
     changes = [{
         'type': 'UPSERT',
@@ -365,6 +351,9 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
 
     if 'password' in data.keys():
         general_models.update_profile_password(profile_id, data['password'])
+
+    if 'email' in data.keys():
+        general_models.edit('profiles', profile_id, {'email': data['email']})
 
     if event_id:
         event_fields = [

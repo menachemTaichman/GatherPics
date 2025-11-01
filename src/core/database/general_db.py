@@ -113,7 +113,7 @@ class GeneralDB(BaseDB):
                 'fields': ['developer_id', 'image_size_limit_bytes', 'images_count_limit'],
             },
             'notifications': {
-                'primary_key': 'id',
+                'primary_key': 'notification_id',
                 'accessible_table': 'accessible_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
                 'serializable': {
@@ -122,7 +122,7 @@ class GeneralDB(BaseDB):
             },
             'my_notifications': {
                 'original_table': 'notifications',
-                'primary_key': 'id',
+                'primary_key': 'notification_id',
                 'accessible_table': 'accessible_my_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
             },
@@ -142,6 +142,7 @@ class GeneralDB(BaseDB):
             'profiles': '''
                 profile_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE NOT NULL,
+                email TEXT,
                 password TEXT DEFAULT '',
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
                 can_create_events INTEGER DEFAULT 0,
@@ -185,7 +186,7 @@ class GeneralDB(BaseDB):
                 FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL
             ''',
             'notifications': '''
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 profile_id TEXT NOT NULL,
                 message TEXT NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -208,6 +209,7 @@ class GeneralDB(BaseDB):
             'idx_refresh_tokens_token': 'refresh_tokens(token)',
             'idx_events_url': 'events(url)',
             'idx_notifications_profile_id': 'notifications(profile_id)',
+            'idx_notifications_notification_id': 'notifications(notification_id)',
             'idx_notifications_message': 'notifications(message)',
             'idx_notifications_read': 'notifications(read)',
             'idx_notifications_created_at': 'notifications(created_at)',
@@ -219,6 +221,21 @@ class GeneralDB(BaseDB):
         return {
             'accessible_events': """
                 SELECT * FROM events
+            """,
+            'current_profile': """
+                SELECT
+                    p.profile_id,
+                    p.label,
+                    p.email,
+                    p.hierarchy_rank,
+                    p.can_create_events,
+                    p.restricted_to_event,
+                    COUNT(mn.notification_id) AS total_notifications,
+                    COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications
+                    FROM profiles p
+                    LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
+                WHERE p.profile_id = cur_profile('profile_id')
+                GROUP BY p.profile_id
             """,
             'accessible_profiles': """
                 SELECT * FROM profiles p
@@ -261,8 +278,8 @@ class GeneralDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot create profile to a different event than the current profile')
                     END;
 
-                    INSERT INTO profiles (profile_id, label, password, hierarchy_rank, can_create_events, restricted_to_event)
-                    VALUES (NEW.profile_id, NEW.label, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event);
+                    INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event)
+                    VALUES (NEW.profile_id, NEW.label, NEW.email, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event);
                 END;
             """,
             'trg_accessible_profiles_update': """
@@ -281,6 +298,7 @@ class GeneralDB(BaseDB):
 
                     UPDATE profiles SET
                         label = NEW.label,
+                        email = NEW.email,
                         password = NEW.password,
                         hierarchy_rank = NEW.hierarchy_rank,
                         can_create_events = NEW.can_create_events,
@@ -384,7 +402,7 @@ class GeneralDB(BaseDB):
                         read = COALESCE(NEW.read, read),
                         type = NEW.type,
                         data = NEW.data
-                    WHERE id = OLD.id;
+                    WHERE notification_id = OLD.notification_id;
                 END;
             """,
             'trg_accessible_notifications_delete': """
@@ -401,7 +419,7 @@ class GeneralDB(BaseDB):
                     END;
 
                     DELETE FROM notifications
-                    WHERE id = OLD.id;
+                    WHERE notification_id = OLD.notification_id;
                 END;
             """,
             
@@ -417,7 +435,7 @@ class GeneralDB(BaseDB):
                     UPDATE notifications SET
                         read = COALESCE(NEW.read, read),
                         read_at = COALESCE(NEW.read_at, CURRENT_TIMESTAMP)
-                    WHERE id = OLD.id;
+                    WHERE notification_id = OLD.notification_id;
                 END;
             """,
             'trg_accessible_my_notifications_delete': """
@@ -429,7 +447,7 @@ class GeneralDB(BaseDB):
                     END;
 
                     DELETE FROM notifications
-                    WHERE id = OLD.id;
+                    WHERE notification_id = OLD.notification_id;
                 END;
             """,
 

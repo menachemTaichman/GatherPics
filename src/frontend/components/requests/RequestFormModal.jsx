@@ -27,7 +27,8 @@ export default function RequestFormModal({
     applicant_email: '',
     applicant_phone: '',
     details: '',
-    group_ids: []
+    group_ids: [],
+    communication_consent: false
   });
   const [loading, setLoading] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState(new Set());
@@ -156,6 +157,7 @@ export default function RequestFormModal({
   const requestDataApplicantPhone = requestData?.applicant_phone;
   const requestDataDetails = requestData?.details;
   const requestDataApplicantProfileId = requestData?.applicant_profile_id;
+  const requestDataCommunicationConsent = requestData?.communication_consent;
   
   // Stabilize storeRequest presence check
   const hasStoreRequest = !!storeRequest;
@@ -182,7 +184,8 @@ export default function RequestFormModal({
         applicant_phone: requestDataApplicantPhone || '',
         details: requestDataDetails || '',
         group_ids: groupIds,
-        applicant_profile_id: requestDataApplicantProfileId || (currentProfile?.id || currentProfile?.profile_id) || null
+        applicant_profile_id: requestDataApplicantProfileId || (currentProfile?.id || currentProfile?.profile_id) || null,
+        communication_consent: requestDataCommunicationConsent || false
       });
       setSelectedGroups(new Set(groupIds));
       setInitialGroups(new Set(groupIds)); // Store initial groups for calculating diff
@@ -196,7 +199,8 @@ export default function RequestFormModal({
         applicant_phone: '',
         details: '',
         group_ids: [],
-        applicant_profile_id: requestType === 'own' ? (currentProfile?.id || currentProfile?.profile_id) : null
+        applicant_profile_id: requestType === 'own' ? (currentProfile?.id || currentProfile?.profile_id) : null,
+        communication_consent: false
       });
       setSelectedGroups(new Set());
       setInitialGroups(new Set()); // No initial groups for new requests
@@ -217,6 +221,7 @@ export default function RequestFormModal({
     requestDataApplicantPhone,
     requestDataDetails,
     requestDataApplicantProfileId,
+    requestDataCommunicationConsent,
     currentProfile?.id,
     currentProfile?.is_public,
     currentProfile?.label
@@ -487,6 +492,10 @@ export default function RequestFormModal({
         showToast('Email is required for new profiles', 'error');
         return;
       }
+      if (!formData.communication_consent) {
+        showToast('Communication consent is required for new profiles', 'error');
+        return;
+      }
     }
     
 
@@ -498,7 +507,8 @@ export default function RequestFormModal({
         applicant_email: formData.applicant_email.trim() || null,
         applicant_phone: formData.applicant_phone.trim() || null,
         details: formData.details.trim() || null,
-        applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null
+        applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null,
+        communication_consent: formData.communication_consent
       };
 
       if (request) {
@@ -1002,6 +1012,31 @@ export default function RequestFormModal({
                     placeholder="Additional information about the request"
                   />
                 </div>
+                
+                {/* Communication Consent - Required for new profile requests */}
+                {formData.requestType === 'new' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label className="flex items-start space-x-3 cursor-pointer group">
+                      <div className="flex items-center h-5">
+                        <input
+                          type="checkbox"
+                          checked={formData.communication_consent}
+                          onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('communication_consent', e.target.checked)}
+                          disabled={isClosed || isPublicSubmissionView}
+                          className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
+                          I consent to receive communications about this request *
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1">
+                          The event manager will use your email to notify you about the status of your access request.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
                 {Array.isArray(requestData?.closed_details) && requestData.closed_details.length > 0 && (
                   <div className="flex items-center gap-2 mt-3">
                     <span className="flex items-center gap-1 group relative text-xs font-semibold text-blue-700">

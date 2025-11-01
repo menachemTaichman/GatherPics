@@ -277,6 +277,12 @@ ids = {
 # recreate_views_triggers_and_indexes(db)
 # general_models.ensure_access_request_notifications(event, 43)
 
+drop_views_triggers_and_indexes(general_models.db)
+general_models.db.execute_query('DROP TABLE IF EXISTS notifications;')
+general_models.db.execute_query(f'CREATE TABLE notifications ({GeneralDB.TABLES()["notifications"]})')
+create_views_triggers_and_indexes(general_models.db)
+
+
 main_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
 main_general_models = GeneralModels(profile_id=main_profile_id)
 main_event = Event(event_id, profile_id=main_profile_id)

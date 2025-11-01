@@ -13,6 +13,24 @@ class GeneralModels(BaseModels):
         self.db = GeneralDB(profile_id)
         self.profile_id = profile_id
 
+    def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
+        """Get the current profile."""
+        general_profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
+        events_profiles = self.get_childs('profiles', general_profile['profile_id'], 'events', return_ids=True)
+        if event_id and event_id not in events_profiles:
+            raise Forbidden('Profile does not have permissions in this event')
+
+        if event_id:
+            event = Event(event_id, general_profile['profile_id'])
+            if not event:
+                raise Forbidden('Event not found')
+            profile_event = event.models.get_current_profile()
+            profile_event.pop('profile_id')
+            profile_event.pop('label')
+            return {**general_profile, **profile_event, 'events': events_profiles}
+        else:
+            return general_profile
+
     @property
     def profile_id(self) -> str | None:
         return self._profile_id
@@ -41,7 +59,7 @@ class GeneralModels(BaseModels):
         return profile
     
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
-        """Check if a profile exists."""
+        """Check if a record exists."""
         if table == 'profiles' and 'restricted_to_event' in fields:
             within_event = super().is_exists(table, fields, exclude_id)
             if within_event:
@@ -76,7 +94,7 @@ class GeneralModels(BaseModels):
         
         return profile.get('is_public')
 
-    def create_profile(self, label: str, password: str, hierarchy_rank: int, *, can_create_events: bool = False, event_id: str | None = None, can_delete: bool = False) -> str:
+    def create_profile(self, label: str, password: str, hierarchy_rank: int, email: str | None = None, *, can_create_events: bool = False, event_id: str | None = None, can_delete: bool = False) -> str:
         """
         Create a new profile.
         Returns:
@@ -92,7 +110,7 @@ class GeneralModels(BaseModels):
             raise Exception('Profile does not have permissions in this event')
 
         profile_id = self.generate_id()
-        self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
+        self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'email': email, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
         if event_id:
             self.add_profile_to_event(profile_id, event_id, can_delete)
 
@@ -251,8 +269,9 @@ class GeneralModels(BaseModels):
         applicant_profile_id = None
         if approved_group_ids and not access_request['applicant_profile_id']:
             label = profile_name or access_request['applicant_name']
+            email = access_request['applicant_email']
             password = secrets.token_urlsafe(6)
-            applicant_profile_id = self.create_profile(label, password, 0, event_id=event_id)
+            applicant_profile_id = self.create_profile(label, password, 0, email=email, event_id=event_id)
         
         applicant_profile_id = event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
         if applicant_profile_id:
@@ -451,20 +470,6 @@ class GeneralModels(BaseModels):
         self.db.execute_query(query, params)
 
     # Notifications helpers
-    def count_my_unread_notifications(self) -> int:
-        """Count my unread notifications."""
-        query = """
-            SELECT COUNT(*) FROM my_notifications WHERE read = 0
-        """
-        return int(self.db.execute_query(query, (), return_format=ReturnFormat.VALUE) or 0)
-
-    def count_my_total_notifications(self) -> int:
-        """Count my total notifications (for hiding bell when 0)."""
-        query = """
-            SELECT COUNT(*) FROM my_notifications
-        """
-        return int(self.db.execute_query(query, (), return_format=ReturnFormat.VALUE) or 0)
-
     def mark_all_my_notifications_read(self, read_at: str) -> list[str]:
         """
         Mark all of my unread notifications as read.

@@ -905,16 +905,26 @@ export default function RequestDetailModal({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex flex-row items-center justify-between">
           {requestData.applicant_email && !requestData.closed_at ? (
-            <label className="relative inline-flex items-center cursor-pointer mr-5 select-none">
-              <input
-                type="checkbox"
-                checked={notifyByEmail}
-                onChange={e => handleNotifyByEmailChange(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white"></div>
-              <span className="ml-3 text-sm font-medium text-gray-700">Notify requester by email</span>
-            </label>
+            <div className="flex flex-col mr-5">
+              <label className={`relative inline-flex items-center ${requestData.communication_consent ? 'cursor-pointer' : 'cursor-not-allowed'} select-none`}>
+                <input
+                  type="checkbox"
+                  checked={notifyByEmail && requestData.communication_consent}
+                  onChange={e => requestData.communication_consent && handleNotifyByEmailChange(e.target.checked)}
+                  disabled={!requestData.communication_consent}
+                  className="sr-only peer"
+                />
+                <div className={`w-10 h-5 ${requestData.communication_consent ? 'bg-gray-200' : 'bg-gray-300'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
+                <span className={`ml-3 text-sm font-medium ${requestData.communication_consent ? 'text-gray-700' : 'text-gray-400'}`}>
+                  Notify requester by email
+                </span>
+              </label>
+              {!requestData.communication_consent && (
+                <p className="text-xs text-amber-600 mt-1 ml-14">
+                  Requester has not consented to email communications
+                </p>
+              )}
+            </div>
           ) : <div />}
           <div className="flex items-center justify-end flex-1">
             {canApprove && (

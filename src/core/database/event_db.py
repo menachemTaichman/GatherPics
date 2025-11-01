@@ -97,6 +97,7 @@ class EventDB(BaseDB):
                     'applicant_email',
                     'applicant_phone',
                     'details',
+                    'communication_consent',
                     'status',
                     'is_closed',
                     'closed_at',
@@ -136,6 +137,7 @@ class EventDB(BaseDB):
                     'applicant_email',
                     'applicant_phone',
                     'details',
+                    'communication_consent',
                     'status',
                     'is_closed',
                     'closed_at',
@@ -304,6 +306,7 @@ class EventDB(BaseDB):
                 applicant_email TEXT,
                 applicant_phone TEXT,
                 details TEXT,
+                communication_consent BOOLEAN DEFAULT 0,
                 is_closed BOOLEAN DEFAULT 0,
                 closed_at DATETIME,
                 closed_by TEXT,
@@ -1262,10 +1265,13 @@ class EventDB(BaseDB):
                         )
                     THEN
                         RAISE(ABORT, 'Permission denied: access request by public profile is only allowed for another profile with name and email required')
+                    WHEN
+                        applicant_profile_id IS NULL AND COALESCE(NEW.communication_consent, 0) = 0 THEN
+                            RAISE(ABORT, 'Permission denied: communication consent is required for anonymous access request')
                     END;
 
                     INSERT INTO access_requests
-                    (profile_id, requested_at, applicant_name, applicant_email, applicant_phone, details, applicant_profile_id)
+                    (profile_id, requested_at, applicant_name, applicant_email, applicant_phone, details, applicant_profile_id, communication_consent)
                     VALUES (
                         NEW.profile_id,
                         COALESCE(NEW.requested_at, CURRENT_TIMESTAMP),
@@ -1273,7 +1279,8 @@ class EventDB(BaseDB):
                         CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_email ELSE NULL END,
                         CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_phone ELSE NULL END,
                         NEW.details,
-                        CASE WHEN cur_profile('is_public') = 0 THEN NEW.applicant_profile_id ELSE NULL END
+                        CASE WHEN cur_profile('is_public') = 0 THEN NEW.applicant_profile_id ELSE NULL END,
+                        COALESCE(NEW.communication_consent, 0)
                     );
                 END;
             """,
@@ -1285,13 +1292,16 @@ class EventDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot update access request for another profile')
                         WHEN OLD.is_closed = 1 THEN
                             RAISE(ABORT, 'Permission denied: cannot update closed access request')
+                        WHEN COALESCE(NEW.communication_consent, 0) = 0 AND applicant_profile_id IS NULL THEN
+                            RAISE(ABORT, 'Permission denied: communication consent is required for anonymous access request')
                     END;
 
                     UPDATE access_requests SET
                         applicant_name = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_name ELSE NULL END,
                         applicant_email = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_email ELSE NULL END,
                         applicant_phone = CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_phone ELSE NULL END,
-                        details = NEW.details
+                        details = NEW.details,
+                        communication_consent = COALESCE(NEW.communication_consent, 0)
                     WHERE access_request_id = OLD.access_request_id;
                 END;
             """,
