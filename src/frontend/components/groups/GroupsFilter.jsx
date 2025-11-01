@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { groupsAPI } from '../../utils/apiService';
 import { useDataStore } from '../../utils/dataManager';
 import { useModalManager } from '../../utils/modalManager';
-import { getRepresentativeUrl } from '../../utils/storeUtils';
+import { getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { getImageCount } from '../../utils/settings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/authContext';
@@ -39,6 +39,7 @@ export default function GroupsFilter({
   onPanelOpenedByUser,
   onFetchRelated // New prop to expose fetch_related function
 }) {
+  const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -51,8 +52,8 @@ export default function GroupsFilter({
       : []
   ); // excludes currentGroupId
   const [isResetting, setIsResetting] = useState(false);
-  const groups = useDataStore(state => state.entities?.groups || {});
-  const entities = useDataStore(state => state.entities);
+  const groups = useDataStore(state => state.entities?.[eventId]?.groups || null);
+  const entities = useDataStore(state => state.entities?.[eventId] || null);
   const { registerModal, unregisterModal } = useModalManager();
   const PANEL_ID = 'groups-filter-panel';
   
@@ -124,7 +125,7 @@ export default function GroupsFilter({
       }
 
       // Get the updated groups from store after applying changes
-      const after = useDataStore.getState().entities?.groups || {};
+      const after = useDataStore.getState().entities?.[eventId]?.groups || {};
       const relatedList = (data.related_group_ids || []).map(id => after[id]).filter(Boolean);
       
       onRelatedGroupsUpdate?.(relatedList);
@@ -274,7 +275,7 @@ export default function GroupsFilter({
       // Changes are automatically applied by the API interceptor
       // Just check if faces were loaded
       const store = useDataStore.getState();
-      const groupAfter = store.entities?.groups?.[groupId];
+      const groupAfter = store.entities?.[eventId]?.groups?.[groupId];
       
     } catch (error) {
       console.error('❌ [GroupsFilter] Error fetching group data for filtering:', error);
@@ -320,7 +321,7 @@ export default function GroupsFilter({
     
     const groupsToFetch = selectedGroups.filter(id => {
       const store = useDataStore.getState();
-      const group = store.entities?.groups?.[id];
+      const group = store.entities?.[eventId]?.groups?.[id];
       // Check if group has faces loaded
       return group && (!group.faces || (group.faces instanceof Set && group.faces.size === 0));
     });

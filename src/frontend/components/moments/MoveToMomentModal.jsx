@@ -247,7 +247,7 @@ export default function MoveToMomentModal({
         // Calculate start/end dates from selected images
         const entities = useDataStore.getState().entities;
         const imageDates = imageIds
-          .map(imageId => entities?.images?.[imageId]?.date_taken)
+          .map(imageId => entities?.[eventId]?.images?.[imageId]?.date_taken)
           .filter(Boolean)
           .map(date => new Date(date))
           .filter(date => !isNaN(date.getTime()));

@@ -167,8 +167,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       // Legacy parent callback (can be removed in future if parent uses store)
       if (onRefreshImages) {
         const store = useDataStore.getState();
-        const imageIds = store.entities?.moments?.[momentId]?.images || EMPTY_SET;
-        const images = Array.from(imageIds).map(id => store.entities?.images?.[id]).filter(Boolean);
+        const imageIds = store.entities?.[eventId]?.moments?.[momentId]?.images || EMPTY_SET;
+        const images = Array.from(imageIds).map(id => store.entities?.[eventId]?.images?.[id]).filter(Boolean);
         onRefreshImages(momentId, images);
       }
       
@@ -264,8 +264,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const imageMomentMap = useMemo(() => {
     const map = new Map();
     const store = useDataStore.getState();
-    const moments = store.entities?.moments || {};
-    const images = store.entities?.images || {};
+    const moments = store.entities?.[eventId]?.moments || {};
+    const images = store.entities?.[eventId]?.images || {};
     
     // Simply iterate through all images and use their moment_id field
     for (const [imageId, image] of Object.entries(images)) {

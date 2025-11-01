@@ -20,7 +20,7 @@ export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
       if (result.conflict) {
         // result.conflicting_group is just an ID, we need to get the full group object
         const store = useDataStore.getState();
-        const conflictingGroup = store.entities?.groups?.[result.conflicting_group];
+        const conflictingGroup = store.entities?.[eventId]?.groups?.[result.conflicting_group];
         setNameConflict(conflictingGroup);
       } else {
         setNameConflict(null);

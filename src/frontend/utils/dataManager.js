@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { useMemo } from 'react';
 
 // Centralized storage keys (prefix can be changed easily)
 export const STORAGE_KEYS = {
@@ -1078,94 +1077,95 @@ const selectorCache = {
 
 export const selectors = {
   // Event-scoped selectors (require eventId) - with memoization
+  // CRITICAL: Use null fallback, NOT {}, to avoid creating new object refs
   groupsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.groups || {};
+    const ref = state.entities?.[eventId]?.groups || null;
     const cache = selectorCache.groups.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.groups.set(eventId, { ref, arr });
     return arr;
   },
   imagesAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.images || {};
+    const ref = state.entities?.[eventId]?.images || null;
     const cache = selectorCache.images.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.images.set(eventId, { ref, arr });
     return arr;
   },
   momentsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.moments || {};
+    const ref = state.entities?.[eventId]?.moments || null;
     const cache = selectorCache.moments.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.moments.set(eventId, { ref, arr });
     return arr;
   },
   albumsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.albums || {};
+    const ref = state.entities?.[eventId]?.albums || null;
     const cache = selectorCache.albums.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.albums.set(eventId, { ref, arr });
     return arr;
   },
   facesAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.faces || {};
+    const ref = state.entities?.[eventId]?.faces || null;
     const cache = selectorCache.faces.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.faces.set(eventId, { ref, arr });
     return arr;
   },
   eventProfilesAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.event_profiles || {};
+    const ref = state.entities?.[eventId]?.event_profiles || null;
     const cache = selectorCache.event_profiles.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.event_profiles.set(eventId, { ref, arr });
     return arr;
   },
   uploadsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.uploads || {};
+    const ref = state.entities?.[eventId]?.uploads || null;
     const cache = selectorCache.uploads.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.uploads.set(eventId, { ref, arr });
     return arr;
   },
   accessRequestsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.access_requests || {};
+    const ref = state.entities?.[eventId]?.access_requests || null;
     const cache = selectorCache.access_requests.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.access_requests.set(eventId, { ref, arr });
     return arr;
   },
   myAccessRequestsAll: (state, eventId) => {
-    const ref = state.entities?.[eventId]?.my_access_requests || {};
+    const ref = state.entities?.[eventId]?.my_access_requests || null;
     const cache = selectorCache.my_access_requests.get(eventId);
     if (cache && cache.ref === ref) return cache.arr;
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.my_access_requests.set(eventId, { ref, arr });
     return arr;
   },
   // General selectors (no eventId needed) - with memoization
   profilesAll: (state) => {
-    const ref = state.entities?.general?.profiles || {};
+    const ref = state.entities?.general?.profiles || null;
     if (selectorCache.profiles_general && selectorCache.profiles_general.ref === ref) {
       return selectorCache.profiles_general.arr;
     }
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.profiles_general = { ref, arr };
     return arr;
   },
   myNotificationsAll: (state) => {
-    const ref = state.entities?.general?.my_notifications || {};
+    const ref = state.entities?.general?.my_notifications || null;
     if (selectorCache.my_notifications_general && selectorCache.my_notifications_general.ref === ref) {
       return selectorCache.my_notifications_general.arr;
     }
-    const arr = Object.values(ref);
+    const arr = ref ? Object.values(ref) : [];
     selectorCache.my_notifications_general = { ref, arr };
     return arr;
   },
@@ -1221,182 +1221,98 @@ export const selectors = {
 // Stable empty array to avoid creating new instances
 const EMPTY_ARRAY = Object.freeze([]);
 
-// Stable selector that always returns empty array (for null eventId case)
-const EMPTY_SELECTOR = () => EMPTY_ARRAY;
-
-// Memoized selector factories to ensure stable function references for zustand
-const selectorFunctions = {
-  groups: new Map(),
-  images: new Map(),
-  moments: new Map(),
-  albums: new Map(),
-  faces: new Map(),
-  event_profiles: new Map(),
-  uploads: new Map(),
-  access_requests: new Map(),
-  my_access_requests: new Map(),
-};
-
-function getOrCreateSelectorAll(entityType, eventId) {
-  if (!eventId) return EMPTY_SELECTOR;
-  
-  const cache = selectorFunctions[entityType];
-  if (!cache.has(eventId)) {
-    // Convert entity_type to camelCase for selector lookup
-    const selectorName = entityType === 'event_profiles' ? 'eventProfilesAll' :
-                         entityType === 'access_requests' ? 'accessRequestsAll' :
-                         entityType === 'my_access_requests' ? 'myAccessRequestsAll' :
-                         entityType + 'All';
-    cache.set(eventId, (state) => selectors[selectorName](state, eventId));
-  }
-  return cache.get(eventId);
-}
-
 // Convenience hooks with stable outputs so components don't need local useMemo for store data
 
 // Event-scoped hooks (require eventId)
+// Note: We don't use useCallback here - Zustand handles subscription stability internally.
+// The selectors have internal memoization to return stable array references.
 export function useGroupsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('groups', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.groupsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useGroupById(eventId, groupId) {
-  const selector = useMemo(
-    () => (state) => (eventId && groupId ? state.entities?.[eventId]?.groups?.[groupId] || null : null),
-    [eventId, groupId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && groupId ? state.entities?.[eventId]?.groups?.[groupId] || null : null));
 }
 
 export function useImagesList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('images', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.imagesAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useImageById(eventId, imageId) {
-  const selector = useMemo(
-    () => (state) => (eventId && imageId ? state.entities?.[eventId]?.images?.[imageId] || null : null),
-    [eventId, imageId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && imageId ? state.entities?.[eventId]?.images?.[imageId] || null : null));
 }
 
 export function useAlbumsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('albums', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.albumsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useAlbumById(eventId, albumId) {
-  const selector = useMemo(
-    () => (state) => (eventId && albumId ? state.entities?.[eventId]?.albums?.[albumId] || null : null),
-    [eventId, albumId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && albumId ? state.entities?.[eventId]?.albums?.[albumId] || null : null));
 }
 
 export function useMomentsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('moments', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.momentsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useMomentById(eventId, momentId) {
-  const selector = useMemo(
-    () => (state) => (eventId && momentId ? state.entities?.[eventId]?.moments?.[momentId] || null : null),
-    [eventId, momentId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && momentId ? state.entities?.[eventId]?.moments?.[momentId] || null : null));
 }
 
 export function useFacesList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('faces', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.facesAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useFaceById(eventId, faceId) {
-  const selector = useMemo(
-    () => (state) => (eventId && faceId ? state.entities?.[eventId]?.faces?.[faceId] || null : null),
-    [eventId, faceId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && faceId ? state.entities?.[eventId]?.faces?.[faceId] || null : null));
 }
 
 export function useEventProfilesList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('event_profiles', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.eventProfilesAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useEventProfileById(eventId, profileId) {
-  const selector = useMemo(
-    () => (state) => (eventId && profileId ? state.entities?.[eventId]?.event_profiles?.[profileId] || null : null),
-    [eventId, profileId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && profileId ? state.entities?.[eventId]?.event_profiles?.[profileId] || null : null));
 }
 
 export function useUploadsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('uploads', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.uploadsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useUploadById(eventId, uploadId) {
-  const selector = useMemo(
-    () => (state) => (eventId && uploadId ? state.entities?.[eventId]?.uploads?.[uploadId] || null : null),
-    [eventId, uploadId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && uploadId ? state.entities?.[eventId]?.uploads?.[uploadId] || null : null));
 }
 
 export function useRequestsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('access_requests', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.accessRequestsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useRequestById(eventId, requestId) {
-  const selector = useMemo(
-    () => (state) => (eventId && requestId ? state.entities?.[eventId]?.access_requests?.[requestId] || null : null),
-    [eventId, requestId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && requestId ? state.entities?.[eventId]?.access_requests?.[requestId] || null : null));
 }
 
 export function useMyRequestsList(eventId) {
-  const selector = useMemo(() => getOrCreateSelectorAll('my_access_requests', eventId), [eventId]);
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId ? selectors.myAccessRequestsAll(state, eventId) : EMPTY_ARRAY));
 }
 
 export function useMyRequestById(eventId, requestId) {
-  const selector = useMemo(
-    () => (state) => (eventId && requestId ? state.entities?.[eventId]?.my_access_requests?.[requestId] || null : null),
-    [eventId, requestId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (eventId && requestId ? state.entities?.[eventId]?.my_access_requests?.[requestId] || null : null));
 }
 
 // General hooks (no eventId needed)
 export function useProfilesList() {
-  const selector = useMemo(() => (state) => selectors.profilesAll(state), []);
-  return useDataStore(selector);
+  return useDataStore((state) => selectors.profilesAll(state));
 }
 
 export function useProfileById(profileId) {
-  const selector = useMemo(
-    () => (state) => (profileId ? state.entities?.general?.profiles?.[profileId] || null : null),
-    [profileId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (profileId ? state.entities?.general?.profiles?.[profileId] || null : null));
 }
 
 export function useMyNotificationsList() {
-  const selector = useMemo(() => (state) => selectors.myNotificationsAll(state), []);
-  return useDataStore(selector);
+  return useDataStore((state) => selectors.myNotificationsAll(state));
 }
 
 export function useMyNotificationById(notificationId) {
-  const selector = useMemo(
-    () => (state) => (notificationId ? state.entities?.general?.my_notifications?.[notificationId] || null : null),
-    [notificationId]
-  );
-  return useDataStore(selector);
+  return useDataStore((state) => (notificationId ? state.entities?.general?.my_notifications?.[notificationId] || null : null));
 }
 
  

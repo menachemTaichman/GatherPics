@@ -247,7 +247,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const relatedImages = useChilds(eventId, entity + 's', parent, 'images', { filterByUploadId, includeArchived, sortBy, sortOrder });
   
   // Get entities from store for filtering
-  const entities = useDataStore((state) => state.entities?.[eventId] || {});
+  const entities = useDataStore((state) => state.entities?.[eventId] || null);
   
   // Apply frontend filtering with same logic as GroupDetailPage
   const filteredImages = useMemo(() => {
@@ -261,7 +261,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     // Get all images from all groups (current + filter groups)
     const allImageIds = new Set();
     allGroups.forEach(groupId => {
-      const groupImages = entities?.groups?.[groupId]?.images;
+      const groupImages = entities?.[eventId]?.groups?.[groupId]?.images;
       if (groupImages instanceof Set) {
         groupImages.forEach(imageId => allImageIds.add(imageId));
       }
@@ -269,7 +269,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     
     // Convert to image objects
     const allImages = Array.from(allImageIds)
-      .map(imageId => entities?.images?.[imageId])
+      .map(imageId => entities?.[eventId]?.images?.[imageId])
       .filter(Boolean);
     
     const filtered = filterImages(allImages, allGroups, filterMode, onlySelected);
@@ -594,7 +594,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
   // Subscribe to current image info from store
-  const storeImageInfo = useDataStore(state => imageId ? state.entities?.images?.[imageId] : null);
+  const storeImageInfo = useDataStore(state => imageId ? state.entities?.[eventId]?.images?.[imageId] : null);
   
   // Subscribe to moments entities for reactive updates
   // Avoid subscribing to entire moments map; read on demand
@@ -603,14 +603,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     if (!isAuthenticated) return null; // No moment info when not authenticated
     const mid = storeImageInfo?.moment_id;
     if (!mid) return null;
-    const m = (useDataStore.getState().entities?.moments || {})[mid];
+    const m = (useDataStore.getState().entities?.[eventId]?.moments || {})[mid];
     if (m) return m;
     return { id: mid, label: storeImageInfo?.moment_label };
-  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, isAuthenticated]);
+  }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, isAuthenticated, eventId]);
 
 
-  const storeFacesList = useFacesForImage(imageId);
-  const storeAlbumsList = useAlbumsForImage(imageId);
+  const storeFacesList = useChilds(eventId, 'images', imageId, 'faces');
+  const storeAlbumsList = useChilds(eventId, 'images', imageId, 'albums');
   
   // Create placeholder lists when not authenticated
   const placeholderFaces = useMemo(() => {
@@ -693,7 +693,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         
         // Changes are automatically applied by apiService interceptor
         
-        const entities = useDataStore.getState().entities || {};
+        const entities = useDataStore.getState().entities?.[eventId] || {};
         const info = entities.images?.[imageId] || null;
         
         if (info) {
@@ -707,7 +707,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             // Get face IDs from the Set and look up face data
             if (info.faces instanceof Set) {
               const faceIds = Array.from(info.faces);
-              const faceEntities = store.entities?.faces || {};
+              const faceEntities = store.entities?.[eventId]?.faces || {};
               
               faceIds.forEach((faceId) => {
                 const face = faceEntities[faceId];
@@ -717,7 +717,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 if (!gid || seen.has(gid)) return;
                 seen.add(gid);
                 
-                const groups = store.entities?.groups || {};
+                const groups = store.entities?.[eventId]?.groups || {};
                 const label = face.group_label || (groups[gid] && groups[gid].label) || undefined;
                 items.push(label ? { id: gid, label } : { id: gid });
               });
@@ -809,7 +809,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   const handleFaceNavigation = (face) => {
     const gid = face?.groupId || face?.group_id;
-    const label = gid ? ((useDataStore.getState().entities?.groups || {})[gid]?.label || '') : '';
+    const label = gid ? ((useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '') : '';
     if (label) {
       navigate(`/${eventUrl}/people/${encodeURIComponent(label)}`, {
         state: { highlightImages: [imageId] }
@@ -917,7 +917,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         // Find the image in the new group's images
         const targetGroupId = result.target_group_id;
         if (targetGroupId) {
-          const entities = useDataStore.getState().entities || {};
+          const entities = useDataStore.getState().entities?.[eventId] || {};
           const targetGroupImages = entities.groups?.[targetGroupId]?.images;
 
           if (targetGroupImages instanceof Set) {
@@ -1045,13 +1045,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     if (face?.isPlaceholder) return ''; // Placeholder faces have no label
     const gid = face?.groupId || face?.group_id;
     if (!gid) return '';
-    return (useDataStore.getState().entities?.groups || {})[gid]?.label || '';
+    return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '';
   };
 
   const getGroupRepresentativeFace = (face) => {
     const gid = face?.groupId || face?.group_id;
     if (!gid) return 'none';
-    return (useDataStore.getState().entities?.groups || {})[gid]?.representative_face || 'none';
+    return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.representative_face || 'none';
   };
 
 
@@ -1599,7 +1599,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           currentGroup={selectedFaceForTransfer ? (() => {
             const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
             if (!gid) return null;
-            return (useDataStore.getState().entities?.groups || {})[gid] || null;
+            return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid] || null;
           })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}

@@ -5,6 +5,7 @@ import { useDataStore, selectors } from '../../utils/dataManager';
 import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useState } from 'react';
+import { useEventId } from '../../utils/storeUtils';
 
 /**
  * Shared ImageActions hook that handles all image-related actions
@@ -22,6 +23,7 @@ export default function useImageActions({
   entity = null, // 'group' or 'moment' - context for representative setting
   entityId = null, // ID of the group or moment
 }) {
+  const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const { addImages, removeFromQueue, queue, open } = useBucketStore();
   
@@ -39,18 +41,18 @@ export default function useImageActions({
   
   // Use data store for state
   const isFavorite = useDataStore(state => 
-    imageIdsArray.length === 1 ? selectors.isFavorite(state, primaryImageId) : false
+    imageIdsArray.length === 1 ? selectors.isFavorite(state, eventId, primaryImageId) : false
   );
   const isArchived = useDataStore(state => 
-    imageIdsArray.length === 1 ? selectors.isArchived(state, primaryImageId) : false
+    imageIdsArray.length === 1 ? selectors.isArchived(state, eventId, primaryImageId) : false
   );
   
   // For multiple images, check if all are in the same state
   const allAreFavorited = useDataStore(state => 
-    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isFavorite(state, imageId)) : false
+    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isFavorite(state, eventId, imageId)) : false
   );
   const allAreArchived = useDataStore(state => 
-    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isArchived(state, imageId)) : false
+    imageIdsArray.length > 1 ? imageIdsArray.every(imageId => selectors.isArchived(state, eventId, imageId)) : false
   );
   
   // Check if images are in bucket
@@ -197,17 +199,17 @@ export default function useImageActions({
       if (entity === 'group') {
         const result = await groupsAPI.update(entityId, { representative_face: faceId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
-        const entityName = useDataStore.getState().entities?.groups?.[entityId]?.label || 'person';
+        const entityName = useDataStore.getState().entities?.[eventId]?.groups?.[entityId]?.label || 'person';
         showToast(`Set as representative for ${entityName}`, 'success');
       } else if (entity === 'moment') {
         const result = await momentsAPI.update(entityId, { representative_image: targetImageId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
-        const entityName = useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment';
+        const entityName = useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment';
         showToast(`Set as representative for ${entityName}`, 'success');
       } else if (entity === 'album') {
         const result = await albumsAPI.update(entityId, { representative_image: targetImageId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
-        const entityName = useDataStore.getState().entities?.albums?.[entityId]?.label || 'album';
+        const entityName = useDataStore.getState().entities?.[eventId]?.albums?.[entityId]?.label || 'album';
         showToast(`Set as representative for ${entityName}`, 'success');
       }
     } catch (error) {
@@ -278,13 +280,13 @@ export default function useImageActions({
     if (!entity || !entityId) return '';
     const state = useDataStore.getState();
     if (entity === 'group') {
-      const group = state.entities?.groups?.[entityId];
+      const group = state.entities?.[eventId]?.groups?.[entityId];
       return group?.label || 'person';
     } else if (entity === 'moment') {
-      const moment = state.entities?.moments?.[entityId];
+      const moment = state.entities?.[eventId]?.moments?.[entityId];
       return moment?.label || 'moment';
     } else if (entity === 'album') {
-      const album = state.entities?.albums?.[entityId];
+      const album = state.entities?.[eventId]?.albums?.[entityId];
       return album?.label || 'album';
     }
     return '';
@@ -298,13 +300,13 @@ export default function useImageActions({
     const state = useDataStore.getState();
     
     if (entity === 'group') {
-      const group = state.entities?.groups?.[entityId];
+      const group = state.entities?.[eventId]?.groups?.[entityId];
       return group?.representative_image === primaryImageId;
     } else if (entity === 'moment') {
-      const moment = state.entities?.moments?.[entityId];
+      const moment = state.entities?.[eventId]?.moments?.[entityId];
       return moment?.representative_image === primaryImageId;
     } else if (entity === 'album') {
-      const album = state.entities?.albums?.[entityId];
+      const album = state.entities?.[eventId]?.albums?.[entityId];
       return album?.representative_image === primaryImageId;
     }
     

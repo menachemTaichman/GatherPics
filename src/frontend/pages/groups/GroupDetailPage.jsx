@@ -290,8 +290,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   // Subscribe to store groups count (stable value) to trigger restoration
   // Get groups count without subscribing to entire map (per STORE_USAGE.md)
   const groupsCount = useMemo(() => {
-    return Object.keys(useDataStore.getState().entities?.groups || {}).length;
-  }, []);
+    return Object.keys(useDataStore.getState().entities?.[eventId]?.groups || {}).length;
+  }, [eventId]);
   
   // Fetch groups from URL using check-name endpoint
   useEffect(() => {
@@ -348,7 +348,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       }
       
       // Access store directly to get all groups (unscoped)
-      const allGroupsFromStore = Object.values(useDataStore.getState().entities?.groups || {});
+      const allGroupsFromStore = Object.values(useDataStore.getState().entities?.[eventId]?.groups || {});
       
       const groupNames = window.__pendingFilterGroups;
       const groupIds = groupNames
@@ -544,7 +544,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     const ensureIds = [group?.id, ...filterGroups].filter(Boolean).map(String);
     const toFetch = [];
     ensureIds.forEach((gid) => {
-      const g = store.entities?.groups?.[gid];
+      const g = store.entities?.[eventId]?.groups?.[gid];
       const hasImages = (g?.images instanceof Set) || Array.isArray(g?.images);
       const hasFaces = (g?.faces instanceof Set) || Array.isArray(g?.faces);
       if ((!hasImages || !hasFaces) && !fetchedGroupsRef.current.has(gid)) {
@@ -576,7 +576,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     // If showCrops, return faces sorted by their image's date_taken
     if (showCrops) {
       const store = useDataStore.getState();
-      const storeImages = store.entities?.images || {};
+      const storeImages = store.entities?.[eventId]?.images || {};
       
       const sorted = [...groupFaces].sort((a, b) => {
         const imgA = storeImages[a.image_id];
@@ -599,8 +599,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       
       // Get all images from all groups (current + filter groups)
       const store = useDataStore.getState();
-      const storeGroups = store.entities?.groups || {};
-      const storeImages = store.entities?.images || {};
+      const storeGroups = store.entities?.[eventId]?.groups || {};
+      const storeImages = store.entities?.[eventId]?.images || {};
       
       const allImageIds = new Set();
       allGroups.forEach(groupId => {
@@ -711,6 +711,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       return;
     }
     
+    // Wait for eventId to resolve before attempting group lookup
+    if (!eventId) {
+      return;
+    }
+    
     // If not authenticated, immediately set placeholder and skip all logic
     if (!isAuthenticated) {
       setGroup({
@@ -727,7 +732,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         const res = await groupsAPI.checkName(decodedGroupName, '', eventUrl);
         if (res && res.conflict) {
           // Changes are applied by interceptor; pick from store
-          const after = storeSelectors.groupsAll(useDataStore.getState()) || [];
+          const after = storeSelectors.groupsAll(useDataStore.getState(), eventId) || [];
           const match = after.find(g => g.id === res.conflicting_group || g.label === decodedGroupName);
           if (match) {
             
@@ -775,7 +780,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       window.removeEventListener('auth:login', handleAuthLogin);
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, [decodedGroupName, currentGroups, navigate, eventUrl, isAuthenticated]);
+  }, [decodedGroupName, currentGroups, navigate, eventUrl, isAuthenticated, eventId]);
 
   // Keep local `group` in sync by id when the store object changes (e.g., rename)
   useEffect(() => {
@@ -1047,7 +1052,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const getSelectedFaces = async () => {
     const selectedFaces = [];
     const store = useDataStore.getState();
-    const storeFaces = store.entities?.faces || {};
+    const storeFaces = store.entities?.[eventId]?.faces || {};
     
     if (showCrops) {
       // In faces mode, selectedImages contains face IDs
@@ -1062,7 +1067,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           height: face.height || 0,
           left: face.left || 0,
           top: face.top || 0,
-          group_label: face.group_id ? store.entities?.groups?.[face.group_id]?.label : group.label
+          group_label: face.group_id ? store.entities?.[eventId]?.groups?.[face.group_id]?.label : group.label
         });
       }
     } else {
@@ -1085,7 +1090,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             height: face?.height || 0,
             left: face?.left || 0,
             top: face?.top || 0,
-            group_label: face.group_id ? store.entities?.groups?.[face.group_id]?.label : group.label
+            group_label: face.group_id ? store.entities?.[eventId]?.groups?.[face.group_id]?.label : group.label
           });
         }
       } catch (error) {
@@ -1197,7 +1202,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const openImageViewer = (itemId, index) => {
     let imageIndex = index;
     const store = useDataStore.getState();
-    const face = showCrops ? (store.entities?.faces || {})[itemId] : null;
+    const face = showCrops ? (store.entities?.[eventId]?.faces || {})[itemId] : null;
     const targetImageId = showCrops && face ? face.image_id : (sortedImages[index]?.id || null);
     if (targetImageId) {
       // Build viewer image list with same semantics as ImageViewer
@@ -1208,12 +1213,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       } else {
         const allImageIdsSet = new Set();
         allGroupsLocal.forEach((gid) => {
-          const rel = store.entities?.groups?.[gid]?.images;
+          const rel = store.entities?.[eventId]?.groups?.[gid]?.images;
           if (rel instanceof Set) rel.forEach((iid) => allImageIdsSet.add(iid));
           else if (Array.isArray(rel)) rel.forEach((iid) => allImageIdsSet.add(iid));
         });
         const allImages = Array.from(allImageIdsSet)
-          .map((iid) => store.entities?.images?.[iid])
+          .map((iid) => store.entities?.[eventId]?.images?.[iid])
           .filter((img) => !!img && (includeArchived || !img.is_archived));
         viewerImages = filterImages(allImages, allGroupsLocal, filterMode, onlySelected);
         viewerImages = sortImages(viewerImages, sortBy, sortOrder);
@@ -1267,7 +1272,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         // Changes are automatically applied by apiService interceptor
         // Get conflicting group from store
         const store = useDataStore.getState();
-        const conflictingGroup = store.entities?.groups?.[conflictResult.conflicting_group];
+        const conflictingGroup = store.entities?.[eventId]?.groups?.[conflictResult.conflicting_group];
         
         // Show merge conflict modal
         showMergeConflictModal(editingTitle.trim(), group, conflictingGroup);
@@ -1676,7 +1681,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 const imageId = isFacesMode ? item.image_id : item.id;
                 const image = isFacesMode ? (() => {
                   const store = useDataStore.getState();
-                  return store.entities?.images?.[item.image_id];
+                  return store.entities?.[eventId]?.images?.[item.image_id];
                 })() : item;
                 
                 // In faces mode, item IS the face; in images mode, we don't need the face for display
@@ -1686,9 +1691,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 } else {
                   // For images mode, find a face for the crop URL (if any)
                   const store = useDataStore.getState();
-                  const facesSet = store.entities?.groups?.[group.id]?.faces;
+                  const facesSet = store.entities?.[eventId]?.groups?.[group.id]?.faces;
                   if (facesSet) {
-                    const facesMap = store.entities?.faces || {};
+                    const facesMap = store.entities?.[eventId]?.faces || {};
                     const facesInImage = Array.from(facesSet)
                       .map(fId => facesMap[fId])
                       .filter(f => f && f.image_id === imageId)
@@ -1744,7 +1749,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium">
                         {(() => {
                           const store = useDataStore.getState();
-                          return store.entities?.groups?.[item.group_id]?.label || `Person ${item.group_id}`;
+                          return store.entities?.[eventId]?.groups?.[item.group_id]?.label || `Person ${item.group_id}`;
                         })()}
                       </div>
                     )}

@@ -9,6 +9,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import { useEventId } from '../../utils/storeUtils';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
@@ -19,6 +20,7 @@ export default function AlbumQuickAddButton({
   dropdownDirection = 'down', // 'up' or 'down'
   onAlbumAdded // Callback when album is added
 }) {
+  const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -69,12 +71,15 @@ export default function AlbumQuickAddButton({
   });
   
   // Get albums from data store entities - now get all albums
-  const albumsEntities = useDataStore(state => state.entities?.albums || {});
+  const albumsEntities = useDataStore(state => state.entities?.[eventId]?.albums || null);
   
   // Convert albums entities to array and sort by label
-  const albums = Object.values(albumsEntities)
-    .filter(album => !['archive', 'favorites'].includes((album.label || '').toLowerCase()))
-    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  const albums = useMemo(() => {
+    if (!albumsEntities) return [];
+    return Object.values(albumsEntities)
+      .filter(album => !['archive', 'favorites'].includes((album.label || '').toLowerCase()))
+      .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  }, [albumsEntities]);
 
   // Modal registration
   useEffect(() => {

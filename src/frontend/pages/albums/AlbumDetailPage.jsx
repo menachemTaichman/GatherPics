@@ -162,6 +162,11 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       return;
     }
     
+    // Wait for eventId to resolve before attempting album lookup
+    if (!eventId) {
+      return;
+    }
+    
     // If not authenticated, immediately set placeholder and skip all logic
     if (!isAuthenticated) {
       setAlbum({
@@ -190,7 +195,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
         }
         
         // After loading, check if album exists in store
-        const storeAlbums = useDataStore.getState().entities?.albums || {};
+        const storeAlbums = useDataStore.getState().entities?.[eventId]?.albums || {};
         const match = Object.values(storeAlbums).find(a => a.label === searchingForLabel);
         if (match) {
           setAlbum(match);
@@ -239,7 +244,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       window.removeEventListener('auth:login', handleAuthLogin);
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, [decodedAlbumName, currentAlbums, navigate, eventUrl, isAuthenticated]);
+  }, [decodedAlbumName, currentAlbums, navigate, eventUrl, isAuthenticated, eventId]);
 
   // Keep local `album` in sync by id when the store object changes
   useEffect(() => {

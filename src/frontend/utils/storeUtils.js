@@ -117,8 +117,9 @@ export function useEntity(eventId, entityType, entityId) {
 
 export function useEntities(eventId, entityType, entityIds) {
   return useDataStore((state) => {
-    const entitiesMap = state.entities?.[eventId]?.[entityType] || {};
-    if (entityIds) {
+    const entitiesMap = state.entities?.[eventId]?.[entityType] || null;
+    if (entityIds && entitiesMap) {
+      // For filtered queries, we need to create a new object, but we memoize below
       const result = {};
       entityIds.forEach(id => {
         if (entitiesMap[id]) result[id] = entitiesMap[id];
@@ -131,16 +132,16 @@ export function useEntities(eventId, entityType, entityIds) {
 
 export function useEntityList(eventId, entityType) {
   const entitiesMap = useEntities(eventId, entityType);
-  return useMemo(() => Object.values(entitiesMap), [entitiesMap]);
+  return useMemo(() => entitiesMap ? Object.values(entitiesMap) : [], [entitiesMap]);
 }
 
 export function useChilds(eventId, parent, parentId, child, options = {}) {
   const parentRelationSet = useDataStore((state) => {
-    if (!parent || !parentId) return null;
+    if (!eventId || !parent || !parentId) return null;
     return state.entities?.[eventId]?.[parent]?.[parentId]?.[child] || null;
   });
 
-  const childMapSub = useDataStore((state) => state.entities?.[eventId]?.[child] || {});
+  const childMapSub = useDataStore((state) => state.entities?.[eventId]?.[child] || null);
 
   return useMemo(() => {
     if (!parentRelationSet) return [];

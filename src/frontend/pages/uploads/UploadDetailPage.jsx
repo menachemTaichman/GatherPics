@@ -335,7 +335,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const openImageViewerInGroup = (groupId, faceId) => {
     const faces = getGroupFacesInUpload(groupId);
     const imageIds = faces.map(f => f.image_id);
-    const face = entities?.faces?.[faceId];
+    const face = entities?.[eventId]?.faces?.[faceId];
     if (!face) return;
     
     const index = imageIds.indexOf(face.image_id);
@@ -464,12 +464,12 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const getSelectedFacesForTransfer = () => {
     if (mode !== 'groups' || !expandedGroup) return [];
     
-    const groupEntity = entities?.groups?.[expandedGroup];
+    const groupEntity = entities?.[eventId]?.groups?.[expandedGroup];
     const selectedFaces = [];
     
     // currentSelection contains face IDs in groups mode
     for (const faceId of currentSelection) {
-      const face = entities?.faces?.[faceId];
+      const face = entities?.[eventId]?.faces?.[faceId];
       if (!face) continue;
       selectedFaces.push({
         id: faceId,
@@ -516,14 +516,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   // Helper to get faces of a group filtered by this upload
   const getGroupFacesInUpload = useCallback((groupId) => {
-    const group = entities?.groups?.[groupId];
+    const group = entities?.[eventId]?.groups?.[groupId];
     if (!group) return [];
     
     const facesSet = group.faces;
     if (!facesSet || !(facesSet instanceof Set)) return [];
     
-    const facesMap = entities?.faces || {};
-    const imagesMap = entities?.images || {};
+    const facesMap = entities?.[eventId]?.faces || {};
+    const imagesMap = entities?.[eventId]?.images || {};
     
     return Array.from(facesSet)
       .map(faceId => facesMap[faceId])
@@ -536,13 +536,13 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   // Helper to get images of a moment filtered by this upload
   const getMomentImagesInUpload = useCallback((momentId) => {
-    const moment = entities?.moments?.[momentId];
+    const moment = entities?.[eventId]?.moments?.[momentId];
     if (!moment) return [];
     
     const imagesSet = moment.images;
     if (!imagesSet || !(imagesSet instanceof Set)) return [];
     
-    const imagesMap = entities?.images || {};
+    const imagesMap = entities?.[eventId]?.images || {};
     
     return Array.from(imagesSet)
       .map(imageId => imagesMap[imageId])
@@ -551,13 +551,13 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   }, [entities, uploadId]);
 
   const getGroupRepUrl = (groupId) => {
-    const group = useDataStore.getState().entities?.groups?.[groupId];
+    const group = useDataStore.getState().entities?.[eventId]?.groups?.[groupId];
     if (!group || group.isPlaceholder || !urlHelpers?.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('groups', groupId)}?v=${group.representative_face || 'none'}`;
   };
 
   const getMomentRepUrl = (momentId) => {
-    const moment = useDataStore.getState().entities?.moments?.[momentId];
+    const moment = useDataStore.getState().entities?.[eventId]?.moments?.[momentId];
     if (!moment || moment.isPlaceholder || !urlHelpers?.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('moments', momentId)}?v=${moment.representative_image || 'none'}`;
   };
@@ -886,7 +886,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   {uploadGroups.map((group) => {
                     const isExpanded = expandedGroup === group.id;
                     const groupFaces = isExpanded ? getGroupFacesInUpload(group.id) : [];
-                    const groupEntity = entities?.groups?.[group.id];
+                    const groupEntity = entities?.[eventId]?.groups?.[group.id];
                     const isRepresentative = (faceId) => groupEntity?.representative_face === faceId;
 
                     return (
@@ -1006,7 +1006,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                   }}
                                 >
                                   {groupFaces.map((face) => {
-                                    const img = entities?.images?.[face.image_id];
+                                    const img = entities?.[eventId]?.images?.[face.image_id];
                                     if (!img) return null;
                                     const isRep = isRepresentative(face.id);
                                     return (
@@ -1067,7 +1067,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   {uploadMoments.map((moment) => {
                     const isExpanded = expandedMoment === moment.id;
                     const momentImages = isExpanded ? getMomentImagesInUpload(moment.id) : [];
-                    const momentEntity = entities?.moments?.[moment.id];
+                    const momentEntity = entities?.[eventId]?.moments?.[moment.id];
                     const isRepresentative = (imageId) => momentEntity?.representative_image === imageId;
 
                     return (
@@ -1300,7 +1300,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             setShowTransferFacesModal(false);
             setSelectedFacesForTransfer([]);
           }}
-          currentGroup={expandedGroup ? entities?.groups?.[expandedGroup] : null}
+          currentGroup={expandedGroup ? entities?.[eventId]?.groups?.[expandedGroup] : null}
           selectedFaces={selectedFacesForTransfer}
           onTransferComplete={handleTransferFacesComplete}
           sourceGroupId={expandedGroup}

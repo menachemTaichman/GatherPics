@@ -221,7 +221,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         await new Promise(resolve => setTimeout(resolve, 50));
         
         const store = useDataStore.getState();
-        savedMoment = store.entities?.moments?.[createdMomentId];
+        savedMoment = store.entities?.[eventId]?.moments?.[createdMomentId];
         
         if (savedMoment) {
           // Replace the temporary moment with the saved one
@@ -254,7 +254,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         await new Promise(resolve => setTimeout(resolve, 50));
         
         const store = useDataStore.getState();
-        savedMoment = store.entities?.moments?.[id || moment_id];
+        savedMoment = store.entities?.[eventId]?.moments?.[id || moment_id];
         
         if (savedMoment) {
           // Update with saved data from store

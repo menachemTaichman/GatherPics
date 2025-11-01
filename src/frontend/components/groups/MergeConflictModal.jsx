@@ -33,7 +33,7 @@ export default function MergeConflictModal({
   // Resolve conflicting group ID to group object (if accessible)
   const conflictingGroupId = typeof conflictingGroup === 'string' ? conflictingGroup : conflictingGroup?.id;
   const conflictingGroupObject = useDataStore(state => 
-    conflictingGroupId ? state.entities?.groups?.[conflictingGroupId] : null
+    conflictingGroupId ? state.entities?.[eventId]?.groups?.[conflictingGroupId] : null
   );
   
   // Custom keyboard handler for MergeConflictModal
@@ -86,9 +86,9 @@ export default function MergeConflictModal({
       
       // Get all faces and images from the current group from store BEFORE transfer
       const store = useDataStore.getState();
-      const currentGroupData = store.entities?.groups?.[currentGroup.id];
-      const groupFaces = currentGroupData?.faces;
-      const groupImages = currentGroupData?.images;
+      const currentGroupData = store.entities?.[eventId]?.groups?.[currentGroup.id];
+      const groupFaces = currentGroupData?.[eventId]?.faces;
+      const groupImages = currentGroupData?.[eventId]?.images;
       
       let faceIds = [];
       let imageIds = [];
