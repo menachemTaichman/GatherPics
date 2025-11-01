@@ -475,3 +475,14 @@ class GeneralModels(BaseModels):
         notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
         self.edit('my_notifications', notification_ids, {'read': 1, 'read_at': read_at})
         return notification_ids
+
+    def delete_all_my_notifications(self) -> list[int]:
+        """
+        Delete all of my notifications.
+        Returns:
+            list of notification ids that were deleted
+        """
+        query = 'SELECT id FROM my_notifications'
+        notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
+        self.delete('my_notifications', notification_ids)
+        return notification_ids

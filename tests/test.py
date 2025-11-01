@@ -274,7 +274,7 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-recreate_views_triggers_and_indexes(db)
+# recreate_views_triggers_and_indexes(db)
 # general_models.ensure_access_request_notifications(event, 43)
 
 main_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'

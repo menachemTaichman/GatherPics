@@ -1186,8 +1186,16 @@ export const notificationsAPI = {
     const response = await api.patch(`/api/notifications/my/mark-all-read`);
     return response.data || {};
   },
+  markRead: async (notificationId, read = 1) => {
+    const response = await api.patch(`/api/notifications/my/${notificationId}/read`, { read });
+    return response.data || {};
+  },
   delete: async (notificationId) => {
     const response = await api.delete(`/api/notifications/my/${notificationId}`);
+    return response.data || {};
+  },
+  deleteAll: async () => {
+    const response = await api.delete(`/api/notifications/my/all`);
     return response.data || {};
   },
   getUnreadCount: async () => {

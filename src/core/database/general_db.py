@@ -121,6 +121,7 @@ class GeneralDB(BaseDB):
                 }
             },
             'my_notifications': {
+                'original_table': 'notifications',
                 'primary_key': 'id',
                 'accessible_table': 'accessible_my_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, RefreshCw, Trash2, ChevronDown } from 'lucide-react';
+import { Bell, RefreshCw, Trash2, ChevronDown, Check, CheckCheck } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { notificationsAPI } from '../../utils/apiService';
 import { useDataStore } from '../../utils/dataManager';
@@ -16,7 +16,6 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const permissions = usePermissions();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadOnOpen, setUnreadOnOpen] = useState(new Set());
   // Subscribe to stable slices only to avoid unnecessary re-renders
   const entities = useDataStore((s) => s.entities);
   const setScope = useDataStore((s) => s.setScope);
@@ -49,13 +48,6 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
         // Ensure notifications upserts are allowed by scopes (once per open)
         setScope({ entity: 'all', id: 'my_notifications' });
         await notificationsAPI.getMy();
-        // Mark all as read when opening
-        try { await notificationsAPI.markAllRead(); } catch {}
-        const unreadNow = new Set(Object.values(useDataStore.getState().entities?.my_notifications || {})
-          .filter(n => !n.read)
-          .map(n => String(n.id)));
-        setUnreadOnOpen(unreadNow);
-        // Do not mark-all-read or refetch counts; counts now come from current_profile
       } catch (e) {
         // ignore
       } finally {
@@ -71,11 +63,36 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
       // Keep scope and reload notifications; counts handled elsewhere
       setScope({ entity: 'all', id: 'my_notifications' });
       await notificationsAPI.getMy();
-      try { await notificationsAPI.markAllRead(); } catch {}
     } catch (e) {
       // ignore
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationsAPI.markAllRead();
+    } catch (e) {
+      showToast('Failed to mark all as read', 'error');
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      await notificationsAPI.deleteAll();
+      showToast('All notifications deleted', 'success');
+    } catch (e) {
+      showToast('Failed to delete all notifications', 'error');
+    }
+  };
+
+  const handleToggleRead = async (id, currentReadState) => {
+    try {
+      const newReadState = currentReadState ? 0 : 1;
+      await notificationsAPI.markRead(id, newReadState);
+    } catch (e) {
+      showToast('Failed to update notification', 'error');
     }
   };
 
@@ -110,22 +127,40 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
           <Bell className="w-4 h-4" />
           <span>Notifications</span>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
-          title="Refresh"
-        >
-          <RefreshCw className={"w-4 h-4 " + (refreshing ? 'animate-spin' : '')} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleMarkAllRead}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
+            title="Mark all as read"
+            disabled={notifications.length === 0}
+          >
+            <CheckCheck className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleDeleteAll}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
+            title="Delete all"
+            disabled={notifications.length === 0}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
+            title="Refresh"
+          >
+            <RefreshCw className={"w-4 h-4 " + (refreshing ? 'animate-spin' : '')} />
+          </button>
+        </div>
       </div>
       {notifications.length === 0 ? (
         <div className="p-3 text-sm text-gray-500">No notifications</div>
       ) : (
         <ul className="divide-y divide-gray-100">
           {notifications.map((n) => {
-            const wasUnread = unreadOnOpen.has(String(n.id));
+            const isUnread = !n.read;
             return (
-              <li key={n.id} className={"flex items-start gap-2 p-3 " + (wasUnread ? 'bg-blue-50' : '')}>
+              <li key={n.id} className={"flex items-start gap-2 p-3 " + (isUnread ? 'bg-blue-50' : '')}>
                 <button
                   className="flex-1 text-left"
                   onClick={() => {
@@ -137,6 +172,13 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
                   <div className="mt-1 text-xs text-gray-500">
                     {formatDateTime(n.created_at)}
                   </div>
+                </button>
+                <button
+                  onClick={() => handleToggleRead(n.id, n.read)}
+                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+                  title={isUnread ? "Mark as read" : "Mark as unread"}
+                >
+                  {isUnread ? <Check className="w-4 h-4" /> : <CheckCheck className="w-4 h-4" />}
                 </button>
                 <button
                   onClick={() => handleDelete(n.id)}
