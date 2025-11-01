@@ -157,9 +157,18 @@ def get_images_to_moments(event_id):
 def _edit_moment_images(event, moment_id, image_ids, add: bool):
     """Helper: Add or remove images from a moment, return response with changes."""
     operation = ChildOperation.ADD if add else ChildOperation.REMOVE
-    updated_image_ids, detached_moments = event.models.edit_childs('moments', moment_id, child='images', child_ids=image_ids, operation=operation)
+    result = event.models.edit_moment_images(moment_id, image_ids, operation)
+    
+    updated_image_ids = result['updated_image_ids']
+    detached_moments = result['detached_moments']
+    updated_moments_uploads = result['updated_moments_uploads']
+    removed_moments_uploads = result['removed_moments_uploads']
+    
     changes = []
+    
     if updated_image_ids:
+        images_data = event.models.get_entities('images', updated_image_ids)
+        
         for detached_moment_id, detached_image_ids in detached_moments.items():
             changes.append({
                 'type': 'RELATION_REMOVE',
@@ -175,14 +184,14 @@ def _edit_moment_images(event, moment_id, image_ids, add: bool):
         changes.append({
             'type': 'UPSERT',
             'entity': 'image',
-            'items': event.models.get_entities('images', updated_image_ids)
+            'items': images_data
         })
         if add:
             changes.append({
                 'type': 'RELATION_ADD',
                 'relation': 'moment.images',
                 'parentId': moment_id,
-                'entities': event.models.get_entities('images', updated_image_ids)
+                'entities': images_data
             })
         else:
             changes.append({
@@ -190,6 +199,25 @@ def _edit_moment_images(event, moment_id, image_ids, add: bool):
                 'relation': 'moment.images',
                 'parentId': moment_id,
                 'ids': updated_image_ids
+            })
+        
+        # Update upload.moments relations
+        for upload_id, moments in updated_moments_uploads.items():
+            _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
+            changes.append({
+                'type': 'RELATION_UPSERT',
+                'relation': 'upload.moments',
+                'parentId': upload_id,
+                'relationData': relation_data
+            })
+        
+        # Remove moments from uploads when no images from that upload remain
+        for upload_id, moments in removed_moments_uploads.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'upload.moments',
+                'parentId': upload_id,
+                'ids': moments
             })
 
     return {
@@ -236,31 +264,61 @@ def remove_images_from_moment(event_id, moment_id):
 @moment_bp.route("/moments/moments/images", methods=["DELETE"])
 @require_auth
 def remove_images_from_moments(event_id):
-    """Remove images from a moment."""
+    """Remove images from moments."""
     event = get_event(event_id)
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        detached_moments = event.models.remove_images_from_moments(image_ids)
+        result = event.models.remove_images_from_moments(image_ids)
+        detached_moments = result['detached_moments']
+        updated_moments_uploads = result['updated_moments_uploads']
+        removed_moments_uploads = result['removed_moments_uploads']
+        
         changes = []
-        for moment_id, image_ids in detached_moments.items():
-            changes.append({
-                'type': 'RELATION_REMOVE',
-                'relation': 'moment.images',
-                'parentId': moment_id,
-                'ids': image_ids
-            })
+        
+        if detached_moments:
+            images_data = event.models.get_entities('images', image_ids)
+            affected_moments = list(detached_moments.keys())
+            
+            for moment_id, detached_image_ids in detached_moments.items():
+                changes.append({
+                    'type': 'RELATION_REMOVE',
+                    'relation': 'moment.images',
+                    'parentId': moment_id,
+                    'ids': detached_image_ids
+                })
+            
             changes.append({
                 'type': 'UPSERT',
                 'entity': 'moment',
-                'items': event.models.get_entities('moments', list(detached_moments.keys()))
+                'items': event.models.get_entities('moments', affected_moments)
             })
             changes.append({
                 'type': 'UPSERT',
                 'entity': 'image',
-                'items': event.models.get_entities('images', image_ids)
+                'items': images_data
             })
-            return jsonify({"success": True, "changes": changes})
+            
+            # Update upload.moments relations
+            for upload_id, moments in updated_moments_uploads.items():
+                _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
+                changes.append({
+                    'type': 'RELATION_UPSERT',
+                    'relation': 'upload.moments',
+                    'parentId': upload_id,
+                    'relationData': relation_data
+                })
+            
+            # Remove moments from uploads when no images from that upload remain
+            for upload_id, moments in removed_moments_uploads.items():
+                changes.append({
+                    'type': 'RELATION_REMOVE',
+                    'relation': 'upload.moments',
+                    'parentId': upload_id,
+                    'ids': moments
+                })
+        
+        return jsonify({"success": True, "changes": changes})
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
     except DatabaseError as e:

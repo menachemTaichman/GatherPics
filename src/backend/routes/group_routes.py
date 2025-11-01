@@ -207,19 +207,18 @@ def transfer_faces(event_id):
         if not target_group_id:
             return jsonify({"error": "target_group_id or new_group_name must be provided"}), 400
         
-        print(f"Adding faces to group {target_group_id}")
         result = event.models.add_faces_to_group(
             face_ids=face_ids,
             target_group_id=target_group_id,
         )
-        print(f"Result: {result}")
 
         detached_groups_images = result['detached_groups_images']
         detached_groups_faces = result['detached_groups_faces']
         faces_added = result['faces_added']
         images_added = result['images_added']
         deleted_group_ids = result['deleted_group_ids']
-
+        updated_groups_uploads = result['updated_groups_uploads']
+        removed_groups_uploads = result['removed_groups_uploads']
 
         changes = []
         
@@ -273,6 +272,24 @@ def transfer_faces(event_id):
             'entity': 'face',
             'items': faces_added_entities
         })
+
+        # update uploads
+        for upload_id, groups in updated_groups_uploads.items():
+            _, relation_data = event.models.get_childs('uploads', upload_id, 'groups', groups)
+            changes.append({
+                'type': 'RELATION_UPSERT',
+                'relation': 'upload.groups',
+                'parentId': upload_id,
+                'relationData': relation_data
+            })
+
+        for upload_id, groups in removed_groups_uploads.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'upload.groups',
+                'parentId': upload_id,
+                'ids': groups
+            })
         
         # Remove deleted groups from store
         if deleted_group_ids:

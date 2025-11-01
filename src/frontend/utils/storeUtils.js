@@ -91,7 +91,8 @@ export function getChilds(eventId, parent, parentId, child, childIds) {
   if (!childSet) return [];
   
   let ids = childSet instanceof Set ? Array.from(childSet) : 
-            Array.isArray(childSet) ? childSet : [];
+            Array.isArray(childSet) ? childSet : 
+            typeof childSet === 'object' ? Object.keys(childSet) : [];
   
   if (childIds) {
     const filterSet = new Set(childIds.map(String));
@@ -147,7 +148,8 @@ export function useChilds(eventId, parent, parentId, child, options = {}) {
     if (!parentRelationSet) return [];
     
     let ids = parentRelationSet instanceof Set ? Array.from(parentRelationSet) : 
-              Array.isArray(parentRelationSet) ? parentRelationSet : [];
+              Array.isArray(parentRelationSet) ? parentRelationSet : 
+              typeof parentRelationSet === 'object' ? Object.keys(parentRelationSet) : [];
     
     // Apply child filtering if specified
     if (options.childIds) {

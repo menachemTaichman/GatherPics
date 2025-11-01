@@ -172,14 +172,79 @@ class EventModels(BaseModels):
 
         return assigned
 
-    def remove_images_from_moments(self, image_ids: list[str]) -> dict[str, list[str]]:
-        """Remove images from a moment."""
+    def remove_images_from_moments(self, image_ids: list[str]) -> Dict:
+        """Remove images from moments.
+        Returns:
+            dict:
+                detached_moments: dict of detached moments with moment ids as keys and list of detached image ids as values
+                updated_moments_uploads: dict of uploads with upload ids as keys and list of affected moment ids as values
+                removed_moments_uploads: dict of uploads with upload ids as keys and list of removed moment ids as values
+        """
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
         accessible_images = self.db.STRUCTURE()['images']['accessible_table']
         query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['?'] * len(valid_image_ids))})'
         self.db.execute_query(query, valid_image_ids)
-        return detached_moments
+        
+        # Track affected uploads
+        updated_moments_uploads = {}
+        removed_moments_uploads = {}
+        for moment_id in detached_moments.keys():
+            moment_uploads = self.get_parents('moments', moment_id, 'uploads')
+            for upload_id in moment_uploads:
+                _, upload_moment = self.get_childs('uploads', upload_id, 'moments', [moment_id])
+                if not upload_moment:
+                    removed_moments_uploads.setdefault(upload_id, []).append(moment_id)
+                else:
+                    updated_moments_uploads.setdefault(upload_id, []).append(moment_id)
+        
+        return {
+            'detached_moments': detached_moments,
+            'updated_moments_uploads': updated_moments_uploads,
+            'removed_moments_uploads': removed_moments_uploads,
+        }
+
+    def edit_moment_images(self, moment_id: str, image_ids: List[str], operation: ChildOperation) -> Dict:
+        """Add or remove images from a moment.
+        Args:
+            moment_id: target moment id
+            image_ids: list of image ids
+            operation: ADD or REMOVE
+        Returns:
+            dict:
+                updated_image_ids: list of image ids that were affected
+                detached_moments: dict of detached moments with moment ids as keys and list of detached image ids as values
+                updated_moments_uploads: dict of uploads with upload ids as keys and list of affected moment ids as values
+                removed_moments_uploads: dict of uploads with upload ids as keys and list of removed moment ids as values
+        """
+        affected_moments_uploads = {}
+        for image_id in image_ids:
+            upload_ids = self.get_parents('images', image_id, 'uploads')
+            for upload_id in upload_ids:
+                image_moment_ids = self.get_parents('images', image_id, 'moments')
+                if image_moment_ids:
+                    affected_moments_uploads.setdefault(upload_id, set()).add(image_moment_ids[0])
+
+        updated_image_ids, detached_moments = self.edit_childs('moments', moment_id, child='images', child_ids=image_ids, operation=operation)
+        
+        # Track affected uploads
+        updated_moments_uploads = {}
+        removed_moments_uploads = {}
+        
+        for affected_moment_id in set(affected_moments_uploads.keys()):
+            new_moment_uploads = set(self.get_parents('moments', affected_moment_id, 'uploads'))
+            detached_uploads = affected_moments_uploads[affected_moment_id] - new_moment_uploads
+            for upload_id in detached_uploads:
+                removed_moments_uploads.setdefault(upload_id, []).append(affected_moment_id)
+            for upload_id in new_moment_uploads:
+                updated_moments_uploads.setdefault(upload_id, []).append(affected_moment_id)
+        
+        return {
+            'updated_image_ids': updated_image_ids,
+            'detached_moments': detached_moments,
+            'updated_moments_uploads': updated_moments_uploads,
+            'removed_moments_uploads': removed_moments_uploads,
+        }
 
     # -------- Images helpers --------
     def get_images_count(self) -> int:
@@ -312,12 +377,25 @@ class EventModels(BaseModels):
                  
         images_added = list(set([self.get_entities('faces', face_id)['image_id'] for face_id in faces_added]))
         
+        updated_groups_uploads = {}
+        removed_groups_uploads = {}
+        for group_id in set(detached_groups_faces.keys()) | {target_group_id}:
+            group_uploads = self.get_parents('groups', group_id, 'uploads')
+            for upload_id in group_uploads:
+                _, upload_group = self.get_childs('uploads', upload_id, 'groups', [group_id])
+                if not upload_group:
+                    removed_groups_uploads.setdefault(upload_id, []).append(group_id)
+                else:
+                    updated_groups_uploads.setdefault(upload_id, []).append(group_id)
+
         result = {
             'detached_groups_images': detached_groups_images,
             'detached_groups_faces': detached_groups_faces,
             'images_added': images_added,
             'faces_added': faces_added,
             'deleted_group_ids': deleted_group_ids,
+            'updated_groups_uploads': updated_groups_uploads,
+            'removed_groups_uploads': removed_groups_uploads,
         }
 
         return result

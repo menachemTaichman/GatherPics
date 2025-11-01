@@ -15,6 +15,7 @@ export const CHANGE_TYPES = {
   RELATION_ADD: 'RELATION_ADD',
   RELATION_REMOVE: 'RELATION_REMOVE',
   RELATION_SET: 'RELATION_SET',
+  RELATION_UPSERT: 'RELATION_UPSERT',
   SCOPE_ADD: 'SCOPE_ADD',
   SCOPE_REMOVE: 'SCOPE_REMOVE',
 };
@@ -124,6 +125,10 @@ const ENTITY_STRUCTURE = {
   },
   uploads: {
     relations: ['images', 'groups', 'moments'],
+    relationTypes: {
+      groups: 'dict', // Store as dict with relation data (faces_count, upload_faces_count)
+      moments: 'dict', // Store as dict with relation data (images_count, upload_images_count)
+    },
   },
   access_requests: {
     relations: ['groups'],
@@ -676,6 +681,7 @@ export const useDataStore = create((set, get) => {
           RELATION_ADD: { ignoreScope: false, broadcast: true },
           RELATION_REMOVE: { ignoreScope: false, broadcast: true },
           RELATION_SET: { ignoreScope: false, broadcast: true },
+          RELATION_UPSERT: { ignoreScope: false, broadcast: true },
           REMOVE: { ignoreScope: false, broadcast: true },
         }[type] || { ignoreScope: false, broadcast: true };
         const callIgnore = Object.prototype.hasOwnProperty.call(options, 'ignoreScope') ? !!options.ignoreScope : undefined;
@@ -892,7 +898,8 @@ export const useDataStore = create((set, get) => {
         if (
           ch.type === CHANGE_TYPES.RELATION_SET ||
           ch.type === CHANGE_TYPES.RELATION_ADD ||
-          ch.type === CHANGE_TYPES.RELATION_REMOVE
+          ch.type === CHANGE_TYPES.RELATION_REMOVE ||
+          ch.type === CHANGE_TYPES.RELATION_UPSERT
         ) {
           const [parentType, childType] = String(ch.relation || '').split('.');
           const parentKey = normalizeEntityKey(parentType, eventId);
@@ -972,6 +979,29 @@ export const useDataStore = create((set, get) => {
               (ch.ids || []).forEach((id) => set.delete(String(id)));
               if (!setsEqual(coerceToSet(beforeValue), set)) parent[field] = set;
             }
+          } else if (ch.type === CHANGE_TYPES.RELATION_UPSERT) {
+            if (isDictRelation && ch.relationData) {
+              // Upsert relationData (add new keys or update existing keys)
+              const existing = parent[field] && typeof parent[field] === 'object' && !Array.isArray(parent[field]) ? parent[field] : {};
+              const updated = { ...existing };
+              let changed = false;
+              
+              Object.keys(ch.relationData).forEach((key) => {
+                const oldEntry = existing[key];
+                const newEntry = oldEntry ? { ...oldEntry, ...ch.relationData[key] } : ch.relationData[key];
+                
+                // Only update if values actually changed
+                if (!oldEntry || !shallowEqualPlainObject(oldEntry, newEntry)) {
+                  updated[key] = newEntry;
+                  changed = true;
+                }
+              });
+              
+              if (changed) {
+                parent[field] = updated;
+              }
+            }
+            // RELATION_UPSERT only works for dict relations; ignored for Set relations
           }
           
           saveBack(eventEntities, parentKey, parentId, parent);

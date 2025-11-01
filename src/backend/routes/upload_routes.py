@@ -29,8 +29,8 @@ def get_upload(event_id, upload_id):
 
     upload = event.models.get_entities('uploads', [upload_id])
     images = event.models.get_childs('uploads', upload_id, 'images')
-    groups = event.models.get_childs('uploads', upload_id, 'groups')
-    moments = event.models.get_childs('uploads', upload_id, 'moments')
+    groups, groups_relation_data = event.models.get_childs('uploads', upload_id, 'groups')
+    moments, moments_relation_data = event.models.get_childs('uploads', upload_id, 'moments')
     
     changes = [{
         'type': 'UPSERT',
@@ -47,13 +47,15 @@ def get_upload(event_id, upload_id):
         'type': 'RELATION_SET',
         'relation': 'upload.groups',
         'parentId': str(upload_id),
-        'entities': groups
+        'entities': groups,
+        'relationData': groups_relation_data
     })
     changes.append({
         'type': 'RELATION_SET',
         'relation': 'upload.moments',
         'parentId': str(upload_id),
-        'entities': moments
+        'entities': moments,
+        'relationData': moments_relation_data
     })
     
     return jsonify({'changes': changes})

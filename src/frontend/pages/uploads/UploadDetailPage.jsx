@@ -318,13 +318,15 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     if (mode === 'groups' && expandedGroup) {
       fetchGroupData(expandedGroup);
     }
-  }, [mode, expandedGroup, fetchGroupData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, expandedGroup]);
 
   useEffect(() => {
     if (mode === 'moments' && expandedMoment) {
       fetchMomentData(expandedMoment);
     }
-  }, [mode, expandedMoment, fetchMomentData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, expandedMoment]);
 
   // Open image viewer for main photos tab
   const openImageViewerInUpload = (imageId, index) => {
@@ -889,6 +891,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const groupEntity = entities?.[eventId]?.groups?.[group.id];
                     const isRepresentative = (faceId) => groupEntity?.representative_face === faceId;
 
+                    const uploadGroupRelation = upload?.groups?.[group.id];
+                    const totalFacesCount = uploadGroupRelation?.group_faces_count || groupEntity?.faces_count || 0;
+                    const uploadFacesCount = uploadGroupRelation?.group_upload_faces_count || 0;
+
                     return (
                       <div key={group.id} className="border rounded-lg overflow-hidden">
                         <div
@@ -937,17 +943,22 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                   />
                                 </div>
                               ) : (
-                                <h4 
-                                  className={`font-medium text-gray-900 inline-block ${
-                                    permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
-                                  }`}
-                                  onClick={permissions.canEdit ? ((e) => {
-                                    e.stopPropagation();
-                                    handleEditGroupLabel(group.id, group.label);
-                                  }) : undefined}
-                                >
-                                  {group.label}
-                                </h4>
+                                <div>
+                                  <h4 
+                                    className={`font-medium text-gray-900 inline-block ${
+                                      permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
+                                    }`}
+                                    onClick={permissions.canEdit ? ((e) => {
+                                      e.stopPropagation();
+                                      handleEditGroupLabel(group.id, group.label);
+                                    }) : undefined}
+                                  >
+                                    {group.label}
+                                  </h4>
+                                  <p className="text-sm text-gray-600">
+                                    {totalFacesCount} {totalFacesCount === 1 ? 'face' : 'faces'}, {uploadFacesCount} in this upload
+                                  </p>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -989,11 +1000,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
                         {isExpanded && (
                           <div className="border-t border-gray-200">
-                            <div className="p-4 bg-gray-50">
-                              <p className="text-sm text-gray-600">
-                                {groupEntity?.faces_count || 0} {(groupEntity?.faces_count || 0) === 1 ? 'face' : 'faces'}, {groupFaces.length} in this upload
-                              </p>
-                            </div>
                             <div className="p-4">
                               {groupFaces.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">No faces from this upload</p>
@@ -1070,6 +1076,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const momentEntity = entities?.[eventId]?.moments?.[moment.id];
                     const isRepresentative = (imageId) => momentEntity?.representative_image === imageId;
 
+                    const uploadMomentRelation = upload?.moments?.[moment.id];
+                    const totalImagesCount = uploadMomentRelation?.moment_images_count || momentEntity?.images_count || 0;
+                    const uploadImagesCount = uploadMomentRelation?.moment_upload_images_count || 0;
+
                     return (
                       <div key={moment.id} className="border rounded-lg overflow-hidden">
                         <div
@@ -1090,6 +1100,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             })}
                             <div>
                               <h4 className="font-medium text-gray-900">{moment.label}</h4>
+                              <p className="text-sm text-gray-600">
+                                {totalImagesCount} {totalImagesCount === 1 ? 'photo' : 'photos'}, {uploadImagesCount} in this upload
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -1119,11 +1132,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
                         {isExpanded && (
                           <div className="border-t border-gray-200">
-                            <div className="p-4 bg-gray-50">
-                              <p className="text-sm text-gray-600">
-                                {momentEntity?.images_count || 0} {(momentEntity?.images_count || 0) === 1 ? 'photo' : 'photos'}, {momentImages.length} in this upload
-                              </p>
-                            </div>
                             <div className="p-4">
                               {momentImages.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>

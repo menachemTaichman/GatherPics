@@ -70,8 +70,16 @@ class EventDB(BaseDB):
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
-                    'groups': {'relation_table': 'uploads_groups', 'fields_needed': ['label', 'representative_face', 'faces_count']},
-                    'moments': {'relation_table': 'uploads_moments', 'fields_needed': ['label', 'representative_image', 'images_count']},
+                    'groups': {
+                        'relation_table': 'uploads_groups',
+                        'fields_needed': ['label', 'representative_face', 'faces_count'],
+                        'relation_table_fields': ['group_faces_count', 'group_upload_faces_count']
+                    },
+                    'moments': {
+                        'relation_table': 'uploads_moments',
+                        'fields_needed': ['label', 'representative_image', 'images_count'],
+                        'relation_table_fields': ['moment_images_count', 'moment_upload_images_count']
+                    },
                 },
                 'serializable': {
                     'errors': list,
@@ -565,7 +573,8 @@ class EventDB(BaseDB):
                 WHERE cur_profile('can_upload_and_delete_images') = 1
             ''',
             'uploads_groups': '''
-                SELECT u.*, g.group_id as group_id
+                SELECT u.*,
+                g.group_id as group_id
                 FROM uploads u
                 INNER JOIN images i ON u.upload_id = i.upload_id
                 INNER JOIN faces f ON i.image_id = f.image_id
@@ -573,7 +582,10 @@ class EventDB(BaseDB):
                 GROUP BY u.upload_id, g.group_id
             ''',
             'accessible_uploads_groups': '''
-                SELECT u.*, g.group_id as group_id
+                SELECT u.*,
+                g.group_id as group_id,
+                g.faces_count as group_faces_count,
+                COUNT(DISTINCT f.face_id) as group_upload_faces_count
                 FROM accessible_uploads u
                 INNER JOIN accessible_images i ON u.upload_id = i.upload_id
                 INNER JOIN accessible_faces f ON i.image_id = f.image_id
@@ -588,7 +600,10 @@ class EventDB(BaseDB):
                 GROUP BY u.upload_id, m.moment_id
             ''',
             'accessible_uploads_moments': '''
-                SELECT u.*, m.moment_id as moment_id
+                SELECT u.*,
+                m.moment_id as moment_id,
+                m.images_count as moment_images_count,
+                COUNT(DISTINCT i.image_id) as moment_upload_images_count
                 FROM accessible_uploads u
                 INNER JOIN accessible_images i ON u.upload_id = i.upload_id
                 INNER JOIN accessible_moments m ON i.moment_id = m.moment_id
