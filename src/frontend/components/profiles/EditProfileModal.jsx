@@ -70,7 +70,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     customKeyHandler: handleEditProfileKeys
   });
 
-  // Register modal
+  // Register modal (scopes managed by useApplyScopes above)
   useEffect(() => {
     if (isOpen) {
       const { registerModal, unregisterModal } = useModalStore.getState();
@@ -78,7 +78,6 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         registerModal({ 
           id: MODAL_ID, 
           type: 'popup', 
-          scopes: profile?.id ? [{ entity: 'profile', id: String(profile.id) }] : [],
           allowOutsideScroll: true 
         });
       } catch {}

@@ -115,7 +115,7 @@ export default function GroupsFilter({
       
       // Store related group IDs in session storage (override)
       const sessionData = JSON.stringify(data.related_group_ids || []);
-      sessionStorage.setItem('groupDetail_filteredRelatedGroups', sessionData);
+      sessionStorage.setItem('frw_groupDetail_filteredRelatedGroups', sessionData);
       setSessionUpdateTrigger(prev => prev + 1); // Trigger re-render
       
       // Apply changes to store (this will automatically update the store with the groups)
@@ -345,7 +345,7 @@ export default function GroupsFilter({
   // Manage filter panel visibility only - no fetching
   useEffect(() => {
     if (isVisible) {
-      stableRegisterModal({ id: PANEL_ID, type: 'panel', scopes: [{ entity: 'all', id: 'groups' }] });
+      stableRegisterModal({ id: PANEL_ID, type: 'panel' });
       // Scope for all:groups is managed by parent (GroupDetail) to avoid conditional hook usage
     }
     return () => {
@@ -382,7 +382,7 @@ export default function GroupsFilter({
     // Get related group IDs from session storage - ALWAYS use this as the source
     let sessionRelatedGroupIds = [];
     try {
-      const stored = sessionStorage.getItem('groupDetail_filteredRelatedGroups');
+      const stored = sessionStorage.getItem('frw_groupDetail_filteredRelatedGroups');
       if (stored) {
         sessionRelatedGroupIds = JSON.parse(stored);
       }

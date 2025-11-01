@@ -23,7 +23,7 @@ class TimelineManager {
 		this.scrollObserverEnabled = false; // Prevent scroll observer from running during initial navigation
 	}
 
-	init(basePath = '/timeline', anchorSelector = '.sticky.top-16', onMomentChange = null, momentsReady = false) {
+	init(basePath = '/timeline', anchorSelector = '.sticky.top-16', onMomentChange = null, momentsReady = false, eventId = null) {
 		// Prevent duplicate initialization
 		if (this._initialized) {
 			return;
@@ -33,6 +33,7 @@ class TimelineManager {
 		this.basePath = basePath;
 		this.anchorSelector = anchorSelector;
 		this.onMomentChange = onMomentChange;
+		this.eventId = eventId;
 
 		// Note: Individual moment scopes should not exist - only 'all:moments' scope is needed
 		// Timeline manager will add/remove individual moment scopes only for UI observation optimization
@@ -337,7 +338,7 @@ class TimelineManager {
 				try {
 					const dataStore = window.__dataStore?.getState();
 					if (dataStore?.addScope) {
-						dataStore.addScope({ entity: 'moment', id: momentId });
+						dataStore.addScope({ entity: 'moment', id: momentId, eventId: this.eventId });
 						
 						// Trigger API call to load moment data (including images)
 						this.loadMomentData(momentId);
@@ -370,7 +371,7 @@ class TimelineManager {
 				try {
 					const dataStore = window.__dataStore?.getState();
 					if (dataStore?.removeScope) {
-						dataStore.removeScope({ entity: 'moment', id: momentId });
+						dataStore.removeScope({ entity: 'moment', id: momentId, eventId: this.eventId });
 					}
 				} catch (error) {
 					// Silent error handling
@@ -382,13 +383,14 @@ class TimelineManager {
 	clearAllMomentScopes() {
 		try {
 			const dataStore = window.__dataStore?.getState();
-			if (dataStore?.scopes) {
-				// Get all moment scopes and remove them
-				const momentScopes = Object.keys(dataStore.scopes).filter(key => key.startsWith('moment:'));
+			if (dataStore?.scopes && this.eventId) {
+				// Get all moment scopes for this event and remove them
+				const scopePrefix = `${this.eventId}:moment:`;
+				const momentScopes = Object.keys(dataStore.scopes).filter(key => key.startsWith(scopePrefix));
 				momentScopes.forEach(scopeKey => {
-					const [entity, id] = scopeKey.split(':');
+					const [eventId, entity, id] = scopeKey.split(':');
 					if (dataStore.removeScope) {
-						dataStore.removeScope({ entity, id });
+						dataStore.removeScope({ entity, id, eventId });
 					}
 				});
 			}

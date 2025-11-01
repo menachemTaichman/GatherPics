@@ -36,7 +36,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     if (!isOpen) {
       loadedOnceRef.current = false;
       // Remove scope when closing dropdown
-      try { removeScope && removeScope({ entity: 'all', id: 'my_notifications' }); } catch {}
+      try { removeScope && removeScope({ entity: 'all', id: 'my_notifications', eventId: 'general' }); } catch {}
       return;
     }
     if (loadedOnceRef.current) return;
@@ -46,7 +46,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
       setLoading(true);
       try {
         // Ensure notifications upserts are allowed by scopes (once per open)
-        setScope({ entity: 'all', id: 'my_notifications' });
+        setScope({ entity: 'all', id: 'my_notifications', eventId: 'general' });
         await notificationsAPI.getMy();
       } catch (e) {
         // ignore
@@ -61,7 +61,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     setRefreshing(true);
     try {
       // Keep scope and reload notifications; counts handled elsewhere
-      setScope({ entity: 'all', id: 'my_notifications' });
+      setScope({ entity: 'all', id: 'my_notifications', eventId: 'general' });
       await notificationsAPI.getMy();
     } catch (e) {
       // ignore

@@ -25,7 +25,7 @@ const useModalStore = create((set, get) => ({
     // Apply scopes
     try {
       const ds = useDataStore.getState();
-      (scopes || []).forEach((s) => s?.entity && ds.addScope && ds.addScope({ entity: s.entity, id: s.id }));
+      (scopes || []).forEach((s) => s?.entity && ds.addScope && ds.addScope({ entity: s.entity, id: s.id, eventId: s.eventId }));
     } catch {}
 
     // Scroll lock if any popup open and none allow outside scroll
@@ -52,7 +52,7 @@ const useModalStore = create((set, get) => ({
     if (entry && Array.isArray(entry.scopes)) {
       try {
         const ds = useDataStore.getState();
-        entry.scopes.forEach((s) => s?.entity && ds.removeScope && ds.removeScope({ entity: s.entity, id: s.id }));
+        entry.scopes.forEach((s) => s?.entity && ds.removeScope && ds.removeScope({ entity: s.entity, id: s.id, eventId: s.eventId }));
       } catch {}
     }
 
@@ -89,13 +89,13 @@ const useModalStore = create((set, get) => ({
       (nextScopes || []).forEach((s) => {
         if (!s?.entity) return;
         const key = prevKey(s);
-        if (!prevSet.has(key)) ds.addScope && ds.addScope({ entity: s.entity, id: s.id });
+        if (!prevSet.has(key)) ds.addScope && ds.addScope({ entity: s.entity, id: s.id, eventId: s.eventId });
       });
       // Remove old scopes
       (prevScopes || []).forEach((s) => {
         if (!s?.entity) return;
         const key = prevKey(s);
-        if (!nextSet.has(key)) ds.removeScope && ds.removeScope({ entity: s.entity, id: s.id });
+        if (!nextSet.has(key)) ds.removeScope && ds.removeScope({ entity: s.entity, id: s.id, eventId: s.eventId });
       });
     } catch {}
 

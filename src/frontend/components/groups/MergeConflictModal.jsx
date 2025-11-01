@@ -6,6 +6,7 @@ import { useDataStore } from '../../utils/dataManager';
 import { useModalManager } from '../../utils/modalManager';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useImageComponent } from '../../hooks/useImage.jsx';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 
 
 
@@ -24,6 +25,7 @@ export default function MergeConflictModal({
   urlHelpers: injectedUrlHelpers,
   showCrops = false // Add showCrops prop to know current mode
 }) {
+  const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore.getState;
@@ -49,10 +51,13 @@ export default function MergeConflictModal({
   const { modalRef } = useModalFocus(isOpen, onClose, {
     customKeyHandler: handleMergeModalKeys
   });
-  // Register as popup modal with groups scope
+  // Apply scope for all groups
+  useApplyScopes(isOpen ? [{ entity: 'all', id: 'groups', eventId }] : []);
+  
+  // Register as popup modal
   useEffect(() => {
     if (isOpen) {
-      try { registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }] }); } catch {}
+      try { registerModal({ id: MODAL_ID, type: 'popup' }); } catch {}
       
       // Listen for logout to auto-close modal
       const handleAuthLogout = () => {

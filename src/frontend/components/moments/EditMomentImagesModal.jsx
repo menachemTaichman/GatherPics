@@ -91,6 +91,9 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     setImagesToRemove(new Set());
   };
 
+  // Apply scope for all images
+  useApplyScopes([{ entity: 'all', id: 'images', eventId }]);
+  
   // Register modal with modal manager
   useEffect(() => {
     if (moment) {
@@ -99,7 +102,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
         registerModal({ 
           id: MODAL_ID, 
           type: 'popup', 
-          scopes: [{ entity: 'all', id: 'images' }], 
           allowOutsideScroll: true 
         });
       } catch {}

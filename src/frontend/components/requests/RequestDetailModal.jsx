@@ -6,7 +6,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, imagesAPI, profilesAPI } from '../../utils/apiService';
 import { useGroupsList, useRequestById } from '../../utils/dataManager';
-import { getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
+import { getRepresentativeUrl, useEventId, useApplyScopes } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
@@ -78,6 +78,9 @@ export default function RequestDetailModal({
   // Use the request from the store (which has up-to-date relation data) if available, otherwise fall back to prop
   const requestData = storeRequest || request;
 
+  // Apply scope for this access request
+  useApplyScopes(isOpen && requestId ? [{ entity: 'access_request', id: requestId, eventId }] : []);
+
   // Fetch request details when modal opens
   useEffect(() => {
     if (isOpen && requestId) {
@@ -95,14 +98,13 @@ export default function RequestDetailModal({
     }
   }, [isOpen, requestId, eventUrl]);
 
-  // Register modal when opened (this also applies scopes, so no need for useApplyScopes)
+  // Register modal when opened
   useEffect(() => {
     if (isOpen) {
       registerModal({ 
         id: modalId, 
         type: 'popup',
-        allowOutsideScroll: true,
-        scopes: requestId ? [{ entity: 'access_request', id: requestId }] : []
+        allowOutsideScroll: true
       });
       
       return () => {

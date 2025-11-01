@@ -296,8 +296,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   // Apply scopes after computing current image id so image.albums updates always pass
   useApplyScopes([
-    ...(parent && entity ? [{ entity, id: String(parent) }] : []),
-    ...(imageId ? [{ entity: 'image', id: String(imageId) }] : []),
+    ...(parent && entity ? [{ entity, id: String(parent), eventId }] : []),
+    ...(imageId ? [{ entity: 'image', id: String(imageId), eventId }] : []),
   ]);
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
@@ -459,10 +459,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Register modal on mount and keep scopes in sync with current image id
   useEffect(() => {
-    // Register once on mount (actions fetched without subscribing)
+    // Register once on mount (scopes are managed via useApplyScopes)
     const { registerModal, unregisterModal } = useModalStore.getState();
     try {
-      registerModal({ id: imageViewerModalId, type: 'popup', scopes: imageId ? [{ entity: 'image', id: String(imageId) }] : [], allowOutsideScroll: true });
+      registerModal({ id: imageViewerModalId, type: 'popup', allowOutsideScroll: true });
     } catch {}
     return () => { try { unregisterModal(imageViewerModalId); } catch {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -641,7 +641,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const count = Array.isArray(albumsList) ? albumsList.length : 0;
     if (prevAlbumsCountRef.current !== null && count === prevAlbumsCountRef.current && imageId) {
       // Trigger a lightweight info refresh to ensure relations are hydrated
-      try { useDataStore.getState().addScope({ entity: 'image', id: String(imageId) }); } catch {}
+      // Scope is already managed by useApplyScopes
       imagesAPI.getImage(imageId, eventUrl).catch(() => {});
     }
     prevAlbumsCountRef.current = count;
@@ -688,7 +688,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       setLoading(prev => (prev === true ? prev : true));
       if (imageId && eventUrl) {
         // Request details using new getImage API
-        try { useDataStore.getState().addScope({ entity: 'image', id: String(imageId) }); } catch {}
+        // Scope is already managed by useApplyScopes
         const response = await imagesAPI.getImage(imageId, eventUrl);
         
         // Changes are automatically applied by apiService interceptor

@@ -92,12 +92,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
   // Register modal with modal manager and initialize editing state
   useEffect(() => {
+    if (!eventId) return; // Wait for eventId
+    
     const { registerModal, unregisterModal } = useModalStore.getState();
     try {
       registerModal({ 
         id: MODAL_ID, 
         type: 'popup', 
-        scopes: [{ entity: 'all', id: 'moments' }], 
+        scopes: [{ entity: 'all', id: 'moments', eventId }], 
         allowOutsideScroll: true 
       });
     } catch {}
@@ -124,7 +126,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         updateMoment._timeouts = {};
       }
     };
-  }, []);
+  }, [eventId]);
 
   const handleClose = () => {
     // Store current scroll position before closing

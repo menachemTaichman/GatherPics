@@ -356,7 +356,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
               {/* Note about data changes */}
               <div className="mt-4 text-xs text-gray-500 italic text-center">
-                Note: Data may have changed since these requests were created
+                Note: Permissions may have changed since these requests were updated
               </div>
             </>
           )}

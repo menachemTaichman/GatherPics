@@ -106,7 +106,7 @@ export default function AlbumQuickAddButton({
       setLoading(true);
       try {
         // Set scope to allow album operations
-        useDataStore.getState().setScope({ entity: 'all', id: 'albums' });
+        useDataStore.getState().setScope({ entity: 'all', id: 'albums', eventId });
         
         // Fetch all albums (no filtering in API call)
         await albumsAPI.getAll(eventUrl);

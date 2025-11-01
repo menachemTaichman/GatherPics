@@ -99,7 +99,7 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
     if (!isOpen) return;
     const { registerModal, unregisterModal } = useModalStore.getState();
     try {
-      registerModal({ id: modalId, type: 'popup', scopes: [], allowOutsideScroll: true });
+      registerModal({ id: modalId, type: 'popup', allowOutsideScroll: true });
     } catch {}
     
     // Listen for logout to auto-close modal

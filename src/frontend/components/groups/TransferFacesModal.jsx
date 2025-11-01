@@ -116,13 +116,15 @@ export default function TransferFacesModal({
       return unique;
     }, []);
 
+  // Apply scope for all groups
+  useApplyScopes(isOpen ? [{ entity: 'all', id: 'groups', eventId }] : []);
+  
   useEffect(() => {
     if (isOpen) {
       const { registerModal, unregisterModal } = useModalStore.getState();
       try {
-        registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }], allowOutsideScroll: true });
+        registerModal({ id: MODAL_ID, type: 'popup', allowOutsideScroll: true });
       } catch {}
-      try { useApplyScopes([{ entity: 'all', id: 'groups', eventId }]); } catch {}
       
       // Load groups with loading state
       const loadGroups = async () => {

@@ -264,12 +264,11 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
     isOpen ? [{ entity: 'all', id: 'event_profiles', eventId }] : []
   );
 
-  // Register modal
+  // Register modal (scopes managed by useApplyScopes above)
   useEffect(() => {
     if (isOpen) {
       registerModal(MODAL_ID, { 
-        priority: 60,
-        scopes: [{ entity: 'all', id: 'profiles' }]
+        priority: 60
       });
       
       // Listen for logout to auto-close modal

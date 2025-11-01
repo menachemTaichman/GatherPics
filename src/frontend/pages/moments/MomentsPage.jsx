@@ -154,10 +154,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     const images = [];
     
     moments.forEach(moment => {
-      const momentImages = entities?.moments?.[moment.id]?.images;
+      const momentImages = entities?.[eventId]?.moments?.[moment.id]?.images;
       if (momentImages && momentImages instanceof Set) {
         Array.from(momentImages).forEach(imageId => {
-          const image = entities?.images?.[imageId];
+          const image = entities?.[eventId]?.images?.[imageId];
           if (image && (includeArchived || !image.is_archived)) {
             images.push({ 
               key: `${moment.id}:${image.id}`, 
@@ -209,6 +209,8 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
   // Initialize timeline manager when component mounts
 	useEffect(() => {
+		if (!eventId) return; // Wait for eventId
+		
 		// Initialize timeline manager but don't handle URL yet (moments not ready)
 		timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-16', (momentKey) => {
 			// Callback from timeline manager when moment changes
@@ -216,12 +218,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 			if (moment) {
 				setCurrentVisibleMoment(moment);
 			}
-		}, false); // momentsReady = false
+		}, false, eventId); // Pass eventId to timeline manager
 		
 		return () => {
 			timelineManager.destroy();
 		};
-	}, [eventUrl]);
+	}, [eventUrl, eventId]);
 
   // Clean up refs when moments change
   useEffect(() => {
@@ -350,12 +352,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     const currentMoment = currentVisibleMoment;
     
     if (currentMoment) {
-      const momentImages = entities?.moments?.[currentMoment.id]?.images;
+      const momentImages = entities?.[eventId]?.moments?.[currentMoment.id]?.images;
       if (!momentImages || !(momentImages instanceof Set)) return;
       
       const currentMomentImageKeys = Array.from(momentImages)
         .map(imageId => {
-          const image = entities?.images?.[imageId];
+          const image = entities?.[eventId]?.images?.[imageId];
           return image && (includeArchived || !image.is_archived) ? `${currentMoment.id}:${imageId}` : null;
         })
         .filter(Boolean);
@@ -379,12 +381,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
 
   const selectAllInMoment = (momentId) => {
-    const momentImages = entities?.moments?.[momentId]?.images;
+    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
     if (!momentImages || !(momentImages instanceof Set)) return;
     
     const momentImageKeys = Array.from(momentImages)
       .map(imageId => {
-        const image = entities?.images?.[imageId];
+        const image = entities?.[eventId]?.images?.[imageId];
         return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
       })
       .filter(Boolean);
@@ -402,12 +404,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   };
 
   const clearMomentSelection = (momentId) => {
-    const momentImages = entities?.moments?.[momentId]?.images;
+    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
     if (!momentImages || !(momentImages instanceof Set)) return;
     
     const momentImageKeys = Array.from(momentImages)
       .map(imageId => {
-        const image = entities?.images?.[imageId];
+        const image = entities?.[eventId]?.images?.[imageId];
         return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
       })
       .filter(Boolean);
@@ -493,11 +495,11 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       }));
     }
     
-    const momentImages = entities?.moments?.[momentId]?.images;
+    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
     if (!momentImages || !(momentImages instanceof Set)) return EMPTY_ARRAY;
     
     return Array.from(momentImages)
-      .map(imageId => entities?.images?.[imageId])
+      .map(imageId => entities?.[eventId]?.images?.[imageId])
       .filter(image => image && (includeArchived || !image.is_archived))
       .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
   };
@@ -507,11 +509,11 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     // Return placeholder count for placeholder moments
     if (momentId?.startsWith('placeholder-')) return 8;
     
-    const momentImages = entities?.moments?.[momentId]?.images;
+    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
     if (!momentImages || !(momentImages instanceof Set)) return 0;
     
     return Array.from(momentImages)
-      .map(imageId => entities?.images?.[imageId])
+      .map(imageId => entities?.[eventId]?.images?.[imageId])
       .filter(image => image) // Only filter out null/undefined, not archived status
       .length;
   };
@@ -531,7 +533,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
   const openImageViewer = (images, image, index) => {
     const momentId = moments.find(m => {
-      const momentImages = entities?.moments?.[m.id]?.images;
+      const momentImages = entities?.[eventId]?.moments?.[m.id]?.images;
       return momentImages instanceof Set && momentImages.has(image?.id);
     })?.id;
     

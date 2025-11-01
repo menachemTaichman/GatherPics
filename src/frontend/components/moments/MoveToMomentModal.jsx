@@ -89,13 +89,15 @@ export default function MoveToMomentModal({
       return unique;
     }, []);
 
+  // Apply scope for all moments
+  useApplyScopes(isOpen ? [{ entity: 'all', id: 'moments', eventId }] : []);
+  
   useEffect(() => {
     if (isOpen) {
       const { registerModal, unregisterModal } = useModalStore.getState();
       try {
-        registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'moments' }], allowOutsideScroll: true });
+        registerModal({ id: MODAL_ID, type: 'popup', allowOutsideScroll: true });
       } catch {}
-      try { useApplyScopes([{ entity: 'all', id: 'moments', eventId }]); } catch {}
       
       // Load moments with loading state
       const loadMoments = async () => {
