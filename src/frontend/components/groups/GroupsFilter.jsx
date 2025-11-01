@@ -22,7 +22,6 @@ import { ImageComponent } from '../../hooks/useImage.jsx';
 
 export default function GroupsFilter({ 
   group,
-  relatedGroups,
   filterMode,
   onlySelected,
   onModeChange,
@@ -31,20 +30,18 @@ export default function GroupsFilter({
   isVisible,
   eventUrl,
   imageIds = [],
-  onRelatedGroupsUpdate,
   currentGroupId,
   onSelectedGroupsChange,
   initialSelectedGroups = [],
   urlHelpers: injectedUrlHelpers,
   onPanelOpenedByUser,
-  onFetchRelated // New prop to expose fetch_related function
+  onFetchRelated
 }) {
   const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
-  const [sessionUpdateTrigger, setSessionUpdateTrigger] = useState(0);
   const urlHelpers = injectedUrlHelpers;
   const [selectedGroups, setSelectedGroups] = useState(
     Array.isArray(initialSelectedGroups)
@@ -71,6 +68,22 @@ export default function GroupsFilter({
   // Track if panel was opened by user action (not just mounted)
   const panelOpenedByUserRef = useRef(false);
   
+  // Track if process_url has been called to prevent repeated calls
+  const processedUrlRef = useRef(false);
+  const lastProcessedGroupsRef = useRef(null);
+  
+  // Track current values in refs for stable callback
+  const currentGroupIdRef = useRef(currentGroupId);
+  const selectedGroupsRef = useRef(selectedGroups);
+  const imageIdsRef = useRef(imageIds);
+  
+  // Update refs on every render
+  useEffect(() => {
+    currentGroupIdRef.current = currentGroupId;
+    selectedGroupsRef.current = selectedGroups;
+    imageIdsRef.current = imageIds;
+  });
+  
   // Listen for panel opened by user callback
   useEffect(() => {
     if (onPanelOpenedByUser) {
@@ -78,12 +91,20 @@ export default function GroupsFilter({
     }
   }, [onPanelOpenedByUser]);
 
-  // Expose fetch_related function to parent
+  // Expose fetch_related function to parent - use refs to get latest values
+  const fetch_related_stable = useCallback(async (imageIdsToUse = null) => {
+    // Read latest values from refs to avoid stale closure
+    const currentSelected = [currentGroupIdRef.current, ...selectedGroupsRef.current].filter(Boolean);
+    await fetch_related_with_groups(currentSelected, imageIdsToUse || imageIdsRef.current);
+  }, []); // Empty deps - function never changes, refs always have latest values
+  
+  // Only expose to parent ONCE on mount
   useEffect(() => {
     if (onFetchRelated) {
-      onFetchRelated(fetch_related);
+      onFetchRelated(fetch_related_stable);
     }
-  }, [onFetchRelated]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onFetchRelated]); // Only when parent's callback changes, not when our function changes
   
   const fetch_related_with_groups = async (groupsToUse, imageIdsToUse = null) => {
     const safeImageIds = imageIdsToUse || (Array.isArray(imageIds) ? imageIds : []);
@@ -113,22 +134,12 @@ export default function GroupsFilter({
       
       const data = await groupsAPI.getRelated(eventUrl, params);
       
-      // Store related group IDs in session storage (override)
-      const sessionData = JSON.stringify(data.related_group_ids || []);
-      sessionStorage.setItem('frw_groupDetail_filteredRelatedGroups', sessionData);
-      setSessionUpdateTrigger(prev => prev + 1); // Trigger re-render
-      
-      // Apply changes to store (this will automatically update the store with the groups)
+      // Apply changes to store (includes related groups in group entity)
+      // Backend should return changes with broadcast=false since this is contextual
       const store = useDataStore.getState();
       if (data.changes && data.changes.length > 0) {
         store.applyChanges(data.changes, { broadcast: false, ignoreScope: true });
       }
-
-      // Get the updated groups from store after applying changes
-      const after = useDataStore.getState().entities?.[eventId]?.groups || {};
-      const relatedList = (data.related_group_ids || []).map(id => after[id]).filter(Boolean);
-      
-      onRelatedGroupsUpdate?.(relatedList);
     } catch (error) {
       console.error('Error fetching related groups:', error);
     } finally {
@@ -136,11 +147,6 @@ export default function GroupsFilter({
       activeRequestsRef.current.delete(requestSignature);
       setIsLoadingRelatedGroups(false);
     }
-  };
-  
-  const fetch_related = async (imageIdsToUse = null) => {
-    const currentSelected = current_selected();
-    await fetch_related_with_groups(currentSelected, imageIdsToUse);
   };
   
   const select = async (groupId, fetchRelated = true) => {
@@ -204,7 +210,7 @@ export default function GroupsFilter({
     }
     
     // Fetch related groups
-    await fetch_related();
+    await fetch_related_stable();
   };
   
   const process_url = async () => {
@@ -217,6 +223,18 @@ export default function GroupsFilter({
       return;
     }
     
+    // Create a signature of the groups to process
+    const groupsSignature = JSON.stringify([...initialSelectedGroups].sort());
+    
+    // Skip if we've already processed these exact groups
+    if (processedUrlRef.current && lastProcessedGroupsRef.current === groupsSignature) {
+      return;
+    }
+    
+    // Mark as processed
+    processedUrlRef.current = true;
+    lastProcessedGroupsRef.current = groupsSignature;
+    
     // Process each group from URL (if any)
     for (const groupId of initialSelectedGroups) {
       if (groupId !== currentGroupId) {
@@ -225,7 +243,7 @@ export default function GroupsFilter({
     }
     
     // Always fetch related groups after processing URL (regardless of filter params)
-    await fetch_related();
+    await fetch_related_stable();
   };
   
   // Stabilize modal functions to prevent infinite re-renders
@@ -337,23 +355,34 @@ export default function GroupsFilter({
 
   // Process URL on mount or when initialSelectedGroups changes
   useEffect(() => {
-    if (isAuthenticated && isVisible) {
+    if (isAuthenticated && isVisible && eventId) {
+      // Create a signature of the current groups
+      const currentSignature = JSON.stringify([...initialSelectedGroups].sort());
+      
+      // Reset the processed flag if the groups have changed
+      if (lastProcessedGroupsRef.current !== currentSignature) {
+        processedUrlRef.current = false;
+      }
+      
       process_url();
     }
-  }, [initialSelectedGroups, isAuthenticated, isVisible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSelectedGroups, isAuthenticated, isVisible, eventId]);
 
   // Manage filter panel visibility only - no fetching
   useEffect(() => {
     if (isVisible) {
       stableRegisterModal({ id: PANEL_ID, type: 'panel' });
       // Scope for all:groups is managed by parent (GroupDetail) to avoid conditional hook usage
+    } else {
+      // Reset processed flag when panel closes so it can re-fetch when reopened
+      processedUrlRef.current = false;
+      lastProcessedGroupsRef.current = null;
     }
     return () => {
-      if (!isVisible) {
-        stableUnregisterModal(PANEL_ID);
-        // Reset the flag when panel closes
-        panelOpenedByUserRef.current = false;
-      }
+      stableUnregisterModal(PANEL_ID);
+      // Reset the flag when panel closes
+      panelOpenedByUserRef.current = false;
     };
   }, [isVisible, stableRegisterModal, stableUnregisterModal]);
 
@@ -369,7 +398,7 @@ export default function GroupsFilter({
     deselect(null);
   };
 
-  // Build display list: selected first (in order), then related groups from session storage (keep order, no dups). Exclude currentGroupId from this row (it's shown as main group)
+  // Build display list: selected first (in order), then related groups from group entity. Exclude currentGroupId from this row (it's shown as main group)
   const displayGroups = useMemo(() => {
     // Return placeholders when not authenticated
     if (!isAuthenticated) {
@@ -378,18 +407,6 @@ export default function GroupsFilter({
     
     const seen = new Set((selectedGroups || []).map(v => String(v)));
     const groupMap = new Map(Object.values(groups || {}).map(g => [String(g.id || g.group_id), g]));
-    
-    // Get related group IDs from session storage - ALWAYS use this as the source
-    let sessionRelatedGroupIds = [];
-    try {
-      const stored = sessionStorage.getItem('frw_groupDetail_filteredRelatedGroups');
-      if (stored) {
-        sessionRelatedGroupIds = JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Error reading session storage:', error);
-    }
-    
     const currentIdStr = currentGroupId != null ? String(currentGroupId) : null;
     
     // Get selected groups objects
@@ -400,23 +417,29 @@ export default function GroupsFilter({
         return group;
       });
     
-    // Get remaining related groups - ALWAYS use session storage data
-    const tail = sessionRelatedGroupIds
-      .filter(id => {
-        const gid = String(id);
-        const notSelected = !seen.has(gid);
-        const notCurrent = gid !== currentIdStr;
+    // Get filtered_related_groups from the main group entity (stored by backend, not broadcast)
+    const mainGroup = groups?.[currentGroupId];
+    const filteredRelatedGroupIds = mainGroup?.filtered_related_groups;
+    
+    // Ensure it's an array (could be Set, undefined, or other type)
+    const relatedGroupIdsArray = Array.isArray(filteredRelatedGroupIds) 
+      ? filteredRelatedGroupIds 
+      : (filteredRelatedGroupIds instanceof Set ? Array.from(filteredRelatedGroupIds) : []);
+    
+    // Get remaining related groups - filter out selected and current
+    const relatedGroupsFiltered = relatedGroupIdsArray
+      .filter(gid => {
+        const gidStr = String(gid);
+        const notSelected = !seen.has(gidStr);
+        const notCurrent = gidStr !== currentIdStr;
         return notSelected && notCurrent;
       })
-      .map(id => {
-        const group = groupMap.get(String(id)) || { id, label: `Person ${id}` };
-        return group;
-      });
+      .map(gid => groupMap.get(String(gid)) || { id: gid, label: `Person ${gid}` });
     
-    const result = [...selectedObjs, ...tail];
+    const result = [...selectedObjs, ...relatedGroupsFiltered];
     
     return result;
-  }, [selectedGroups, currentGroupId, groups, isAuthenticated, placeholderRelatedGroups, entities, sessionUpdateTrigger]);
+  }, [selectedGroups, currentGroupId, groups, isAuthenticated, placeholderRelatedGroups]);
 
   const getGroupDisplayName = (group) => {
     if (!group) return 'Person';

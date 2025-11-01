@@ -45,6 +45,18 @@ export default function RequestFormModal({
   
   const { showToast } = useToast();
   const currentProfile = useMemo(() => getCurrentProfile(), []);
+  const currentProfileHasEmail = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('frw_currentProfile');
+      if (stored) {
+        const profile = JSON.parse(stored);
+        return !!(profile?.email);
+      }
+    } catch (e) {
+      console.error('Error reading current profile email:', e);
+    }
+    return false;
+  }, []);
   const allGroups = useGroupsList(eventId);
   
   const { registerModal, unregisterModal } = useModalManager();
@@ -1014,8 +1026,8 @@ export default function RequestFormModal({
                   />
                 </div>
                 
-                {/* Communication Consent - Required for new profile requests */}
-                {formData.requestType === 'new' && (
+                {/* Communication Consent - Show if new profile or current profile has email */}
+                {(formData.requestType === 'new' || currentProfileHasEmail) && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <label className="flex items-start space-x-3 cursor-pointer group">
                       <div className="flex items-center h-5">
@@ -1029,7 +1041,7 @@ export default function RequestFormModal({
                       </div>
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          I consent to receive communications about this request *
+                          I consent to receive communications about this request {formData.requestType === 'new' ? '*' : ''}
                         </span>
                         <p className="text-xs text-gray-600 mt-1">
                           The event manager will use your email to notify you about the status of your access request.

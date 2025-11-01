@@ -77,9 +77,17 @@ export default function RequestDetailModal({
   
   // Use the request from the store (which has up-to-date relation data) if available, otherwise fall back to prop
   const requestData = storeRequest || request;
-
-  // Apply scope for this access request
-  useApplyScopes(isOpen && requestId ? [{ entity: 'access_request', id: requestId, eventId }] : []);
+ 
+  // Apply scope for this access request and the requester's profile
+  const applicantProfileId = requestData?.applicant_profile_id;
+  useApplyScopes(
+    isOpen && requestId 
+      ? [
+          { entity: 'access_request', id: requestId, eventId },
+          ...(applicantProfileId ? [{ entity: 'profile', id: applicantProfileId, eventId }] : [])
+        ]
+      : []
+  );
 
   // Fetch request details when modal opens
   useEffect(() => {

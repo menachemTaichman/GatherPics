@@ -160,7 +160,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   
   // Filter states
   const [filterVisible, setFilterVisible] = useState(false);
-  const [relatedGroups, setRelatedGroups] = useState([]);
   // Filter settings are temporary (not stored) - they reset when component unmounts
   const [filterGroups, setFilterGroups] = useState([]);
   const [filterMode, setFilterMode] = useState('and');
@@ -215,10 +214,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     filterGroupsLength: filterGroups.length
   });*/
   
-  // Wrapped callback for when related groups are updated
-  const handleRelatedGroupsUpdate = useCallback((groups) => {
-    setRelatedGroups(groups);
-  }, []);
   
   
   // Initialize ImageViewer controller
@@ -378,7 +373,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       filterGroups: Array.isArray(filterGroups) ? `[${filterGroups.join(',')}]` : 'null',
       filterMode,
       onlySelected,
-      relatedGroupsLen: relatedGroups.length,
       currentGroupsLen: (currentGroups || []).length,
       path: location.pathname,
       groupLabel: group?.label,
@@ -406,10 +400,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       searchParams.delete('filterMode');
     }
     
-    // Update filter groups - always update URL when filterGroups changes, regardless of relatedGroups
+    // Update filter groups - always update URL when filterGroups changes
     if (filterGroups.length > 0) {
       // Always use currentGroups (store data) as the authoritative source for group names
-      // This prevents race conditions where relatedGroups state changes after filterGroups is set
       const groupNames = filterGroups
         .map(id => {
           const group = currentGroups.find(g => g.id === id);
@@ -447,7 +440,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     window.history.replaceState(null, '', newUrl);
     __lastUrlRef.current = newUrl;
     
-  }, [filterGroups, filterMode, onlySelected, relatedGroups, location.pathname, currentGroups, group?.label]);
+  }, [filterGroups, filterMode, onlySelected, location.pathname, currentGroups, group?.label]);
 
 
   // Use the custom hook for conflict handling
@@ -653,17 +646,20 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     });
   }, []);
 
-  // Call fetch_related when memoizedImageIds changes (after filtering)
+  // Call fetch_related when memoizedImageIds actually changes (not just reference)
+  const lastImageIdsSignatureRef = useRef(null);
   useEffect(() => {
     if (fetchRelatedRef.current && memoizedImageIds.length > 0) {
+      // Create signature to prevent calling with same IDs repeatedly
+      const signature = memoizedImageIds.join(',');
+      if (lastImageIdsSignatureRef.current === signature) {
+        return; // Same IDs, skip
+      }
+      lastImageIdsSignatureRef.current = signature;
       fetchRelatedRef.current(memoizedImageIds);
     }
   }, [memoizedImageIds]);
 
-  // Memoize relatedGroups to prevent infinite re-renders in GroupsFilter
-  const memoizedRelatedGroups = useMemo(() => {
-    return relatedGroups.filter(g => g.id !== group?.id);
-  }, [relatedGroups, group?.id]);
 
   useEffect(() => {
     
@@ -1617,7 +1613,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             <GroupsFilter
               group={group}
               urlHelpers={urlHelpers}
-              relatedGroups={memoizedRelatedGroups}
               filterMode={filterMode}
               onlySelected={onlySelected}
               onModeChange={handleFilterModeChange}
@@ -1626,7 +1621,6 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               isVisible={filterVisible}
               eventUrl={eventUrl}
               imageIds={memoizedImageIds}
-              onRelatedGroupsUpdate={handleRelatedGroupsUpdate}
               currentGroupId={group?.id}
               onSelectedGroupsChange={handleFilterGroupsChange}
               initialSelectedGroups={filterGroups}

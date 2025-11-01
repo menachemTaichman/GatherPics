@@ -84,11 +84,18 @@ def get_related_groups(event_id):
         group_ids=group_ids,
         base_image_ids=image_ids
     )
+    main_group_id = selected_groups[0]
     changes = [{
-        'type': 'INSERT',
+        'type': 'UPDATE',
+        'entity': 'group',
+        'items': {main_group_id: {'id': main_group_id, 'filtered_related_groups': group_ids}},
+        'broadcast': False  # Contextual data, don't broadcast
+    },
+        {'type': 'INSERT',
         'entity': 'group',
         'items': groups
     }]
+    
     return jsonify({"changes": changes, "related_group_ids": group_ids})
 
 @group_bp.route("/groups/check-name", methods=["POST"])
