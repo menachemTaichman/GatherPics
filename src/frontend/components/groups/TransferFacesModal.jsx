@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { useModalStore } from '../../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
-import { getRepresentativeUrl, useApplyScopes } from '../../utils/storeUtils';
+import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/storeUtils';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -24,9 +24,10 @@ export default function TransferFacesModal({
   showCrops = false // Add showCrops prop to know current mode
 }) {
   const { showToast } = useToast();
+  const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
-  const groups = useDataStore(state => storeSelectors.groupsAll(state));
+  const groups = useDataStore(state => storeSelectors.groupsAll(state, eventId));
   const MODAL_ID = 'transfer-faces-modal';
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -121,7 +122,7 @@ export default function TransferFacesModal({
       try {
         registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'groups' }], allowOutsideScroll: true });
       } catch {}
-      try { useApplyScopes([{ entity: 'all', id: 'groups' }]); } catch {}
+      try { useApplyScopes([{ entity: 'all', id: 'groups', eventId }]); } catch {}
       
       // Load groups with loading state
       const loadGroups = async () => {

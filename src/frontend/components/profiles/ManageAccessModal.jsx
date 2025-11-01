@@ -4,10 +4,10 @@ import { X, Key, Check, Minus, Info, Loader2 } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { useProfilesList } from '../../utils/dataManager';
+import { useEventProfilesList } from '../../utils/dataManager';
 import { profilesAPI } from '../../utils/apiService';
 import { getCurrentProfileId } from '../../utils/profileService';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 
 /**
  * Profile Access Row Component
@@ -240,12 +240,13 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
  * @param {string} eventUrl - Current event URL
  */
 export default function ManageAccessModal({ isOpen, onClose, entityType, entityIds = [], eventUrl }) {
+  const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const MODAL_ID = 'manage-access-modal';
   const { registerModal, unregisterModal } = useModalStore();
 
-  // Get all profiles and filter out the current one
-  const allProfiles = useProfilesList();
+  // Get all event profiles and filter out the current one
+  const allProfiles = useEventProfilesList(eventId);
   const currentProfileId = getCurrentProfileId();
   const otherProfiles = allProfiles.filter(p => p.id !== currentProfileId);
 
@@ -258,9 +259,9 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
     modalType: 'popup'
   });
 
-  // Apply scopes to allow profiles to be inserted into the store
+  // Apply scopes to allow event_profiles to be inserted into the store
   useApplyScopes(
-    isOpen ? [{ entity: 'all', id: 'profiles' }] : []
+    isOpen ? [{ entity: 'all', id: 'event_profiles', eventId }] : []
   );
 
   // Register modal

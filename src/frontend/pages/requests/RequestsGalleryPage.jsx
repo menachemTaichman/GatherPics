@@ -5,7 +5,7 @@ import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, ArrowU
 import { requestsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useRequestsList } from '../../utils/dataManager';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { getPreference, setPreference } from '../../utils/settings';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ConfirmDelete } from '../../components/modals';
@@ -45,6 +45,7 @@ function getRequestStatus(request) {
 
 export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
+  const eventId = useEventId(eventUrl);
   const [deleteRequest, setDeleteRequest] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -54,9 +55,9 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  useApplyScopes([{ entity: 'all', id: 'access_requests' }]);
+  useApplyScopes([{ entity: 'all', id: 'access_requests', eventId }]);
 
-  const storeRequests = useRequestsList();
+  const storeRequests = useRequestsList(eventId);
 
   // Create placeholder requests when not authenticated
   const placeholderRequests = useMemo(() => {

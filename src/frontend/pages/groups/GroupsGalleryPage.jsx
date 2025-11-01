@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { FaceCard } from '../../components/groups';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
@@ -14,7 +14,8 @@ import { ImageIconPlaceholder } from '../../hooks/useImage.jsx';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
-  useApplyScopes([{ entity: 'all', id: 'groups' }]);
+  const eventId = useEventId(eventUrl);
+  useApplyScopes([{ entity: 'all', id: 'groups', eventId }]);
   const { isAuthenticated } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const sortBy = usePreference('GroupsGallery.sortBy', 'name');
@@ -26,7 +27,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
 
   // Use the data store for groups
-  const storeGroups = useGroupsList();
+  const storeGroups = useGroupsList(eventId);
   
   // Create placeholder groups when not authenticated
   const placeholderGroups = useMemo(() => {

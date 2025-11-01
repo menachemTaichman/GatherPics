@@ -10,7 +10,7 @@ import useImageActions from './ImageActions';
 import { AlbumQuickAddButton } from '../albums';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../../utils/apiService';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent, useFacesForImage, useAlbumsForImage } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -34,7 +34,8 @@ function ImageViewerActions({
   placeholderDataUrl,
   onImageUpdated,
   entity,
-  entityId
+  entityId,
+  eventId
 }) {
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const permissions = usePermissions();
@@ -56,8 +57,8 @@ function ImageViewerActions({
 
   // Get entity label for modal
   const entityLabel = entity === 'group' 
-    ? (useDataStore.getState().entities?.groups?.[entityId]?.label || 'person')
-    : (useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment');
+    ? (useDataStore.getState().entities?.[eventId]?.groups?.[entityId]?.label || 'person')
+    : (useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment');
 
   // Check if action buttons group has any visible buttons
   const hasActionButtons = (
@@ -231,6 +232,7 @@ function ImageViewerActions({
 
 function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected }) {
   const permissions = usePermissions(); // <-- add this near the top of the component
+  const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
@@ -242,10 +244,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   
   // Use universal util for related images
-  const relatedImages = useImagesForParent({ entity, parentId: parent, filteredIds: null, filterByUploadId, includeArchived, sortBy, sortOrder });
+  const relatedImages = useChilds(eventId, entity + 's', parent, 'images', { filterByUploadId, includeArchived, sortBy, sortOrder });
   
   // Get entities from store for filtering
-  const entities = useDataStore((state) => state.entities);
+  const entities = useDataStore((state) => state.entities?.[eventId] || {});
   
   // Apply frontend filtering with same logic as GroupDetailPage
   const filteredImages = useMemo(() => {
@@ -1368,6 +1370,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   onImageUpdated={handleImageUpdated}
                   entity={entity}
                   entityId={parent}
+                  eventId={eventId}
                 />
 
                 {/* Details Section */}

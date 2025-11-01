@@ -20,6 +20,7 @@ import { useDataStore } from '../../utils/dataManager';
 import { useState } from 'react';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useEventId } from '../../utils/storeUtils';
 
 export default function FloatingSelectionControls({
   selectedCount,
@@ -51,6 +52,7 @@ export default function FloatingSelectionControls({
   entityId = null,
   isFacesMode = false
 }) {  
+  const eventId = useEventId(eventUrl);
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const permissions = usePermissions();
 
@@ -75,8 +77,8 @@ export default function FloatingSelectionControls({
 
   // Get entity label for modal
   const entityLabel = entity === 'group' 
-    ? (useDataStore.getState().entities?.groups?.[entityId]?.label || 'person')
-    : (useDataStore.getState().entities?.moments?.[entityId]?.label || 'moment');
+    ? (useDataStore.getState().entities?.[eventId]?.groups?.[entityId]?.label || 'person')
+    : (useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment');
 
   // Check if action buttons group has any visible buttons
   const hasActionButtons = (

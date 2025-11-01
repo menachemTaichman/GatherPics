@@ -5,7 +5,7 @@ import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDo
 import { uploadsAPI, groupsAPI, momentsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadById, useDataStore } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent, useGroupsForUpload, useMomentsForUpload } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { sortImages } from '../../utils/sorting';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
@@ -44,6 +44,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
   const navigate = useNavigate();
   const uploadId = params.uploadId;
+  const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
   
   const [mode, setMode] = useState(() => getPreference('UploadDetail.mode', 'images'));
@@ -76,27 +77,27 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   // Base scopes: upload and its related entities
   const baseScopes = useMemo(() => [
-    { entity: 'upload', id: String(uploadId) },
-  ], [uploadId]);
+    { entity: 'upload', id: String(uploadId), eventId },
+  ], [uploadId, eventId]);
 
   // Dynamic scopes for expanded group and moment
   const dynamicScopes = useMemo(() => {
     const scopes = [];
     if (expandedGroup) {
-      scopes.push({ entity: 'group', id: String(expandedGroup) });
+      scopes.push({ entity: 'group', id: String(expandedGroup), eventId });
     }
     if (expandedMoment) {
-      scopes.push({ entity: 'moment', id: String(expandedMoment) });
+      scopes.push({ entity: 'moment', id: String(expandedMoment), eventId });
     }
     return scopes;
-  }, [expandedGroup, expandedMoment]);
+  }, [expandedGroup, expandedMoment, eventId]);
 
   // Combine base and dynamic scopes
   const allScopes = useMemo(() => [...baseScopes, ...dynamicScopes], [baseScopes, dynamicScopes]);
   
   useApplyScopes(allScopes);
 
-  const storeUpload = useUploadById(uploadId);
+  const storeUpload = useUploadById(eventId, uploadId);
 
   // Create placeholder upload when not authenticated
   const placeholderUpload = useMemo(() => ({
@@ -155,8 +156,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   };
 
   // Get upload groups and moments from relations using stable hooks
-  const rawUploadGroups = useGroupsForUpload(uploadId);
-  const rawUploadMoments = useMomentsForUpload(uploadId);
+  const rawUploadGroups = useChilds(eventId, 'uploads', uploadId, 'groups', { sortBy: 'name', sortOrder: 'asc' });
+  const rawUploadMoments = useChilds(eventId, 'uploads', uploadId, 'moments', { sortBy: 'label', sortOrder: 'asc' });
   
   // Create placeholder groups when not authenticated
   const placeholderGroups = useMemo(() => {
@@ -211,9 +212,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   }, [rawUploadMoments, placeholderMoments, sortDir, isAuthenticated]);
 
   // Get all images for upload
-  const storeUploadImages = useImagesForParent({ 
-    entity: 'upload', 
-    parentId: uploadId, 
+  const storeUploadImages = useChilds(eventId, 'uploads', uploadId, 'images', { 
     includeArchived: true,
     sortBy: 'date',
     sortOrder: sortDir

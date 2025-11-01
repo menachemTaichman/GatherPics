@@ -11,7 +11,7 @@ import useImageSelection from '../../hooks/useImageSelection';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference } from '../../utils/settings';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { shallow } from 'zustand/shallow';
 import { momentsAPI } from '../../utils/apiService';
 import useImageActions from '../../components/images/ImageActions';
@@ -61,12 +61,13 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const location = useLocation();
   const navigate = useNavigate();
   const urlHelpers = injectedUrlHelpers;
+  const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
   
   // Apply scope for all moments
-  useApplyScopes([{ entity: 'all', id: 'moments' }]);
+  useApplyScopes([{ entity: 'all', id: 'moments', eventId }]);
   
-  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state), shallow);
+  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId), shallow);
   
   // Create placeholder moments when not authenticated
   const placeholderMoments = useMemo(() => {

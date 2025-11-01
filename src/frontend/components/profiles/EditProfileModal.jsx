@@ -6,13 +6,14 @@ import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
-import { useApplyScopes, useImagesForProfile, useAlbumsForProfile, useGroupsForProfile } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { useDataStore } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false }) {
+  const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const MODAL_ID = 'edit-profile-modal';
   const currentProfile = getCurrentProfile();
@@ -26,13 +27,13 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   
   // Apply scopes for profile relations
   useApplyScopes(profile?.id ? [
-    { entity: 'profile', id: String(profile.id) }
+    { entity: 'event_profile', id: String(profile.id), eventId }
   ] : []);
   
   // Get profile images, albums, and groups from store
-  const profileImages = useImagesForProfile(profile?.id);
-  const profileAlbums = useAlbumsForProfile(profile?.id);
-  const profileGroups = useGroupsForProfile(profile?.id);
+  const profileImages = useChilds(eventId, 'event_profiles', profile?.id, 'images', { sortBy: 'date', sortOrder: 'asc' });
+  const profileAlbums = useChilds(eventId, 'event_profiles', profile?.id, 'albums', { sortBy: 'name', sortOrder: 'asc' });
+  const profileGroups = useChilds(eventId, 'event_profiles', profile?.id, 'groups', { sortBy: 'name', sortOrder: 'asc' });
 
   // Custom keyboard handler to allow child modal to work
   const handleEditProfileKeys = (e) => {

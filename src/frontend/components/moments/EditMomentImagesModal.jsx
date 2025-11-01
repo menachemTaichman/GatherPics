@@ -7,7 +7,7 @@ import { setPreference } from '../../utils/settings';
 import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../../utils/apiService';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useModalStore } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
@@ -33,6 +33,7 @@ function formatDateTime(dateString) {
 
 function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose, onToast, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
+  const eventId = useEventId(eventUrl);
   const { updateMoment } = useDataStore();
   
   const MODAL_ID = 'edit-moment-images-modal';
@@ -44,22 +45,22 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const momentId = useMemo(() => moment?.id || moment?.moment_id, [moment?.id, moment?.moment_id]);
   
   // Subscribe to all images from store using selector
-  const storeImages = useDataStore(state => storeSelectors.imagesAll(state));
+  const storeImages = useDataStore(state => storeSelectors.imagesAll(state, eventId));
   
   // Subscribe to current moment from store (for reactive label updates) - use stable selector
   const currentMoment = useDataStore(useCallback(state => {
     if (!momentId) return null;
-    return state.entities?.moments?.[momentId] || null;
-  }, [momentId]));
+    return state.entities?.[eventId]?.moments?.[momentId] || null;
+  }, [momentId, eventId]));
   
   // Subscribe to current moment's images from store - use stable selector with EMPTY_SET
   const currentMomentImageIds = useDataStore(useCallback(state => {
     if (!momentId) return EMPTY_SET;
-    return state.entities?.moments?.[momentId]?.images || EMPTY_SET;
-  }, [momentId]));
+    return state.entities?.[eventId]?.moments?.[momentId]?.images || EMPTY_SET;
+  }, [momentId, eventId]));
   
   // Subscribe to all moments for getting image-moment relationships
-  const allMomentsFromStore = useDataStore(state => storeSelectors.momentsAll(state));
+  const allMomentsFromStore = useDataStore(state => storeSelectors.momentsAll(state, eventId));
   
   // Filter images based on includeArchived preference
   const allImagesWithTimestamps = useMemo(() => {

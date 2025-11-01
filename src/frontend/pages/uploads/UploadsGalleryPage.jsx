@@ -5,7 +5,7 @@ import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, ArrowUp, ArrowDown, Plus }
 import { uploadsAPI, imagesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortUploads } from '../../utils/sorting';
 import { getPreference, setPreference } from '../../utils/settings';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -33,6 +33,7 @@ function formatDateTime(dateString) {
 
 export default function UploadsGallery({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
+  const eventId = useEventId(eventUrl);
   const [sortBy, setSortBy] = useState(() => getPreference('UploadsGallery.sortBy', 'started_at'));
   const [sortDir, setSortDir] = useState(() => getPreference('UploadsGallery.sortDir', 'desc'));
   const [editingNotes, setEditingNotes] = useState(null);
@@ -44,9 +45,9 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  useApplyScopes([{ entity: 'all', id: 'uploads' }]);
+  useApplyScopes([{ entity: 'all', id: 'uploads', eventId }]);
 
-  const storeUploads = useUploadsList();
+  const storeUploads = useUploadsList(eventId);
 
   // Create placeholder uploads when not authenticated
   const placeholderUploads = useMemo(() => {

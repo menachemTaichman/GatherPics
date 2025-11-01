@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { useModalStore } from '../../utils/modalManager';
 import { ImageComponent } from '../../hooks/useImage.jsx';
-import { getRepresentativeUrl, useApplyScopes } from '../../utils/storeUtils';
+import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortMoments } from '../../utils/sorting';
 
 export default function MoveToMomentModal({ 
@@ -23,9 +23,10 @@ export default function MoveToMomentModal({
   urlHelpers: injectedUrlHelpers
 }) {
   const { showToast } = useToast();
+  const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
-  const allMoments = useDataStore(state => storeSelectors.momentsAll(state));
+  const allMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId));
   const MODAL_ID = 'move-to-moment-modal';
   const [selectedMomentId, setSelectedMomentId] = useState('');
   const [newMomentName, setNewMomentName] = useState('');
@@ -94,7 +95,7 @@ export default function MoveToMomentModal({
       try {
         registerModal({ id: MODAL_ID, type: 'popup', scopes: [{ entity: 'all', id: 'moments' }], allowOutsideScroll: true });
       } catch {}
-      try { useApplyScopes([{ entity: 'all', id: 'moments' }]); } catch {}
+      try { useApplyScopes([{ entity: 'all', id: 'moments', eventId }]); } catch {}
       
       // Load moments with loading state
       const loadMoments = async () => {

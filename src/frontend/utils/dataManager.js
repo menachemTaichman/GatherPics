@@ -1,4 +1,12 @@
 import { create } from 'zustand';
+import { useMemo } from 'react';
+
+// Centralized storage keys (prefix can be changed easily)
+export const STORAGE_KEYS = {
+  ENTITIES: 'frw_entities',
+  CURRENT_PROFILE: 'frw_currentProfile',
+  PREFERENCES: 'frw_preferences',
+};
 
 export const CHANGE_TYPES = {
   UPSERT: 'UPSERT',
@@ -96,6 +104,7 @@ const CHANNEL_ID = Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 // Centralized entity structure definition
 const ENTITY_STRUCTURE = {
+  // Event-scoped entities (per event)
   images: {
     relations: ['albums', 'faces', 'groups'],
   },
@@ -111,8 +120,8 @@ const ENTITY_STRUCTURE = {
   faces: {
     relations: [],
   },
-  profiles: {
-    relations: ['images', 'albums'],
+  event_profiles: {
+    relations: ['images', 'albums', 'groups'],
   },
   uploads: {
     relations: ['images', 'groups', 'moments'],
@@ -129,12 +138,22 @@ const ENTITY_STRUCTURE = {
       groups: 'dict', // Store as dict with relation data (approved, closed_at, closed_by)
     },
   },
+  // General entities (cross-event)
+  profiles: {
+    relations: [],
+  },
   my_notifications: {
     relations: [],
   },
 };
 
 const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
+
+// Event-scoped entities
+const EVENT_ENTITY_TYPES = ['images', 'groups', 'moments', 'albums', 'faces', 'event_profiles', 'uploads', 'access_requests', 'my_access_requests'];
+
+// General entities (not scoped to events)
+const GENERAL_ENTITY_TYPES = ['profiles', 'my_notifications'];
 
 function getEntityType(entity) {
   const normalized = normalizeEntityKey(entity);
@@ -149,21 +168,29 @@ function shouldStoreAsDict(entityType, relationField) {
   return getRelationType(entityType, relationField) === 'dict';
 }
 
-function normalizeEntityKey(entity) {
+function normalizeEntityKey(entity, eventId = null) {
   if (!entity) return entity;
-  switch (String(entity)) {
+  const entityStr = String(entity);
+  
+  switch (entityStr) {
     case 'image': return 'images';
     case 'group': return 'groups';
     case 'moment': return 'moments';
     case 'album': return 'albums';
     case 'face': return 'faces';
-    case 'profile': return 'profiles';
+    case 'profile': 
+      // 'profile' maps to 'event_profiles' for event-scoped, 'profiles' for general
+      // This will be determined by event_id in the change processing
+      return eventId && eventId !== 'general' ? 'event_profiles' : 'profiles';
     case 'upload': return 'uploads';
     case 'access_request': return 'access_requests';
     case 'my_access_request': return 'my_access_requests';
     case 'my_notification': return 'my_notifications';
     case 'local_storage': return 'localStore';
     case 'localStorage': return 'localStore';
+    // Already plural forms
+    case 'event_profiles': return 'event_profiles';
+    case 'profiles': return 'profiles';
     default: return entity;
   }
 }
@@ -230,70 +257,112 @@ function preserveRelations(entityType, before, merged) {
 function persistEntitiesSession(entities) {
   try {
     const plain = {};
-    ENTITY_TYPES.forEach((entityType) => {
-      plain[entityType] = {};
-      const src = entities[entityType] || {};
-      const out = {};
-      Object.keys(src).forEach((id) => {
-        const e = src[id];
-        const copy = { ...e };
-        Object.keys(copy).forEach((fk) => {
-          if (copy[fk] instanceof Set) {
-            copy[fk] = Array.from(copy[fk]);
-          }
+    
+    // Process each event or 'general'
+    Object.keys(entities).forEach((eventIdOrGeneral) => {
+      plain[eventIdOrGeneral] = {};
+      const eventEntities = entities[eventIdOrGeneral] || {};
+      
+      // Determine which entity types to process
+      const entityTypes = eventIdOrGeneral === 'general' ? GENERAL_ENTITY_TYPES : EVENT_ENTITY_TYPES;
+      
+      entityTypes.forEach((entityType) => {
+        const src = eventEntities[entityType] || {};
+        const out = {};
+        Object.keys(src).forEach((id) => {
+          const e = src[id];
+          const copy = { ...e };
+          Object.keys(copy).forEach((fk) => {
+            if (copy[fk] instanceof Set) {
+              copy[fk] = Array.from(copy[fk]);
+            }
+          });
+          out[id] = copy;
         });
-        out[id] = copy;
+        plain[eventIdOrGeneral][entityType] = out;
       });
-      plain[entityType] = out;
     });
-    sessionStorage.setItem('entities', JSON.stringify(plain));
+    
+    sessionStorage.setItem(STORAGE_KEYS.ENTITIES, JSON.stringify(plain));
   } catch {}
 }
 
 function hydrateEntitiesSession() {
   try {
-    // Clear on actual reloads so each F5 starts with a fresh session
+    // Clear old session data and on actual reloads so each F5 starts fresh
     const nav = (performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
     const isReload = Array.isArray(nav) && nav.length > 0 ? (nav[0]?.type === 'reload') : (performance && performance.navigation && performance.navigation.type === 1);
     if (isReload) {
+      // Clean break - remove old structure
+      sessionStorage.removeItem('entities');
+      sessionStorage.removeItem(STORAGE_KEYS.ENTITIES);
+    } else {
+      // Always remove old 'entities' key if it exists
       sessionStorage.removeItem('entities');
     }
   } catch {}
 
   try {
-    const raw = sessionStorage.getItem('entities');
-    const base = {};
-    ENTITY_TYPES.forEach((entityType) => {
-      base[entityType] = {};
+    const raw = sessionStorage.getItem(STORAGE_KEYS.ENTITIES);
+    
+    // Initialize base structure with general
+    const base = {
+      general: {}
+    };
+    GENERAL_ENTITY_TYPES.forEach((entityType) => {
+      base.general[entityType] = {};
     });
+    
     if (!raw) return base;
+    
     const parsed = JSON.parse(raw);
     const revived = {};
-    ENTITY_TYPES.forEach((entityType) => {
-      const src = parsed?.[entityType] || {};
-      const out = {};
-      Object.keys(src).forEach((id) => {
-        const e = { ...src[id] };
-        Object.keys(e).forEach((fk) => {
-          if (Array.isArray(e[fk])) {
-            const relationType = getRelationType(entityType, fk);
-            if (relationType === 'dict') {
-              // Dict relations need special handling - keep as object if it already is
-              // This prevents converting back to Set
-            } else {
-              e[fk] = new Set(e[fk].map(String));
+    
+    // Process each event or 'general'
+    Object.keys(parsed).forEach((eventIdOrGeneral) => {
+      revived[eventIdOrGeneral] = {};
+      const eventData = parsed[eventIdOrGeneral] || {};
+      
+      // Determine which entity types to process
+      const entityTypes = eventIdOrGeneral === 'general' ? GENERAL_ENTITY_TYPES : EVENT_ENTITY_TYPES;
+      
+      entityTypes.forEach((entityType) => {
+        const src = eventData[entityType] || {};
+        const out = {};
+        Object.keys(src).forEach((id) => {
+          const e = { ...src[id] };
+          Object.keys(e).forEach((fk) => {
+            if (Array.isArray(e[fk])) {
+              const relationType = getRelationType(entityType, fk);
+              if (relationType === 'dict') {
+                // Dict relations stay as objects
+              } else {
+                e[fk] = new Set(e[fk].map(String));
+              }
             }
-          }
+          });
+          out[id] = e;
         });
-        out[id] = e;
+        revived[eventIdOrGeneral][entityType] = out;
       });
-      revived[entityType] = out;
     });
+    
+    // Ensure general exists
+    if (!revived.general) {
+      revived.general = {};
+      GENERAL_ENTITY_TYPES.forEach((entityType) => {
+        revived.general[entityType] = {};
+      });
+    }
+    
     return revived;
   } catch {
-    const empty = {};
-    ENTITY_TYPES.forEach((entityType) => {
-      empty[entityType] = {};
+    // Return empty structure on error
+    const empty = {
+      general: {}
+    };
+    GENERAL_ENTITY_TYPES.forEach((entityType) => {
+      empty.general[entityType] = {};
     });
     return empty;
   }
@@ -333,9 +402,9 @@ export const useDataStore = create((set, get) => {
     notificationsMeta: { unreadCount: 0, totalCount: 0 },
   };
 
-  const applyUpsertsFromEntitiesDict = (childTypeKey, entitiesDict, nextEntities) => {
+  const applyUpsertsFromEntitiesDict = (childTypeKey, entitiesDict, eventEntities) => {
     if (!entitiesDict || typeof entitiesDict !== 'object') return;
-    const prevMap = nextEntities[childTypeKey] || {};
+    const prevMap = eventEntities[childTypeKey] || {};
     let map = prevMap;
     const structure = ENTITY_STRUCTURE[childTypeKey];
     const relations = structure?.relations || [];
@@ -382,64 +451,74 @@ export const useDataStore = create((set, get) => {
         map[id] = nextObj;
       }
     });
-    if (map !== prevMap) nextEntities[childTypeKey] = map;
+    if (map !== prevMap) eventEntities[childTypeKey] = map;
   };
 
-  const shouldApplyRelation = (relation, parentId) => {
+  const shouldApplyRelation = (relation, parentId, eventId) => {
     const state = get();
     const single = state.scope || {};
     const scopesMap = state.scopes || {};
     const scopesList = [single, ...Object.values(scopesMap)];
     const [parentType] = String(relation || '').split('.');
-    const parentKey = normalizeEntityKey(parentType);
+    const parentKey = normalizeEntityKey(parentType, eventId);
     for (const sc of scopesList) {
       if (!sc || !sc.entity) continue;
+      // Check if scope matches the event
+      if (sc.eventId && String(sc.eventId) !== String(eventId)) continue;
       if (sc.entity === parentType && (!sc.id || String(sc.id) === String(parentId))) return true;
       if (sc.entity === 'all' && String(sc.id) === String(parentKey)) return true;
     }
     return false;
   };
 
-  const isEntityInsertAllowedByScopes = (entityKey) => {
+  const isEntityInsertAllowedByScopes = (entityKey, eventId) => {
     const state = get();
     const single = state.scope || {};
     const scopesMap = state.scopes || {};
     const scopesList = [single, ...Object.values(scopesMap)];
 
+    // Filter scopes to match the event
+    const eventScopes = scopesList.filter((sc) => !sc || !sc.eventId || String(sc.eventId) === String(eventId));
+
     // Helper: does any scope match exactly this entity set?
-    const hasAllScope = scopesList.some((sc) => sc && sc.entity === 'all' && String(sc.id) === String(entityKey));
+    const hasAllScope = eventScopes.some((sc) => sc && sc.entity === 'all' && String(sc.id) === String(entityKey));
     if (hasAllScope) return true;
 
     // Singular entity type
     const singular = String(entityKey).replace(/s$/, '');
-
-    // Direct entity scope (e.g., group:<id> allows group upserts)
-    const hasDirect = scopesList.some((sc) => sc && sc.entity === singular);
-    if (hasDirect) return true;
+    if (singular === 'event_profile') {
+      // event_profiles should match 'profile' scope
+      const hasDirect = eventScopes.some((sc) => sc && (sc.entity === singular || sc.entity === 'profile'));
+      if (hasDirect) return true;
+    } else {
+      // Direct entity scope (e.g., group:<id> allows group upserts)
+      const hasDirect = eventScopes.some((sc) => sc && sc.entity === singular);
+      if (hasDirect) return true;
+    }
 
     // Relationship-derived allowances
-    // images are allowed under group/album/moment/image/profile scopes
+    // images are allowed under group/album/moment/image/profile/event_profile scopes
     if (entityKey === 'images') {
-      const hasParent = scopesList.some((sc) => sc && (sc.entity === 'group' || sc.entity === 'album' || sc.entity === 'moment' || sc.entity === 'image' || sc.entity === 'profile'));
+      const hasParent = eventScopes.some((sc) => sc && (sc.entity === 'group' || sc.entity === 'album' || sc.entity === 'moment' || sc.entity === 'image' || sc.entity === 'profile' || sc.entity === 'event_profile'));
       if (hasParent) return true;
     }
     // groups/albums/faces are allowed under image scope (e.g., image.groups, image.albums, image.faces)
     if (entityKey === 'groups' || entityKey === 'albums' || entityKey === 'faces') {
-      const hasImage = scopesList.some((sc) => sc && sc.entity === 'image');
+      const hasImage = eventScopes.some((sc) => sc && sc.entity === 'image');
       if (hasImage) return true;
     }
-    // albums/images are allowed under profile scope (e.g., profile.images, profile.albums)
-    if (entityKey === 'images' || entityKey === 'albums') {
-      const hasProfile = scopesList.some((sc) => sc && sc.entity === 'profile');
+    // albums/images/groups are allowed under profile/event_profile scope
+    if (entityKey === 'images' || entityKey === 'albums' || entityKey === 'groups') {
+      const hasProfile = eventScopes.some((sc) => sc && (sc.entity === 'profile' || sc.entity === 'event_profile'));
       if (hasProfile) return true;
     }
     // images/groups/moments are allowed under upload scope
     if (entityKey === 'images' || entityKey === 'groups' || entityKey === 'moments') {
-      const hasUpload = scopesList.some((sc) => sc && sc.entity === 'upload');
+      const hasUpload = eventScopes.some((sc) => sc && sc.entity === 'upload');
       if (hasUpload) return true;
     }
     // access_requests are allowed under all scopes (anyone can create requests)
-    if (entityKey === 'access_requests') {
+    if (entityKey === 'access_requests' || entityKey === 'my_access_requests') {
       return true;
     }
 
@@ -507,32 +586,38 @@ export const useDataStore = create((set, get) => {
     setArchiveAlbumId: (id) => set({ archiveAlbumId: id }),
     setScope: (scope) => set((state) => {
       const prev = state.scope || {};
-      if ((prev.entity || '') === (scope?.entity || '') && String(prev.id || '') === String(scope?.id || '')) {
+      if ((prev.entity || '') === (scope?.entity || '') && 
+          String(prev.id || '') === String(scope?.id || '') &&
+          String(prev.eventId || '') === String(scope?.eventId || '')) {
         return {};
       }
       
       const scopes = {};
       if (scope?.entity) {
-        const key = `${scope.entity}:${scope.id ?? ''}`;
-        scopes[key] = { entity: scope.entity, id: scope.id };
+        const key = `${scope.eventId || 'general'}:${scope.entity}:${scope.id ?? ''}`;
+        scopes[key] = { entity: scope.entity, id: scope.id, eventId: scope.eventId };
       }
-      return { scope: { entity: scope?.entity, id: scope?.id }, scopes, scopeCounts: scopes && Object.keys(scopes).length ? { [Object.keys(scopes)[0]]: 1 } : {} };
+      return { 
+        scope: { entity: scope?.entity, id: scope?.id, eventId: scope?.eventId }, 
+        scopes, 
+        scopeCounts: scopes && Object.keys(scopes).length ? { [Object.keys(scopes)[0]]: 1 } : {} 
+      };
     }),
     addScope: (scope) => set((state) => {
       if (!scope?.entity) return {};
-      const key = `${scope.entity}:${scope.id ?? ''}`;
+      const key = `${scope.eventId || 'general'}:${scope.entity}:${scope.id ?? ''}`;
       const counts = { ...(state.scopeCounts || {}) };
       const currentCount = counts[key] || 0;
       
       // Always add/update the scope entry and increment the reference count
-      const nextScopes = { ...(state.scopes || {}), [key]: { entity: scope.entity, id: scope.id } };
+      const nextScopes = { ...(state.scopes || {}), [key]: { entity: scope.entity, id: scope.id, eventId: scope.eventId } };
       counts[key] = currentCount + 1;
       
       return { scopes: nextScopes, scopeCounts: counts };
     }),
     removeScope: (scope) => set((state) => {
       if (!scope?.entity) return {};
-      const key = `${scope.entity}:${scope.id ?? ''}`;
+      const key = `${scope.eventId || 'general'}:${scope.entity}:${scope.id ?? ''}`;
       const counts = { ...(state.scopeCounts || {}) };
       const curr = counts[key] || 0;
       if (curr <= 1) {
@@ -553,7 +638,6 @@ export const useDataStore = create((set, get) => {
         return;
       }
       const prevEntities = get().entities;
-      const prevGroupsRef = prevEntities?.groups;
       const typeCounts = {};
       const relationSummaries = [];
       const nextEntities = { ...get().entities };
@@ -562,6 +646,26 @@ export const useDataStore = create((set, get) => {
     if (!options.fromBroadcast && Array.isArray(changes) && changes.length > 0) {
       try { broadcast(changes); } catch {}
     }
+
+      // Helper to ensure event container exists
+      const ensureEventContainer = (eventId) => {
+        if (!nextEntities[eventId]) {
+          nextEntities[eventId] = {};
+          const entityTypes = eventId === 'general' ? GENERAL_ENTITY_TYPES : EVENT_ENTITY_TYPES;
+          entityTypes.forEach((entityType) => {
+            nextEntities[eventId][entityType] = {};
+          });
+        }
+        return nextEntities[eventId];
+      };
+
+      // Ensure general container always exists
+      if (!nextEntities.general) {
+        nextEntities.general = {};
+        GENERAL_ENTITY_TYPES.forEach((entityType) => {
+          nextEntities.general[entityType] = {};
+        });
+      }
 
       // Helper to resolve effective flags (per-change overrides > call-level > type defaults)
       const resolveFlags = (ch) => {
@@ -582,19 +686,19 @@ export const useDataStore = create((set, get) => {
         return { ignoreScope: effIgnore, broadcast: effBroadcast };
       };
 
-      const ensureEntity = (key, id) => {
-        const map = nextEntities[key] || {};
+      const ensureEntity = (eventEntities, key, id) => {
+        const map = eventEntities[key] || {};
         const curr = map[id] || { id };
-        nextEntities[key] = map;
+        eventEntities[key] = map;
         return curr;
       };
 
-      const saveBack = (key, id, obj) => {
-        const prevMap = nextEntities[key] || {};
+      const saveBack = (eventEntities, key, id, obj) => {
+        const prevMap = eventEntities[key] || {};
         const prevObj = prevMap[id];
         if (prevObj === obj) return; // No-op; keep map ref stable
         const nextMap = { ...prevMap, [id]: obj };
-        nextEntities[key] = nextMap;
+        eventEntities[key] = nextMap;
         
       };
 
@@ -602,7 +706,10 @@ export const useDataStore = create((set, get) => {
 
       changes.forEach((ch) => {
         if (!ch || !ch.type) return;
-        const entityKey = normalizeEntityKey(ch.entity);
+        
+        // Extract event_id from change (defaults to 'general')
+        const eventId = ch.event_id || 'general';
+        const entityKey = normalizeEntityKey(ch.entity, eventId);
         const { ignoreScope: effIgnoreScope, broadcast: effBroadcast } = resolveFlags(ch);
         typeCounts[ch.type] = (typeCounts[ch.type] || 0) + 1;
 
@@ -614,7 +721,11 @@ export const useDataStore = create((set, get) => {
             ids.forEach((storageKey) => {
               if (!storageKey) return;
               try {
-                localStorage.removeItem(String(storageKey));
+                // Map to frw_ prefixed keys
+                const mappedKey = storageKey === 'currentProfile' ? STORAGE_KEYS.CURRENT_PROFILE :
+                                  storageKey === 'preferences' ? STORAGE_KEYS.PREFERENCES :
+                                  storageKey;
+                localStorage.removeItem(String(mappedKey));
               } catch (e) {
                 console.warn('Failed to remove from localStorage:', e);
               }
@@ -631,12 +742,17 @@ export const useDataStore = create((set, get) => {
               if (!it || !it.id) return;
               const storageKey = it.id;
               
+              // Map to frw_ prefixed keys
+              const mappedKey = storageKey === 'currentProfile' ? STORAGE_KEYS.CURRENT_PROFILE :
+                                storageKey === 'preferences' ? STORAGE_KEYS.PREFERENCES :
+                                storageKey;
+              
               if (ch.type === CHANGE_TYPES.UPSERT) {
                 // Replace entire value
                 try {
                   const value = { ...it };
                   delete value.id;
-                  localStorage.setItem(storageKey, JSON.stringify(value));
+                  localStorage.setItem(mappedKey, JSON.stringify(value));
                   // Dispatch custom event for same-tab updates
                   if (storageKey === 'currentProfile') {
                     window.dispatchEvent(new Event('localStorage:currentProfile'));
@@ -647,11 +763,11 @@ export const useDataStore = create((set, get) => {
               } else if (ch.type === CHANGE_TYPES.UPDATE) {
                 // Merge into existing value
                 try {
-                  const existingRaw = localStorage.getItem(storageKey);
+                  const existingRaw = localStorage.getItem(mappedKey);
                   const existing = existingRaw ? JSON.parse(existingRaw) : {};
                   const merged = { ...existing, ...it };
                   delete merged.id;
-                  localStorage.setItem(storageKey, JSON.stringify(merged));
+                  localStorage.setItem(mappedKey, JSON.stringify(merged));
                   // Dispatch custom event for same-tab updates
                   if (storageKey === 'currentProfile') {
                     window.dispatchEvent(new Event('localStorage:currentProfile'));
@@ -669,20 +785,24 @@ export const useDataStore = create((set, get) => {
         if (ch.type === CHANGE_TYPES.UPSERT) {
           const key = entityKey;
           if (!key) return;
+          
+          // Get or create event container
+          const eventEntities = ensureEventContainer(eventId);
+          
           const items = Array.isArray(ch.items)
             ? ch.items
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const prevMap = nextEntities[key] || {};
+          const prevMap = eventEntities[key] || {};
           let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
-            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id;
+            const id = it.id || it.image_id || it.group_id || it.moment_id || it.album_id || it.face_id || it.profile_id;
             if (!id) return;
             const exists = !!map[id];
             // Gate only inserts unless ignoreScope=true
-            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
+            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key, eventId)) return;
             const prev = prevMap[id] || { id };
             const merged = { ...prev, ...it };
             const normalized = normalizeRelations(key, merged);
@@ -694,7 +814,7 @@ export const useDataStore = create((set, get) => {
               
             }
           });
-          if (map !== prevMap) nextEntities[key] = map;
+          if (map !== prevMap) eventEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -702,12 +822,16 @@ export const useDataStore = create((set, get) => {
         if (ch.type === CHANGE_TYPES.UPDATE) {
           const key = entityKey;
           if (!key) return;
+          
+          // Get or create event container
+          const eventEntities = ensureEventContainer(eventId);
+          
           const items = Array.isArray(ch.items)
             ? ch.items
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const prevMap = nextEntities[key] || {};
+          const prevMap = eventEntities[key] || {};
           let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
@@ -725,7 +849,7 @@ export const useDataStore = create((set, get) => {
               
             }
           });
-          if (map !== prevMap) nextEntities[key] = map;
+          if (map !== prevMap) eventEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -733,12 +857,16 @@ export const useDataStore = create((set, get) => {
         if (ch.type === CHANGE_TYPES.INSERT) {
           const key = entityKey;
           if (!key) return;
+          
+          // Get or create event container
+          const eventEntities = ensureEventContainer(eventId);
+          
           const items = Array.isArray(ch.items)
             ? ch.items
             : (ch.items && typeof ch.items === 'object')
               ? Object.keys(ch.items).map((id) => ({ id, ...ch.items[id] }))
               : [];
-          const prevMap = nextEntities[key] || {};
+          const prevMap = eventEntities[key] || {};
           let map = prevMap;
           items.forEach((it) => {
             if (!it) return;
@@ -746,7 +874,7 @@ export const useDataStore = create((set, get) => {
             if (!id) return;
             const exists = !!map[id];
             // Gate only inserts unless ignoreScope=true
-            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key)) return;
+            if (!exists && !effIgnoreScope && !isEntityInsertAllowedByScopes(key, eventId)) return;
             const prev = prevMap[id] || { id };
             const merged = { ...prev, ...it };
             const normalized = normalizeRelations(key, merged);
@@ -757,7 +885,7 @@ export const useDataStore = create((set, get) => {
               map[id] = nextObj;
             }
           });
-          if (map !== prevMap) nextEntities[key] = map;
+          if (map !== prevMap) eventEntities[key] = map;
           if (effBroadcast) outgoing.push(ch);
           return;
         }
@@ -768,26 +896,29 @@ export const useDataStore = create((set, get) => {
           ch.type === CHANGE_TYPES.RELATION_REMOVE
         ) {
           const [parentType, childType] = String(ch.relation || '').split('.');
-          const parentKey = normalizeEntityKey(parentType);
+          const parentKey = normalizeEntityKey(parentType, eventId);
           if (!parentKey) return;
-          const field = normalizeEntityKey(childType).replace(/s$/, 's');
+          const field = normalizeEntityKey(childType, eventId).replace(/s$/, 's');
           const isDictRelation = shouldStoreAsDict(parentKey, field);
+
+          // Get or create event container
+          const eventEntities = ensureEventContainer(eventId);
 
           // Apply child entity upserts when 'entities' dict is provided (local only, ignore scopes)
           if (ch.entities && (ch.type === CHANGE_TYPES.RELATION_SET || ch.type === CHANGE_TYPES.RELATION_ADD)) {
-            const childKey = normalizeEntityKey(childType);
-            applyUpsertsFromEntitiesDict(childKey, ch.entities, nextEntities);
+            const childKey = normalizeEntityKey(childType, eventId);
+            applyUpsertsFromEntitiesDict(childKey, ch.entities, eventEntities);
           }
 
           // Gate relation mutations by scope
           const parentId = String(ch.parentId ?? '');
           if (!parentId) return;
           if (!effIgnoreScope) {
-            const allowed = shouldApplyRelation(ch.relation, parentId);
+            const allowed = shouldApplyRelation(ch.relation, parentId, eventId);
             if (!allowed) return;
           }
 
-          const parent = ensureEntity(parentKey, parentId);
+          const parent = ensureEntity(eventEntities, parentKey, parentId);
           let beforeSize = 0;
           let beforeValue = null;
           
@@ -844,7 +975,7 @@ export const useDataStore = create((set, get) => {
             }
           }
           
-          saveBack(parentKey, parentId, parent);
+          saveBack(eventEntities, parentKey, parentId, parent);
           if (effBroadcast) {
             outgoing.push(ch);
           }
@@ -854,10 +985,14 @@ export const useDataStore = create((set, get) => {
         if (ch.type === CHANGE_TYPES.REMOVE) {
           const key = entityKey;
           if (!key) return;
+          
+          // Get or create event container
+          const eventEntities = ensureEventContainer(eventId);
+          
           const ids = ch.ids || [];
-          const map = { ...(nextEntities[key] || {}) };
+          const map = { ...(eventEntities[key] || {}) };
           ids.forEach((id) => { delete map[id]; });
-          nextEntities[key] = map;
+          eventEntities[key] = map;
           // Removal broadcast as-is
           const { broadcast: effBroadcastRemove } = resolveFlags(ch);
           if (effBroadcastRemove) outgoing.push(ch);
@@ -871,7 +1006,7 @@ export const useDataStore = create((set, get) => {
             const entity = ch.entity;
             const id = ch.id;
             if (entity && id) {
-              get().addScope({ entity, id });
+              get().addScope({ entity, id, eventId });
             }
           }
           // Don't broadcast scope instructions to other tabs
@@ -885,7 +1020,7 @@ export const useDataStore = create((set, get) => {
             const entity = ch.entity;
             const id = ch.id;
             if (entity && id) {
-              get().removeScope({ entity, id });
+              get().removeScope({ entity, id, eventId });
             }
           }
           // Don't broadcast scope instructions to other tabs
@@ -894,10 +1029,6 @@ export const useDataStore = create((set, get) => {
       });
 
       set({ entities: nextEntities });
-      
-      const nextGroupsRef = nextEntities?.groups;
-      const prevGroupsSize = prevGroupsRef ? Object.keys(prevGroupsRef).length : 0;
-      const nextGroupsSize = nextGroupsRef ? Object.keys(nextGroupsRef).length : 0;
       
       persistEntitiesSession(nextEntities);
       
@@ -908,9 +1039,11 @@ export const useDataStore = create((set, get) => {
     setSelectedImages: (selectedImages) => set({ selectedImages }),
     setImageViewer: (imageViewer) => set({ imageViewer }),
     clearData: () => {
-      const empty = {};
-      ENTITY_TYPES.forEach((entityType) => {
-        empty[entityType] = {};
+      const empty = {
+        general: {}
+      };
+      GENERAL_ENTITY_TYPES.forEach((entityType) => {
+        empty.general[entityType] = {};
       });
       persistEntitiesSession(empty);
       set({
@@ -928,234 +1061,342 @@ export const useDataStore = create((set, get) => {
   };
 });
 
+// Memoization cache for selectors (per eventId)
+const selectorCache = {
+  groups: new Map(),
+  images: new Map(),
+  moments: new Map(),
+  albums: new Map(),
+  faces: new Map(),
+  event_profiles: new Map(),
+  uploads: new Map(),
+  access_requests: new Map(),
+  my_access_requests: new Map(),
+  profiles_general: null,
+  my_notifications_general: null,
+};
+
 export const selectors = {
-  groupsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.groups || null;
-      if (ref === lastRef) return lastArr;
-      const prevLen = lastArr.length;
-      lastRef = ref;
-      const nextArr = Object.values(ref || {});
-      // Check referential stability of elements
-      let sameRefs = 0;
-      const prevById = {};
-      lastArr.forEach(g => { if (g && g.id) prevById[g.id] = g; });
-      nextArr.forEach(g => { if (g && prevById[g.id] === g) sameRefs += 1; });
-      lastArr = nextArr;
-      
-      return lastArr;
-    };
-  })(),
-  imagesAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.images || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  momentsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.moments || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  albumsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.albums || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  facesAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.faces || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  profilesAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.profiles || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  uploadsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.uploads || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  accessRequestsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.access_requests || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  myAccessRequestsAll: (() => {
-    let lastRef = null;
-    let lastArr = [];
-    return (state) => {
-      const ref = state.entities?.my_access_requests || null;
-      if (ref === lastRef) return lastArr;
-      lastRef = ref;
-      lastArr = Object.values(ref || {});
-      return lastArr;
-    };
-  })(),
-  groupImages: (state, groupId) => {
-    const group = state.entities?.groups?.[groupId];
+  // Event-scoped selectors (require eventId) - with memoization
+  groupsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.groups || {};
+    const cache = selectorCache.groups.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.groups.set(eventId, { ref, arr });
+    return arr;
+  },
+  imagesAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.images || {};
+    const cache = selectorCache.images.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.images.set(eventId, { ref, arr });
+    return arr;
+  },
+  momentsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.moments || {};
+    const cache = selectorCache.moments.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.moments.set(eventId, { ref, arr });
+    return arr;
+  },
+  albumsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.albums || {};
+    const cache = selectorCache.albums.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.albums.set(eventId, { ref, arr });
+    return arr;
+  },
+  facesAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.faces || {};
+    const cache = selectorCache.faces.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.faces.set(eventId, { ref, arr });
+    return arr;
+  },
+  eventProfilesAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.event_profiles || {};
+    const cache = selectorCache.event_profiles.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.event_profiles.set(eventId, { ref, arr });
+    return arr;
+  },
+  uploadsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.uploads || {};
+    const cache = selectorCache.uploads.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.uploads.set(eventId, { ref, arr });
+    return arr;
+  },
+  accessRequestsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.access_requests || {};
+    const cache = selectorCache.access_requests.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.access_requests.set(eventId, { ref, arr });
+    return arr;
+  },
+  myAccessRequestsAll: (state, eventId) => {
+    const ref = state.entities?.[eventId]?.my_access_requests || {};
+    const cache = selectorCache.my_access_requests.get(eventId);
+    if (cache && cache.ref === ref) return cache.arr;
+    const arr = Object.values(ref);
+    selectorCache.my_access_requests.set(eventId, { ref, arr });
+    return arr;
+  },
+  // General selectors (no eventId needed) - with memoization
+  profilesAll: (state) => {
+    const ref = state.entities?.general?.profiles || {};
+    if (selectorCache.profiles_general && selectorCache.profiles_general.ref === ref) {
+      return selectorCache.profiles_general.arr;
+    }
+    const arr = Object.values(ref);
+    selectorCache.profiles_general = { ref, arr };
+    return arr;
+  },
+  myNotificationsAll: (state) => {
+    const ref = state.entities?.general?.my_notifications || {};
+    if (selectorCache.my_notifications_general && selectorCache.my_notifications_general.ref === ref) {
+      return selectorCache.my_notifications_general.arr;
+    }
+    const arr = Object.values(ref);
+    selectorCache.my_notifications_general = { ref, arr };
+    return arr;
+  },
+  groupImages: (state, eventId, groupId) => {
+    const group = state.entities?.[eventId]?.groups?.[groupId];
     const ids = Array.from(group?.images || []);
-    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
+    return ids.map((id) => state.entities?.[eventId]?.images?.[id]).filter(Boolean);
   },
-  albumImages: (state, albumId) => {
-    const album = state.entities?.albums?.[albumId];
+  albumImages: (state, eventId, albumId) => {
+    const album = state.entities?.[eventId]?.albums?.[albumId];
     const ids = Array.from(album?.images || []);
-    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
+    return ids.map((id) => state.entities?.[eventId]?.images?.[id]).filter(Boolean);
   },
-  momentImages: (state, momentId) => {
-    const moment = state.entities?.moments?.[momentId];
+  momentImages: (state, eventId, momentId) => {
+    const moment = state.entities?.[eventId]?.moments?.[momentId];
     const ids = Array.from(moment?.images || []);
-    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
+    return ids.map((id) => state.entities?.[eventId]?.images?.[id]).filter(Boolean);
   },
-  uploadImages: (state, uploadId) => {
-    const upload = state.entities?.uploads?.[uploadId];
+  uploadImages: (state, eventId, uploadId) => {
+    const upload = state.entities?.[eventId]?.uploads?.[uploadId];
     const ids = Array.from(upload?.images || []);
-    return ids.map((id) => state.entities?.images?.[id]).filter(Boolean);
+    return ids.map((id) => state.entities?.[eventId]?.images?.[id]).filter(Boolean);
   },
-  imageById: (state, id) => state.entities?.images?.[id] || null,
-  albumMembershipSets: (state) => {
+  imageById: (state, eventId, id) => state.entities?.[eventId]?.images?.[id] || null,
+  albumMembershipSets: (state, eventId) => {
     const favId = state.favoritesAlbumId;
     const arcId = state.archiveAlbumId;
-    const favSet = (favId && state.entities?.albums?.[favId]?.images) || new Set();
-    const arcSet = (arcId && state.entities?.albums?.[arcId]?.images) || new Set();
+    const favSet = (favId && state.entities?.[eventId]?.albums?.[favId]?.images) || new Set();
+    const arcSet = (arcId && state.entities?.[eventId]?.albums?.[arcId]?.images) || new Set();
     return { favoritesSet: favSet, archiveSet: arcSet };
   },
-  isFavorite: (state, imageId) => {
+  isFavorite: (state, eventId, imageId) => {
     const favId = state.favoritesAlbumId;
-    const favSet = favId && state.entities?.albums?.[favId]?.images;
+    const favSet = favId && state.entities?.[eventId]?.albums?.[favId]?.images;
     if (favSet instanceof Set) return favSet.has(String(imageId));
-    const img = state.entities?.images?.[imageId];
+    const img = state.entities?.[eventId]?.images?.[imageId];
     return !!(img?.is_favorite ?? img?.is_favorites);
   },
-  isArchived: (state, imageId) => {
+  isArchived: (state, eventId, imageId) => {
     const arcId = state.archiveAlbumId;
-    const arcSet = arcId && state.entities?.albums?.[arcId]?.images;
+    const arcSet = arcId && state.entities?.[eventId]?.albums?.[arcId]?.images;
     if (arcSet instanceof Set) return arcSet.has(String(imageId));
-    const img = state.entities?.images?.[imageId];
+    const img = state.entities?.[eventId]?.images?.[imageId];
     return !!img?.is_archived;
   },
-  visibleImages: (state, ids, { includeArchived = true } = {}) => {
-    const list = (ids || []).map((id) => state.entities?.images?.[id]).filter(Boolean);
+  visibleImages: (state, eventId, ids, { includeArchived = true } = {}) => {
+    const list = (ids || []).map((id) => state.entities?.[eventId]?.images?.[id]).filter(Boolean);
     if (includeArchived) return list;
     return list.filter((img) => !img?.is_archived);
   },
 };
 
+// Stable empty array to avoid creating new instances
+const EMPTY_ARRAY = Object.freeze([]);
+
+// Stable selector that always returns empty array (for null eventId case)
+const EMPTY_SELECTOR = () => EMPTY_ARRAY;
+
+// Memoized selector factories to ensure stable function references for zustand
+const selectorFunctions = {
+  groups: new Map(),
+  images: new Map(),
+  moments: new Map(),
+  albums: new Map(),
+  faces: new Map(),
+  event_profiles: new Map(),
+  uploads: new Map(),
+  access_requests: new Map(),
+  my_access_requests: new Map(),
+};
+
+function getOrCreateSelectorAll(entityType, eventId) {
+  if (!eventId) return EMPTY_SELECTOR;
+  
+  const cache = selectorFunctions[entityType];
+  if (!cache.has(eventId)) {
+    // Convert entity_type to camelCase for selector lookup
+    const selectorName = entityType === 'event_profiles' ? 'eventProfilesAll' :
+                         entityType === 'access_requests' ? 'accessRequestsAll' :
+                         entityType === 'my_access_requests' ? 'myAccessRequestsAll' :
+                         entityType + 'All';
+    cache.set(eventId, (state) => selectors[selectorName](state, eventId));
+  }
+  return cache.get(eventId);
+}
+
 // Convenience hooks with stable outputs so components don't need local useMemo for store data
-export function useGroupsList() {
-  return useDataStore((state) => selectors.groupsAll(state));
+
+// Event-scoped hooks (require eventId)
+export function useGroupsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('groups', eventId), [eventId]);
+  return useDataStore(selector);
 }
 
-export function useGroupById(groupId) {
-  return useDataStore((state) => (groupId ? state.entities?.groups?.[groupId] || null : null));
+export function useGroupById(eventId, groupId) {
+  const selector = useMemo(
+    () => (state) => (eventId && groupId ? state.entities?.[eventId]?.groups?.[groupId] || null : null),
+    [eventId, groupId]
+  );
+  return useDataStore(selector);
 }
 
-export function useImagesList() {
-  return useDataStore((state) => selectors.imagesAll(state));
+export function useImagesList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('images', eventId), [eventId]);
+  return useDataStore(selector);
 }
 
-export function useImageById(imageId) {
-  return useDataStore((state) => (imageId ? state.entities?.images?.[imageId] || null : null));
+export function useImageById(eventId, imageId) {
+  const selector = useMemo(
+    () => (state) => (eventId && imageId ? state.entities?.[eventId]?.images?.[imageId] || null : null),
+    [eventId, imageId]
+  );
+  return useDataStore(selector);
 }
 
-export function useAlbumsList() {
-  return useDataStore((state) => selectors.albumsAll(state));
+export function useAlbumsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('albums', eventId), [eventId]);
+  return useDataStore(selector);
 }
 
-export function useAlbumById(albumId) {
-  return useDataStore((state) => (albumId ? state.entities?.albums?.[albumId] || null : null));
+export function useAlbumById(eventId, albumId) {
+  const selector = useMemo(
+    () => (state) => (eventId && albumId ? state.entities?.[eventId]?.albums?.[albumId] || null : null),
+    [eventId, albumId]
+  );
+  return useDataStore(selector);
 }
 
-export function useMomentsList() {
-  return useDataStore((state) => selectors.momentsAll(state));
+export function useMomentsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('moments', eventId), [eventId]);
+  return useDataStore(selector);
 }
 
-export function useMomentById(momentId) {
-  return useDataStore((state) => (momentId ? state.entities?.moments?.[momentId] || null : null));
+export function useMomentById(eventId, momentId) {
+  const selector = useMemo(
+    () => (state) => (eventId && momentId ? state.entities?.[eventId]?.moments?.[momentId] || null : null),
+    [eventId, momentId]
+  );
+  return useDataStore(selector);
 }
 
-export function useFacesList() {
-  return useDataStore((state) => selectors.facesAll(state));
+export function useFacesList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('faces', eventId), [eventId]);
+  return useDataStore(selector);
 }
 
-export function useFaceById(faceId) {
-  return useDataStore((state) => (faceId ? state.entities?.faces?.[faceId] || null : null));
+export function useFaceById(eventId, faceId) {
+  const selector = useMemo(
+    () => (state) => (eventId && faceId ? state.entities?.[eventId]?.faces?.[faceId] || null : null),
+    [eventId, faceId]
+  );
+  return useDataStore(selector);
 }
 
+export function useEventProfilesList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('event_profiles', eventId), [eventId]);
+  return useDataStore(selector);
+}
+
+export function useEventProfileById(eventId, profileId) {
+  const selector = useMemo(
+    () => (state) => (eventId && profileId ? state.entities?.[eventId]?.event_profiles?.[profileId] || null : null),
+    [eventId, profileId]
+  );
+  return useDataStore(selector);
+}
+
+export function useUploadsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('uploads', eventId), [eventId]);
+  return useDataStore(selector);
+}
+
+export function useUploadById(eventId, uploadId) {
+  const selector = useMemo(
+    () => (state) => (eventId && uploadId ? state.entities?.[eventId]?.uploads?.[uploadId] || null : null),
+    [eventId, uploadId]
+  );
+  return useDataStore(selector);
+}
+
+export function useRequestsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('access_requests', eventId), [eventId]);
+  return useDataStore(selector);
+}
+
+export function useRequestById(eventId, requestId) {
+  const selector = useMemo(
+    () => (state) => (eventId && requestId ? state.entities?.[eventId]?.access_requests?.[requestId] || null : null),
+    [eventId, requestId]
+  );
+  return useDataStore(selector);
+}
+
+export function useMyRequestsList(eventId) {
+  const selector = useMemo(() => getOrCreateSelectorAll('my_access_requests', eventId), [eventId]);
+  return useDataStore(selector);
+}
+
+export function useMyRequestById(eventId, requestId) {
+  const selector = useMemo(
+    () => (state) => (eventId && requestId ? state.entities?.[eventId]?.my_access_requests?.[requestId] || null : null),
+    [eventId, requestId]
+  );
+  return useDataStore(selector);
+}
+
+// General hooks (no eventId needed)
 export function useProfilesList() {
-  return useDataStore((state) => selectors.profilesAll(state));
+  const selector = useMemo(() => (state) => selectors.profilesAll(state), []);
+  return useDataStore(selector);
 }
 
 export function useProfileById(profileId) {
-  return useDataStore((state) => (profileId ? state.entities?.profiles?.[profileId] || null : null));
+  const selector = useMemo(
+    () => (state) => (profileId ? state.entities?.general?.profiles?.[profileId] || null : null),
+    [profileId]
+  );
+  return useDataStore(selector);
 }
 
-export function useUploadsList() {
-  return useDataStore((state) => selectors.uploadsAll(state));
+export function useMyNotificationsList() {
+  const selector = useMemo(() => (state) => selectors.myNotificationsAll(state), []);
+  return useDataStore(selector);
 }
 
-export function useUploadById(uploadId) {
-  return useDataStore((state) => (uploadId ? state.entities?.uploads?.[uploadId] || null : null));
-}
-
-export function useRequestsList() {
-  return useDataStore((state) => selectors.accessRequestsAll(state));
-}
-
-export function useRequestById(requestId) {
-  return useDataStore((state) => (requestId ? state.entities?.access_requests?.[requestId] || null : null));
-}
-
-export function useMyRequestsList() {
-  return useDataStore((state) => selectors.myAccessRequestsAll(state));
-}
-
-export function useMyRequestById(requestId) {
-  return useDataStore((state) => (requestId ? state.entities?.my_access_requests?.[requestId] || null : null));
+export function useMyNotificationById(notificationId) {
+  const selector = useMemo(
+    () => (state) => (notificationId ? state.entities?.general?.my_notifications?.[notificationId] || null : null),
+    [notificationId]
+  );
+  return useDataStore(selector);
 }
 
  

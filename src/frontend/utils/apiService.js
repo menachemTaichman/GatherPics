@@ -60,8 +60,21 @@ api.interceptors.response.use(
     // Apply changes to store if present
     if (response.data && response.data.changes) {
       const store = useDataStore.getState();
-      const changes = response.data.changes;
-      store.applyChanges(Array.isArray(changes) ? changes : []);
+      const changes = Array.isArray(response.data.changes) 
+        ? response.data.changes 
+        : [];
+      
+      // Extract event_id from request URL
+      const eventIdMatch = response.config.url?.match(/\/events\/([^\/]+)/);
+      const defaultEventId = eventIdMatch ? eventIdMatch[1] : 'general';
+      
+      // Inject event_id into changes that don't have it
+      const enrichedChanges = changes.map(ch => ({
+        ...ch,
+        event_id: ch.event_id || defaultEventId
+      }));
+      
+      store.applyChanges(enrichedChanges);
       
       // Remove changes from response to prevent double application
       const { changes: _, ...responseDataWithoutChanges } = response.data;

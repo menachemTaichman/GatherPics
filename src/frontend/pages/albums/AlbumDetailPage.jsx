@@ -26,7 +26,7 @@ import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
 import useImageSelection from '../../hooks/useImageSelection';
 import { useDataStore, useAlbumsList } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { albumsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useImageComponent } from '../../hooks/useImage.jsx';
@@ -41,6 +41,7 @@ const EMPTY_ARRAY = Object.freeze([]);
 
 export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const { album_name, eventUrl } = useParams();
+  const eventId = useEventId(eventUrl);
   const navigate = useNavigate();
   const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
@@ -81,7 +82,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const [nameConflict, setNameConflict] = useState(false);
 
   // Subscribe to normalized albums list
-  const currentAlbums = useAlbumsList();
+  const currentAlbums = useAlbumsList(eventId);
   const attemptedLookupRef = useRef(false);
   const isRenamingRef = useRef(false);
   
@@ -102,11 +103,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
   // For archived album, always include archived; otherwise use preference
   const includeArchived = isArchivedAlbum ? true : usePreference('general.includeArchived', false);
-  useApplyScopes(album?.id ? [{ entity: 'album', id: String(album.id) }] : []);
-  const relatedImages = useImagesForParent({ 
-    entity: 'album', 
-    parentId: album?.id, 
-    filteredIds: null, 
+  useApplyScopes(album?.id ? [{ entity: 'album', id: String(album.id), eventId }] : []);
+  const relatedImages = useChilds(eventId, 'albums', album?.id, 'images', { 
     includeArchived, 
     sortBy: 'date', 
     sortOrder 

@@ -3,8 +3,9 @@
  */
 
 import { profilesAPI } from './apiService';
+import { STORAGE_KEYS } from './dataManager';
 
-const PREFERENCES = 'preferences';
+const PREFERENCES = STORAGE_KEYS.PREFERENCES;
 
 // Default values for all settings
 const DEFAULT_PREFERENCES = {

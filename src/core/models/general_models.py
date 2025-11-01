@@ -16,18 +16,19 @@ class GeneralModels(BaseModels):
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
         general_profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        events_profiles = self.get_childs('profiles', general_profile['profile_id'], 'events', return_ids=True)
-        if event_id and event_id not in events_profiles:
-            raise Forbidden('Profile does not have permissions in this event')
-
+        events_ids = self.get_childs('profiles', general_profile['profile_id'], 'events', return_ids=True)
+              
         if event_id:
+            if event_id not in events_ids:
+                raise Forbidden('Profile does not have permissions in this event')
+            
             event = Event(event_id, general_profile['profile_id'])
             if not event:
                 raise Forbidden('Event not found')
             profile_event = event.models.get_current_profile()
             profile_event.pop('profile_id')
             profile_event.pop('label')
-            return {**general_profile, **profile_event, 'events': events_profiles}
+            return {**general_profile, **profile_event, 'events': events_ids}
         else:
             return general_profile
 

@@ -6,7 +6,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, groupsAPI } from '../../utils/apiService';
 import { useGroupsList, useMyRequestById } from '../../utils/dataManager';
-import { useApplyScopes, getRepresentativeUrl } from '../../utils/storeUtils';
+import { useApplyScopes, getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
 import { usePreference } from '../../hooks/useSettings';
@@ -21,6 +21,7 @@ export default function RequestFormModal({
   eventUrl,
   urlHelpers
 }) {
+  const eventId = useEventId(eventUrl);
   const [formData, setFormData] = useState({
     requestType: 'own', // 'own' or 'new'
     applicant_name: '',
@@ -44,7 +45,7 @@ export default function RequestFormModal({
   
   const { showToast } = useToast();
   const currentProfile = useMemo(() => getCurrentProfile(), []);
-  const allGroups = useGroupsList();
+  const allGroups = useGroupsList(eventId);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-form-modal';
@@ -85,7 +86,7 @@ export default function RequestFormModal({
   );
   
   // Get request from store (which is updated by API interceptor)
-  const storeRequest = useMyRequestById(requestId);
+  const storeRequest = useMyRequestById(eventId, requestId);
   
   // Use store request if available (has full data), otherwise use request prop
   const requestData = storeRequest || request;
@@ -100,10 +101,10 @@ export default function RequestFormModal({
   useApplyScopes(
     currentRequestId && isEditing
       ? [
-          { entity: 'all', id: 'groups' },
-          { entity: 'my_access_request', id: currentRequestId }
+          { entity: 'all', id: 'groups', eventId },
+          { entity: 'my_access_request', id: currentRequestId, eventId }
         ]
-      : [{ entity: 'all', id: 'groups' }]
+      : [{ entity: 'all', id: 'groups', eventId }]
   );
 
   // Fetch request data when editing

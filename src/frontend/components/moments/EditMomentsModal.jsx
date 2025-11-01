@@ -6,7 +6,7 @@ import { momentsAPI, handleAPIError, optimisticUpdates, API_BASE } from '../../u
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useModalStore } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
@@ -32,11 +32,12 @@ function formatDateTime(dateString) {
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
+  const eventId = useEventId(eventUrl);
   
   const MODAL_ID = 'edit-moments-modal';
   
   // Subscribe to all moments from store (including archived and empty ones)
-  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state));
+  const storeMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId));
   
   // Sort moments for display
   const sortedStoreMoments = useMemo(() => {

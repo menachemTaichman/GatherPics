@@ -6,7 +6,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, imagesAPI, profilesAPI } from '../../utils/apiService';
 import { useGroupsList, useRequestById } from '../../utils/dataManager';
-import { getRepresentativeUrl } from '../../utils/storeUtils';
+import { getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
@@ -48,6 +48,7 @@ export default function RequestDetailModal({
   eventUrl,
   urlHelpers
 }) {
+  const eventId = useEventId(eventUrl);
   const [loading, setLoading] = useState(false);
   const [groupActions, setGroupActions] = useState({}); // { groupId: 'approve' | 'deny' | null }
   const [closedDetails, setClosedDetails] = useState('');
@@ -66,8 +67,8 @@ export default function RequestDetailModal({
   const [showNotesTooltip, setShowNotesTooltip] = useState(false);
   const [notesTooltipPos, setNotesTooltipPos] = useState({ left: 0, top: 0 });
   const notesIconRef = useRef(null);
-  const allGroups = useGroupsList();
-  const storeRequest = useRequestById(request?.access_request_id || request?.id);
+  const allGroups = useGroupsList(eventId);
+  const storeRequest = useRequestById(eventId, request?.access_request_id || request?.id);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-detail-modal';

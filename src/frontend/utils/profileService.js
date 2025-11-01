@@ -1,6 +1,5 @@
 // Profile service for managing current profile in localStorage
-
-const CURRENT_PROFILE_KEY = 'currentProfile';
+import { STORAGE_KEYS } from './dataManager';
 
 /**
  * Get the current profile from localStorage
@@ -8,7 +7,7 @@ const CURRENT_PROFILE_KEY = 'currentProfile';
  */
 export function getCurrentProfile() {
   try {
-    const stored = localStorage.getItem(CURRENT_PROFILE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_PROFILE);
     if (!stored) return null;
     return JSON.parse(stored);
   } catch (error) {
@@ -27,7 +26,7 @@ export function setCurrentProfile(profile) {
       clearCurrentProfile();
       return;
     }
-    localStorage.setItem(CURRENT_PROFILE_KEY, JSON.stringify(profile));
+    localStorage.setItem(STORAGE_KEYS.CURRENT_PROFILE, JSON.stringify(profile));
   } catch (error) {
     console.warn('Failed to save current profile to localStorage:', error);
   }
@@ -38,7 +37,7 @@ export function setCurrentProfile(profile) {
  */
 export function clearCurrentProfile() {
   try {
-    localStorage.removeItem(CURRENT_PROFILE_KEY);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_PROFILE);
   } catch (error) {
     console.warn('Failed to clear current profile from localStorage:', error);
   }

@@ -72,7 +72,7 @@ export async function resolveEventId(eventUrl) {
     
     return null;
   } catch (error) {
-    console.error('Error resolving event id:', error);
+    console.error('[resolveEventId] Error resolving event id:', error);
     return null;
   }
 }

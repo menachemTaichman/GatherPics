@@ -8,8 +8,8 @@ import { profilesAPI, requestsAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useProfilesList, useRequestsList, useMyRequestsList } from '../../utils/dataManager';
-import { useApplyScopes, usePendingRequestsCount } from '../../utils/storeUtils';
+import { useEventProfilesList, useRequestsList, useMyRequestsList } from '../../utils/dataManager';
+import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../contexts/authContext';
@@ -24,6 +24,7 @@ export default function SettingsManager() {
   const [activeTab, setActiveTab] = useState('general');
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
   const { eventUrl } = useParams();
+  const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
   const permissions = usePermissions();
@@ -31,8 +32,8 @@ export default function SettingsManager() {
   
   // Profile management state
   const currentProfile = getCurrentProfile();
-  const allProfiles = useProfilesList();
-  const pendingRequestsCount = usePendingRequestsCount();
+  const allProfiles = useEventProfilesList(eventId);
+  const pendingRequestsCount = usePendingRequestsCount(eventId);
   const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
   const [currentProfileLabel, setCurrentProfileLabel] = useState('');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -79,11 +80,11 @@ export default function SettingsManager() {
   const profileId = currentProfile?.id || currentProfile?.profile_id;
   useApplyScopes(
     isOpen && activeTab === 'profiles' 
-      ? [{ entity: 'all', id: 'profiles' }] 
+      ? [{ entity: 'all', id: 'event_profiles', eventId }] 
       : isOpen && activeTab === 'account' && profileId
       ? [
-          { entity: 'profile', id: String(profileId) },
-          { entity: 'all', id: 'my_access_requests' }
+          { entity: 'event_profile', id: String(profileId), eventId },
+          { entity: 'all', id: 'my_access_requests', eventId }
         ]
       : []
   );
@@ -407,7 +408,7 @@ export default function SettingsManager() {
   };
 
   // Get user's requests
-  const userRequests = useMyRequestsList();
+  const userRequests = useMyRequestsList(eventId);
   const sortedMyRequests = useMemo(() => {
     return [...userRequests].sort((a, b) => {
       const ta = a?.requested_at ? new Date(a.requested_at).getTime() : 0;

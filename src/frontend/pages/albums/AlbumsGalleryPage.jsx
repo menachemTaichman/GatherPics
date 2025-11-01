@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown, Image as ImageIcon, Minus, Plus, Check, X, AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApplyScopes } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
 import { albumsAPI } from '../../utils/apiService';
@@ -16,7 +16,8 @@ import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 
 export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
-  useApplyScopes([{ entity: 'all', id: 'albums' }]);
+  const eventId = useEventId(eventUrl);
+  useApplyScopes([{ entity: 'all', id: 'albums', eventId }]);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -40,7 +41,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   const MODAL_ID = 'album-create-fab';
 
   // Use the data store for albums
-  const storeAlbums = useAlbumsList();
+  const storeAlbums = useAlbumsList(eventId);
   
   // Create placeholder albums when not authenticated
   const placeholderAlbums = useMemo(() => {

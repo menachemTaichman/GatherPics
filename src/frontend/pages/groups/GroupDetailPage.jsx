@@ -59,7 +59,7 @@ import { useGroupNameConflict } from '../../hooks/useGroupNameConflict';
 import { useDataStore, selectors } from '../../utils/dataManager';
 import { shallow } from 'zustand/shallow';
 import { selectors as storeSelectors, useGroupsList, useGroupById } from '../../utils/dataManager';
-import { useApplyScopes, useImagesForParent, useFacesForGroup, useFacesForGroups } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../../utils/apiService';
 import useImageActions from '../../components/images/ImageActions';
 import { clearTransferredImagesFromCache } from '../../utils/selection';
@@ -100,6 +100,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const __lastUrlRef = useRef('');
   const __initialRestorationComplete = useRef(false);
   const { group_name, eventUrl } = useParams();
+  const eventId = useEventId(eventUrl);
   const navigate = useNavigate();
   const location = useLocation();
   // Use injected urlHelpers from App to avoid creating duplicate instances on refresh
@@ -184,9 +185,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
     // Sort for stable identity
     return scopesList
-      .map((s) => ({ entity: s.entity, id: String(s.id) }))
+      .map((s) => ({ entity: s.entity, id: String(s.id), eventId }))
       .sort((a, b) => (a.entity === b.entity ? a.id.localeCompare(b.id) : a.entity.localeCompare(b.entity)));
-  }, [group?.id, showCrops, filterGroups.join(','), filterVisible]);
+  }, [group?.id, showCrops, filterGroups.join(','), filterVisible, eventId]);
 
   useApplyScopes(scopes);
 
@@ -245,7 +246,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const skipNextAnimation = useRef(false);
 
   // Subscribe to normalized groups list
-  const currentGroups = useGroupsList();
+  const currentGroups = useGroupsList(eventId);
   const attemptedLookupRef = useRef(false);
   const isRenamingRef = useRef(false);
   const decodedGroupName = useMemo(() => {
@@ -469,13 +470,56 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   
   // Scopes for group/filter are now managed via top-level useApplyScopes(scopes)
   
-  const relatedImages = useImagesForParent({ entity: 'group', parentId: group?.id, includeArchived, sortBy, sortOrder });
+  const relatedImages = useChilds(eventId, 'groups', group?.id, 'images', { includeArchived, sortBy, sortOrder });
   
   // Use stable hooks to avoid subscribing to entire maps (per STORE_USAGE.md)
   const allGroups = [group?.id, ...filterGroups].filter(Boolean);
 
   // Faces filtered by images matching the selected groups and mode
-  const filteredFaces = useFacesForGroups(allGroups, filterMode, onlySelected, includeArchived);
+  const filteredFaces = useMemo(() => {
+    if (allGroups.length === 0) return [];
+    
+    const state = useDataStore.getState();
+    const groupsMap = state.entities?.[eventId]?.groups || {};
+    const facesMap = state.entities?.[eventId]?.faces || {};
+    const imagesMap = state.entities?.[eventId]?.images || {};
+    
+    // Get base image IDs from all groups
+    const baseIdSet = new Set();
+    allGroups.forEach((gid) => {
+      const rel = groupsMap[gid]?.images;
+      if (rel instanceof Set) rel.forEach((iid) => baseIdSet.add(String(iid)));
+      else if (Array.isArray(rel)) rel.forEach((iid) => baseIdSet.add(String(iid)));
+    });
+    
+    const baseImages = Array.from(baseIdSet)
+      .map((id) => imagesMap[String(id)])
+      .filter(Boolean)
+      .filter((img) => includeArchived || !img.is_archived);
+    
+    const utilFiltered = (!onlySelected && allGroups.length === 1)
+      ? baseImages
+      : filterImages(baseImages, allGroups, filterMode, onlySelected);
+    
+    const filteredImageIds = new Set(utilFiltered.map(img => String(img.id)));
+    
+    // Collect faces whose images are in the filtered set
+    const out = [];
+    allGroups.forEach((gid) => {
+      const setOrArray = groupsMap[gid]?.faces;
+      const faces = setOrArray instanceof Set ? Array.from(setOrArray) : 
+                   Array.isArray(setOrArray) ? setOrArray : [];
+      faces.forEach((faceId) => {
+        const face = facesMap[faceId];
+        const imgId = face ? String(face.image_id) : null;
+        if (face && filteredImageIds.has(imgId)) {
+          out.push(face);
+        }
+      });
+    });
+    
+    return out;
+  }, [allGroups, filterMode, onlySelected, includeArchived, eventId]);
 
   const groupFaces = useMemo(() => {
     if (!showCrops || !group?.id) return [];
