@@ -2,8 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, ChildOperation
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_general_models, ChildOperation, Forbidden, DatabaseError
 
 request_bp = Blueprint('requests', __name__, url_prefix='/api/events/<event_id>')
 

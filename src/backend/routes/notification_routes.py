@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, Forbidden, DatabaseError
 
 notification_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
 

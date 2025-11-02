@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from src.core.database.base_db import ReturnFormat
+from src.core.database.base_db import BaseDB, ReturnFormat
 from abc import ABC
 import uuid
 from enum import Enum
@@ -11,12 +11,12 @@ class ChildOperation(Enum):
 
 class BaseModels(ABC):
 
-    def __init__(self) -> None:
+    def __init__(self, db: BaseDB | None = None) -> None:
         """
         Initialize the base models.
         Set self.db to the database instance.
         """
-        self.db = None
+        self.db = db
 
     @staticmethod
     def generate_id() -> str:
@@ -197,20 +197,23 @@ class BaseModels(ABC):
 
         return valid_childs
 
-    def get_parents(self, child: str, entity_id: str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
+    def get_parents(self, child: str, entity_ids: list[str] | str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
         """Get parents of a child.
         Args:
             child: child entity
-            entity_id: child id
+            entity_ids: list of child ids or single child id
             parents: list of parent ids or single parent id or None to get all parents
         Returns:
-            dict of parents with parent entities as keys and list of parent ids as values
-            if single parent entity is provided, return the list of parent ids
+            if entity_ids is a single item, return the list of parent ids
+            if entity_ids is a list, return dict of parents with parent ids as keys and list of child ids as values
+
+            if parents is a single item, return the list (or dict) of parent ids
+            if parents is a list, return dict of parents with parent entities as keys and list (or dict) of parent ids as values
         """
-        single_item = False
+        single_parent = False
         if isinstance(parents, str):
             parents = [parents]
-            single_item = True
+            single_parent = True
         elif parents is None:
             parents = [
                 parent
@@ -219,28 +222,45 @@ class BaseModels(ABC):
             ]
         parents = dict.fromkeys(parents, [])
 
+        if isinstance(entity_ids, list):
+            params = entity_ids
+            return_format = ReturnFormat.LIST_TUPLES
+        else:
+            params = [entity_ids]
+            return_format = ReturnFormat.LIST_VALUES
+
         parents_to_remove = []
         for parent in parents.keys():
+            id_field = self.db.get_id_field(parent)
             relation, child, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
             accessible_relation = self.db.STRUCTURE()[relation]['accessible_table']
-            id_field = self.db.get_id_field(parent)
-            params = [entity_id]
+            
+            if return_format == ReturnFormat.LIST_TUPLES:
+                fields = f'r.{id_field}, r.{child_id_field}'
+            else:
+                fields = f'DISTINCT r.{id_field}'
             query = f"""
-                SELECT DISTINCT r.{id_field}
+                SELECT {fields}
                 FROM {accessible_relation} r
-                WHERE r.{child_id_field} = ?
+                WHERE r.{child_id_field} IN ({','.join(['?'] * len(params))})
                 AND r.{id_field} IS NOT NULL
             """
-            parent_ids = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
+            parent_ids = self.db.execute_query(query, params, return_format=return_format)
+            if return_format == ReturnFormat.LIST_TUPLES:
+                parent_dict = {}
+                for parent_id, child_id in parent_ids:
+                    parent_dict.setdefault(parent_id, []).append(child_id)
+                parent_ids = parent_dict
+            
             if parent_ids:
                 parents[parent] = parent_ids
-            elif not single_item:
+            elif not single_parent:
                 parents_to_remove.append(parent)
 
         for parent in parents_to_remove:
             parents.pop(parent)
 
-        if single_item:
+        if single_parent:
             return parents[list(parents.keys())[0]]
         
         return parents
@@ -346,10 +366,7 @@ class BaseModels(ABC):
 
         detached_parents = {}
         if operation == ADD and exclusive:
-            for child_id in valid_child_ids:
-                parent_ids = self.get_parents(child_table, child_id, parent)
-                for parent_id in parent_ids:
-                    detached_parents.setdefault(parent_id, []).append(child_id)
+            detached_parents = self.get_parents(child_table, valid_child_ids, parent)
 
         placeholders = ','.join(['?'] * len(valid_child_ids))
         params = []

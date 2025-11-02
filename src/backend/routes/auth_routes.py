@@ -8,7 +8,6 @@ from datetime import timedelta, datetime, timezone
 import secrets
 import traceback
 
-from src.core.models.general_models import GeneralModels
 from src.backend.helpers import get_event, get_general_models
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
@@ -67,7 +66,7 @@ def create_auth_response(access_token: str, profile_id: str, expires_days: int =
 def get_events():
     """Get all available events."""
     try:
-        general_models = GeneralModels()
+        general_models = get_general_models()
         events = general_models.get_entities('events')
         return jsonify(events)
     except Exception as e:
@@ -81,7 +80,7 @@ def resolve_event_url():
         return jsonify({"error": "URL parameter is required"}), 400
     
     try:
-        general_models = GeneralModels()
+        general_models = get_general_models()
         event = general_models.get_event_by_url(event_url)
         
         if event:
@@ -102,7 +101,7 @@ def login():
         return jsonify({"error": "Profile label is required"}), 400
     
     try:
-        general_models = GeneralModels()
+        general_models = get_general_models()
         
         # Authenticate profile
         profile_id = general_models.authenticate_profile(label, password)
@@ -130,7 +129,7 @@ def refresh():
         return jsonify({"error": "Refresh token not found"}), 401
     
     try:
-        general_models = GeneralModels()
+        general_models = get_general_models()
         
         # Validate refresh token
         profile_id = general_models.validate_refresh_token(refresh_token)
@@ -162,7 +161,7 @@ def logout():
     
     if refresh_token:
         try:
-            general_models = GeneralModels()
+            general_models = get_general_models()
             general_models.revoke_refresh_token(refresh_token)
         except Exception as e:
             print(f"Logout error: {e}")

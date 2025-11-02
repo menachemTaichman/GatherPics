@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_event, Forbidden, DatabaseError
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 

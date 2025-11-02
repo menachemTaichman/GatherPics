@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, _parse_bool, ChildOperation
-from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+from src.backend.helpers import get_event, _parse_bool, ChildOperation, Event, Forbidden, DatabaseError, DBPolicyError
 
 album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 
@@ -155,7 +154,7 @@ def delete_album(event_id, album_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-def _edit_album_images(event, album_id, image_ids, add: bool):
+def _edit_album_images(event: Event, album_id: str, image_ids: list[str], add: bool):
     """Helper: Add or remove images from an album, return response with changes."""
     operation = ChildOperation.ADD if add else ChildOperation.REMOVE
     updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=operation)
@@ -193,14 +192,14 @@ def _edit_album_images(event, album_id, image_ids, add: bool):
                 'items': event.models.get_entities('images', updated_image_ids)
             })
             if album_id == event.models.get_archive_album():
-                for image_id in updated_image_ids:
-                    parents = event.models.get_parents('images', image_id)
-                    for entity, parent_ids in parents.items():
-                        changes.append({
-                            'type': 'UPDATE',
-                            'entity': entity,
-                            'items': event.models.get_entities(entity, parent_ids)
-                        })
+                all_parents = event.models.get_parents('images', updated_image_ids)
+                for entity, parent_to_images in all_parents.items():
+                    parent_ids = list(parent_to_images.keys())
+                    changes.append({
+                        'type': 'UPDATE',
+                        'entity': entity,
+                        'items': event.models.get_entities(entity, parent_ids)
+                    })
         else:
             for image_id in updated_image_ids:
                 if add:

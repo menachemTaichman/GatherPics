@@ -2,8 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, ChildOperation
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_general_models, ChildOperation, Event, Forbidden, DatabaseError
 
 profile_bp = Blueprint('profiles', __name__)
 
@@ -663,7 +662,7 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
         event = get_event(event_id)
         event.models.edit('profiles', profile_id, event_data)
 
-def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bool):
+def _edit_event_profile_childs(event: Event, profile_id: str, child: str, child_ids: list[str], add: bool):
     """Add or remove multiple childs from a profile."""
     if not event.models.get_current_profile()['is_profiles_manager']:
         return jsonify({"error": "Access denied"}), 403
@@ -698,7 +697,7 @@ def _edit_event_profile_childs(event, profile_id, child: str, child_ids, add: bo
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-def _set_profile_accessibility(event, profile_id, child: str, child_ids, set_accessible: bool):
+def _set_profile_accessibility(event: Event, profile_id: str, child: str, child_ids: list[str], set_accessible: bool):
     """Set multiple childs as accessible or inaccessible to a profile."""
     if not (event.models.get_current_profile()['is_profiles_manager'] and event.models.is_accessible('profiles', profile_id)):
         return jsonify({"error": "Access denied"}), 403

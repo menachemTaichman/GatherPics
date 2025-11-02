@@ -6,8 +6,7 @@ import threading
 import json
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_event_details, get_general_models
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_event_details, get_general_models, Forbidden, DatabaseError
 
 image_bp = Blueprint('images', __name__, url_prefix='/api/events/<event_id>')
 
@@ -16,6 +15,7 @@ image_bp = Blueprint('images', __name__, url_prefix='/api/events/<event_id>')
 def get_upload_limits(event_id):
     """Get upload limits and current usage."""
     event = get_event(event_id)
+    # TODO: use event_routes
     event_details = get_event_details(event_id)
     
     images_count_limit = event_details['images_count_limit']
@@ -187,10 +187,8 @@ def upload_images(event_id):
         if processed_image_ids:
             images = event.models.get_entities('images', processed_image_ids)
             
-            all_parent_groups = set()
-            for image_id in processed_image_ids:
-                parent_groups = event.models.get_parents('images', image_id, 'groups')
-                all_parent_groups.update(parent_groups)
+            group_to_images = event.models.get_parents('images', processed_image_ids, 'groups')
+            all_parent_groups = set(group_to_images.keys())
             
             changes.append({
                 'type': 'UPSERT',
@@ -383,10 +381,8 @@ def process_images_stream(event_id):
                         if processed_image_ids:
                             images = event.models.get_entities('images', processed_image_ids)
                             
-                            all_parent_groups = set()
-                            for image_id in processed_image_ids:
-                                parent_groups = event.models.get_parents('images', image_id, 'groups')
-                                all_parent_groups.update(parent_groups)
+                            group_to_images = event.models.get_parents('images', processed_image_ids, 'groups')
+                            all_parent_groups = set(group_to_images.keys())
                             
                             changes.append({
                                 'type': 'UPSERT',

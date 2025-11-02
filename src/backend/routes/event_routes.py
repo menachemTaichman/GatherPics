@@ -1,11 +1,9 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models
-from src.core.errors import Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, Forbidden, DatabaseError
 
 event_bp = Blueprint('events', __name__, url_prefix='/api')
-
 
 @event_bp.route('/events', methods=['GET'])
 def get_events():
@@ -21,7 +19,6 @@ def get_events():
         return jsonify({}), 200
     except Exception:
         return jsonify({}), 200
-
 
 @event_bp.route('/events/<event_id>', methods=['GET'])
 @require_auth
@@ -40,7 +37,6 @@ def get_event(event_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @event_bp.route('/events/resolve', methods=['GET'])
 def resolve_event():
     """Resolve event by URL slug. Public endpoint used by client resolver."""
@@ -55,7 +51,6 @@ def resolve_event():
         return jsonify({ 'event_id': event.get('event_id') or event.get('id'), 'event': event })
     except Exception:
         return jsonify({"error": "Event not found"}), 404
-
 
 @event_bp.route('/events/<event_id>/url', methods=['GET'])
 def get_event_url(event_id):
