@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, AlertTriangle, Calendar, Plus, Clock, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { momentsAPI, handleAPIError } from '../../utils/apiService';
 import { usePreference } from '../../hooks/useSettings';
@@ -19,7 +19,7 @@ export default function MoveToMomentModal({
   onClose, 
   selectedImages,
   onMoveComplete,
-  sourceMomentId,
+  sourceMomentId, // Deprecated: kept for backward compatibility but not used
   urlHelpers: injectedUrlHelpers
 }) {
   const { showToast } = useToast();
@@ -27,6 +27,7 @@ export default function MoveToMomentModal({
   const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
   const allMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId));
+  const entities = useDataStore(state => state.entities?.[eventId]);
   const MODAL_ID = 'move-to-moment-modal';
   const [selectedMomentId, setSelectedMomentId] = useState('');
   const [newMomentName, setNewMomentName] = useState('');
@@ -40,6 +41,30 @@ export default function MoveToMomentModal({
   const setSortBy = (value) => setPreference('Moments.sortBy', value);
   const sortOrder = usePreference('Moments.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('Moments.sortDir', value);
+
+  // Get all source moments from the selected images
+  const sourceMoments = useMemo(() => {
+    const momentMap = new Map();
+    const imageIds = Array.from(selectedImages);
+    
+    imageIds.forEach(imageId => {
+      const image = entities?.images?.[imageId];
+      const momentId = image?.moment_id;
+      if (momentId && !momentMap.has(momentId)) {
+        const moment = allMoments.find(m => m.id === momentId);
+        if (moment) {
+          momentMap.set(momentId, moment);
+        }
+      }
+    });
+    
+    return Array.from(momentMap.values());
+  }, [selectedImages, entities, allMoments]);
+
+  // Determine if we should show the remove option
+  // Show if any image has a moment (the remove operation clears moments from all selected images)
+  const showRemoveOption = sourceMoments.length > 0;
+  const hasMultipleMoments = sourceMoments.length > 1;
 
   // Custom keyboard handler for MoveToMomentModal
   const handleMoveModalKeys = (e) => {
@@ -58,8 +83,11 @@ export default function MoveToMomentModal({
     allowOutsideScroll: true
   });
 
-  // Filter out source moment from available moments
-  const availableMoments = allMoments.filter(m => m.id !== sourceMomentId);
+  // Filter out source moments from available moments
+  const availableMoments = allMoments.filter(m => {
+    // Exclude any moment that contains selected images
+    return !sourceMoments.some(sm => sm.id === m.id);
+  });
 
   // Filter and sort moments
   const filteredAndSortedMoments = availableMoments
@@ -179,15 +207,17 @@ export default function MoveToMomentModal({
 
     // If only removing from current moment (no target selected)
     if (removeFromCurrent && !selectedMomentId && !newMomentName.trim()) {
-      if (!sourceMomentId) {
-        setError('No current moment to remove from');
+      if (sourceMoments.length === 0) {
+        setError('No moment to remove from');
         setIsLoading(false);
         return;
       }
       
       try {
         const imageIds = Array.from(selectedImages);
-        await momentsAPI.removeImages(sourceMomentId, imageIds, eventUrl);
+        
+        // Remove from all moments (single API call)
+        await momentsAPI.removeImages(imageIds, eventUrl);
         
         const removedCount = imageIds.length;
         const imageText = removedCount === 1 ? 'image' : 'images';
@@ -235,9 +265,9 @@ export default function MoveToMomentModal({
       // Convert Set to Array if needed
       const imageIds = Array.from(selectedImages);
       
-      // If removeFromCurrent is checked and we have a source moment, remove from it first
-      if (removeFromCurrent && sourceMomentId) {
-        await momentsAPI.removeImages(sourceMomentId, imageIds, eventUrl);
+      // If removeFromCurrent is checked and we have source moments, remove from all moments first
+      if (removeFromCurrent && sourceMoments.length > 0) {
+        await momentsAPI.removeImages(imageIds, eventUrl);
       }
       
       let targetMomentId = selectedMomentId;
@@ -377,11 +407,21 @@ export default function MoveToMomentModal({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Move to Moment
+                Move {Array.from(selectedImages).length} Photo{Array.from(selectedImages).length !== 1 ? 's' : ''}
               </h2>
               <p className="text-xs text-gray-500">
-                {Array.from(selectedImages).length} photo{Array.from(selectedImages).length !== 1 ? 's' : ''} selected
+                Choose destination moment or create new one
               </p>
+              {Array.from(selectedImages).length > 0 && (
+                <div className="mt-1 text-xs text-gray-600">
+                  From: {sourceMoments.length === 0
+                    ? 'Not in any moment'
+                    : sourceMoments.length === 1
+                    ? sourceMoments[0]?.label || 'Unknown Moment'
+                    : `${sourceMoments.length} moments (${sourceMoments.map(m => m.label || `Moment ${m.id}`).join(', ')})`
+                  }
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -524,11 +564,11 @@ export default function MoveToMomentModal({
             <p className="text-xs text-gray-500">Dates will be auto-detected from selected photos</p>
           </div>
 
-          {/* Remove from current moment option */}
-          {sourceMomentId && (
+          {/* Remove from current moment option - show if any image has a moment */}
+          {showRemoveOption && (
             <div className="mb-6 flex items-center justify-between">
               <div className="text-sm font-medium text-gray-900">
-                Remove from current moment
+                Remove from current {hasMultipleMoments ? 'moments' : 'moment'}
               </div>
               <button
                 onClick={() => {

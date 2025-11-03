@@ -274,45 +274,33 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-# recreate_views_triggers_and_indexes(db)
-# general_models.ensure_access_request_notifications(event, 43)
 
-# drop_views_triggers_and_indexes(general_models.db)
-# general_models.db.execute_query('DROP TABLE IF EXISTS notifications;')
-# general_models.db.execute_query(f'CREATE TABLE notifications ({GeneralDB.TABLES()["notifications"]})')
-# create_views_triggers_and_indexes(general_models.db)
 
-moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c'
-# moment_id = 'f0f8c9a5-2d7b-4b0c-8475-a53daa08c521'
-image_id = '55f1960c-620e-437c-8b7c-c3ac8ccad49f'
+image_ids = ['55f1960c-620e-437c-8b7c-c3ac8ccad49f']
+moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c' # סיור כלה
+# moment_id = 'f0f8c9a5-2d7b-4b0c-8475-a53daa08c521' # סיור חתן
 
-result = event.models.edit_moment_images(moment_id, [image_id], operation=ChildOperation.ADD)
-print(result)
-print('--------------------------------')
+# result = event.models.edit_moment_images(moment_id, image_ids, operation=ChildOperation.ADD)
+result = event.models.remove_images_from_moments(image_ids)
+updated_moments_uploads = result['updated_moments_uploads']
+removed_moments_uploads = result['removed_moments_uploads']
+changes = []
+for upload_id, moments in updated_moments_uploads.items():
+    _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
+    changes.append({
+        'type': 'RELATION_UPSERT',
+        'relation': 'upload.moments',
+        'parentId': upload_id,
+        'relationData': relation_data
+    })
 
-recreate_views_triggers_and_indexes(db)
+for upload_id, moments in removed_moments_uploads.items():
+    _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
+    changes.append({
+        'type': 'RELATION_REMOVE',
+        'relation': 'upload.moments',
+        'parentId': upload_id,
+        'ids': moments
+    })
 
-group_id = 'cab96740-97c7-4a36-8c47-d3c3e59ffd54'
-result = db.execute_query('SELECT * FROM accessible_groups WHERE group_id = ?;',(group_id,), return_format=ReturnFormat.LIST_DICTS)
-print(result)
-print('--------------------------------')
-
-result = db.execute_query('SELECT * FROM accessible_uploads_groups WHERE group_id = ?;',(group_id,), return_format=ReturnFormat.LIST_DICTS)
-print(result)
-print('--------------------------------')
-
-recreate_views_triggers_and_indexes(event.models.db)
-
-main_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-main_general_models = GeneralModels(profile_id=main_profile_id)
-main_event = Event(event_id, profile_id=main_profile_id)
-request_id = main_general_models.create_access_request(main_event, {
-    'profile_id': main_profile_id,
-    'applicant_profile_id': main_profile_id,
-})
-print(request_id)
-print('--------------------------------')
-
-all_notifications = general_models.db.execute_query('SELECT * FROM notifications;', return_format=ReturnFormat.LIST_DICTS)
-print(all_notifications)
-print('--------------------------------')
+print(changes)

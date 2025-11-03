@@ -157,7 +157,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       }
       
       if (actualRemovals.length > 0) {
-        await momentsAPI.removeImages(momentId, actualRemovals, eventUrl);
+        await momentsAPI.removeImages(actualRemovals, eventUrl);
       }
       
       // Wait a bit for store to update

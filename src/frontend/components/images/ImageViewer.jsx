@@ -1617,7 +1617,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           onClose={() => setShowMoveToMomentModal(false)}
           selectedImages={imageId ? new Set([imageId]) : new Set()}
           onMoveComplete={handleMoveToMomentComplete}
-          sourceMomentId={momentInfo?.id}
         />
       )}
     </AnimatePresence>

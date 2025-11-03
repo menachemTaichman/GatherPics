@@ -150,6 +150,7 @@ class EventModels(BaseModels):
                 LIMIT 1
             )
             WHERE image_id IN ({placeholders})
+            AND moment_id IS NULL
         """
 
         params = image_ids + image_ids
@@ -179,17 +180,40 @@ class EventModels(BaseModels):
                 detached_moments: dict of detached moments with moment ids as keys and list of detached image ids as values
                 updated_moments_uploads: dict of uploads with upload ids as keys and list of affected moment ids as values
         """
+
+        affected_uploads_to_moments = {}
+        query = f"""
+            SELECT DISTINCT ai.upload_id, ai.moment_id
+            FROM accessible_images ai
+            WHERE ai.image_id IN ({','.join(['?'] * len(image_ids))})
+            AND ai.moment_id IS NOT NULL
+        """
+        result = self.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
+        for upload_id, moment_id in result:
+            affected_uploads_to_moments.setdefault(upload_id, []).append(moment_id)
+
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
         accessible_images = self.db.STRUCTURE()['images']['accessible_table']
         query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['?'] * len(valid_image_ids))})'
         self.db.execute_query(query, valid_image_ids)
         
-        updated_moments_uploads = self.get_parents('moments', list(detached_moments.keys()), 'uploads')
-        
+        updated_uploads_to_moments = {}
+        removed_uploads_to_moments = {}
+        for upload_id, moments in affected_uploads_to_moments.items():
+            updated_moments = self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
+            if updated_moments:
+                updated_uploads_to_moments.setdefault(upload_id, []).extend(updated_moments)
+            removed_moments = self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
+            if removed_moments:
+                removed_uploads_to_moments.setdefault(upload_id, []).extend(removed_moments)
+
+
         return {
+            'updated_image_ids': valid_image_ids,
             'detached_moments': detached_moments,
-            'updated_moments_uploads': updated_moments_uploads,
+            'updated_moments_uploads': updated_uploads_to_moments,
+            'removed_moments_uploads': removed_uploads_to_moments,
         }
 
     def edit_moment_images(self, moment_id: str, image_ids: List[str], operation: ChildOperation) -> Dict:
@@ -205,14 +229,39 @@ class EventModels(BaseModels):
                 updated_moments_uploads: dict of uploads with upload ids as keys and list of affected moment ids as values
         """
 
+        affected_uploads_to_moments = {}
+        query = f"""
+            SELECT DISTINCT ai.upload_id, ai.moment_id
+            FROM accessible_images ai
+            WHERE ai.image_id IN ({','.join(['?'] * len(image_ids))})
+            AND ai.moment_id IS NOT NULL
+            AND ai.moment_id <> ?
+        """
+        result = self.db.execute_query(query, image_ids + [moment_id], return_format=ReturnFormat.LIST_TUPLES)
+        for upload_id, affected_moment_id in result:
+            affected_uploads_to_moments.setdefault(upload_id, []).append(affected_moment_id)
+
         updated_image_ids, detached_moments = self.edit_childs('moments', moment_id, child='images', child_ids=image_ids, operation=operation)
         
-        updated_moments_uploads = self.get_parents('moments', list(set(detached_moments.keys()) | {moment_id}), 'uploads')
-        
+        updated_uploads_to_moments = {}
+        removed_uploads_to_moments = {}
+        uploads_to_images = self.get_parents('images', updated_image_ids, 'uploads')
+        for upload_id in uploads_to_images.keys():
+            updated_uploads_to_moments.setdefault(upload_id, []).append(moment_id)
+
+        for upload_id, moments in affected_uploads_to_moments.items():
+            updated_uploads_to_moments.setdefault(upload_id, []).extend(
+                self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
+            )
+            removed_uploads_to_moments.setdefault(upload_id, []).extend(
+                self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
+            )
+
         return {
             'updated_image_ids': updated_image_ids,
             'detached_moments': detached_moments,
-            'updated_moments_uploads': updated_moments_uploads,
+            'updated_moments_uploads': updated_uploads_to_moments,
+            'removed_moments_uploads': removed_uploads_to_moments,
         }
 
     # -------- Images helpers --------

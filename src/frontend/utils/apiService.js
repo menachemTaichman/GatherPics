@@ -480,9 +480,9 @@ export const momentsAPI = {
     return data;
   },
 
-  removeImages: async (momentId, imageIds, eventUrl) => {
+  removeImages: async (imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/moments/${momentId}/images`, { data: { image_ids: imageIds } });
+    const response = await api.delete(`/api/events/${eventId}/moments/images`, { data: { image_ids: imageIds } });
     return response.data;
   },
 

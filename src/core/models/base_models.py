@@ -220,7 +220,7 @@ class BaseModels(ABC):
                 for parent in self.db.STRUCTURE().keys()
                 if self.db.STRUCTURE()[parent].get('relations', {}).get(child, {})
             ]
-        parents = dict.fromkeys(parents, [])
+        parents_to_childs = {}
 
         if isinstance(entity_ids, list):
             params = entity_ids
@@ -229,8 +229,7 @@ class BaseModels(ABC):
             params = [entity_ids]
             return_format = ReturnFormat.LIST_VALUES
 
-        parents_to_remove = []
-        for parent in parents.keys():
+        for parent in parents:
             id_field = self.db.get_id_field(parent)
             relation, child, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
             accessible_relation = self.db.STRUCTURE()[relation]['accessible_table']
@@ -252,16 +251,11 @@ class BaseModels(ABC):
                     parent_dict.setdefault(parent_id, []).append(child_id)
                 parent_ids = parent_dict
             
-            if parent_ids:
-                parents[parent] = parent_ids
-            elif not single_parent:
-                parents_to_remove.append(parent)
-
-        for parent in parents_to_remove:
-            parents.pop(parent)
+            if parent_ids or single_parent:
+                parents_to_childs[parent] = parent_ids
 
         if single_parent:
-            return parents[list(parents.keys())[0]]
+            return parents_to_childs[parents[0]]
         
         return parents
 

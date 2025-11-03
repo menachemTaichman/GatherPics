@@ -1294,7 +1294,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
           onClose={() => setShowMoveToMomentModal(false)}
           selectedImages={currentSelection}
           onMoveComplete={handleMoveToMomentComplete}
-          sourceMomentId={mode === 'moments' && expandedMoment ? expandedMoment : null}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
         />

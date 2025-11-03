@@ -69,7 +69,7 @@ class EventDB(BaseDB):
                 'accessible_table': 'accessible_uploads',
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
-                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
+                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id']},
                     'groups': {
                         'relation_table': 'uploads_groups',
                         'fields_needed': ['label', 'representative_face', 'faces_count'],

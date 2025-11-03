@@ -880,7 +880,6 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
           onClose={() => setShowMoveModal(false)}
           selectedImages={new Set(getSelectedImageIds())}
           onMoveComplete={handleMoveComplete}
-          sourceMomentId={getSelectedImageMomentId()}
         />
       )}
 
