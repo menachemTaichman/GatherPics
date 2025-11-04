@@ -1186,13 +1186,14 @@ export const requestsAPI = {
   },
     
   // Toggle request (approve/deny groups)
-  toggle: async (requestId, groupsApproved, groupsDenied, closedDetails, profileName, eventUrl) => {
+  toggle: async (requestId, groupsApproved, groupsDenied, closedDetails, profileName, applicantProfileId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const data = { 
       groupsApproved: groupsApproved || [],
       groupsDenied: groupsDenied || [],
       closedDetails: closedDetails || null,
-      profileName: profileName || null
+      profileName: profileName || null,
+      applicantProfileId: applicantProfileId || null
     };
     const response = await api.post(`/api/events/${eventId}/requests/${requestId}/toggle`, data);
     return response.data;

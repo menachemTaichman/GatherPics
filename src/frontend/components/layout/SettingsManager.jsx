@@ -654,7 +654,7 @@ export default function SettingsManager() {
                           const isPublic = currentProfile?.is_public === 1;
                           const enableNewRequests = permissions.enable_new_requests;
                           const hasRequests = userRequests.length > 0;
-                          const shouldShow = !isPublic && (enableNewRequests || hasRequests);
+                          const shouldShow = enableNewRequests || (!isPublic && hasRequests);
                           
                           if (!shouldShow) return null;
                           
@@ -671,7 +671,7 @@ export default function SettingsManager() {
                                   </button>
                                 )}
                               </div>
-                              {userRequests.length === 0 ? (
+                              {!isPublic && (userRequests.length === 0 ? (
                                 <div key="no-requests-message" className="text-center py-4">
                                   <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                   <p className="text-sm text-gray-500">No requests yet</p>
@@ -760,7 +760,7 @@ export default function SettingsManager() {
                                     );
                                   })}
                                 </div>
-                              )}
+                              ))}
                             </div>
                           );
                         })()}

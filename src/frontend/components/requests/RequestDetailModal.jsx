@@ -307,13 +307,14 @@ export default function RequestDetailModal({
         deniedGroupIds.length > 0 ? deniedGroupIds : null,
         closedDetails.trim() || null,
         (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) ? profileName.trim() : null,
+        requestData.applicant_profile_id || null,
         eventUrl
       );
       
       showToast('Changes applied successfully', 'success');
       onClose();
-      // After closing: if notifyByEmail, open Gmail tab
-      if (notifyByEmail && requestData.applicant_email) {
+      // After closing: if notifyByEmail, open Gmail tab (only if consent given)
+      if (notifyByEmail && requestData.communication_consent && requestData.applicant_email) {
         setTimeout(() => {
           const lines = [];
           lines.push(`Access Request Processed`);

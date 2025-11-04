@@ -5,7 +5,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, groupsAPI } from '../../utils/apiService';
-import { useGroupsList, useMyRequestById } from '../../utils/dataManager';
+import { useGroupsList, useMyRequestById, useProfileById } from '../../utils/dataManager';
 import { useApplyScopes, getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
@@ -45,18 +45,9 @@ export default function RequestFormModal({
   
   const { showToast } = useToast();
   const currentProfile = useMemo(() => getCurrentProfile(), []);
-  const currentProfileHasEmail = useMemo(() => {
-    try {
-      const stored = localStorage.getItem('frw_currentProfile');
-      if (stored) {
-        const profile = JSON.parse(stored);
-        return !!(profile?.email);
-      }
-    } catch (e) {
-      console.error('Error reading current profile email:', e);
-    }
-    return false;
-  }, []);
+  const currentProfileId = currentProfile?.id || currentProfile?.profile_id;
+  const currentProfileFromStore = useProfileById(currentProfileId);
+  const currentProfileHasEmail = !!(currentProfileFromStore?.email);
   const allGroups = useGroupsList(eventId);
   
   const { registerModal, unregisterModal } = useModalManager();
@@ -114,9 +105,13 @@ export default function RequestFormModal({
     currentRequestId && isEditing
       ? [
           { entity: 'all', id: 'groups', eventId },
-          { entity: 'my_access_request', id: currentRequestId, eventId }
+          { entity: 'my_access_request', id: currentRequestId, eventId },
+          ...(currentProfileId ? [{ entity: 'profile', id: currentProfileId }] : [])
         ]
-      : [{ entity: 'all', id: 'groups', eventId }]
+      : [
+          { entity: 'all', id: 'groups', eventId },
+          ...(currentProfileId ? [{ entity: 'profile', id: currentProfileId }] : [])
+        ]
   );
 
   // Fetch request data when editing
