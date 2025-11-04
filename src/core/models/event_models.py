@@ -250,12 +250,12 @@ class EventModels(BaseModels):
             updated_uploads_to_moments.setdefault(upload_id, []).append(moment_id)
 
         for upload_id, moments in affected_uploads_to_moments.items():
-            updated_uploads_to_moments.setdefault(upload_id, []).extend(
-                self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
-            )
-            removed_uploads_to_moments.setdefault(upload_id, []).extend(
-                self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
-            )
+            updated_moments = self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
+            if updated_moments:
+                updated_uploads_to_moments.setdefault(upload_id, []).extend(updated_moments)
+            removed_moments = self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
+            if removed_moments:
+                removed_uploads_to_moments.setdefault(upload_id, []).extend(removed_moments)
 
         return {
             'updated_image_ids': updated_image_ids,
@@ -375,6 +375,17 @@ class EventModels(BaseModels):
                 faces_added: list of face ids added to target group
                 deleted_group_ids: list of group ids that were deleted (based on accessibility)
         """
+        affected_uploads_to_groups = {}
+        query = f"""
+            SELECT DISTINCT auf.upload_id, auf.group_id
+            FROM accessible_uploads_faces auf
+            WHERE auf.face_id IN ({','.join(['?'] * len(face_ids))})
+            AND auf.group_id <> ?
+        """
+        result = self.db.execute_query(query, face_ids + [target_group_id], return_format=ReturnFormat.LIST_TUPLES)
+        for upload_id, group_id in result:
+            affected_uploads_to_groups.setdefault(upload_id, []).append(group_id)
+
         faces_added, detached_groups_faces = self.edit_childs('groups', target_group_id, child='faces', child_ids=face_ids, operation=ChildOperation.ADD)
 
         # Track which groups were deleted based on accessibility
@@ -395,8 +406,19 @@ class EventModels(BaseModels):
                  
         images_added = list(set([self.get_entities('faces', face_id)['image_id'] for face_id in faces_added]))
         
-        affected_group_ids = list(set(detached_groups_faces.keys()) | {target_group_id})
-        updated_groups_uploads = self.get_parents('groups', affected_group_ids, 'uploads')
+        updated_uploads_to_groups = {}
+        removed_uploads_to_groups = {}
+        uploads_to_faces = self.get_parents('faces', faces_added, 'uploads')
+        for upload_id in uploads_to_faces.keys():
+            updated_uploads_to_groups.setdefault(upload_id, []).append(target_group_id)
+
+        for upload_id, groups in affected_uploads_to_groups.items():
+            updated_groups = self.get_childs('uploads', upload_id, 'groups', groups, return_ids=True)
+            if updated_groups:
+                updated_uploads_to_groups.setdefault(upload_id, []).extend(updated_groups)
+            removed_groups = self.get_childs('uploads', upload_id, 'groups', groups, within=False, return_ids=True)
+            if removed_groups:
+                removed_uploads_to_groups.setdefault(upload_id, []).extend(removed_groups)
 
         result = {
             'detached_groups_images': detached_groups_images,
@@ -404,7 +426,8 @@ class EventModels(BaseModels):
             'images_added': images_added,
             'faces_added': faces_added,
             'deleted_group_ids': deleted_group_ids,
-            'updated_groups_uploads': updated_groups_uploads,
+            'updated_groups_uploads': updated_uploads_to_groups,
+            'removed_groups_uploads': removed_uploads_to_groups,
         }
 
         return result

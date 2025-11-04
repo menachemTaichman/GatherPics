@@ -276,6 +276,8 @@ ids = {
 }
 
 
+recreate_views_triggers_and_indexes(db)
+
 image_ids = ['55f1960c-620e-437c-8b7c-c3ac8ccad49f']
 moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c' # סיור כלה
 # moment_id = 'f0f8c9a5-2d7b-4b0c-8475-a53daa08c521' # סיור חתן

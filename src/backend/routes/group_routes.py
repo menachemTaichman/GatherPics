@@ -217,6 +217,7 @@ def transfer_faces(event_id):
         images_added = result['images_added']
         deleted_group_ids = result['deleted_group_ids']
         updated_groups_uploads = result['updated_groups_uploads']
+        removed_groups_uploads = result['removed_groups_uploads']
 
         changes = []
         
@@ -271,7 +272,7 @@ def transfer_faces(event_id):
             'items': faces_added_entities
         })
 
-        # update uploads
+        # Update upload.moments relations
         for upload_id, groups in updated_groups_uploads.items():
             _, relation_data = event.models.get_childs('uploads', upload_id, 'groups', groups)
             changes.append({
@@ -279,6 +280,14 @@ def transfer_faces(event_id):
                 'relation': 'upload.groups',
                 'parentId': upload_id,
                 'relationData': relation_data
+            })
+        
+        for upload_id, groups in removed_groups_uploads.items():
+            changes.append({
+                'type': 'RELATION_REMOVE',
+                'relation': 'upload.groups',
+                'parentId': upload_id,
+                'ids': groups
             })
         
         # Remove deleted groups from store

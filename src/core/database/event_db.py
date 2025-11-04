@@ -70,6 +70,7 @@ class EventDB(BaseDB):
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id']},
+                    'faces': {'relation_table': 'uploads_faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']},
                     'groups': {
                         'relation_table': 'uploads_groups',
                         'fields_needed': ['label', 'representative_face', 'faces_count'],
@@ -198,6 +199,10 @@ class EventDB(BaseDB):
             'uploads_moments': {
                 'primary_key': ['upload_id', 'moment_id'],
                 'accessible_table': 'accessible_uploads_moments',
+            },
+            'uploads_faces': {
+                'primary_key': ['upload_id', 'face_id'],
+                'accessible_table': 'accessible_uploads_faces',
             },
         }
     
@@ -608,6 +613,18 @@ class EventDB(BaseDB):
                 INNER JOIN accessible_images i ON u.upload_id = i.upload_id
                 INNER JOIN accessible_moments m ON i.moment_id = m.moment_id
                 GROUP BY u.upload_id, m.moment_id
+            ''',
+            'uploads_faces': '''
+                SELECT u.upload_id, f.face_id, f.group_id
+                FROM uploads u
+                INNER JOIN images i ON u.upload_id = i.upload_id
+                INNER JOIN faces f ON i.image_id = f.image_id
+            ''',
+            'accessible_uploads_faces': '''
+                SELECT u.upload_id, f.face_id, f.group_id
+                FROM accessible_uploads u
+                INNER JOIN accessible_images i ON u.upload_id = i.upload_id
+                INNER JOIN accessible_faces f ON i.image_id = f.image_id
             ''',
             'access_requests_groups_details': '''
                 SELECT arg.*,

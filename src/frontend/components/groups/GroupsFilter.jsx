@@ -50,7 +50,6 @@ export default function GroupsFilter({
   ); // excludes currentGroupId
   const [isResetting, setIsResetting] = useState(false);
   const groups = useDataStore(state => state.entities?.[eventId]?.groups || null);
-  const entities = useDataStore(state => state.entities?.[eventId] || null);
   const { registerModal, unregisterModal } = useModalManager();
   const PANEL_ID = 'groups-filter-panel';
   
@@ -235,10 +234,19 @@ export default function GroupsFilter({
     processedUrlRef.current = true;
     lastProcessedGroupsRef.current = groupsSignature;
     
-    // Process each group from URL (if any)
-    for (const groupId of initialSelectedGroups) {
-      if (groupId !== currentGroupId) {
-        await select(groupId, false); // Don't fetch related for each individual selection
+    // Filter out current group and ensure all are strings
+    const groupsToSelect = initialSelectedGroups
+      .filter(groupId => groupId !== currentGroupId)
+      .map(groupId => String(groupId));
+    
+    // Set all groups at once instead of in a loop to avoid state race conditions
+    if (groupsToSelect.length > 0) {
+      setSelectedGroups(groupsToSelect);
+      onSelectedGroupsChange?.(groupsToSelect);
+      
+      // Fetch data for each group
+      for (const groupId of groupsToSelect) {
+        await fetchGroupData(groupId);
       }
     }
     

@@ -244,6 +244,16 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const currentGroups = useGroupsList(eventId);
   const attemptedLookupRef = useRef(false);
   const isRenamingRef = useRef(false);
+  
+  // Trigger restoration when currentGroups loads (for filter restoration)
+  const prevCurrentGroupsLenRef = useRef(0);
+  useEffect(() => {
+    const currentLen = (currentGroups || []).length;
+    if (currentLen > 0 && prevCurrentGroupsLenRef.current === 0 && window.__pendingFilterGroups) {
+      setRestorationTrigger(prev => prev + 1);
+    }
+    prevCurrentGroupsLenRef.current = currentLen;
+  }, [currentGroups?.length]);
   const decodedGroupName = useMemo(() => {
     try { return decodeURIComponent(group_name || ''); } catch { return group_name || ''; }
   }, [group_name]);
@@ -282,11 +292,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
   }, []); // Empty dependency array - only run once on mount
 
-  // Subscribe to store groups count (stable value) to trigger restoration
-  // Get groups count without subscribing to entire map (per STORE_USAGE.md)
-  const groupsCount = useMemo(() => {
-    return Object.keys(useDataStore.getState().entities?.[eventId]?.groups || {}).length;
-  }, [eventId]);
+  // State to trigger restoration after async fetch completes
+  const [restorationTrigger, setRestorationTrigger] = useState(0);
   
   // Fetch groups from URL using check-name endpoint
   useEffect(() => {
@@ -307,9 +314,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         });
         
         delete window.__fetchingGroupsForRestore;
+        // Trigger restoration effect to run now that groups are loaded
+        setRestorationTrigger(prev => prev + 1);
       }).catch(err => {
         console.error('[GroupDetail] Failed to check group names:', err);
         delete window.__fetchingGroupsForRestore;
+        // Still trigger restoration even on error
+        setRestorationTrigger(prev => prev + 1);
       });
     }
   }, []); // Run once on mount
@@ -336,18 +347,26 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
     
     // Handle filter groups restoration
-    if (window.__pendingFilterGroups && groupsCount > 0) {
-      // If only 1 group in store, wait for our specific fetch to complete
-      if (groupsCount === 1 && window.__fetchingGroupsForRestore) {
+    if (window.__pendingFilterGroups) {
+      // If fetch is still in progress, wait for it
+      if (window.__fetchingGroupsForRestore) {
         return;
       }
       
-      // Access store directly to get all groups (unscoped)
-      const allGroupsFromStore = Object.values(useDataStore.getState().entities?.[eventId]?.groups || {});
+      // Use currentGroups instead of accessing store directly - it's already normalized and scoped
+      const allGroupsFromStore = currentGroups || [];
+      
+      // If no groups available yet, wait for them to load
+      if (allGroupsFromStore.length === 0) {
+        return;
+      }
       
       const groupNames = window.__pendingFilterGroups;
       const groupIds = groupNames
-        .map(name => allGroupsFromStore.find(g => g.label === name)?.id)
+        .map(name => {
+          const found = allGroupsFromStore.find(g => g.label === name);
+          return found?.id;
+        })
         .filter(Boolean); // Filter out any undefineds if a group isn't found
       
       // Set filter groups with whatever we found
@@ -361,7 +380,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     if (!window.__pendingFilterGroups && !__initialRestorationComplete.current) {
       __initialRestorationComplete.current = true;
     }
-  }, [groupsCount]); // Depend on groups count (stable number), not the array
+  }, [restorationTrigger, currentGroups?.length]); // Depend on restoration trigger AND currentGroups length
 
   // Update URL when filter state changes
   useEffect(() => {
@@ -416,6 +435,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         .join(',');
       if (groupNames) {
         searchParams.set('filterGroups', groupNames);
+      } else {
+        searchParams.delete('filterGroups');
       }
     } else {
       // Always clear filterGroups from URL when empty

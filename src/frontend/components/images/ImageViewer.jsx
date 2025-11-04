@@ -261,7 +261,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     // Get all images from all groups (current + filter groups)
     const allImageIds = new Set();
     allGroups.forEach(groupId => {
-      const groupImages = entities?.[eventId]?.groups?.[groupId]?.images;
+      const groupImages = entities?.groups?.[groupId]?.images;
       if (groupImages instanceof Set) {
         groupImages.forEach(imageId => allImageIds.add(imageId));
       }
@@ -269,7 +269,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     
     // Convert to image objects
     const allImages = Array.from(allImageIds)
-      .map(imageId => entities?.[eventId]?.images?.[imageId])
+      .map(imageId => entities?.images?.[imageId])
       .filter(Boolean);
     
     const filtered = filterImages(allImages, allGroups, filterMode, onlySelected);
@@ -420,6 +420,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
   const [dynamicHeight, setDynamicHeight] = useState(null);
+  // Track initial values to avoid persisting unchanged preferences
+  const initialValuesRef = useRef({
+    albumsOpen: getPreference('ImageViewer.albumsOpen', false),
+    facesOpen: getPreference('ImageViewer.facesOpen', false),
+    albumsHeight: getPreference('ImageViewer.albumsHeight', 200),
+    sidebarVisible: getPreference('ImageViewer.sidebarOpen', false)
+  });
   // Modal registration for scope lifecycle tied to actual modal open/close (no subscription to modal store)
 
   useEffect(() => {
@@ -474,9 +481,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     prevScopedImageIdRef.current = imageId;
     const { updateModalScopes } = useModalStore.getState();
     try {
-      updateModalScopes(imageViewerModalId, imageId ? [{ entity: 'image', id: String(imageId) }] : []);
+      updateModalScopes(imageViewerModalId, imageId ? [{ entity: 'image', id: String(imageId), eventId }] : []);
     } catch {}
-  }, [imageId, imageViewerModalId]);
+  }, [imageId, imageViewerModalId, eventId]);
 
   // Scroll lock and focus trapping handled by useModalFocus (popup)
 
@@ -489,18 +496,30 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Respect user choice; do not auto-open on image change
 
-  // Persist UI state
+  // Persist UI state (only when values actually change from initial to avoid unnecessary API calls on mount)
   useEffect(() => {
-    setPreference('ImageViewer.albumsOpen', albumsOpen);
+    if (albumsOpen !== initialValuesRef.current.albumsOpen) {
+      initialValuesRef.current.albumsOpen = albumsOpen;
+      setPreference('ImageViewer.albumsOpen', albumsOpen);
+    }
   }, [albumsOpen]);
   useEffect(() => {
-    setPreference('ImageViewer.facesOpen', facesOpen);
+    if (facesOpen !== initialValuesRef.current.facesOpen) {
+      initialValuesRef.current.facesOpen = facesOpen;
+      setPreference('ImageViewer.facesOpen', facesOpen);
+    }
   }, [facesOpen]);
   useEffect(() => {
-    setPreference('ImageViewer.albumsHeight', albumsHeight);
+    if (albumsHeight !== initialValuesRef.current.albumsHeight) {
+      initialValuesRef.current.albumsHeight = albumsHeight;
+      setPreference('ImageViewer.albumsHeight', albumsHeight);
+    }
   }, [albumsHeight]);
   useEffect(() => {
-    setPreference('ImageViewer.sidebarOpen', sidebarVisible);
+    if (sidebarVisible !== initialValuesRef.current.sidebarVisible) {
+      initialValuesRef.current.sidebarVisible = sidebarVisible;
+      setPreference('ImageViewer.sidebarOpen', sidebarVisible);
+    }
   }, [sidebarVisible]);
 
   // Global mouse handlers for resizer
