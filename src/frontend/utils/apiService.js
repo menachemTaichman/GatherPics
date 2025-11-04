@@ -992,6 +992,17 @@ export const profilesAPI = {
       return response.data;
     });
   },
+
+  // Update current profile
+  updateCurrentProfile: async (updates, eventUrl = null) => {
+    const params = {};
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      params.event_id = eventId;
+    }
+    const response = await api.put('/api/profiles/current', updates, { params });
+    return response.data;
+  },
   
   // Get archived access for current profile
   getArchivedAccess: async (eventUrl) => {

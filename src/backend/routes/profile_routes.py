@@ -47,7 +47,9 @@ def create_profile():
         changes = [{
             'type': 'UPSERT',
             'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id])
+            'items': general_models.get_entities('profiles', [profile_id]),
+            'event_id': 'general',
+            'ignoreScope': True
         }]
         return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
     
@@ -63,22 +65,7 @@ def create_profile():
 def update_profile(profile_id):
     """Update a general profile."""
     data = request.json or {}
-    try:
-        _update_profile(profile_id, data)
-        general_models = get_general_models()
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id])
-        }]
-        return jsonify({"success": True, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return _update_profile(profile_id, data)
 
 @profile_bp.route("/api/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
@@ -168,10 +155,18 @@ def get_event_profiles(event_id):
 def get_event_profile(event_id, profile_id):
     """Get a single event profile with relations."""
     event = get_event(event_id)
+    general_models = get_general_models()
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
         'items': event.models.get_entities('profiles', [profile_id])
+    },
+    {
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': general_models.get_entities('profiles', [profile_id]),
+        'event_id': 'general',
+        'ignoreScope': True
     },
     {
         'type': 'RELATION_SET',
@@ -209,7 +204,9 @@ def create_event_profile(event_id):
         changes = [{
             'type': 'UPSERT',
             'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id])
+            'items': general_models.get_entities('profiles', [profile_id]),
+            'event_id': 'general',
+            'ignoreScope': True
         },
         {
             'type': 'UPSERT',
@@ -229,32 +226,8 @@ def create_event_profile(event_id):
 @require_auth
 def update_event_profile(event_id, profile_id):
     """Update an event profile."""
-    event = get_event(event_id)
-    general_models = get_general_models()
-    if not event.models.get_current_profile()['is_profiles_manager']:
-        return jsonify({"error": "Access denied"}), 403
-
     data = request.json or {}
-    try:
-        _update_profile(profile_id, data, event_id)
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': event.models.get_entities('profiles', [profile_id])
-        },
-        {
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id])
-        }]
-        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return _update_profile(profile_id, data, event_id)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
@@ -352,19 +325,13 @@ def update_current_profile_preferences():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@profile_bp.route("/api/events/<event_id>/profiles/current/archived-access", methods=["GET"])
+@profile_bp.route("/api/profiles/current", methods=["PUT"])
 @require_auth
-def get_archived_access(event_id):
-    """Get archived access for the current profile."""
-    event = get_event(event_id)
-    return jsonify({"archived_access": bool(event.models.get_archive_album())})
-
-@profile_bp.route("/api/events/<event_id>/profiles/current/favorites-access", methods=["GET"])
-@require_auth
-def get_favorites_access(event_id):
-    """Get favorites access for the current profile."""
-    event = get_event(event_id)
-    return jsonify({"favorites_access": bool(event.models.get_favorites_album())})
+def update_current_profile():
+    """Update the current profile data."""
+    profile_id = get_jwt_identity()
+    event_id = request.args.get('event_id', None)
+    return _update_profile(profile_id, request.json or {}, event_id)
 
 # ========================================
 # CHECK ENDPOINTS
@@ -636,31 +603,57 @@ def _create_profile(data: dict, event_id: str | None = None):
 def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
     general_models = get_general_models()
 
-    if 'label' in data.keys():
-        general_models.update_profile_label(profile_id, data['label'])
+    try:
+        if 'label' in data.keys():
+            general_models.update_profile_label(profile_id, data['label'])
+        
+        if 'hierarchy_rank' in data.keys():
+            general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
+
+        if 'password' in data.keys():
+            general_models.update_profile_password(profile_id, data['password'])
+
+        general_fields = ['email']
+        general_data = {k: v for k, v in data.items() if k in general_fields}
+        if general_data:
+            general_models.edit('profiles', profile_id, general_data)
+
+        changes = []
+        if event_id:
+            event_fields = [
+                'can_delete_event',
+                'can_upload_and_delete_images',
+                'can_edit',
+                'all_images',
+                'all_albums',
+                'all_groups',
+                'is_public'
+            ]
+            event_data = {k: v for k, v in data.items() if k in event_fields}
+            event = get_event(event_id)
+            event.models.edit('profiles', profile_id, event_data)
+
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'profile',
+                'items': event.models.get_entities('profiles', [profile_id]),
+                'event_id': event_id
+            })
+        
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id]),
+            'event_id': 'general',
+        })
+        return jsonify({"success": True, "changes": changes})
     
-    if 'hierarchy_rank' in data.keys():
-        general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
-
-    if 'password' in data.keys():
-        general_models.update_profile_password(profile_id, data['password'])
-
-    if 'email' in data.keys():
-        general_models.edit('profiles', profile_id, {'email': data['email']})
-
-    if event_id:
-        event_fields = [
-            'can_delete_event',
-            'can_upload_and_delete_images',
-            'can_edit',
-            'all_images',
-            'all_albums',
-            'all_groups',
-            'is_public'
-        ]
-        event_data = {k: v for k, v in data.items() if k in event_fields}
-        event = get_event(event_id)
-        event.models.edit('profiles', profile_id, event_data)
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 def _edit_event_profile_childs(event: Event, profile_id: str, child: str, child_ids: list[str], add: bool):
     """Add or remove multiple childs from a profile."""

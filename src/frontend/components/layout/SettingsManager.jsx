@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText, Eye } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -36,6 +36,8 @@ export default function SettingsManager() {
   const pendingRequestsCount = usePendingRequestsCount(eventId);
   const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
   const [currentProfileLabel, setCurrentProfileLabel] = useState('');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState('');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
@@ -134,6 +136,30 @@ export default function SettingsManager() {
       console.error('Failed to fetch profiles:', error);
     }
   };
+
+  // Email editing handlers
+  const handleEmailEdit = useCallback(() => {
+    setCurrentEmail(currentProfile?.email || '');
+    setEditingEmail(true);
+  }, [currentProfile?.email]);
+
+  const handleEmailSave = useCallback(async () => {
+    try {
+      await profilesAPI.updateCurrentProfile({ email: currentEmail.trim() || null }, eventUrl);
+      // Update local storage
+      setCurrentProfile({ ...currentProfile, email: currentEmail.trim() || null });
+      showToast('Email updated', 'success');
+      setEditingEmail(false);
+    } catch (error) {
+      console.error('Failed to update email:', error);
+      showToast(formatErrorMessage('update email', error), 'error');
+    }
+  }, [currentProfile, currentEmail, eventUrl, showToast]);
+
+  const handleEmailCancel = useCallback(() => {
+    setEditingEmail(false);
+    setCurrentEmail(currentProfile?.email || '');
+  }, [currentProfile?.email]);
 
   // Custom keyboard handler to prevent ESC from closing modal when editing
   const handleSettingsKeys = useCallback((e) => {
@@ -513,17 +539,87 @@ export default function SettingsManager() {
                         className="space-y-6"
                       >
                         {/* Current Profile Section (compact with sign out) */}
-                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-                          <div className="text-base text-gray-700">
-                            Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
+                        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-base text-gray-700">
+                              Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {currentProfile?.is_public !== 1 && (
+                                <button
+                                  onClick={() => setShowChangePasswordModal(true)}
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-blue-700 shadow-sm"
+                                >
+                                  <Lock className="w-4 h-4" />
+                                  <span>Change Password</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={handleSignOut}
+                                className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
+                              >
+                                <LogOut className="w-4 h-4" />
+                                <span>Sign Out</span>
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={handleSignOut}
-                            className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
-                          >
-                            <LogOut className="w-4 h-4" />
-                            <span>Sign Out</span>
-                          </button>
+                          {currentProfile?.is_public !== 1 && (
+                            <div 
+                              className="flex items-center space-x-1.5"
+                              onKeyDown={(e) => {
+                                if (editingEmail) {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleEmailSave();
+                                  } else if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleEmailCancel();
+                                  }
+                                }
+                              }}
+                            >
+                              <span className="text-sm text-gray-600">Email:</span>
+                              {editingEmail ? (
+                                <>
+                                  <input
+                                    type="email"
+                                    value={currentEmail}
+                                    onChange={(e) => setCurrentEmail(e.target.value)}
+                                    className="w-64 px-2 py-1 text-sm border border-blue-500 rounded focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                                    placeholder="Enter email (optional)"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={handleEmailSave}
+                                    className="p-1 hover:bg-green-100 rounded transition-colors"
+                                    title="Save (Enter)"
+                                  >
+                                    <Check className="w-4 h-4 text-green-600" />
+                                  </button>
+                                  <button
+                                    onClick={handleEmailCancel}
+                                    className="p-1 hover:bg-red-100 rounded transition-colors"
+                                    title="Cancel (Esc)"
+                                  >
+                                    <X className="w-4 h-4 text-red-600" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-sm font-medium text-gray-900">{currentProfile?.email || 'Not set'}</span>
+                                  <button
+                                    onClick={handleEmailEdit}
+                                    className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                    title="Edit email"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Include Archived */}
@@ -920,7 +1016,7 @@ export default function SettingsManager() {
         <ChangePasswordModal
           isOpen={showChangePasswordModal}
           onClose={() => setShowChangePasswordModal(false)}
-          profileId={currentProfile.id}
+          profileId={currentProfile.id || currentProfile.profile_id}
           profileLabel={currentProfile.label}
           eventUrl={eventUrl}
         />

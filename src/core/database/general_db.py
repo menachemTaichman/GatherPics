@@ -87,7 +87,7 @@ class GeneralDB(BaseDB):
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['label', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
+                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
                 'relations': {
                     'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
                 },
@@ -288,8 +288,18 @@ class GeneralDB(BaseDB):
                     SELECT CASE
                         WHEN cur_profile('hierarchy_rank') = 0 THEN
                             RAISE(ABORT, 'Permission denied: not a profiles manager')
-                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                        WHEN
+                            NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND OLD.profile_id <> cur_profile('profile_id')
+                        THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile with higher or equal rank')
+                        WHEN OLD.profile_id = cur_profile('profile_id') AND (
+                            OLD.hierarchy_rank <> NEW.hierarchy_rank
+                            OR OLD.can_create_events <> NEW.can_create_events
+                            OR OLD.restricted_to_event <> NEW.restricted_to_event
+                            OR OLD.label <> NEW.label
+                        )
+                        THEN
+                            RAISE(ABORT, 'Permission denied: the fields to update are not accessible to the current profile')
                         WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN

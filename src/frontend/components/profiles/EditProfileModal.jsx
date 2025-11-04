@@ -7,7 +7,7 @@ import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
-import { useDataStore } from '../../utils/dataManager';
+import { useDataStore, useProfileById } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
@@ -17,6 +17,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const { showToast } = useToast();
   const MODAL_ID = 'edit-profile-modal';
   const currentProfile = getCurrentProfile();
+  
+  // Get general profile data (includes email and other general fields)
+  const generalProfile = useProfileById(profile?.id);
   
   // Local editing state
   const [editingProfile, setEditingProfile] = useState(null);
@@ -95,23 +98,27 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     }
   }, [isOpen, profile?.id]);
 
-  // Initialize editing state from profile prop
+  // Initialize editing state from merged profile data (only once when modal opens)
   useEffect(() => {
     if (isOpen && profile) {
+      // Use the merged profile for initial data, but only set it once
+      const initialProfile = generalProfile ? { ...profile, ...generalProfile } : profile;
       setEditingProfile({
-        id: profile.id || profile.profile_id,
-        label: profile.label || '',
-        hierarchy_rank: profile.hierarchy_rank || 0,
-        can_upload_and_delete_images: profile.can_upload_and_delete_images || 0,
-        can_edit: profile.can_edit || 0,
-        all_images: profile.all_images || 0,
-        all_groups: profile.all_groups || 0,
-        all_albums: profile.all_albums || 0,
-        is_public: profile.is_public || 0
+        id: initialProfile.id || initialProfile.profile_id,
+        label: initialProfile.label || '',
+        email: initialProfile.email || '',
+        hierarchy_rank: initialProfile.hierarchy_rank || 0,
+        can_upload_and_delete_images: initialProfile.can_upload_and_delete_images || 0,
+        can_edit: initialProfile.can_edit || 0,
+        all_images: initialProfile.all_images || 0,
+        all_groups: initialProfile.all_groups || 0,
+        all_albums: initialProfile.all_albums || 0,
+        is_public: initialProfile.is_public || 0
       });
       setNameConflict(false);
     }
-  }, [isOpen, profile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, profile?.id]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
 
   // Fetch profile with scopes (images and albums relations) when modal opens
   useEffect(() => {
@@ -173,6 +180,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     try {
       const profileData = {
         label: editingProfile.label,
+        email: editingProfile.email || null,
         hierarchy_rank: editingProfile.hierarchy_rank,
         can_upload_and_delete_images: editingProfile.can_upload_and_delete_images,
         can_edit: editingProfile.can_edit,
@@ -330,9 +338,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                   <span>Basic Information</span>
                 </h3>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="flex gap-3">
                   {/* Label */}
-                  <div>
+                  <div className="flex-1">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Profile Name
                     </label>
@@ -355,10 +363,26 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                     </div>
                   </div>
 
+                  {/* Email - only for non-public profiles */}
+                  {editingProfile.is_public !== 1 && (
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={editingProfile.email || ''}
+                        onChange={(e) => handleFieldChange('email', e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Enter email (optional)"
+                      />
+                    </div>
+                  )}
+
                   {/* Hierarchy Rank */}
-                  <div>
+                  <div className="w-32">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Hierarchy Rank
+                      Rank
                     </label>
                     <select
                       value={editingProfile.hierarchy_rank}
@@ -367,28 +391,25 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                     >
                       {rankOptions.map(rank => (
                         <option key={`rank-${rank}`} value={rank}>
-                          Rank {rank}
+                          {rank}
                         </option>
                       ))}
                     </select>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      Max: {maxRank}
-                    </p>
                   </div>
 
                   {/* Password */}
-                  <div>
+                  <div className="w-40">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Password
                     </label>
                     <button
                       onClick={() => setShowPasswordModal(true)}
                       disabled={isCreating}
-                      className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       title={isCreating ? 'Save profile first to set password' : 'Change password'}
                     >
                       <Lock className="w-4 h-4" />
-                      <span>Change Password</span>
+                      <span>Change</span>
                     </button>
                   </div>
                 </div>
