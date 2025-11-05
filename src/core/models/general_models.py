@@ -395,6 +395,16 @@ class GeneralModels(BaseModels):
             progress_callback=progress_callback
         )
 
+    def create_access_request(self, event_id: str, request_data: dict, group_ids: list[str]) -> str:
+        """Create an access request."""
+        event = Event(event_id, self.profile_context['profile_id'])
+        request_id = event.models.add('my_access_requests', request_data)
+        if group_ids and isinstance(group_ids, list):
+            event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
+            self.ensure_access_request_notifications(event, request_id)
+        
+        return request_id
+    
     # Settings
     def get_settings(self) -> Dict[str, Any]:
         """Get system settings."""

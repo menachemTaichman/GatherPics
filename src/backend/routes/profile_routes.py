@@ -49,7 +49,6 @@ def create_profile():
             'entity': 'profile',
             'items': general_models.get_entities('profiles', [profile_id]),
             'event_id': 'general',
-            'ignoreScope': True
         }]
         return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
     
@@ -166,7 +165,6 @@ def get_event_profile(event_id, profile_id):
         'entity': 'profile',
         'items': general_models.get_entities('profiles', [profile_id]),
         'event_id': 'general',
-        'ignoreScope': True
     },
     {
         'type': 'RELATION_SET',
@@ -206,7 +204,6 @@ def create_event_profile(event_id):
             'entity': 'profile',
             'items': general_models.get_entities('profiles', [profile_id]),
             'event_id': 'general',
-            'ignoreScope': True
         },
         {
             'type': 'UPSERT',

@@ -275,33 +275,19 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+recreate_views_triggers_and_indexes(event.models.db)
 
-
-image_ids = ['55f1960c-620e-437c-8b7c-c3ac8ccad49f']
-moment_id = '98ff7b08-bdbe-4b15-9637-290e24a58a7c' # סיור כלה
-# moment_id = 'f0f8c9a5-2d7b-4b0c-8475-a53daa08c521' # סיור חתן
-
-# result = event.models.edit_moment_images(moment_id, image_ids, operation=ChildOperation.ADD)
-result = event.models.remove_images_from_moments(image_ids)
-updated_moments_uploads = result['updated_moments_uploads']
-removed_moments_uploads = result['removed_moments_uploads']
-changes = []
-for upload_id, moments in updated_moments_uploads.items():
-    _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
-    changes.append({
-        'type': 'RELATION_UPSERT',
-        'relation': 'upload.moments',
-        'parentId': upload_id,
-        'relationData': relation_data
-    })
-
-for upload_id, moments in removed_moments_uploads.items():
-    _, relation_data = event.models.get_childs('uploads', upload_id, 'moments', moments)
-    changes.append({
-        'type': 'RELATION_REMOVE',
-        'relation': 'upload.moments',
-        'parentId': upload_id,
-        'ids': moments
-    })
-
-print(changes)
+guests_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c' #'1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
+guests_general_models = GeneralModels(profile_id=guests_profile_id)
+guests_event = Event(event_id, profile_id=guests_profile_id)
+request_data = {
+    'profile_id': guests_profile_id,
+    'applicant_name': 'test',
+    'applicant_email': 'test@test.com',
+    'applicant_phone': '1234567890',
+    'details': 'test details',
+    'applicant_profile_id': None,
+}
+group_ids = ['8f965866-ec14-4b61-95d8-79bae649dad4','275d589e-9673-49d1-bc93-aa427dcada15']
+request_id = guests_general_models.create_access_request(event_id, request_data, group_ids)
+print(request_id)

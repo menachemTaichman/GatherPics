@@ -5,7 +5,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { requestsAPI, groupsAPI } from '../../utils/apiService';
-import { useGroupsList, useMyRequestById, useProfileById } from '../../utils/dataManager';
+import { useGroupsList, useMyRequestById } from '../../utils/dataManager';
 import { useApplyScopes, getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
@@ -46,8 +46,7 @@ export default function RequestFormModal({
   const { showToast } = useToast();
   const currentProfile = useMemo(() => getCurrentProfile(), []);
   const currentProfileId = currentProfile?.id || currentProfile?.profile_id;
-  const currentProfileFromStore = useProfileById(currentProfileId);
-  const currentProfileHasEmail = !!(currentProfileFromStore?.email);
+  const currentProfileHasEmail = !!(currentProfile?.email);
   const allGroups = useGroupsList(eventId);
   
   const { registerModal, unregisterModal } = useModalManager();
@@ -105,12 +104,10 @@ export default function RequestFormModal({
     currentRequestId && isEditing
       ? [
           { entity: 'all', id: 'groups', eventId },
-          { entity: 'my_access_request', id: currentRequestId, eventId },
-          ...(currentProfileId ? [{ entity: 'profile', id: currentProfileId }] : [])
+          { entity: 'my_access_request', id: currentRequestId, eventId }
         ]
       : [
-          { entity: 'all', id: 'groups', eventId },
-          ...(currentProfileId ? [{ entity: 'profile', id: currentProfileId }] : [])
+          { entity: 'all', id: 'groups', eventId }
         ]
   );
 
@@ -516,7 +513,7 @@ export default function RequestFormModal({
         applicant_phone: formData.applicant_phone.trim() || null,
         details: formData.details.trim() || null,
         applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null,
-        communication_consent: formData.communication_consent
+        communication_consent: formData.communication_consent ? 1 : 0
       };
 
       if (request) {
@@ -592,7 +589,7 @@ export default function RequestFormModal({
         className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <FileText className="w-5 h-5 text-blue-600" />
@@ -629,7 +626,7 @@ export default function RequestFormModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleFormSubmit} onKeyDown={handleKeyDown} className="flex-1 overflow-y-auto p-6">
+        <form onSubmit={handleFormSubmit} onKeyDown={handleKeyDown} className="flex-1 overflow-y-auto px-6 py-4">
           {currentStep === 3 ? (
             <div className="space-y-4">
               <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -675,7 +672,7 @@ export default function RequestFormModal({
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
             {/* Step 1: Profile Details (only for new profile requests) */}
             {currentStep === 1 && (
               <>
@@ -738,9 +735,9 @@ export default function RequestFormModal({
 
             {/* Step 2: Groups Selection + Details */}
             {currentStep === 2 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     <Users className="w-4 h-4 inline mr-1" />
                     Select Groups *
                   </label>
@@ -844,7 +841,7 @@ export default function RequestFormModal({
                     {/* Search and Sort Controls */}
                     {!isLoadingGroups && (
                   <>
-                    <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                    <div className="mb-3 flex flex-col sm:flex-row gap-2">
                       {/* Search */}
                       <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -875,7 +872,7 @@ export default function RequestFormModal({
                     </div>
 
                     {/* Groups Grid */}
-                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-52 overflow-y-auto border border-gray-200 rounded-lg p-3">
                       {filteredAndSortedGroups.map((group) => (
                         <div
                           key={group.id || `group-${Math.random()}`}
@@ -924,11 +921,11 @@ export default function RequestFormModal({
 
                     {/* Approved and Denied Groups List - Show below grid for open requests */}
                     {(approvedGroups.length > 0 || deniedGroups.length > 0) && (
-                      <div className="mt-4 space-y-4">
+                      <div className="mt-3 space-y-3">
                         {/* Approved Groups List */}
                         {approvedGroups.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center space-x-1.5">
                               <CheckCircle className="w-4 h-4 text-green-600" />
                               <span>Approved</span>
                             </h4>
@@ -965,7 +962,7 @@ export default function RequestFormModal({
                         {/* Denied Groups List */}
                         {deniedGroups.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center space-x-1.5">
                               <XCircle className="w-4 h-4 text-red-600" />
                               <span>Denied</span>
                             </h4>
@@ -1006,7 +1003,7 @@ export default function RequestFormModal({
                 
                 {/* Details field at bottom of groups step */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     <FileText className="w-4 h-4 inline mr-1" />
                     Details
                   </label>
@@ -1015,7 +1012,7 @@ export default function RequestFormModal({
                     onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('details', e.target.value)}
                     readOnly={isClosed || isPublicSubmissionView}
                     onKeyDown={handleKeyDown}
-                    rows={3}
+                    rows={2}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
                     placeholder="Additional information about the request"
                   />
@@ -1023,8 +1020,8 @@ export default function RequestFormModal({
                 
                 {/* Communication Consent - Show if new profile or current profile has email */}
                 {(formData.requestType === 'new' || currentProfileHasEmail) && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <label className="flex items-start space-x-3 cursor-pointer group">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <label className="flex items-start space-x-2 cursor-pointer group">
                       <div className="flex items-center h-5">
                         <input
                           type="checkbox"
@@ -1038,8 +1035,8 @@ export default function RequestFormModal({
                         <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
                           I consent to receive communications about this request {formData.requestType === 'new' ? '*' : ''}
                         </span>
-                        <p className="text-xs text-gray-600 mt-1">
-                          The event manager will use your email to notify you about the status of your access request.
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          You'll receive email notifications about your request status.
                         </p>
                       </div>
                     </label>
@@ -1089,7 +1086,7 @@ export default function RequestFormModal({
         </form>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <div className="flex justify-between items-center">
             {/* Step Navigation */}
             <div className="flex items-center space-x-3">
@@ -1140,7 +1137,7 @@ export default function RequestFormModal({
                   <button
                     type="submit"
                     onClick={handleSubmit}
-                    disabled={loading || selectedGroups.size === 0}
+                    disabled={loading || selectedGroups.size === 0 || (formData.requestType === 'new' && !formData.communication_consent)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
                   >
                     {loading && (

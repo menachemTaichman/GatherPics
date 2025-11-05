@@ -30,6 +30,14 @@ def get_request(event_id, request_id):
         return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
 
     request_data = event.models.get_entities('access_requests', [request_id])
+    
+    # TODO: simplify when moving to postgres
+    if request_data and request_data.get(request_id).get('applicant_profile_id'):
+        general_models = get_general_models()
+        email = general_models.get_entities('profiles', request_data[request_id]['applicant_profile_id']).get('email')
+        if email:
+            request_data[request_id]['applicant_email'] = email
+        
     groups, relation_data = event.models.get_childs('access_requests', request_id, 'groups')
     changes = [{
         'type': 'UPSERT',
@@ -91,7 +99,6 @@ def create_access_request(event_id):
     data = request.json or {}
     
     try:
-        # request_id = event.models.create_access_request(data['applicant_name'], data.get('applicant_email'), data.get('applicant_phone'), data.get('details'), data.get('group_ids'))
 
         request_data = {
             'profile_id': get_jwt_identity(),
@@ -100,19 +107,17 @@ def create_access_request(event_id):
             'applicant_phone': data.get('applicant_phone'),
             'details': data.get('details'),
             'applicant_profile_id': data.get('applicant_profile_id'),
+            'communication_consent': data.get('communication_consent'),
         }
-        request_id = event.models.add('my_access_requests', request_data)
-        # Add groups to the request
-        if data['group_ids'] and isinstance(data['group_ids'], list):
-            event.models.edit_childs('my_access_requests', request_id, 'groups', data['group_ids'], operation=ChildOperation.ADD)
-            general_models.ensure_access_request_notifications(event, request_id)
-        # Return the created request (both as access_request and my_access_request for the creator)
+        request_id = general_models.create_access_request(event_id, request_data, data.get('group_ids'))
         created_request = event.models.get_entities('my_access_requests', [request_id])
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'my_access_request',
-            'items': created_request
-        }]
+        changes = []
+        if created_request:
+            changes.append({
+                'type': 'UPSERT',
+                'entity': 'my_access_request',
+                'items': created_request
+            })
         
         # Include the new request id explicitly so clients can reference it immediately
         return jsonify({'success': True, 'access_request_id': request_id, 'changes': changes})
@@ -133,11 +138,11 @@ def update_my_request(event_id, request_id):
         
     data = request.json or {}
     try:
-        allowed_fields = {'applicant_name', 'applicant_email', 'applicant_phone', 'details'}
+        allowed_fields = {'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'communication_consent'}
         sanitized = {k: v for k, v in data.items() if k in allowed_fields}
         
         if sanitized:
-            event.models.edit('access_requests', request_id, sanitized)
+            event.models.edit('my_access_requests', request_id, sanitized)
 
         edited = False
         # Handle groups to add
@@ -279,7 +284,7 @@ def toggle_request(event_id, request_id):
             }
         })
         
-        if applicant_profile_id:
+        if applicant_profile_id and applicant_profile_id != updated_request[request_id]['profile_id']:
             changes.append({
                 'type': 'UPSERT',
                 'entity': 'profile',

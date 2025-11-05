@@ -78,8 +78,9 @@ export default function RequestDetailModal({
   // Use the request from the store (which has up-to-date relation data) if available, otherwise fall back to prop
   const requestData = storeRequest || request;
  
-  // Apply scope for this access request and the requester's profile
+  // Apply scope for this access request
   const applicantProfileId = requestData?.applicant_profile_id;
+  
   useApplyScopes(
     isOpen && requestId 
       ? [
@@ -483,12 +484,12 @@ export default function RequestDetailModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Request Information */}
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Request Information</h3>
-                <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Request Information</h3>
+                <div className="space-y-3">
                   {(requestData.profile_label) && (
                   <div className="flex items-center space-x-3">
                     <User className="w-5 h-5 text-gray-400" />
@@ -581,7 +582,7 @@ export default function RequestDetailModal({
               {/* Profile Name for New Profiles */}
               {!requestData.applicant_profile_id && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">New Profile</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">New Profile</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Profile Name *
@@ -605,14 +606,15 @@ export default function RequestDetailModal({
                       }`}
                       placeholder="Enter profile name"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      This will be the name of the new profile created when approved
-                    </p>
-                    {nameConflict && (
+                    {nameConflict ? (
                       <div className="flex items-center space-x-1 text-red-500 text-xs mt-1">
                         <AlertTriangle className="w-3 h-3" />
                         <span>Name exists</span>
                       </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Name of the new profile to create
+                      </p>
                     )}
                   </div>
                 </div>
@@ -621,7 +623,7 @@ export default function RequestDetailModal({
               {/* Closed Details */}
               {canApprove && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Closed Details</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Closed Details</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Details (optional)
@@ -631,11 +633,8 @@ export default function RequestDetailModal({
                       onChange={(e) => setClosedDetails(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter details about closing this request"
-                      rows={3}
+                      rows={2}
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Optional details that will be added to the request's closed details list
-                    </p>
                   </div>
                 </div>
               )}
@@ -722,7 +721,7 @@ export default function RequestDetailModal({
               {(!requestData.closed_at) && (
                 <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-1">Pending</h4>
-                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
                   {pendingGroups.length > 0 ? (
                   <div className="divide-y divide-gray-100">
                       {pendingGroups.map(([groupId, groupData]) => {

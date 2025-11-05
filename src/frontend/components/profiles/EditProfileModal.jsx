@@ -30,7 +30,8 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   
   // Apply scopes for profile relations
   useApplyScopes(profile?.id ? [
-    { entity: 'event_profile', id: String(profile.id), eventId }
+    { entity: 'event_profile', id: String(profile.id), eventId },
+    { entity: 'profile', id: String(profile.id), eventId: 'general' }
   ] : []);
   
   // Get profile images, albums, and groups from store
@@ -119,6 +120,13 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, profile?.id]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
+
+  // Update email when generalProfile loads (after initial render)
+  useEffect(() => {
+    if (isOpen && !isCreating && generalProfile?.email && editingProfile && !editingProfile.email) {
+      setEditingProfile(prev => ({ ...prev, email: generalProfile.email }));
+    }
+  }, [isOpen, isCreating, generalProfile?.email, editingProfile?.email]);
 
   // Fetch profile with scopes (images and albums relations) when modal opens
   useEffect(() => {

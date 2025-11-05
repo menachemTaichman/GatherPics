@@ -669,11 +669,12 @@ class EventDB(BaseDB):
                 SELECT ard.*
                 FROM access_requests_details ard
                 WHERE ard.profile_id = cur_profile('profile_id')
-                AND cur_profile('is_public') = 0
             ''',
             'accessible_my_access_requests': '''
                 SELECT mar.*
-                FROM my_access_requests mar;
+                FROM my_access_requests mar
+                INNER JOIN accessible_profiles ap ON mar.profile_id = ap.profile_id
+                WHERE ap.is_public = 0
             ''',
             'my_access_requests_groups': '''
                 SELECT argd.*
@@ -1298,7 +1299,7 @@ class EventDB(BaseDB):
                     THEN
                         RAISE(ABORT, 'Permission denied: access request by public profile is only allowed for another profile with name and email required')
                     WHEN
-                        applicant_profile_id IS NULL AND COALESCE(NEW.communication_consent, 0) = 0 THEN
+                        NEW.applicant_profile_id IS NULL AND COALESCE(NEW.communication_consent, 0) = 0 THEN
                             RAISE(ABORT, 'Permission denied: communication consent is required for anonymous access request')
                     END;
 
@@ -1324,7 +1325,7 @@ class EventDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot update access request for another profile')
                         WHEN OLD.is_closed = 1 THEN
                             RAISE(ABORT, 'Permission denied: cannot update closed access request')
-                        WHEN COALESCE(NEW.communication_consent, 0) = 0 AND applicant_profile_id IS NULL THEN
+                        WHEN COALESCE(NEW.communication_consent, 0) = 0 AND NEW.applicant_profile_id IS NULL THEN
                             RAISE(ABORT, 'Permission denied: communication consent is required for anonymous access request')
                     END;
 

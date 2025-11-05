@@ -86,6 +86,7 @@ export default function SettingsManager() {
       : isOpen && activeTab === 'account' && profileId
       ? [
           { entity: 'event_profile', id: String(profileId), eventId },
+          { entity: 'profile', id: String(profileId), eventId: 'general' },
           { entity: 'all', id: 'my_access_requests', eventId }
         ]
       : []
