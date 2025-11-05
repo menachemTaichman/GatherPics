@@ -8,6 +8,7 @@ import { AlbumsGalleryPage, AlbumDetailPage } from '../pages/albums';
 import { MomentsPage } from '../pages/moments';
 import { UploadsGalleryPage, UploadDetailPage } from '../pages/uploads';
 import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
+import { FeedbacksGalleryPage } from '../pages/feedbacks';
 import { LoadingSpinner, Toast } from './common';
 import { LoginModal } from './auth';
 import { useDataStore } from '../utils/dataManager';
@@ -602,6 +603,12 @@ function AppContent({ eventUrl }) {
             path="requests"
             element={
               <RequestsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
+            }
+          />
+          <Route
+            path="feedbacks"
+            element={
+              <FeedbacksGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
           <Route 

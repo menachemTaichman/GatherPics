@@ -274,20 +274,6 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-
-recreate_views_triggers_and_indexes(event.models.db)
-
-guests_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c' #'1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
-guests_general_models = GeneralModels(profile_id=guests_profile_id)
-guests_event = Event(event_id, profile_id=guests_profile_id)
-request_data = {
-    'profile_id': guests_profile_id,
-    'applicant_name': 'test',
-    'applicant_email': 'test@test.com',
-    'applicant_phone': '1234567890',
-    'details': 'test details',
-    'applicant_profile_id': None,
-}
-group_ids = ['8f965866-ec14-4b61-95d8-79bae649dad4','275d589e-9673-49d1-bc93-aa427dcada15']
-request_id = guests_general_models.create_access_request(event_id, request_data, group_ids)
-print(request_id)
+recreate_views_triggers_and_indexes(general_models.db)
+result = general_models.get_entities('my_feedbacks')
+print(result)

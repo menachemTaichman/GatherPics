@@ -4,11 +4,11 @@ import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, L
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
-import { profilesAPI, requestsAPI } from '../../utils/apiService';
+import { profilesAPI, requestsAPI, feedbacksAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useEventProfilesList, useRequestsList, useMyRequestsList } from '../../utils/dataManager';
+import { useEventProfilesList, useRequestsList, useMyRequestsList, useMyFeedbacksList } from '../../utils/dataManager';
 import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/authContext';
 import { ChangePasswordModal, EditProfileModal } from '../profiles';
 import { ConfirmDelete } from '../modals';
 import { RequestFormModal } from '../requests';
+import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -34,6 +35,11 @@ export default function SettingsManager() {
   const currentProfile = getCurrentProfile();
   const allProfiles = useEventProfilesList(eventId);
   const pendingRequestsCount = usePendingRequestsCount(eventId);
+  const pendingFeedbacksCount = Number(currentProfile?.pending_feedbacks || 0);
+  const hasFeedbacks = currentProfile?.has_feedbacks === 1;
+  
+  // Calculate total badge count (number of categories with pending items)
+  const settingsBadgeCount = (pendingRequestsCount > 0 ? 1 : 0) + (pendingFeedbacksCount > 0 ? 1 : 0);
   const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
   const [currentProfileLabel, setCurrentProfileLabel] = useState('');
   const [editingEmail, setEditingEmail] = useState(false);
@@ -52,6 +58,12 @@ export default function SettingsManager() {
   const [editingRequest, setEditingRequest] = useState(null);
   const [showDeleteRequestModal, setShowDeleteRequestModal] = useState(false);
   const [requestToDelete, setRequestToDelete] = useState(null);
+  
+  // Feedback state
+  const [showFeedbackFormModal, setShowFeedbackFormModal] = useState(false);
+  const [editingMyFeedback, setEditingMyFeedback] = useState(null);
+  const [showDeleteMyFeedbackModal, setShowDeleteMyFeedbackModal] = useState(false);
+  const [myFeedbackToDelete, setMyFeedbackToDelete] = useState(null);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'settings-manager';
@@ -80,6 +92,7 @@ export default function SettingsManager() {
 
   // Apply scopes based on active tab
   const profileId = currentProfile?.id || currentProfile?.profile_id;
+  const isPublic = currentProfile?.is_public === 1;
   useApplyScopes(
     isOpen && activeTab === 'profiles' 
       ? [{ entity: 'all', id: 'event_profiles', eventId }] 
@@ -87,7 +100,8 @@ export default function SettingsManager() {
       ? [
           { entity: 'event_profile', id: String(profileId), eventId },
           { entity: 'profile', id: String(profileId), eventId: 'general' },
-          { entity: 'all', id: 'my_access_requests', eventId }
+          { entity: 'all', id: 'my_access_requests', eventId },
+          ...(isPublic ? [] : [{ entity: 'all', id: 'my_feedbacks', eventId: 'general' }])
         ]
       : []
   );
@@ -107,8 +121,11 @@ export default function SettingsManager() {
     if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.profile_id) {
       fetchCurrentProfile();
       fetchMyRequests();
+      if (currentProfile?.is_public !== 1) {
+        fetchMyFeedbacks();
+      }
     }
-  }, [isOpen, activeTab, eventUrl, currentProfile?.id, permissions.enable_new_requests]);
+  }, [isOpen, activeTab, eventUrl, currentProfile?.id, currentProfile?.is_public, permissions.enable_new_requests]);
 
 
   const fetchCurrentProfile = async () => {
@@ -126,6 +143,15 @@ export default function SettingsManager() {
       // Changes are automatically applied by apiService interceptor
     } catch (error) {
       console.error('Failed to fetch my requests:', error);
+    }
+  };
+
+  const fetchMyFeedbacks = async () => {
+    try {
+      await feedbacksAPI.getMyFeedbacks();
+      // Changes are automatically applied by apiService interceptor
+    } catch (error) {
+      console.error('Failed to fetch my feedbacks:', error);
     }
   };
 
@@ -434,6 +460,40 @@ export default function SettingsManager() {
     }
   };
 
+  // My Feedbacks handlers
+  const handleEditMyFeedback = (feedback) => {
+    const feedbackId = feedback?.id || feedback?.feedback_id;
+    const feedbackWithId = feedback ? { ...feedback, feedback_id: feedbackId || feedback.id } : null;
+    setEditingMyFeedback(feedbackWithId);
+    setShowFeedbackFormModal(true);
+  };
+
+  const handleDeleteMyFeedback = (feedback) => {
+    setMyFeedbackToDelete(feedback);
+    setShowDeleteMyFeedbackModal(true);
+  };
+
+  const handleConfirmDeleteMyFeedback = async () => {
+    if (!myFeedbackToDelete) return;
+
+    const feedbackId = myFeedbackToDelete?.id || myFeedbackToDelete?.feedback_id;
+    if (!feedbackId) {
+      console.error('Cannot delete feedback: no ID found', myFeedbackToDelete);
+      showToast('Cannot delete feedback: ID not found', 'error');
+      return;
+    }
+
+    try {
+      await feedbacksAPI.deleteMyFeedback(feedbackId);
+      showToast(`Feedback deleted`, 'success');
+    } catch (error) {
+      console.error('Failed to delete feedback:', error);
+      showToast(formatErrorMessage('delete feedback', error), 'error');
+    } finally {
+      setMyFeedbackToDelete(null);
+    }
+  };
+
   // Get user's requests
   const userRequests = useMyRequestsList(eventId);
   const sortedMyRequests = useMemo(() => {
@@ -444,6 +504,16 @@ export default function SettingsManager() {
     });
   }, [userRequests]);
 
+  // Get user's feedbacks
+  const userFeedbacks = useMyFeedbacksList();
+  const sortedMyFeedbacks = useMemo(() => {
+    return [...userFeedbacks].sort((a, b) => {
+      const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta; // desc
+    });
+  }, [userFeedbacks]);
+
   return (
     <>
       <button
@@ -453,9 +523,9 @@ export default function SettingsManager() {
       >
         <div className="relative">
           <Settings className="w-4 h-4" />
-          {pendingRequestsCount > 0 && (
+          {settingsBadgeCount > 0 && (
             <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
-              1
+              {settingsBadgeCount}
             </span>
           )}
         </div>
@@ -766,6 +836,97 @@ export default function SettingsManager() {
                           );
                         })()}
 
+                        {/* My Feedbacks Section - for non-public profiles only */}
+                        {(() => {
+                          const isPublic = currentProfile?.is_public === 1;
+                          const hasFeedbacks = userFeedbacks.length > 0;
+                          const shouldShow = !isPublic && hasFeedbacks;
+                          
+                          if (!shouldShow) return null;
+                          
+                          return (
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-sm font-semibold text-gray-700">My Feedbacks</h4>
+                              </div>
+                              {userFeedbacks.length === 0 ? (
+                                <div key="no-feedbacks-message" className="text-center py-4">
+                                  <MessageSquare className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-sm text-gray-500">No feedbacks yet</p>
+                                </div>
+                              ) : (
+                                <div key="feedbacks-list" className="space-y-2">
+                                  {sortedMyFeedbacks.map((feedback, index) => {
+                                    const feedbackKey = feedback?.id || feedback?.feedback_id || `feedback-${index}`;
+                                    const feedbackId = feedback?.id || feedback?.feedback_id;
+                                    const isClosed = feedback?.is_closed === 1;
+                                    
+                                    return (
+                                      <div
+                                        key={feedbackKey}
+                                        className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
+                                      >
+                                        <div className="flex items-center space-x-3">
+                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                            feedback.type === 0 ? 'bg-red-100' : 'bg-green-100'
+                                          }`}>
+                                            <MessageSquare className={`w-5 h-5 ${
+                                              feedback.type === 0 ? 'text-red-600' : 'text-green-600'
+                                            }`} />
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center space-x-2">
+                                              <p className="font-medium text-gray-900">{feedback.title}</p>
+                                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                                isClosed 
+                                                  ? (feedback.solved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700')
+                                                  : 'bg-blue-100 text-blue-700'
+                                              }`}>
+                                                {isClosed ? (feedback.solved ? 'Solved' : 'Closed') : 'Open'}
+                                              </span>
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                              {feedback.type === 0 ? 'Bug Report' : 'Suggestion'} • {new Date(feedback.created_at).toLocaleDateString()}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          {isClosed ? (
+                                            <button
+                                              onClick={() => handleEditMyFeedback(feedback)}
+                                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                              title="View feedback"
+                                            >
+                                              <Eye className="w-4 h-4 text-blue-600" />
+                                            </button>
+                                          ) : (
+                                            <>
+                                              <button
+                                                onClick={() => handleEditMyFeedback(feedback)}
+                                                className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                                title="Edit feedback"
+                                              >
+                                                <Edit2 className="w-4 h-4 text-blue-600" />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteMyFeedback(feedback)}
+                                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                                title="Delete feedback"
+                                              >
+                                                <Trash2 className="w-4 h-4 text-red-600" />
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         
                       </motion.div>
                     )}
@@ -983,12 +1144,51 @@ export default function SettingsManager() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
+                        className="space-y-6"
                       >
+                        {/* View Feedbacks Section - Developer Only */}
+                        {hasFeedbacks && (
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-sm font-semibold text-gray-700">Manage Feedbacks</h4>
+                                {pendingFeedbacksCount > 0 && (
+                                  <span className="px-2 py-1 text-xs bg-primary-600 text-white rounded-full">
+                                    {pendingFeedbacksCount}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <button
+                                  onClick={() => urlHelpers.navigateToFeedbacks()}
+                                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>View Feedbacks</span>
+                                </button>
+                                {pendingFeedbacksCount > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
+                                    {pendingFeedbacksCount}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Send Feedback Section - All Users */}
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-4">Send Feedback</h3>
                           <div className="bg-gray-50 rounded-lg p-8 text-center">
                             <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                            <p className="text-gray-600">Feedback form will be available soon.</p>
+                            <p className="text-gray-600 mb-4">Help us improve by sharing your thoughts</p>
+                            <button
+                              onClick={() => setShowFeedbackFormModal(true)}
+                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center space-x-2"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                              <span>Send Feedback</span>
+                            </button>
                           </div>
                         </div>
                       </motion.div>
@@ -1090,6 +1290,36 @@ export default function SettingsManager() {
           request={editingRequest}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
+        />
+      )}
+
+      {/* Feedback Form Modal */}
+      {showFeedbackFormModal && (
+        <FeedbackFormModal
+          isOpen={showFeedbackFormModal}
+          onClose={() => {
+            setShowFeedbackFormModal(false);
+            setEditingMyFeedback(null);
+          }}
+          feedback={editingMyFeedback}
+        />
+      )}
+
+      {/* Delete My Feedback Confirmation Modal */}
+      {showDeleteMyFeedbackModal && myFeedbackToDelete && (
+        <ConfirmDelete
+          isOpen={showDeleteMyFeedbackModal}
+          onClose={() => {
+            setShowDeleteMyFeedbackModal(false);
+            setMyFeedbackToDelete(null);
+          }}
+          onConfirm={handleConfirmDeleteMyFeedback}
+          title="Delete Feedback"
+          message="Are you sure you want to delete this feedback"
+          itemName={myFeedbackToDelete.title}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
         />
       )}
     </>

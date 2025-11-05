@@ -1233,6 +1233,81 @@ export const notificationsAPI = {
   },
 };
 
+// Feedbacks API
+export const feedbacksAPI = {
+  // ==================== DEVELOPER ROUTES ====================
+  
+  // Get all feedbacks (for developer)
+  getAll: async () => {
+    const key = `FEEDBACKS_GET_ALL`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/feedbacks`);
+      return response.data;
+    });
+  },
+  
+  // Get feedback by ID (for developer)
+  getById: async (feedbackId) => {
+    const key = `FEEDBACK_GET_BY_ID:${feedbackId}`;
+    const result = await withDedupe(key, async () => {
+      const response = await api.get(`/api/feedbacks/${feedbackId}`);
+      return response.data;
+    });
+    return result;
+  },
+  
+  // Update feedback (for developer)
+  update: async (feedbackId, data) => {
+    const response = await api.patch(`/api/feedbacks/${feedbackId}`, data);
+    return response.data;
+  },
+  
+  // Delete feedback (for developer)
+  delete: async (feedbackId) => {
+    const response = await api.delete(`/api/feedbacks/${feedbackId}`);
+    return response.data;
+  },
+  
+  // ==================== USER ROUTES ====================
+  
+  // Get my feedbacks
+  getMyFeedbacks: async () => {
+    const response = await api.get(`/api/my-feedbacks`);
+    return response.data;
+  },
+  
+  // Get my feedback by ID
+  getMyFeedbackById: async (feedbackId, params = {}) => {
+    // Include cache-busting param in key if present
+    const cacheKey = params._t ? `${feedbackId}:${params._t}` : `${feedbackId}`;
+    const key = `MY_FEEDBACK_GET_BY_ID:${cacheKey}`;
+    const result = await withDedupe(key, async () => {
+      const queryString = params._t ? `?_t=${params._t}` : '';
+      const response = await api.get(`/api/my-feedbacks/${feedbackId}${queryString}`);
+      return response.data;
+    });
+    return result;
+  },
+  
+  // Create feedback
+  create: async (data) => {
+    const response = await api.post(`/api/feedbacks`, data);
+    return response.data;
+  },
+  
+  // Update my feedback
+  updateMyFeedback: async (feedbackId, data) => {
+    const response = await api.patch(`/api/my-feedbacks/${feedbackId}`, data);
+    return response.data;
+  },
+  
+  // Delete my feedback
+  deleteMyFeedback: async (feedbackId) => {
+    const response = await api.delete(`/api/my-feedbacks/${feedbackId}`);
+    return response.data;
+  },
+};
+
 // Optimistic update helpers
 export const optimisticUpdates = {
   // Optimistic group update

@@ -38,6 +38,7 @@ export default function Header() {
     unreadCount: Number(notifCounts?.unreadCount || cachedProfile?.unread_notifications || 0),
   };
   const effectivePendingRequestsCount = usePendingRequestsCount();
+  const pendingFeedbacksCount = Number(cachedProfile?.pending_feedbacks || 0);
 
   // No debug logs
 

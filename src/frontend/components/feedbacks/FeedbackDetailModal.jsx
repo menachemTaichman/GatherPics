@@ -1,0 +1,536 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useModalFocus } from '../../hooks/useModalFocus';
+import { useModalManager } from '../../utils/modalManager';
+import { useToast } from '../../contexts/ToastContext';
+import { feedbacksAPI } from '../../utils/apiService';
+import { useFeedbackById } from '../../utils/dataManager';
+import { formatErrorMessage } from '../../utils/errorHandler';
+
+export default function FeedbackDetailModal({ 
+  isOpen, 
+  onClose, 
+  feedbackId
+}) {
+  const [loading, setLoading] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showCloseFeedbackModal, setShowCloseFeedbackModal] = useState(false);
+  const [closeDetails, setCloseDetails] = useState('');
+  const [solved, setSolved] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [editingNotes, setEditingNotes] = useState(false);
+  
+  const { showToast } = useToast();
+  const { registerModal, unregisterModal } = useModalManager();
+  const modalId = 'feedback-detail-modal';
+
+  // Get feedback from store
+  const feedback = useFeedbackById(feedbackId);
+
+  // Register modal
+  useEffect(() => {
+    if (isOpen) {
+      registerModal({ id: modalId, type: 'modal', allowOutsideScroll: false });
+      return () => unregisterModal(modalId);
+    }
+  }, [isOpen, registerModal, unregisterModal]);
+
+  // Fetch feedback details when modal opens
+  useEffect(() => {
+    if (isOpen && feedbackId) {
+      const fetchFeedback = async () => {
+        try {
+          await feedbacksAPI.getById(feedbackId);
+        } catch (error) {
+          console.error('Failed to load feedback:', error);
+          showToast(formatErrorMessage('load feedback', error), 'error');
+        }
+      };
+      fetchFeedback();
+    }
+  }, [isOpen, feedbackId, showToast]);
+
+  // Initialize notes from feedback
+  useEffect(() => {
+    if (feedback) {
+      setNotes(feedback.notes || '');
+      setEditingNotes(false);
+    }
+  }, [feedback]);
+
+  const { modalRef } = useModalFocus(isOpen, onClose, {
+    modalId,
+    modalType: 'modal',
+    allowOutsideScroll: false
+  });
+
+  const handleSaveNotes = useCallback(async () => {
+    setLoading(true);
+    try {
+      await feedbacksAPI.update(feedbackId, {
+        notes: notes.trim() || null
+      });
+      
+      showToast('Notes saved', 'success');
+      setEditingNotes(false);
+    } catch (error) {
+      console.error('Failed to save notes:', error);
+      showToast(formatErrorMessage('save notes', error), 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [feedbackId, notes, showToast]);
+
+  const handleCloseFeedback = useCallback(async () => {
+    setLoading(true);
+    try {
+      await feedbacksAPI.update(feedbackId, {
+        is_closed: 1,
+        solved: solved ? 1 : 0,
+        closed_details: closeDetails.trim() || null
+      });
+      
+      showToast(`Feedback ${solved ? 'resolved' : 'closed'}`, 'success');
+      setShowCloseFeedbackModal(false);
+      onClose();
+    } catch (error) {
+      console.error('Failed to close feedback:', error);
+      showToast(formatErrorMessage('close feedback', error), 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [feedbackId, solved, closeDetails, showToast, onClose]);
+
+  const handleDelete = useCallback(async () => {
+    const confirmed = window.confirm('Are you sure you want to delete this feedback?');
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await feedbacksAPI.delete(feedbackId);
+      showToast('Feedback deleted', 'success');
+      onClose();
+    } catch (error) {
+      console.error('Failed to delete feedback:', error);
+      showToast(formatErrorMessage('delete feedback', error), 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [feedbackId, showToast, onClose]);
+
+  // Parse diagnostics if available
+  const diagnostics = useMemo(() => {
+    if (!feedback?.diagnostics) return null;
+    try {
+      return typeof feedback.diagnostics === 'string' 
+        ? JSON.parse(feedback.diagnostics) 
+        : feedback.diagnostics;
+    } catch (e) {
+      return null;
+    }
+  }, [feedback?.diagnostics]);
+
+  const isClosed = feedback?.is_closed === 1;
+
+  if (!isOpen || !feedback) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <motion.div
+          ref={modalRef}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+          className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                isClosed ? 'bg-gray-100' : 'bg-primary-100'
+              }`}>
+                <MessageSquare className={`w-5 h-5 ${isClosed ? 'text-gray-600' : 'text-primary-600'}`} />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
+                  <span>Feedback #{feedbackId}</span>
+                  {isClosed && (
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      feedback.solved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {feedback.solved ? 'Solved' : 'Closed'}
+                    </span>
+                  )}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {new Date(feedback.created_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Sender Info */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Sender Information</h3>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <User className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-900">{feedback.sender_name}</span>
+                </div>
+                {feedback.sender_email && (
+                  <div className="flex items-center space-x-2">
+                    <Mail className="w-4 h-4 text-gray-400" />
+                    <a href={`mailto:${feedback.sender_email}`} className="text-sm text-blue-600 hover:underline">
+                      {feedback.sender_email}
+                    </a>
+                    {feedback.communication_consent && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                        Agreed to contact
+                      </span>
+                    )}
+                  </div>
+                )}
+                {feedback.profile_id && (
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-600">Profile ID: {feedback.profile_id}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Title and Type */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Feedback Details</h3>
+              <div className="space-y-2">
+                <div>
+                  <span className="text-xs text-gray-600">Title:</span>
+                  <p className="text-sm font-medium text-gray-900">{feedback.title}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-600">Type:</span>
+                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
+                    feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                  }`}>
+                    {feedback.type === 0 ? 'Bug Report' : 'Suggestion'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Feedback Message */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Message</h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-gray-900 whitespace-pre-wrap">{feedback.message}</p>
+              </div>
+            </div>
+
+            {/* Developer Notes - private, not shown to sender */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">Developer Notes (Private)</h3>
+                {!editingNotes && (
+                  <button
+                    onClick={() => setEditingNotes(true)}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              {editingNotes ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
+                    placeholder="Add private notes (not shown to sender)..."
+                    rows={3}
+                    disabled={loading}
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={() => {
+                        setNotes(feedback.notes || '');
+                        setEditingNotes(false);
+                      }}
+                      className="px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      disabled={loading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveNotes}
+                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      disabled={loading}
+                    >
+                      Save Notes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                  {notes || <span className="text-gray-400 italic">No notes yet</span>}
+                </p>
+              )}
+            </div>
+
+            {/* Metadata */}
+            {(feedback.user_agent || feedback.ip_address) && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Metadata</h3>
+                <div className="space-y-2">
+                  {feedback.ip_address && (
+                    <div className="flex items-center space-x-2 text-xs">
+                      <Wifi className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">IP:</span>
+                      <span className="text-gray-900 font-mono">{feedback.ip_address}</span>
+                    </div>
+                  )}
+                  {feedback.user_agent && (
+                    <div className="flex items-start space-x-2 text-xs">
+                      <Monitor className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <span className="text-gray-600">User Agent:</span>
+                        <p className="text-gray-900 font-mono text-[10px] leading-relaxed break-all mt-1">
+                          {feedback.user_agent}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Diagnostics */}
+            {diagnostics && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <button
+                  onClick={() => setShowDiagnostics(!showDiagnostics)}
+                  className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 hover:text-primary-600 transition-colors"
+                >
+                  <span>Diagnostic Information</span>
+                  {showDiagnostics ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+                
+                {showDiagnostics && (
+                  <div className="mt-4 space-y-4">
+                    {/* Browser Info */}
+                    {diagnostics.browser_info && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Browser Information</h4>
+                        <pre className="bg-white p-3 rounded text-[10px] overflow-x-auto">
+                          {JSON.stringify(diagnostics.browser_info, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Console Logs */}
+                    {diagnostics.console_logs && diagnostics.console_logs.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">
+                          Console Logs ({diagnostics.console_logs.length})
+                        </h4>
+                        <div className="bg-white p-3 rounded max-h-60 overflow-y-auto">
+                          {diagnostics.console_logs.map((log, idx) => (
+                            <div key={idx} className="text-[10px] font-mono mb-1 pb-1 border-b border-gray-100 last:border-0">
+                              <span className={`${
+                                log.type === 'error' ? 'text-red-600' :
+                                log.type === 'warn' ? 'text-yellow-600' :
+                                'text-gray-600'
+                              }`}>
+                                [{log.type}]
+                              </span>
+                              <span className="text-gray-400 ml-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                              <pre className="mt-1 text-gray-900 whitespace-pre-wrap break-words">{log.message}</pre>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Network Logs */}
+                    {diagnostics.network_logs && diagnostics.network_logs.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">
+                          Network Requests ({diagnostics.network_logs.length})
+                        </h4>
+                        <div className="bg-white p-3 rounded max-h-60 overflow-y-auto">
+                          {diagnostics.network_logs.map((log, idx) => (
+                            <div key={idx} className="text-[10px] font-mono mb-2 pb-2 border-b border-gray-100 last:border-0">
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-1.5 py-0.5 rounded ${
+                                  log.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {log.status || 'ERR'}
+                                </span>
+                                <span className="text-blue-600">{log.method}</span>
+                                <span className="text-gray-600">{log.duration}ms</span>
+                              </div>
+                              <div className="mt-1 text-gray-900 break-all">{log.url}</div>
+                              {log.error && (
+                                <div className="mt-1 text-red-600">{log.error}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Closed Info */}
+            {isClosed && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Closure Information</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600">Closed at:</span>
+                    <span className="text-gray-900">{new Date(feedback.closed_at).toLocaleString()}</span>
+                  </div>
+                  {feedback.closed_by && (
+                    <div className="flex items-center space-x-2 text-sm">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Closed by:</span>
+                      <span className="text-gray-900">{feedback.closed_by}</span>
+                    </div>
+                  )}
+                  {feedback.closed_details && (
+                    <div className="mt-3">
+                      <span className="text-xs text-gray-600">Notes:</span>
+                      <p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{feedback.closed_details}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-between">
+            <button
+              onClick={handleDelete}
+              disabled={loading}
+              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium disabled:opacity-50"
+            >
+              Delete
+            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors font-medium"
+                disabled={loading}
+              >
+                Close
+              </button>
+              {!isClosed && (
+                <button
+                  onClick={() => setShowCloseFeedbackModal(true)}
+                  disabled={loading}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Close Feedback</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Close Feedback Modal */}
+      {showCloseFeedbackModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Close Feedback</h3>
+            
+            <div className="space-y-4 mb-6">
+              <p className="text-gray-700">Close this feedback with optional notes.</p>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="mark-solved"
+                  checked={solved}
+                  onChange={(e) => setSolved(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  disabled={loading}
+                />
+                <label htmlFor="mark-solved" className="text-sm text-gray-700 cursor-pointer">
+                  Mark as solved
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (optional)
+                </label>
+                <textarea
+                  value={closeDetails}
+                  onChange={(e) => setCloseDetails(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  placeholder="Add any notes about this feedback..."
+                  rows={3}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowCloseFeedbackModal(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseFeedback}
+                disabled={loading}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Closing...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Close Feedback</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </>
+  );
+}
+

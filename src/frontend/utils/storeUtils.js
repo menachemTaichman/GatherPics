@@ -287,8 +287,7 @@ export function usePendingRequestsCount(eventId) {
       const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_PROFILE);
       if (stored) {
         const profile = JSON.parse(stored);
-        const eventData = profile.events?.[eventId];
-        return Number(eventData?.pending_access_requests_count || 0);
+        return Number(profile.pending_access_requests_count || 0);
       }
     } catch {}
     return 0;

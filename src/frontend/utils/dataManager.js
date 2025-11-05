@@ -1199,6 +1199,24 @@ export const selectors = {
     selectorCache.my_notifications_general = { ref, arr };
     return arr;
   },
+  feedbacksAll: (state) => {
+    const ref = state.entities?.general?.feedbacks || null;
+    if (selectorCache.feedbacks_general && selectorCache.feedbacks_general.ref === ref) {
+      return selectorCache.feedbacks_general.arr;
+    }
+    const arr = ref ? Object.values(ref) : [];
+    selectorCache.feedbacks_general = { ref, arr };
+    return arr;
+  },
+  myFeedbacksAll: (state) => {
+    const ref = state.entities?.general?.my_feedbacks || null;
+    if (selectorCache.my_feedbacks_general && selectorCache.my_feedbacks_general.ref === ref) {
+      return selectorCache.my_feedbacks_general.arr;
+    }
+    const arr = ref ? Object.values(ref) : [];
+    selectorCache.my_feedbacks_general = { ref, arr };
+    return arr;
+  },
   groupImages: (state, eventId, groupId) => {
     const group = state.entities?.[eventId]?.groups?.[groupId];
     const ids = Array.from(group?.images || []);
@@ -1343,6 +1361,22 @@ export function useMyNotificationsList() {
 
 export function useMyNotificationById(notificationId) {
   return useDataStore((state) => (notificationId ? state.entities?.general?.my_notifications?.[notificationId] || null : null));
+}
+
+export function useFeedbacksList() {
+  return useDataStore((state) => selectors.feedbacksAll(state));
+}
+
+export function useFeedbackById(feedbackId) {
+  return useDataStore((state) => (feedbackId ? state.entities?.general?.feedbacks?.[feedbackId] || null : null));
+}
+
+export function useMyFeedbacksList() {
+  return useDataStore((state) => selectors.myFeedbacksAll(state));
+}
+
+export function useMyFeedbackById(feedbackId) {
+  return useDataStore((state) => (feedbackId ? state.entities?.general?.my_feedbacks?.[feedbackId] || null : null));
 }
 
  

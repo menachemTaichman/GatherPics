@@ -141,6 +141,10 @@ export function useEventUrls(eventUrl) {
       if (!eventUrl) return;
       window.location.href = `/${eventUrl}/requests`;
     },
+    navigateToFeedbacks: () => {
+      if (!eventUrl) return;
+      window.location.href = `/${eventUrl}/feedbacks`;
+    },
   }), [eventId, eventUrl]);
 
   

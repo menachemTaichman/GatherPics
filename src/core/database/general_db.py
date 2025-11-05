@@ -126,6 +126,52 @@ class GeneralDB(BaseDB):
                 'accessible_table': 'accessible_my_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
             },
+            'feedbacks': {
+                'primary_key': 'feedback_id',
+                'accessible_table': 'accessible_feedbacks',
+                'fields': [
+                    'profile_id',
+                    'sender_name',
+                    'sender_email',
+                    'communication_consent',
+                    'title',
+                    'type',
+                    'message',
+                    'created_at',
+                    'user_agent',
+                    'ip_address',
+                    'diagnostics',
+                    'notes',
+                    'is_closed',
+                    'solved',
+                    'closed_at',
+                    'closed_by',
+                    'closed_details'
+                ],
+                'serializable': {
+                    'diagnostics': dict,
+                }
+            },
+            'my_feedbacks': {
+                'original_table': 'feedbacks',
+                'primary_key': 'feedback_id',
+                'accessible_table': 'accessible_my_feedbacks',
+                'fields': [
+                    'sender_name',
+                    'sender_email',
+                    'communication_consent',
+                    'title',
+                    'type',
+                    'message',
+                    'created_at',
+                    'is_closed',
+                    'closed_at',
+                    'closed_details'
+                ],
+                'serializable': {
+                    'diagnostics': dict,
+                }
+            },
         }
     
     @classmethod
@@ -139,6 +185,7 @@ class GeneralDB(BaseDB):
                 images_count_limit INTEGER DEFAULT 0,
                 image_size_limit_bytes INTEGER DEFAULT 0
             ''',
+            # TODO: synchronize is_public field
             'profiles': '''
                 profile_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE NOT NULL,
@@ -147,6 +194,7 @@ class GeneralDB(BaseDB):
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
                 can_create_events INTEGER DEFAULT 0,
                 restricted_to_event TEXT DEFAULT NULL,
+                is_public INTEGER DEFAULT 0,
                 UNIQUE (label, restricted_to_event)
                 FOREIGN KEY (restricted_to_event) REFERENCES events(event_id) ON DELETE SET NULL
             ''',
@@ -196,6 +244,28 @@ class GeneralDB(BaseDB):
                 data TEXT,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE
             ''',
+            'feedbacks': '''
+                feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT,
+                sender_name TEXT NOT NULL,
+                sender_email TEXT,
+                communication_consent INTEGER DEFAULT 0,
+                title TEXT,
+                type INTEGER DEFAULT 0,
+                message TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                user_agent TEXT,
+                ip_address TEXT,
+                diagnostics TEXT,
+                notes TEXT,
+                is_closed INTEGER DEFAULT 0,
+                solved INTEGER DEFAULT 0,
+                closed_at DATETIME,
+                closed_by TEXT,
+                closed_details TEXT,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+                FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL
+            ''',
         }
     
     @classmethod
@@ -212,8 +282,12 @@ class GeneralDB(BaseDB):
             'idx_notifications_notification_id': 'notifications(notification_id)',
             'idx_notifications_message': 'notifications(message)',
             'idx_notifications_read': 'notifications(read)',
-            'idx_notifications_created_at': 'notifications(created_at)',
             'idx_notifications_type': 'notifications(type)',
+            'idx_feedbacks_profile_id': 'feedbacks(profile_id)',
+            'idx_feedbacks_is_closed': 'feedbacks(is_closed)',
+            'idx_feedbacks_type': 'feedbacks(type)',
+            'idx_feedbacks_closed_by': 'feedbacks(closed_by)',
+            'idx_feedbacks_solved': 'feedbacks(solved)',
         }
     
     @classmethod
@@ -231,9 +305,11 @@ class GeneralDB(BaseDB):
                     p.can_create_events,
                     p.restricted_to_event,
                     COUNT(mn.notification_id) AS total_notifications,
-                    COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications
-                    FROM profiles p
-                    LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
+                    COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
+                    (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
+                    CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks
+                FROM profiles p
+                LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             """,
@@ -257,6 +333,30 @@ class GeneralDB(BaseDB):
             'accessible_notifications': """
                 SELECT * FROM notifications
                 INNER JOIN accessible_profiles ap ON notifications.profile_id = ap.profile_id
+            """,
+            'my_feedbacks': """
+                SELECT
+                    feedback_id,
+                    sender_name,
+                    sender_email,
+                    communication_consent,
+                    title,
+                    type,
+                    message,
+                    created_at,
+                    is_closed,
+                    closed_at,
+                    closed_details
+                FROM feedbacks
+                WHERE profile_id = cur_profile('profile_id')
+                AND cur_profile('is_public') = 0
+            """,
+            'accessible_my_feedbacks': """
+                SELECT * FROM my_feedbacks
+            """,
+            'accessible_feedbacks': """
+                SELECT * FROM feedbacks
+                WHERE cur_profile('profile_id') = (SELECT developer_id FROM settings WHERE id = 1)
             """,
         }
     
@@ -458,6 +558,109 @@ class GeneralDB(BaseDB):
 
                     DELETE FROM notifications
                     WHERE notification_id = OLD.notification_id;
+                END;
+            """,
+
+            # my_feedbacks
+            'trg_accessible_my_feedbacks_insert': """
+                INSTEAD OF INSERT ON accessible_my_feedbacks
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot create feedback for another profile')
+                    END;
+
+                    INSERT INTO feedbacks (
+                        profile_id,
+                        sender_name,
+                        sender_email,
+                        communication_consent,
+                        title,
+                        type,
+                        message,
+                        created_at,
+                        user_agent,
+                        ip_address,
+                        diagnostics
+                    )
+                    VALUES (
+                        NEW.profile_id,
+                        NEW.sender_name,
+                        NEW.sender_email,
+                        NEW.communication_consent,
+                        NEW.title,
+                        NEW.type,
+                        NEW.message,
+                        COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
+                        NEW.user_agent,
+                        NEW.ip_address,
+                        NEW.diagnostics
+                    );
+                END;
+            """,
+            'trg_accessible_my_feedbacks_update': """
+                INSTEAD OF UPDATE ON accessible_my_feedbacks
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot update feedback for another profile')
+                        WHEN OLD.is_closed = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot update closed feedback')
+                    END;
+
+                    UPDATE feedbacks SET
+                        title = NEW.title,
+                        type = NEW.type,
+                        message = NEW.message,
+                        communication_consent = NEW.communication_consent
+                    WHERE feedback_id = OLD.feedback_id;
+                END;
+            """,
+            'trg_accessible_my_feedbacks_delete': """
+                INSTEAD OF DELETE ON accessible_my_feedbacks
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete feedback for another profile')
+                        WHEN OLD.is_closed = 1 THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete closed feedback')
+                    END;
+
+                    DELETE FROM feedbacks
+                    WHERE feedback_id = OLD.feedback_id;
+                END;
+            """,
+
+            # accessible_feedbacks
+            'trg_accessible_feedbacks_update': """
+                INSTEAD OF UPDATE ON accessible_feedbacks
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Permission denied: only developer can update feedbacks')
+                    END;
+
+                    UPDATE feedbacks SET
+                        type = NEW.type,
+                        notes = NEW.notes,
+                        is_closed = NEW.is_closed,
+                        solved = NEW.solved,
+                        closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
+                        closed_by = cur_profile('profile_id'),
+                        closed_details = NEW.closed_details
+                    WHERE feedback_id = OLD.feedback_id;
+                END;
+            """,
+            'trg_accessible_feedbacks_delete': """
+                INSTEAD OF DELETE ON accessible_feedbacks
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Permission denied: only developer can delete feedbacks')
+                    END;
+
+                    DELETE FROM feedbacks
+                    WHERE feedback_id = OLD.feedback_id;
                 END;
             """,
 
