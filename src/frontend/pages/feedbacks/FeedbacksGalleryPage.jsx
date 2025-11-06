@@ -10,8 +10,10 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { ConfirmDelete } from '../../components/modals';
 import { FeedbackDetailModal } from '../../components/feedbacks';
 import { useAuth } from '../../contexts/authContext';
+import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useFeedbackViewerController from '../../hooks/useFeedbackViewerController';
+import Header from '../../components/layout/Header';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -31,7 +33,7 @@ function formatDateTime(dateString) {
 }
 
 export default function FeedbacksGalleryPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const [deleteFeedback, setDeleteFeedback] = useState(null);
   const [deleteAll, setDeleteAll] = useState(false);
   const [sortBy, setSortBy] = useState(() => getPreference('FeedbacksGallery.sortBy', 'created_at'));
@@ -39,6 +41,13 @@ export default function FeedbacksGalleryPage() {
   const [filterStatus, setFilterStatus] = useState(() => getPreference('FeedbacksGallery.filterStatus', 'all'));
   
   const { showToast } = useToast();
+
+  // Auto-show login modal when not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      openLoginModal();
+    }
+  }, [isAuthenticated, isLoading, openLoginModal]);
   
   // Initialize Feedback Viewer controller
   const { isOpen: viewerOpen, open: openViewer, viewerProps } = useFeedbackViewerController({
@@ -204,7 +213,8 @@ export default function FeedbacksGalleryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      <Header />
+      {/* Page Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between mb-4">
@@ -462,6 +472,14 @@ export default function FeedbacksGalleryPage() {
           caption="This action cannot be undone. All displayed feedbacks will be permanently deleted."
         />
       )}
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
     </div>
   );
 }

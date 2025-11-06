@@ -1,8 +1,21 @@
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import { MessageSquare, LayoutDashboard } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Header from '../../components/layout/Header';
+import { useAuth } from '../../contexts/authContext';
+import { LoginModal } from '../../components/auth';
 
 export default function DashboardPage() {
+  const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+
+  // Auto-show login modal when not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      openLoginModal();
+    }
+  }, [isAuthenticated, isLoading, openLoginModal]);
+
   const sections = [
     {
       id: 'feedbacks',
@@ -16,6 +29,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <Header />
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-4">
@@ -35,10 +49,12 @@ export default function DashboardPage() {
               <Link
                 key={section.id}
                 to={section.link}
-                className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group"
+                className={`block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group ${
+                  !isAuthenticated ? 'opacity-50 pointer-events-none' : ''
+                }`}
               >
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
+                  whileHover={{ scale: isAuthenticated ? 1.02 : 1 }}
                   transition={{ duration: 0.2 }}
                   className="p-6"
                 >
@@ -69,6 +85,14 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
     </div>
   );
 }

@@ -29,7 +29,7 @@ export default function SettingsManager() {
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
   const permissions = usePermissions();
-  const { logout } = useAuth();
+  const { logout, isAuthenticated, openLoginModal } = useAuth();
   
   // Profile management state
   const currentProfile = getCurrentProfile();
@@ -108,28 +108,28 @@ export default function SettingsManager() {
 
   // Fetch profiles when profiles tab is opened
   useEffect(() => {
-    if (isOpen && activeTab === 'profiles' && eventUrl) {
+    if (isOpen && isAuthenticated && activeTab === 'profiles' && eventUrl) {
       fetchProfiles();
       if (permissions.isProfilesManager) {
         fetchCurrentProfile();
       }
     }
-  }, [isOpen, activeTab, eventUrl, permissions.isProfilesManager]);
+  }, [isOpen, isAuthenticated, activeTab, eventUrl, permissions.isProfilesManager]);
 
   // Fetch current profile when account tab is opened
   useEffect(() => {
-    if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.profile_id) {
+    if (isOpen && isAuthenticated && activeTab === 'account' && eventUrl && currentProfile?.profile_id) {
       fetchCurrentProfile();
       fetchMyRequests();
     }
-  }, [isOpen, activeTab, eventUrl, currentProfile?.id, currentProfile?.is_public, permissions.enable_new_requests]);
+  }, [isOpen, isAuthenticated, activeTab, eventUrl, currentProfile?.id, currentProfile?.is_public, permissions.enable_new_requests]);
 
   // Fetch my feedbacks when account or feedback tab is opened
   useEffect(() => {
-    if (isOpen && (activeTab === 'account' || activeTab === 'feedback') && currentProfile?.is_public !== 1) {
+    if (isOpen && isAuthenticated && (activeTab === 'account' || activeTab === 'feedback') && currentProfile?.is_public !== 1) {
       fetchMyFeedbacks();
     }
-  }, [isOpen, activeTab, currentProfile?.is_public]);
+  }, [isOpen, isAuthenticated, activeTab, currentProfile?.is_public]);
 
 
   const fetchCurrentProfile = async () => {
@@ -218,7 +218,7 @@ export default function SettingsManager() {
     customKeyHandler: handleSettingsKeys
   });
 
-  // Filter tabs based on permissions
+  // Filter tabs based on permissions and authentication
   const allTabs = [
     { id: 'account', label: 'Account', icon: User },
     { id: 'profiles', label: 'Profiles', icon: User },
@@ -229,6 +229,10 @@ export default function SettingsManager() {
   const tabs = allTabs.filter(tab => {
     // Hide profiles tab if not a profiles manager
     if (tab.id === 'profiles' && !permissions.isProfilesManager) {
+      return false;
+    }
+    // Hide feedback tab if not authenticated
+    if (tab.id === 'feedback' && !isAuthenticated) {
       return false;
     }
     return true;
@@ -348,6 +352,11 @@ export default function SettingsManager() {
   const handleSignOut = async () => {
     await logout();
     setIsOpen(false); // Close settings modal
+  };
+
+  const handleSignIn = () => {
+    setIsOpen(false); // Close settings modal
+    openLoginModal(); // Open login modal
   };
 
   // Public access code management functions
@@ -614,89 +623,105 @@ export default function SettingsManager() {
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
-                        {/* Current Profile Section (compact with sign out) */}
-                        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="text-base text-gray-700">
-                              Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {currentProfile?.is_public !== 1 && (
-                                <button
-                                  onClick={() => setShowChangePasswordModal(true)}
-                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-blue-700 shadow-sm"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                  <span>Change Password</span>
-                                </button>
-                              )}
-                              <button
-                                onClick={handleSignOut}
-                                className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
-                              >
-                                <LogOut className="w-4 h-4" />
-                                <span>Sign Out</span>
-                              </button>
-                            </div>
-                          </div>
-                          {currentProfile?.is_public !== 1 && (
-                            <div 
-                              className="flex items-center space-x-1.5"
-                              onKeyDown={(e) => {
-                                if (editingEmail) {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleEmailSave();
-                                  } else if (e.key === 'Escape') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleEmailCancel();
-                                  }
-                                }
-                              }}
+                        {!isAuthenticated ? (
+                          /* Not Authenticated - Show Sign In */
+                          <div className="bg-gray-50 rounded-lg p-8 text-center">
+                            <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Not Signed In</h3>
+                            <p className="text-gray-600 mb-4">Sign in to access your account settings</p>
+                            <button
+                              onClick={handleSignIn}
+                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center space-x-2"
                             >
-                              <span className="text-sm text-gray-600">Email:</span>
-                              {editingEmail ? (
-                                <>
-                                  <input
-                                    type="email"
-                                    value={currentEmail}
-                                    onChange={(e) => setCurrentEmail(e.target.value)}
-                                    className="w-64 px-2 py-1 text-sm border border-blue-500 rounded focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-                                    placeholder="Enter email (optional)"
-                                    autoFocus
-                                  />
+                              <User className="w-4 h-4" />
+                              <span>Sign In</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Current Profile Section (compact with sign out) */}
+                            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-base text-gray-700">
+                                  Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {currentProfile?.is_public !== 1 && (
+                                    <button
+                                      onClick={() => setShowChangePasswordModal(true)}
+                                      className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-blue-700 shadow-sm"
+                                    >
+                                      <Lock className="w-4 h-4" />
+                                      <span>Change Password</span>
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={handleEmailSave}
-                                    className="p-1 hover:bg-green-100 rounded transition-colors"
-                                    title="Save (Enter)"
+                                    onClick={handleSignOut}
+                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
                                   >
-                                    <Check className="w-4 h-4 text-green-600" />
+                                    <LogOut className="w-4 h-4" />
+                                    <span>Sign Out</span>
                                   </button>
-                                  <button
-                                    onClick={handleEmailCancel}
-                                    className="p-1 hover:bg-red-100 rounded transition-colors"
-                                    title="Cancel (Esc)"
-                                  >
-                                    <X className="w-4 h-4 text-red-600" />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-sm font-medium text-gray-900">{currentProfile?.email || 'Not set'}</span>
-                                  <button
-                                    onClick={handleEmailEdit}
-                                    className="p-1 hover:bg-blue-100 rounded transition-colors"
-                                    title="Edit email"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                                  </button>
-                                </>
+                                </div>
+                              </div>
+                              {currentProfile?.is_public !== 1 && (
+                                <div 
+                                  className="flex items-center space-x-1.5"
+                                  onKeyDown={(e) => {
+                                    if (editingEmail) {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleEmailSave();
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleEmailCancel();
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <span className="text-sm text-gray-600">Email:</span>
+                                  {editingEmail ? (
+                                    <>
+                                      <input
+                                        type="email"
+                                        value={currentEmail}
+                                        onChange={(e) => setCurrentEmail(e.target.value)}
+                                        className="w-64 px-2 py-1 text-sm border border-blue-500 rounded focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                                        placeholder="Enter email (optional)"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={handleEmailSave}
+                                        className="p-1 hover:bg-green-100 rounded transition-colors"
+                                        title="Save (Enter)"
+                                      >
+                                        <Check className="w-4 h-4 text-green-600" />
+                                      </button>
+                                      <button
+                                        onClick={handleEmailCancel}
+                                        className="p-1 hover:bg-red-100 rounded transition-colors"
+                                        title="Cancel (Esc)"
+                                      >
+                                        <X className="w-4 h-4 text-red-600" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-sm font-medium text-gray-900">{currentProfile?.email || 'Not set'}</span>
+                                      <button
+                                        onClick={handleEmailEdit}
+                                        className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                        title="Edit email"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
 
                         {/* Include Archived */}
                         <PermissionGate requires="hasArchiveAlbum">
@@ -931,7 +956,8 @@ export default function SettingsManager() {
                             </div>
                           );
                         })()}
-
+                          </>
+                        )}
                         
                       </motion.div>
                     )}

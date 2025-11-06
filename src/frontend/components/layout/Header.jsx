@@ -112,18 +112,22 @@ export default function Header() {
           {/* Navigation */}
           <nav className="flex items-center space-x-3">
             <Link
-              to={getEventPath('')}
+              to={eventUrl ? getEventPath('') : '/'}
               className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                location.pathname === `/${eventUrl}` || location.pathname === `/${eventUrl}/`
-                  ? 'bg-primary-100 text-primary-700' 
-                  : 'hover:bg-gray-100 text-gray-700'
+                eventUrl 
+                  ? (location.pathname === `/${eventUrl}` || location.pathname === `/${eventUrl}/`
+                      ? 'bg-primary-100 text-primary-700' 
+                      : 'hover:bg-gray-100 text-gray-700')
+                  : (location.pathname === '/' 
+                      ? 'bg-primary-100 text-primary-700' 
+                      : 'hover:bg-gray-100 text-gray-700')
               }`}
               title="Home"
             >
               <Home className="w-4 h-4" />
             </Link>
 
-            {permissions.has_groups && (
+            {eventUrl && permissions.has_groups && (
               <Link
                 to={getEventPath('/people')}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -137,8 +141,7 @@ export default function Header() {
               </Link>
             )}
 
-            {/* Albums Navigation */}
-            {(permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit) && (
+            {eventUrl && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit) && (
               <Link
                 to={getEventPath('/albums')}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -152,7 +155,7 @@ export default function Header() {
               </Link>
             )}
 
-            {permissions.has_images && (
+            {eventUrl && permissions.has_images && (
               <Link
                 to={getEventPath('/timeline')}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -166,29 +169,31 @@ export default function Header() {
               </Link>
             )}
 
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggle();
-              }}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
-              title="Bucket"
-              animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
-              transition={{ duration: 0.4 }}
-              key={lastPulseTs}
-              data-bucket-toggle="true"
-            >
-              <div className="relative">
-                <ShoppingBag className="w-4 h-4" />
-                {queue.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
-                    {queue.length}
-                  </span>
-                )}
-              </div>
-            </motion.button>
+            {eventUrl && (
+              <motion.button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle();
+                }}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
+                title="Bucket"
+                animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
+                transition={{ duration: 0.4 }}
+                key={lastPulseTs}
+                data-bucket-toggle="true"
+              >
+                <div className="relative">
+                  <ShoppingBag className="w-4 h-4" />
+                  {queue.length > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+                      {queue.length}
+                    </span>
+                  )}
+                </div>
+              </motion.button>
+            )}
 
-            {permissions.canUploadAndDeleteImages && (
+            {eventUrl && permissions.canUploadAndDeleteImages && (
               <Link
                 to={getEventPath('/uploads')}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
