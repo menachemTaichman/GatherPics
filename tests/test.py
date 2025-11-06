@@ -275,9 +275,8 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-results = general_models.get_entities('events')
-print(results)
-# general_models.edit('events', event_id, {'is_public': 0})
+# recreate_views_triggers_and_indexes(general_db)
+general_models.edit('events', event_id, {'is_public': 0})
 
 gm = GeneralModels(profile_id=None)
 results = gm.get_entities('events')

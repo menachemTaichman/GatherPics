@@ -48,6 +48,7 @@ export default function RequestFormModal({
   const currentProfileId = currentProfile?.id || currentProfile?.profile_id;
   const currentProfileHasEmail = !!(currentProfile?.email);
   const allGroups = useGroupsList(eventId);
+  const currentProfileIsPublic = currentProfile?.is_public === 1;
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-form-modal';
@@ -196,7 +197,7 @@ export default function RequestFormModal({
       setInitialGroups(new Set(groupIds)); // Store initial groups for calculating diff
     } else {
       // Creating new request - automatically determine type based on profile
-      const requestType = currentProfile?.is_public ? 'new' : 'own';
+      const requestType = currentProfileIsPublic ? 'new' : 'own';
       setFormData({
         requestType: requestType,
         applicant_name: requestType === 'new' ? '' : (currentProfile?.label || ''),
@@ -212,7 +213,7 @@ export default function RequestFormModal({
     }
     setSearchTerm('');
     // For 'own' requests, go directly to groups step (step 2). For 'new', start at step 1
-    const calculatedRequestType = requestData && requestDataId ? 'own' : (currentProfile?.is_public ? 'new' : 'own');
+    const calculatedRequestType = requestData && requestDataId ? 'own' : (currentProfileIsPublic ? 'new' : 'own');
     setCurrentStep(calculatedRequestType === 'own' ? 2 : 1);
   }, [
     isOpen, 
@@ -228,7 +229,7 @@ export default function RequestFormModal({
     requestDataApplicantProfileId,
     requestDataCommunicationConsent,
     currentProfile?.id,
-    currentProfile?.is_public,
+    currentProfileIsPublic,
     currentProfile?.label
   ]);
 

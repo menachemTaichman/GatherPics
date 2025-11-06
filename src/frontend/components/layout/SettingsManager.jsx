@@ -19,6 +19,7 @@ import { RequestFormModal } from '../requests';
 import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -531,13 +532,13 @@ export default function SettingsManager() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
+        className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
         title="Settings"
       >
         <div className="relative">
           <Settings className="w-4 h-4" />
           {settingsBadgeCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+            <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
               {settingsBadgeCount}
             </span>
           )}
@@ -1128,13 +1129,13 @@ export default function SettingsManager() {
                         className="space-y-6"
                       >
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About Face Gallery</h3>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About {APP_CONFIG.name}</h3>
                           
                           <div className="space-y-4">
                             {/* App Info */}
                             <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6">
-                              <h4 className="text-2xl font-bold text-primary-900 mb-2">Face Gallery</h4>
-                              <p className="text-primary-700 mb-4">AI-Powered Face Recognition System</p>
+                              <h4 className="text-2xl font-bold text-primary-900 mb-2">{APP_CONFIG.name}</h4>
+                              <p className="text-primary-700 mb-4">{APP_CONFIG.description}</p>
                               <p className="text-sm text-primary-600">
                                 An intelligent photo management system that automatically organizes your photos by recognizing faces and creating smart albums.
                               </p>
@@ -1157,7 +1158,7 @@ export default function SettingsManager() {
                             <div className="bg-gray-50 rounded-lg p-6">
                               <h4 className="font-semibold text-gray-900 mb-3">Copyright</h4>
                               <p className="text-sm text-gray-600">
-                                © {new Date().getFullYear()} Face Gallery. All rights reserved.
+                                © {new Date().getFullYear()} {APP_CONFIG.name}. All rights reserved.
                               </p>
                               <p className="text-xs text-gray-500 mt-2">
                                 This software is provided as-is without any warranties.

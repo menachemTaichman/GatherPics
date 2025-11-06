@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function LoadingSpinner() {
   return (
@@ -10,7 +11,7 @@ export default function LoadingSpinner() {
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
         />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Loading Face Gallery
+          Loading {APP_CONFIG.name}
         </h2>
         <p className="text-gray-600">
           Preparing your beautiful face collection...

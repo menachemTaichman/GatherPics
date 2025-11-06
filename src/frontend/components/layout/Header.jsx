@@ -11,6 +11,7 @@ import { getCurrentProfile } from '../../utils/profileService';
 import { useDataStore } from '../../utils/dataManager';
 import { useAuth } from '../../contexts/authContext';
 import { usePendingRequestsCount } from '../../utils/storeUtils';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function Header() {
   const location = useLocation();
@@ -85,7 +86,7 @@ export default function Header() {
 
   return (
     <motion.header 
-      className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40"
+      className="bg-white/90 backdrop-blur-md shadow-sm border-b border-gray-200 sticky top-0 z-40"
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5 }}
@@ -93,33 +94,33 @@ export default function Header() {
       <div className="w-full px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Title */}
-          <Link to={getEventPath('/people')} className="flex items-center space-x-3 group">
+          <Link to="/" className="flex items-center space-x-3 group">
             <motion.div
-              className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center"
+              className="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-700 rounded-lg flex items-center justify-center shadow-sm"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Users className="w-6 h-6 text-white" />
+              <Users className="w-5 h-5 text-white" />
             </motion.div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
-                Face Gallery
+              <h1 className="text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                {APP_CONFIG.name}
               </h1>
-              <p className="text-sm text-gray-500">AI-Powered Face Recognition</p>
+              <p className="text-xs text-gray-500">{APP_CONFIG.tagline}</p>
             </div>
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center space-x-3">
+          <nav className="flex items-center space-x-2">
             <Link
               to={eventUrl ? getEventPath('') : '/'}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+              className={`w-9 h-9 border border-transparent rounded-lg transition-all flex items-center justify-center ${
                 eventUrl 
                   ? (location.pathname === `/${eventUrl}` || location.pathname === `/${eventUrl}/`
-                      ? 'bg-primary-100 text-primary-700' 
+                      ? 'bg-primary-600 text-white shadow-sm' 
                       : 'hover:bg-gray-100 text-gray-700')
                   : (location.pathname === '/' 
-                      ? 'bg-primary-100 text-primary-700' 
+                      ? 'bg-primary-600 text-white shadow-sm' 
                       : 'hover:bg-gray-100 text-gray-700')
               }`}
               title="Home"
@@ -130,9 +131,9 @@ export default function Header() {
             {eventUrl && permissions.has_groups && (
               <Link
                 to={getEventPath('/people')}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all flex items-center justify-center ${
                   location.pathname.includes('/people') 
-                    ? 'bg-primary-100 text-primary-700' 
+                    ? 'bg-primary-600 text-white shadow-sm' 
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
                 title="People"
@@ -144,9 +145,9 @@ export default function Header() {
             {eventUrl && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit) && (
               <Link
                 to={getEventPath('/albums')}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all flex items-center justify-center ${
                   location.pathname.includes('/albums') 
-                    ? 'bg-primary-100 text-primary-700' 
+                    ? 'bg-primary-600 text-white shadow-sm' 
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
                 title="Albums"
@@ -158,9 +159,9 @@ export default function Header() {
             {eventUrl && permissions.has_images && (
               <Link
                 to={getEventPath('/timeline')}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all flex items-center justify-center ${
                   location.pathname.includes('/timeline')
-                    ? 'bg-primary-100 text-primary-700'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
                 title="Timeline"
@@ -175,7 +176,7 @@ export default function Header() {
                   e.stopPropagation();
                   toggle();
                 }}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center ${isOpen ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-700'}`}
                 title="Bucket"
                 animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
                 transition={{ duration: 0.4 }}
@@ -185,7 +186,7 @@ export default function Header() {
                 <div className="relative">
                   <ShoppingBag className="w-4 h-4" />
                   {queue.length > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
                       {queue.length}
                     </span>
                   )}
@@ -196,9 +197,9 @@ export default function Header() {
             {eventUrl && permissions.canUploadAndDeleteImages && (
               <Link
                 to={getEventPath('/uploads')}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all flex items-center justify-center ${
                   location.pathname.includes('/uploads')
-                    ? 'bg-primary-100 text-primary-700'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
                 title="Uploads"
@@ -214,13 +215,13 @@ export default function Header() {
               <button
                 ref={setNotifButtonRef}
                 onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
-                className={`w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center ${notifOpen ? 'text-primary-700 bg-primary-100' : 'text-gray-700'}`}
+                className={`w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center ${notifOpen ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-700'}`}
                 title="Notifications"
               >
                 <div className="relative">
                   <Bell className="w-4 h-4" />
                   {(effectiveCounts?.unreadCount || 0) > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+                    <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
                       {effectiveCounts.unreadCount}
                     </span>
                   )}

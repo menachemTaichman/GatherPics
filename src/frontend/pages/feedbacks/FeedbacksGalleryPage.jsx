@@ -14,6 +14,7 @@ import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useFeedbackViewerController from '../../hooks/useFeedbackViewerController';
 import Header from '../../components/layout/Header';
+import { APP_CONFIG } from '../../config/appConfig';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -41,6 +42,11 @@ export default function FeedbacksGalleryPage() {
   const [filterStatus, setFilterStatus] = useState(() => getPreference('FeedbacksGallery.filterStatus', 'all'));
   
   const { showToast } = useToast();
+
+  // Set document title
+  useEffect(() => {
+    document.title = `Feedbacks | ${APP_CONFIG.name}`;
+  }, []);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {

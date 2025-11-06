@@ -1,16 +1,16 @@
 from flask import Blueprint, jsonify, request
 
-from src.backend.middleware.auth import require_auth
+from src.backend.middleware.auth import require_auth, optional_auth
 from src.backend.helpers import get_general_models, Forbidden, DatabaseError
 
 event_bp = Blueprint('events', __name__, url_prefix='/api')
 
 @event_bp.route('/events', methods=['GET'])
+@optional_auth
 def get_events():
-    """List all events (id->event map). Public endpoint (no auth) for resolver and home."""
-    gm = get_general_models(profile_id=None)
+    """List all events (id->event map). Optional auth for profile context."""
+    gm = get_general_models()
     try:
-        # Return as { id: { ...event } }
         events = gm.get_entities('events')
         return jsonify(events or {})
     except Forbidden as e:

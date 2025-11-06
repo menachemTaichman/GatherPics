@@ -1,10 +1,12 @@
 import { create } from 'zustand';
+import { getStoragePrefix } from '../config/appConfig';
 
-// Centralized storage keys (prefix can be changed easily)
+// Centralized storage keys (prefix derived from app name)
+const prefix = getStoragePrefix();
 export const STORAGE_KEYS = {
-  ENTITIES: 'frw_entities',
-  CURRENT_PROFILE: 'frw_currentProfile',
-  PREFERENCES: 'frw_preferences',
+  ENTITIES: `${prefix}_entities`,
+  CURRENT_PROFILE: `${prefix}_currentProfile`,
+  PREFERENCES: `${prefix}_preferences`,
 };
 
 export const CHANGE_TYPES = {

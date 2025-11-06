@@ -37,7 +37,7 @@ function withDedupe(key, factory) {
 api.interceptors.request.use(
   async (config) => {
     // Skip auth header for public endpoints
-    const publicEndpoints = ['/api/events', '/api/events/resolve', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
+    const publicEndpoints = ['/api/events/resolve', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
     const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
     
     if (!isPublicEndpoint) {

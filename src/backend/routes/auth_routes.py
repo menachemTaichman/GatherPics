@@ -62,34 +62,6 @@ def create_auth_response(access_token: str, profile_id: str, expires_days: int =
     
     return response
 
-@auth_bp.route("/events", methods=["GET"])
-def get_events():
-    """Get all available events."""
-    try:
-        general_models = get_general_models()
-        events = general_models.get_entities('events')
-        return jsonify(events)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@auth_bp.route("/events/resolve", methods=["GET"])
-def resolve_event_url():
-    """Resolve an event URL to its ID and basic info."""
-    event_url = request.args.get('url')
-    if not event_url:
-        return jsonify({"error": "URL parameter is required"}), 400
-    
-    try:
-        general_models = get_general_models()
-        event = general_models.get_event_by_url(event_url)
-        
-        if event:
-            return jsonify({'event': event})
-        else:
-            return jsonify({"error": f"Event not found: {event_url}"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
 @auth_bp.route("/auth/login", methods=["POST"])
 def login():
     """Authenticate user and issue access + refresh tokens."""

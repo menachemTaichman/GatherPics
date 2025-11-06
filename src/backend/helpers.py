@@ -4,6 +4,14 @@ from src.core.models.general_models import GeneralModels
 from src.core.services.event import Event, ChildOperation
 from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 
+# Export core classes for use in routes
+Event = Event
+ChildOperation = ChildOperation
+Forbidden = Forbidden
+DatabaseError = DatabaseError
+DBPolicyError = DBPolicyError
+
+# Export helper functions for use in routes
 def _parse_bool(val: str | None, default: bool) -> bool:
     """Parse a boolean value from a string, with a default."""
     if val is None:

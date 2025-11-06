@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { getCurrentProfile } from '../utils/profileService';
+import { useEventId } from '../utils/storeUtils';
 
 /**
  * Custom hook to get current user's permissions
  * Returns an object with boolean flags for all permission checks
  * 
+ * @param {string} eventUrl - Optional event URL to get event-specific permissions
  * @returns {Object} Permission flags object
  * @property {boolean} canCreateEvents - Can create new events (from general_db)
  * @property {boolean} isProfilesManager - Can manage other profiles (hierarchy_rank != 0)
@@ -17,7 +20,10 @@ import { getCurrentProfile } from '../utils/profileService';
  * @property {boolean} has_images - Has access to images/timeline
  * @property {boolean} enable_new_requests - Can manage access requests
  */
-export function usePermissions() {
+export function usePermissions(eventUrl = null) {
+  const params = useParams();
+  const effectiveEventUrl = eventUrl || params.eventUrl;
+  const eventId = useEventId(effectiveEventUrl);
   const profile = getCurrentProfile();
 
   const permissions = useMemo(() => {
@@ -37,30 +43,33 @@ export function usePermissions() {
       };
     }
 
+    // Get event-specific permissions from profile.events[eventId]
+    const eventPermissions = (eventId && profile.events && profile.events[eventId]) || {};
+
     return {
-      // From general_db profiles table
+      // From general_db profiles table (at root level)
       canCreateEvents: Boolean(profile.can_create_events),
       
       // From event_db - derived from hierarchy_rank in profiles_details view
-      isProfilesManager: Boolean(profile.is_profiles_manager),
+      isProfilesManager: Boolean(eventPermissions.is_profiles_manager),
       
       // From event_db profiles table
-      canUploadAndDeleteImages: Boolean(profile.can_upload_and_delete_images),
-      canEdit: Boolean(profile.can_edit),
+      canUploadAndDeleteImages: Boolean(eventPermissions.can_upload_and_delete_images),
+      canEdit: Boolean(eventPermissions.can_edit),
       
       // From event_db - calculated in profiles_details view
-      hasArchiveAlbum: Boolean(profile.has_archive_album),
-      hasFavoritesAlbum: Boolean(profile.has_favorites_album),
+      hasArchiveAlbum: Boolean(eventPermissions.has_archive_album),
+      hasFavoritesAlbum: Boolean(eventPermissions.has_favorites_album),
       
       // Entity access flags
-      has_groups: Boolean(profile.has_groups),
-      has_albums: Boolean(profile.has_albums),
-      has_images: Boolean(profile.has_images),
+      has_groups: Boolean(eventPermissions.has_groups),
+      has_albums: Boolean(eventPermissions.has_albums),
+      has_images: Boolean(eventPermissions.has_images),
       
       // Enable requests flag
-      enable_new_requests: Boolean(profile.enable_new_requests),
+      enable_new_requests: Boolean(eventPermissions.enable_new_requests),
     };
-  }, [profile]);
+  }, [profile, eventId]);
 
   return permissions;
 }

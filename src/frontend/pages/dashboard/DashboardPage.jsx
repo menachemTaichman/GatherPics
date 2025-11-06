@@ -5,9 +5,15 @@ import { motion } from 'framer-motion';
 import Header from '../../components/layout/Header';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+
+  // Set document title
+  useEffect(() => {
+    document.title = `Dashboard | ${APP_CONFIG.name}`;
+  }, []);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {

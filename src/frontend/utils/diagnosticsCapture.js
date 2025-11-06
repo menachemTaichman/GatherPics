@@ -118,7 +118,7 @@ class DiagnosticsCapture {
    * Intercept network requests (fetch API)
    */
   _interceptNetwork() {
-    this.originalFetch = window.fetch;
+    this.originalFetch = window.fetch.bind(window);
     
     window.fetch = async (...args) => {
       const startTime = Date.now();

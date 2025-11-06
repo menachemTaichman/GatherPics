@@ -11,57 +11,29 @@ class GeneralModels(BaseModels):
 
     def __init__(self, profile_id: str | None = None):
         self.db = GeneralDB(profile_id)
-        self.profile_id = profile_id
 
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
-        general_profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        events_ids = self.get_childs('profiles', general_profile['profile_id'], 'events', return_ids=True)
-        general_profile['events'] = events_ids
+        profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
+        events = self.get_childs('profiles', profile['profile_id'], 'events')
+        profile['events'] = events
               
         if event_id:
             event = self.get_event(event_id)
             profile_event = event.models.get_current_profile()
             profile_event.pop('profile_id')
             profile_event.pop('label')
-            return {**general_profile, **profile_event}
-        else:
-            return general_profile
+            profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
 
-    @property
-    def profile_id(self) -> str | None:
-        return self._profile_id
-    
-    @profile_id.setter
-    def profile_id(self, profile_id: str | None):
-        """
-        Set the current profile id for access control
-        Allow profile_id to be None for general operations, but raise an error if the id provided is not in the profiles table.
-        """
-        if profile_id is not None:
-            query = 'SELECT profile_id FROM profiles WHERE profile_id = ?'
-            profile_id = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
-            if not profile_id:
-                raise Exception(f'Profile {profile_id} not found')
-
-        self._profile_id = profile_id
-
-    @property
-    def profile_context(self) -> dict:
-        """Get the current profile id, ensuring it is set."""
-        if self.profile_id is None:
-            raise Exception('Profile id is not set')
-        profile = self.get_entities('profiles', self.profile_id)
-        profile['profile_id'] = self.profile_id
         return profile
-    
+
     def get_event(self, event_id: str) -> Event:
         """Get an event."""
         event = self.get_entities('events', event_id)
         if not event:
             raise Forbidden('Event not found')
         
-        return Event(event_id, self.profile_id)
+        return Event(event_id, self.db.profile_context['profile_id'])
     
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists."""
@@ -91,7 +63,7 @@ class GeneralModels(BaseModels):
         return profile.get('is_public')
 
     # TODO: remove
-    def create_profile(self, label: str, password: str, hierarchy_rank: int, email: str | None = None, *, can_create_events: bool = False, event_id: str | None = None, can_delete: bool = False) -> str:
+    def create_profile(self, label: str, password: str, hierarchy_rank: int, email: str | None = None, *, can_create_events: bool = False, event_id: str | None = None, can_delete_event: bool = False) -> str:
         """
         Create a new profile.
         Returns:
@@ -108,7 +80,7 @@ class GeneralModels(BaseModels):
         profile_id = self.generate_id()
         self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'email': email, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
         if event_id:
-            self.add_profile_to_event(profile_id, event_id, can_delete)
+            self.add_profile_to_event(profile_id, event_id, can_delete_event)
 
         preferences = GeneralDB.CONSTANTS()['profiles_preferences']
         for preference_group, keys_dict in preferences.items():
@@ -255,9 +227,9 @@ class GeneralModels(BaseModels):
         return applicant_profile_id
 
     # Profile-Event management
-    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete: bool = True):
+    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
-        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete': can_delete})
+        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
@@ -272,7 +244,7 @@ class GeneralModels(BaseModels):
         if not event_data:
             return
 
-        event = Event(event_id, self.profile_id)
+        event = self.get_event(event_id)
         hierarchy_rank = -1
         label = None
         if upsert:
@@ -303,18 +275,18 @@ class GeneralModels(BaseModels):
         event_id = self.add('events', data)
 
         Event.create_event(event_id)
-        self.add_profile_to_event(developer_id, event_id, can_delete=True)
+        self.add_profile_to_event(developer_id, event_id, can_delete_event=True)
         profile_id = self.db.profile_context['profile_id']
         if developer_id != profile_id:
-            self.add_profile_to_event(profile_id, event_id, can_delete=True)
+            self.add_profile_to_event(profile_id, event_id, can_delete_event=True)
 
         return event_id
     
     def delete_event(self, event_id: str):
         """Delete an event and its associated data."""
         profile_id = self.db.profile_context['profile_id']
-        can_delete = self.get_childs('events', event_id, 'profiles', [profile_id]).get(profile_id, {}).get('can_delete')
-        if not can_delete:
+        can_delete_event = self.get_childs('events', event_id, 'profiles', [profile_id]).get(profile_id, {}).get('can_delete_event')
+        if not can_delete_event:
             raise Forbidden('Profile does not have permission to delete this event')
 
         Event.delete_event(event_id)         
@@ -333,7 +305,7 @@ class GeneralModels(BaseModels):
 
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process images for an event."""
-        event = Event(event_id, self.profile_context['profile_id'])
+        event = self.get_event(event_id)
         event_details = self.get_entities('events', event_id)
         return event.process_new_images(
             file_names=file_names,
@@ -345,7 +317,7 @@ class GeneralModels(BaseModels):
 
     def create_access_request(self, event_id: str, request_data: dict, group_ids: list[str]) -> str:
         """Create an access request."""
-        event = Event(event_id, self.profile_context['profile_id'])
+        event = self.get_event(event_id)
         request_id = event.models.add('my_access_requests', request_data)
         if group_ids and isinstance(group_ids, list):
             event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)

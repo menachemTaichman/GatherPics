@@ -86,21 +86,21 @@ class GeneralDB(BaseDB):
                 'accessible_table': 'accessible_events',
                 'fields': ['name', 'date', 'url', 'is_public', 'images_count_limit', 'image_size_limit_bytes'],
                 'relations': {
-                    'profiles': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
+                    'profiles': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete_event', 'can_edit_event']},
                 },
             },
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event'],
+                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public'],
                 'relations': {
-                    'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
+                    'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete_event', 'can_edit_event']},
                 },
             },
             'profiles_events': {
                 'primary_key': ['profile_id', 'event_id'],
                 'accessible_table': 'accessible_profiles_events',
-                'fields': ['can_edit', 'can_delete'],
+                'fields': ['can_edit_event', 'can_delete_event'],
             },
             'profiles_preferences': {
                 'primary_key': ['profile_id', 'preference_group', 'preference_key'],
@@ -210,8 +210,8 @@ class GeneralDB(BaseDB):
             'profiles_events': '''
                 profile_id TEXT NOT NULL,
                 event_id TEXT NOT NULL,
-                can_edit INTEGER DEFAULT 0,
-                can_delete INTEGER DEFAULT 0,
+                can_edit_event INTEGER DEFAULT 0,
+                can_delete_event INTEGER DEFAULT 0,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, event_id)
@@ -460,7 +460,7 @@ class GeneralDB(BaseDB):
                 BEGIN
                     SELECT CASE
                         WHEN (
-                            SELECT can_edit
+                            SELECT can_edit_event
                             FROM profiles_events
                             WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
                         ) = 0
@@ -478,7 +478,7 @@ class GeneralDB(BaseDB):
                 BEGIN
                     SELECT CASE
                         WHEN (
-                            SELECT can_delete
+                            SELECT can_delete_event
                             FROM profiles_events
                             WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
                         ) = 0
@@ -573,14 +573,14 @@ class GeneralDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
                         WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
                             RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
-                        WHEN NEW.can_edit = 1 AND cur_profile('can_edit') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_edit=1 if current profile does not have can_edit=1')
-                        WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_delete=1 if current profile does not have can_delete=1')
+                        WHEN NEW.can_edit_event = 1 AND cur_profile('can_edit_event') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_edit_event=1 if current profile does not have can_edit_event=1')
+                        WHEN NEW.can_delete_event = 1 AND cur_profile('can_delete_event') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_delete_event=1 if current profile does not have can_delete_event=1')
                     END;
 
-                    INSERT INTO profiles_events (profile_id, event_id, can_edit, can_delete)
-                    VALUES (NEW.profile_id, NEW.event_id, NEW.can_edit, NEW.can_delete);
+                    INSERT INTO profiles_events (profile_id, event_id, can_edit_event, can_delete_event)
+                    VALUES (NEW.profile_id, NEW.event_id, NEW.can_edit_event, NEW.can_delete_event);
                 END;
             """,
             'trg_accessible_profiles_events_update': """
@@ -593,15 +593,15 @@ class GeneralDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
                         WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
                             RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
-                        WHEN NEW.can_edit = 1 AND cur_profile('can_edit') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_edit=1 if current profile does not have can_edit=1')
-                        WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_delete=1 if current profile does not have can_delete=1')
+                        WHEN NEW.can_edit_event = 1 AND cur_profile('can_edit_event') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_edit_event=1 if current profile does not have can_edit_event=1')
+                        WHEN NEW.can_delete_event = 1 AND cur_profile('can_delete_event') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_delete_event=1 if current profile does not have can_delete_event=1')
                     END;
 
                     UPDATE profiles_events SET
-                        can_edit = NEW.can_edit,
-                        can_delete = NEW.can_delete
+                        can_edit_event = NEW.can_edit_event,
+                        can_delete_event = NEW.can_delete_event
                     WHERE profile_id = OLD.profile_id AND event_id = OLD.event_id;
                 END;
             """,
@@ -950,6 +950,43 @@ class GeneralDB(BaseDB):
                 END;
             """,
 
+            # ensure_profiles_publicity_policy
+            'trg_insert_ensure_profiles_publicity': """
+                BEFORE INSERT ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                    END;
+                END;
+            """,
+            # 'trg_insert_ensure_profiles_public_access_code': """
+            #     AFTER INSERT ON profiles
+            #     BEGIN
+            #         UPDATE profiles
+            #         SET public_access_code = NULL
+            #         WHERE profile_id = NEW.profile_id
+            #         AND is_public = 0;
+            #     END;
+            # """,
+            'trg_update_ensure_profiles_publicity': """
+                BEFORE UPDATE ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                    END;
+                END;
+            """,
+            # 'trg_update_ensure_profiles_public_access_code': """
+            #     AFTER UPDATE ON profiles
+            #     BEGIN
+            #         UPDATE profiles
+            #         SET public_access_code = NULL
+            #         WHERE profile_id = OLD.profile_id
+            #         AND is_public = 0;
+            #     END;
+            # """,
         }
 
     @classmethod
