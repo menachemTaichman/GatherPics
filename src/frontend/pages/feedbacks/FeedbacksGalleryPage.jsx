@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown } from 'lucide-react';
+import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown, Trash } from 'lucide-react';
 import { feedbacksAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useFeedbacksList } from '../../utils/dataManager';
@@ -11,6 +11,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { FeedbackDetailModal } from '../../components/feedbacks';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import useFeedbackViewerController from '../../hooks/useFeedbackViewerController';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -32,13 +33,20 @@ function formatDateTime(dateString) {
 export default function FeedbacksGalleryPage() {
   const { isAuthenticated } = useAuth();
   const [deleteFeedback, setDeleteFeedback] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedFeedbackId, setSelectedFeedbackId] = useState(null);
+  const [deleteAll, setDeleteAll] = useState(false);
   const [sortBy, setSortBy] = useState(() => getPreference('FeedbacksGallery.sortBy', 'created_at'));
   const [sortDir, setSortDir] = useState(() => getPreference('FeedbacksGallery.sortDir', 'desc'));
   const [filterStatus, setFilterStatus] = useState(() => getPreference('FeedbacksGallery.filterStatus', 'all'));
   
   const { showToast } = useToast();
+  
+  // Initialize Feedback Viewer controller
+  const { isOpen: viewerOpen, open: openViewer, viewerProps } = useFeedbackViewerController({
+    showToast,
+    defaultSortBy: sortBy,
+    defaultSortOrder: sortDir,
+    filterStatus: filterStatus,
+  });
 
   // Apply scopes for feedbacks (general database)
   useApplyScopes([{ entity: 'all', id: 'feedbacks', eventId: 'general' }]);
@@ -71,10 +79,13 @@ export default function FeedbacksGalleryPage() {
   // Use feedbacks from store or placeholders when not authenticated
   const currentFeedbacks = isAuthenticated ? storeFeedbacks : placeholderFeedbacks;
 
-  const handleViewFeedback = (feedback) => {
-    const feedbackId = feedback.feedback_id || feedback.id;
-    setSelectedFeedbackId(feedbackId);
-    setShowDetailModal(true);
+  const handleViewFeedback = (feedback, index) => {
+    openViewer({
+      index,
+      sortBy,
+      sortOrder: sortDir,
+      filterStatus,
+    });
   };
 
   const handleDeleteFeedback = (feedback) => {
@@ -96,9 +107,21 @@ export default function FeedbacksGalleryPage() {
     }
   };
 
-  const handleCloseDetailModal = () => {
-    setShowDetailModal(false);
-    setSelectedFeedbackId(null);
+  const handleDeleteAll = () => {
+    setDeleteAll(true);
+  };
+
+  const handleConfirmDeleteAll = async () => {
+    try {
+      const response = await feedbacksAPI.deleteAll();
+      const deletedCount = response?.deleted_ids?.length || 0;
+      showToast(`Successfully deleted ${deletedCount} feedback${deletedCount !== 1 ? 's' : ''}`, 'success');
+    } catch (error) {
+      console.error('Failed to delete feedbacks:', error);
+      showToast(formatErrorMessage('delete feedbacks', error), 'error');
+    } finally {
+      setDeleteAll(false);
+    }
   };
 
   // Filtering
@@ -122,6 +145,8 @@ export default function FeedbacksGalleryPage() {
           return (item.sender_name || '').toString().toLowerCase();
         case 'status':
           return item.is_closed ? 'closed' : 'open';
+        case 'type':
+          return item.type || 0;
         default:
           return '';
       }
@@ -154,6 +179,11 @@ export default function FeedbacksGalleryPage() {
       setPreference('FeedbacksGallery.sortBy', field);
       setPreference('FeedbacksGallery.sortDir', 'desc');
     }
+  };
+
+  const getSortIcon = (field) => {
+    if (sortBy !== field) return null;
+    return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
   };
 
   const handleFilterChange = (status) => {
@@ -192,222 +222,214 @@ export default function FeedbacksGalleryPage() {
           </div>
 
           {/* Filters */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => handleFilterChange('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterStatus === 'all'
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              All ({stats.total})
-            </button>
-            <button
-              onClick={() => handleFilterChange('open')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterStatus === 'open'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Open ({stats.open})
-            </button>
-            <button
-              onClick={() => handleFilterChange('closed')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterStatus === 'closed'
-                  ? 'bg-gray-200 text-gray-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Closed ({stats.closed})
-            </button>
-            <button
-              onClick={() => handleFilterChange('solved')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterStatus === 'solved'
-                  ? 'bg-green-100 text-green-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Solved ({stats.solved})
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleFilterChange('all')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === 'all'
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                All ({stats.total})
+              </button>
+              <button
+                onClick={() => handleFilterChange('open')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === 'open'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Open ({stats.open})
+              </button>
+              <button
+                onClick={() => handleFilterChange('closed')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === 'closed'
+                    ? 'bg-gray-200 text-gray-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Closed ({stats.closed})
+              </button>
+              <button
+                onClick={() => handleFilterChange('solved')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === 'solved'
+                    ? 'bg-green-100 text-green-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Solved ({stats.solved})
+              </button>
+            </div>
+
+            {/* Delete All Button */}
+            {isAuthenticated && sortedFeedbacks.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                title="Delete all feedbacks"
+              >
+                <Trash className="w-4 h-4" />
+                <span>Delete All</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="w-full px-8 py-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Table Header */}
-          <div className="bg-gray-50 border-b border-gray-200 px-6 py-3 grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
-            <button
-              onClick={() => handleSort('sender_name')}
-              className="col-span-2 flex items-center space-x-1 hover:text-primary-600 transition-colors text-left"
-            >
-              <span>Sender</span>
-              {sortBy === 'sender_name' && (
-                sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
-              )}
-            </button>
-            <div className="col-span-1">Type</div>
-            <div className="col-span-4">Title</div>
-            <button
-              onClick={() => handleSort('created_at')}
-              className="col-span-2 flex items-center space-x-1 hover:text-primary-600 transition-colors text-left"
-            >
-              <span>Date</span>
-              {sortBy === 'created_at' && (
-                sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              onClick={() => handleSort('status')}
-              className="col-span-2 flex items-center space-x-1 hover:text-primary-600 transition-colors text-left"
-            >
-              <span>Status</span>
-              {sortBy === 'status' && (
-                sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
-              )}
-            </button>
-            <div className="col-span-1 text-right">Actions</div>
+        {sortedFeedbacks.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12"
+          >
+            <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No feedbacks found</h3>
+            <p className="text-gray-500">
+              No feedback submissions match your current filter.
+            </p>
+          </motion.div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">ID</th>
+                    <th
+                      onClick={() => handleSort('sender_name')}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Sender</span>
+                        {getSortIcon('sender_name')}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort('created_at')}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Date</span>
+                        {getSortIcon('created_at')}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort('type')}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Type</span>
+                        {getSortIcon('type')}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Title</th>
+                    <th
+                      onClick={() => handleSort('status')}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Status</span>
+                        {getSortIcon('status')}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sortedFeedbacks.map((feedback, index) => {
+                    const feedbackId = feedback.feedback_id || feedback.id;
+                    const isClosed = feedback.is_closed === 1;
+                    const isSolved = feedback.solved === 1;
+
+                    return (
+                      <tr key={feedbackId} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+                          {feedbackId || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {feedback.sender_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {formatDateTime(feedback.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                          }`}>
+                            {feedback.type === 0 ? 'Bug' : 'Idea'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
+                          {feedback.title}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            isSolved
+                              ? 'bg-green-100 text-green-700'
+                              : isClosed
+                              ? 'bg-gray-100 text-gray-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {isSolved ? (
+                              <>
+                                <CheckCircle className="inline mr-1 w-4 h-4 align-text-bottom text-green-600" />
+                                Solved
+                              </>
+                            ) : isClosed ? (
+                              <>
+                                <XCircle className="inline mr-1 w-4 h-4 align-text-bottom text-gray-600" />
+                                Closed
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="inline mr-1 w-4 h-4 align-text-bottom text-blue-600" />
+                                Open
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleViewFeedback(feedback, index)}
+                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="View details"
+                            >
+                              <Eye className="w-4 h-4 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFeedback(feedback)}
+                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-
-          {/* Table Body */}
-          <div className="divide-y divide-gray-100">
-            {sortedFeedbacks.length === 0 ? (
-              <div className="px-6 py-12 text-center text-gray-500">
-                <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No feedbacks found</p>
-              </div>
-            ) : (
-              sortedFeedbacks.map((feedback, index) => {
-                const feedbackId = feedback.feedback_id || feedback.id;
-                const isClosed = feedback.is_closed === 1;
-                const isSolved = feedback.solved === 1;
-
-                return (
-                  <motion.div
-                    key={feedbackId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                    className={`px-6 py-4 grid grid-cols-12 gap-4 items-center hover:bg-gray-50 transition-colors ${
-                      feedback.isPlaceholder ? 'animate-pulse' : ''
-                    }`}
-                  >
-                    {/* Sender */}
-                    <div className="col-span-2">
-                      {feedback.isPlaceholder ? (
-                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      ) : (
-                        <div>
-                          <p className="font-medium text-gray-900 truncate">{feedback.sender_name}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Type */}
-                    <div className="col-span-1">
-                      {feedback.isPlaceholder ? (
-                        <div className="h-6 bg-gray-200 rounded w-16"></div>
-                      ) : (
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                          feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                        }`}>
-                          {feedback.type === 0 ? 'Bug' : 'Idea'}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Title */}
-                    <div className="col-span-4">
-                      {feedback.isPlaceholder ? (
-                        <div className="space-y-1">
-                          <div className="h-3 bg-gray-200 rounded w-full"></div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-900 font-medium line-clamp-1">{feedback.title}</p>
-                      )}
-                    </div>
-
-                    {/* Date */}
-                    <div className="col-span-2 text-sm text-gray-600">
-                      {feedback.isPlaceholder ? (
-                        <div className="h-3 bg-gray-200 rounded w-full"></div>
-                      ) : (
-                        formatDateTime(feedback.created_at)
-                      )}
-                    </div>
-
-                    {/* Status */}
-                    <div className="col-span-2">
-                      {feedback.isPlaceholder ? (
-                        <div className="h-6 bg-gray-200 rounded w-16"></div>
-                      ) : (
-                        <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          isSolved
-                            ? 'bg-green-100 text-green-700'
-                            : isClosed
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {isSolved ? (
-                            <>
-                              <CheckCircle className="w-3 h-3" />
-                              <span>Solved</span>
-                            </>
-                          ) : isClosed ? (
-                            <>
-                              <XCircle className="w-3 h-3" />
-                              <span>Closed</span>
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              <span>Open</span>
-                            </>
-                          )}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="col-span-1 flex items-center justify-end space-x-2">
-                      {!feedback.isPlaceholder && (
-                        <>
-                          <button
-                            onClick={() => handleViewFeedback(feedback)}
-                            className="p-1.5 hover:bg-blue-100 rounded-lg transition-colors group"
-                            title="View details"
-                          >
-                            <Eye className="w-4 h-4 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFeedback(feedback)}
-                            className="p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Detail Modal */}
-      {showDetailModal && selectedFeedbackId && (
+      {viewerOpen && sortedFeedbacks.length > 0 && (
         <FeedbackDetailModal
-          isOpen={showDetailModal}
-          onClose={handleCloseDetailModal}
-          feedbackId={selectedFeedbackId}
+          {...viewerProps}
+          feedbackId={sortedFeedbacks[viewerProps.currentIndex]?.feedback_id || sortedFeedbacks[viewerProps.currentIndex]?.id}
+          totalFeedbacks={sortedFeedbacks.length}
+          filteredFeedbacks={sortedFeedbacks}
         />
       )}
 
@@ -423,6 +445,21 @@ export default function FeedbacksGalleryPage() {
           confirmText="Delete"
           cancelText="Cancel"
           caption="This action cannot be undone."
+        />
+      )}
+
+      {/* Delete All Confirmation */}
+      {deleteAll && (
+        <ConfirmDelete
+          isOpen={deleteAll}
+          onClose={() => setDeleteAll(false)}
+          onConfirm={handleConfirmDeleteAll}
+          title="Delete All Feedbacks"
+          message={`Are you sure you want to delete all ${sortedFeedbacks.length} feedback${sortedFeedbacks.length !== 1 ? 's' : ''}?`}
+          simpleMessage={true}
+          confirmText="Delete All"
+          cancelText="Cancel"
+          caption="This action cannot be undone. All displayed feedbacks will be permanently deleted."
         />
       )}
     </div>

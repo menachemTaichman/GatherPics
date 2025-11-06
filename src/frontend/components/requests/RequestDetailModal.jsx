@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle, AlertCircle } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,7 +10,6 @@ import { getRepresentativeUrl, useEventId, useApplyScopes } from '../../utils/st
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
-import { getPreference, setPreference } from '../../utils/settings';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -46,7 +45,12 @@ export default function RequestDetailModal({
   onClose, 
   request,
   eventUrl,
-  urlHelpers
+  urlHelpers,
+  // Navigation props
+  onNavigate = null,
+  currentIndex = 0,
+  totalRequests = 1,
+  filterStatus = 'all'
 }) {
   const eventId = useEventId(eventUrl);
   const [loading, setLoading] = useState(false);
@@ -56,8 +60,7 @@ export default function RequestDetailModal({
   const [nameConflict, setNameConflict] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-  const [notifyByEmailPref, setNotifyByEmailPref] = useState(() => getPreference('RequestDetailModal.notifyByEmail') ?? true);
-  const [notifyByEmail, setNotifyByEmail] = useState(notifyByEmailPref);
+  const [notifyByEmail, setNotifyByEmail] = useState(true);
   // Track whether we are creating a new profile (to indicate in the mail)
   const [newProfileCreated, setNewProfileCreated] = useState(false);
   
@@ -70,6 +73,25 @@ export default function RequestDetailModal({
   const allGroups = useGroupsList(eventId);
   const storeRequest = useRequestById(eventId, request?.access_request_id || request?.id);
   
+  // Navigation handlers
+  const handleNavigate = useCallback((direction) => {
+    if (!onNavigate || totalRequests <= 1) return;
+    
+    if (direction === 'prev') {
+      if (currentIndex === 0) {
+        onNavigate('jump', totalRequests - 1);
+      } else {
+        onNavigate('prev');
+      }
+    } else if (direction === 'next') {
+      if (currentIndex === totalRequests - 1) {
+        onNavigate('jump', 0);
+      } else {
+        onNavigate('next');
+      }
+    }
+  }, [onNavigate, currentIndex, totalRequests]);
+  
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-detail-modal';
 
@@ -77,6 +99,11 @@ export default function RequestDetailModal({
   
   // Use the request from the store (which has up-to-date relation data) if available, otherwise fall back to prop
   const requestData = storeRequest || request;
+  
+  // Check if this is a new profile request
+  const isNewProfileRequest = !requestData?.applicant_profile_id || 
+                               (requestData?.applicant_profile_id && requestData?.profile_id && 
+                                requestData?.applicant_profile_id !== requestData?.profile_id);
  
   // Apply scope for this access request
   const applicantProfileId = requestData?.applicant_profile_id;
@@ -146,38 +173,60 @@ export default function RequestDetailModal({
       setClosedDetails('');
       setNameConflict(false);
       
-      // Check name conflict when modal opens (if applicant_profile_id is null and name exists)
-      if (!requestData.applicant_profile_id && requestData.applicant_name) {
+      // Check name conflict when modal opens (if new profile request and name exists)
+      if (isNewProfileRequest && requestData.applicant_name) {
         checkNameConflict(requestData.applicant_name);
       }
     }
-  }, [isOpen, requestData]);
+  }, [isOpen, requestData, isNewProfileRequest]);
 
-  // If the dialog opens, re-sync with latest preference
-  useEffect(() => {
-    if (isOpen) {
-      setNotifyByEmail(getPreference('RequestDetailModal.notifyByEmail') ?? true);
-    }
-  }, [isOpen]);
-
-  // When the user toggles the checkbox, save to preferences
-  const handleNotifyByEmailChange = (checked) => {
-    setNotifyByEmail(checked);
-    setPreference('RequestDetailModal.notifyByEmail', checked);
-  };
-
-  // Track if new profile is created based on applicant_profile_id being null before approve
+  // Track if new profile is created based on isNewProfileRequest
   useEffect(() => {
     if (isOpen && requestData) {
-      setNewProfileCreated(!requestData.applicant_profile_id);
+      setNewProfileCreated(isNewProfileRequest);
     }
-  }, [isOpen, requestData]);
+  }, [isOpen, requestData, isNewProfileRequest]);
+
+  // Custom keyboard handler for navigation
+  const handleDetailModalKeys = useCallback((e) => {
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // ESC always closes the modal
+    if (e.key === 'Escape') {
+      if (!loading) {
+        onClose();
+      }
+      return true; // Handled
+    }
+    
+    // Arrow keys for navigation (except when in input fields)
+    if (targetTagName !== 'input' && targetTagName !== 'textarea' && targetTagName !== 'select') {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleNavigate('prev');
+        return true; // Handled
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNavigate('next');
+        return true; // Handled
+      }
+    }
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it
+    }
+    
+    return false; // Not handled
+  }, [loading, onClose, handleNavigate]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
-    enableFocusTrapping: true
+    enableFocusTrapping: true,
+    customKeyHandler: handleDetailModalKeys
   });
 
   const handleGroupAction = (groupId, action) => {
@@ -286,7 +335,7 @@ export default function RequestDetailModal({
       return;
     }
 
-    if (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) {
+    if (approvedGroupIds.length > 0 && isNewProfileRequest) {
       if (!profileName || !profileName.trim()) {
         showToast('Profile name is required for new profiles', 'error');
         return;
@@ -307,14 +356,27 @@ export default function RequestDetailModal({
         approvedGroupIds.length > 0 ? approvedGroupIds : null,
         deniedGroupIds.length > 0 ? deniedGroupIds : null,
         closedDetails.trim() || null,
-        (approvedGroupIds.length > 0 && !requestData.applicant_profile_id) ? profileName.trim() : null,
+        (approvedGroupIds.length > 0 && isNewProfileRequest) ? profileName.trim() : null,
         requestData.applicant_profile_id || null,
         eventUrl
       );
       
       showToast('Changes applied successfully', 'success');
-      onClose();
-      // After closing: if notifyByEmail, open Gmail tab (only if consent given)
+      
+      // Check if we should navigate or close
+      // If filtering by pending and we just approved/denied groups, auto-navigate
+      const shouldAutoNavigate = onNavigate && totalRequests > 1 && 
+        (filterStatus === 'pending' && (approvedGroupIds.length > 0 || deniedGroupIds.length > 0));
+      
+      if (shouldAutoNavigate) {
+        // Navigate to next, or wrap to first if at end
+        const nextIndex = currentIndex >= totalRequests - 1 ? 0 : currentIndex;
+        onNavigate('jump', nextIndex);
+      } else if (totalRequests <= 1) {
+        onClose();
+      }
+      
+      // After handling modal: if notifyByEmail, open Gmail tab (only if consent given)
       if (notifyByEmail && requestData.communication_consent && requestData.applicant_email) {
         setTimeout(() => {
           const lines = [];
@@ -470,16 +532,42 @@ export default function RequestDetailModal({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Request Details</h2>
-              <p className="text-sm text-gray-500">Review and process access request</p>
+              <p className="text-sm text-gray-500">
+                Review and process access request
+                {totalRequests > 1 && (
+                  <span className="ml-2">• {currentIndex + 1} of {totalRequests}</span>
+                )}
+              </p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            disabled={loading}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            {/* Navigation buttons */}
+            {totalRequests > 1 && onNavigate && (
+              <>
+                <button
+                  onClick={() => handleNavigate('prev')}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  title="Previous request (Left arrow)"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => handleNavigate('next')}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  title="Next request (Right arrow)"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
+            <button
+              onClick={handleClose}
+              disabled={loading}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -490,17 +578,27 @@ export default function RequestDetailModal({
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Request Information</h3>
                 <div className="space-y-3">
-                  {(requestData.profile_label) && (
+                  {requestData.profile_label && (
                   <div className="flex items-center space-x-3">
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{requestData.profile_label}</p>
-                      <p className="text-xs text-gray-500">Applicant Name</p>
+                      <p className="text-xs text-gray-500">Profile</p>
                     </div>
                   </div>
                   )}
                   
-                  {requestData.applicant_email && (
+                  {isNewProfileRequest && requestData.applicant_name && (
+                  <div className="flex items-center space-x-3">
+                    <User className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{requestData.applicant_name}</p>
+                      <p className="text-xs text-gray-500">Name Requested</p>
+                    </div>
+                  </div>
+                  )}
+                  
+                  {requestData.applicant_email && !requestData.closed_at && (
                     <div className="flex items-center space-x-3">
                       <Mail className="w-5 h-5 text-gray-400" />
                       <div>
@@ -580,7 +678,7 @@ export default function RequestDetailModal({
               </div>
 
               {/* Profile Name for New Profiles */}
-              {!requestData.applicant_profile_id && (
+              {isNewProfileRequest && !requestData.closed_at && (
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">New Profile</h3>
                   <div>
@@ -593,7 +691,7 @@ export default function RequestDetailModal({
                       onChange={(e) => {
                         const value = e.target.value;
                         setProfileName(value);
-                        if (!requestData.applicant_profile_id) {
+                        if (isNewProfileRequest) {
                           // Debounce name conflict check
                           if (checkNameConflict._timeout) clearTimeout(checkNameConflict._timeout);
                           checkNameConflict._timeout = setTimeout(() => {
@@ -921,7 +1019,7 @@ export default function RequestDetailModal({
                 <input
                   type="checkbox"
                   checked={notifyByEmail && requestData.communication_consent}
-                  onChange={e => requestData.communication_consent && handleNotifyByEmailChange(e.target.checked)}
+                  onChange={e => requestData.communication_consent && setNotifyByEmail(e.target.checked)}
                   disabled={!requestData.communication_consent}
                   className="sr-only peer"
                 />

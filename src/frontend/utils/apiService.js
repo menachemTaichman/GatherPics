@@ -1131,6 +1131,13 @@ export const requestsAPI = {
     const response = await api.delete(`/api/events/${eventId}/requests/${requestId}`);
     return response.data;
   },
+
+  // Delete all requests (for managers)
+  deleteAll: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/requests/all`);
+    return response.data;
+  },
   
   // ==================== USER ROUTES (my requests) ====================
   
@@ -1257,6 +1264,12 @@ export const feedbacksAPI = {
   // Delete feedback (for developer)
   delete: async (feedbackId) => {
     const response = await api.delete(`/api/feedbacks/${feedbackId}`);
+    return response.data;
+  },
+
+  // Delete all feedbacks (for developer)
+  deleteAll: async () => {
+    const response = await api.delete(`/api/feedbacks/all`);
     return response.data;
   },
   

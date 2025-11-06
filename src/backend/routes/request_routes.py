@@ -214,6 +214,32 @@ def delete_request(event_id, request_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+@request_bp.route("/requests/all", methods=["DELETE"])
+@require_auth
+def delete_all_requests(event_id):
+    """Delete all access requests for this event."""
+    event = get_event(event_id)
+    try:
+        deleted_ids = event.models.delete_all('access_requests')
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'access_request',
+            'ids': deleted_ids
+        }, {
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': event.models.get_current_profile()
+            }
+        }]
+        return jsonify({'success': True, 'changes': changes, 'deleted_ids': deleted_ids})
+    except Forbidden as e:
+        return jsonify({'error': str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
 @request_bp.route("/my-requests/<int:request_id>", methods=["DELETE"])
 @require_auth
 def delete_my_request(event_id, request_id):

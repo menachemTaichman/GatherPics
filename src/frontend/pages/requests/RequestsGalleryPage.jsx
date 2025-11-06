@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, ArrowUp, ArrowDown, Trash } from 'lucide-react';
 import { requestsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useRequestsList } from '../../utils/dataManager';
@@ -12,6 +12,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { RequestDetailModal } from '../../components/requests';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import useRequestViewerController from '../../hooks/useRequestViewerController';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -47,13 +48,21 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
   const eventId = useEventId(eventUrl);
   const [deleteRequest, setDeleteRequest] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [deleteAll, setDeleteAll] = useState(false);
   const [sortBy, setSortBy] = useState(() => getPreference('RequestsGallery.sortBy', 'requested_at'));
   const [sortDir, setSortDir] = useState(() => getPreference('RequestsGallery.sortDir', 'desc'));
+  const [filterStatus, setFilterStatus] = useState(() => getPreference('RequestsGallery.filterStatus', 'all'));
   
   const navigate = useNavigate();
   const { showToast } = useToast();
+  
+  // Initialize Request Viewer controller
+  const { isOpen: viewerOpen, open: openViewer, viewerProps } = useRequestViewerController({
+    showToast,
+    defaultSortBy: sortBy,
+    defaultSortOrder: sortDir,
+    filterStatus: filterStatus,
+  });
 
   useApplyScopes([{ entity: 'all', id: 'access_requests', eventId }]);
 
@@ -87,9 +96,13 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   // Use requests from store or placeholders when not authenticated
   const currentRequests = isAuthenticated ? storeRequests : placeholderRequests;
 
-  const handleViewRequest = (request) => {
-    setSelectedRequest(request);
-    setShowDetailModal(true);
+  const handleViewRequest = (request, index) => {
+    openViewer({
+      index,
+      sortBy,
+      sortOrder: sortDir,
+      filterStatus,
+    });
   };
 
   const handleDeleteRequest = (request) => {
@@ -111,31 +124,36 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     }
   };
 
-  const handleCloseDetailModal = () => {
-    setShowDetailModal(false);
-    setSelectedRequest(null);
+  const handleDeleteAll = () => {
+    setDeleteAll(true);
   };
 
-  // Listen for external open-detail events (from notifications)
-  useEffect(() => {
-    const handler = async (ev) => {
-      const rid = ev?.detail?.requestId;
-      if (!rid) return;
-      try {
-        const res = await requestsAPI.getById(rid, eventUrl);
-        const items = res?.changes?.[0]?.items || [];
-        const req = items[0] || { id: rid, access_request_id: rid };
-        setSelectedRequest(req);
-        setShowDetailModal(true);
-      } catch {}
-    };
-    window.addEventListener('requests:open-detail', handler);
-    return () => window.removeEventListener('requests:open-detail', handler);
-  }, [eventUrl]);
+  const handleConfirmDeleteAll = async () => {
+    try {
+      const response = await requestsAPI.deleteAll(eventUrl);
+      const deletedCount = response?.deleted_ids?.length || 0;
+      showToast(`Successfully deleted ${deletedCount} request${deletedCount !== 1 ? 's' : ''}`, 'success');
+    } catch (error) {
+      console.error('Failed to delete requests:', error);
+      showToast(formatErrorMessage('delete requests', error), 'error');
+    } finally {
+      setDeleteAll(false);
+    }
+  };
+
+  // Filtering by status
+  const filteredRequests = useMemo(() => {
+    if (filterStatus === 'all') return currentRequests;
+    if (filterStatus === 'pending') return currentRequests.filter(r => r.status === 'pending' || !r.status);
+    if (filterStatus === 'approved') return currentRequests.filter(r => r.status === 'approved');
+    if (filterStatus === 'rejected') return currentRequests.filter(r => r.status === 'rejected');
+    if (filterStatus === 'mixed') return currentRequests.filter(r => r.status === 'mixed');
+    return currentRequests;
+  }, [currentRequests, filterStatus]);
 
   // Sorting similar to UploadsGallery
   const sortedRequests = useMemo(() => {
-    if (!isAuthenticated) return currentRequests;
+    if (!isAuthenticated) return filteredRequests;
 
     const toValue = (item, field) => {
       switch (field) {
@@ -159,14 +177,39 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     };
 
     const dir = sortDir === 'asc' ? 1 : -1;
-    return [...currentRequests].sort((a, b) => {
+    return [...filteredRequests].sort((a, b) => {
       const va = toValue(a, sortBy);
       const vb = toValue(b, sortBy);
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
       return 0;
     });
-  }, [currentRequests, isAuthenticated, sortBy, sortDir]);
+  }, [filteredRequests, isAuthenticated, sortBy, sortDir]);
+
+  // Listen for external open-detail events (from notifications)
+  useEffect(() => {
+    const handler = async (ev) => {
+      const rid = ev?.detail?.requestId;
+      if (!rid) return;
+      try {
+        const res = await requestsAPI.getById(rid, eventUrl);
+        const items = res?.changes?.[0]?.items || [];
+        const req = items[0] || { id: rid, access_request_id: rid };
+        // Find the index of this request in the sorted list
+        const index = sortedRequests.findIndex(r => 
+          (r.access_request_id || r.id) === (req.access_request_id || req.id)
+        );
+        openViewer({
+          index: index >= 0 ? index : 0,
+          sortBy,
+          sortOrder: sortDir,
+          filterStatus,
+        });
+      } catch {}
+    };
+    window.addEventListener('requests:open-detail', handler);
+    return () => window.removeEventListener('requests:open-detail', handler);
+  }, [eventUrl, sortedRequests, sortBy, sortDir, filterStatus, openViewer]);
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -179,6 +222,23 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     }
   };
 
+  const handleFilterChange = (status) => {
+    setFilterStatus(status);
+    setPreference('RequestsGallery.filterStatus', status);
+  };
+
+  // Stats
+  const stats = useMemo(() => {
+    if (!isAuthenticated) return { total: 0, pending: 0, approved: 0, rejected: 0, mixed: 0 };
+    return {
+      total: currentRequests.length,
+      pending: currentRequests.filter(r => r.status === 'pending' || !r.status).length,
+      approved: currentRequests.filter(r => r.status === 'approved').length,
+      rejected: currentRequests.filter(r => r.status === 'rejected').length,
+      mixed: currentRequests.filter(r => r.status === 'mixed').length
+    };
+  }, [currentRequests, isAuthenticated]);
+
   const getSortIcon = (field) => {
     if (sortBy !== field) return null;
     return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
@@ -186,25 +246,96 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className="w-full">
-        {/* Sticky Header */}
-        <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Access Requests
-              </h1>
-              <p className="text-gray-600">
-                {sortedRequests.length === 0 
-                  ? 'No requests yet'
-                  : `${sortedRequests.length} request${sortedRequests.length !== 1 ? 's' : ''}`}
-              </p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200">
+          <div className="w-full px-8 py-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Access Requests</h1>
+                  <p className="text-sm text-gray-500">
+                    {isAuthenticated ? `${stats.total} total, ${stats.pending} pending` : 'Loading...'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleFilterChange('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'all'
+                      ? 'bg-primary-100 text-primary-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  All ({stats.total})
+                </button>
+                <button
+                  onClick={() => handleFilterChange('pending')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'pending'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Pending ({stats.pending})
+                </button>
+                <button
+                  onClick={() => handleFilterChange('approved')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'approved'
+                      ? 'bg-green-100 text-green-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Approved ({stats.approved})
+                </button>
+                <button
+                  onClick={() => handleFilterChange('rejected')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'rejected'
+                      ? 'bg-red-100 text-red-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Rejected ({stats.rejected})
+                </button>
+                <button
+                  onClick={() => handleFilterChange('mixed')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'mixed'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Mixed ({stats.mixed})
+                </button>
+              </div>
+
+              {/* Delete All Button */}
+              {isAuthenticated && sortedRequests.length > 0 && (
+                <button
+                  onClick={handleDeleteAll}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  title="Delete all requests"
+                >
+                  <Trash className="w-4 h-4" />
+                  <span>Delete All</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="px-8 py-8">
+        <div className="w-full px-8 py-8">
           {sortedRequests.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -331,7 +462,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                             <td className="px-4 py-3 text-sm text-right">
                               <div className="flex items-center justify-end space-x-2">
                                 <button
-                                  onClick={() => handleViewRequest(request)}
+                                  onClick={() => handleViewRequest(request, idx)}
                                   className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                                   title="View details"
                                 >
@@ -378,12 +509,27 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
         />
       )}
 
+      {/* Delete All Confirmation Modal */}
+      {deleteAll && (
+        <ConfirmDelete
+          isOpen={deleteAll}
+          onClose={() => setDeleteAll(false)}
+          onConfirm={handleConfirmDeleteAll}
+          title="Delete All Requests"
+          message={`Are you sure you want to delete all ${sortedRequests.length} request${sortedRequests.length !== 1 ? 's' : ''}?`}
+          simpleMessage={true}
+          confirmText="Delete All"
+          cancelText="Cancel"
+          caption="This action cannot be undone. All displayed requests will be permanently deleted."
+        />
+      )}
+
       {/* Request Detail Modal */}
-      {showDetailModal && selectedRequest && (
+      {viewerOpen && sortedRequests.length > 0 && (
         <RequestDetailModal
-          isOpen={showDetailModal}
-          onClose={handleCloseDetailModal}
-          request={selectedRequest}
+          {...viewerProps}
+          request={sortedRequests[viewerProps.currentIndex]}
+          totalRequests={sortedRequests.length}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
         />

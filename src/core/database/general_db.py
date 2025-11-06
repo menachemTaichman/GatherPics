@@ -721,7 +721,7 @@ class GeneralDB(BaseDB):
                         data
                     )
                     SELECT
-                        profile_id,
+                        p.profile_id,
                         'Your feedback has been updated',
                         CURRENT_TIMESTAMP,
                         0,

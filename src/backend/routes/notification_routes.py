@@ -141,7 +141,7 @@ def delete_all_my_notifications():
     """Delete all notifications belonging to current user."""
     general_models = get_general_models()
     try:
-        deleted_ids = general_models.delete_all_my_notifications()
+        deleted_ids = general_models.delete_all('my_notifications')
         changes = [{
             'type': 'REMOVE',
             'entity': 'my_notification',

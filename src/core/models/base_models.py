@@ -333,6 +333,18 @@ class BaseModels(ABC):
         condition = {self.db.get_id_field(table): entity_ids}
         self.db.delete(table, condition)
 
+    def delete_all(self, table: str) -> list[str]:
+        """
+        Delete all records from a table.
+        Returns:
+            list of deleted entity ids
+        """
+        accessible_table = self.db.STRUCTURE()[table]['accessible_table']
+        query = f'SELECT {self.db.get_id_field(table)} FROM {accessible_table}'
+        entity_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
+        self.delete(table, entity_ids)
+        return entity_ids
+
     def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict | None = None) -> tuple[list[str], dict[str, list[str]]]:
         """Edit childs of a parent.
         Args:

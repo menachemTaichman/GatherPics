@@ -277,6 +277,8 @@ ids = {
 # upsert_profiles_preferences()
 # make the profile public
 # recreate_views_triggers_and_indexes(general_models.db)
+deleted_ids = general_models.delete_all('feedbacks')
+
 general_models.edit('profiles', '10d60cb9-6aec-4540-b15e-6df187f19b3c', {'is_public': 0})
 result = general_models.get_entities('feedbacks', 1, include_details=False)
 print(result)

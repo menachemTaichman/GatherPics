@@ -106,6 +106,32 @@ def delete_feedback(feedback_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+@feedback_bp.route("/feedbacks/all", methods=["DELETE"])
+@require_auth
+def delete_all_feedbacks():
+    """Delete all feedbacks - developer only."""
+    general_models = get_general_models()
+    try:
+        deleted_ids = general_models.delete_all('feedbacks')
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'feedback',
+            'ids': deleted_ids
+        }, {
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': general_models.get_current_profile()
+            }
+        }]
+        return jsonify({'success': True, 'changes': changes, 'deleted_ids': deleted_ids})
+    except Forbidden as e:
+        return jsonify({'error': str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
 # ==================== USER ROUTES (my_feedbacks) ====================
 
 @feedback_bp.route("/my-feedbacks", methods=["GET"])

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -14,7 +14,13 @@ import ConfirmDelete from '../modals/ConfirmDelete';
 export default function FeedbackDetailModal({ 
   isOpen, 
   onClose, 
-  feedbackId
+  feedbackId,
+  // Navigation props
+  onNavigate = null,
+  currentIndex = 0,
+  totalFeedbacks = 1,
+  filteredFeedbacks = [],
+  filterStatus = 'all'
 }) {
   const [loading, setLoading] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -88,9 +94,18 @@ export default function FeedbackDetailModal({
   const handleCloseModalCallback = useCallback((success) => {
     setShowCloseFeedbackModal(false);
     if (success) {
+      // Check if current feedback still matches filter after closing
+      // If using filter for "open only", navigate to next since this is now closed
+      if (onNavigate && totalFeedbacks > 1 && (filterStatus === 'open' || filterStatus === 'solved')) {
+        // Feedback was just closed, so it no longer matches "open" or "solved" filters
+        // Auto-navigate to next feedback (stay at same index which will show the next item)
+        const nextIndex = currentIndex >= totalFeedbacks - 1 ? 0 : currentIndex;
+        onNavigate('jump', nextIndex);
+        return; // Don't close modal
+      }
       onClose();
     }
-  }, [onClose]);
+  }, [onClose, onNavigate, totalFeedbacks, currentIndex, filterStatus]);
 
   const handleDeleteConfirm = useCallback(async () => {
     setLoading(true);
@@ -108,6 +123,25 @@ export default function FeedbackDetailModal({
 
   const isClosed = feedback?.is_closed === 1;
 
+  // Navigation handlers
+  const handleNavigate = useCallback((direction) => {
+    if (!onNavigate || totalFeedbacks <= 1) return;
+    
+    if (direction === 'prev') {
+      if (currentIndex === 0) {
+        onNavigate('jump', totalFeedbacks - 1);
+      } else {
+        onNavigate('prev');
+      }
+    } else if (direction === 'next') {
+      if (currentIndex === totalFeedbacks - 1) {
+        onNavigate('jump', 0);
+      } else {
+        onNavigate('next');
+      }
+    }
+  }, [onNavigate, currentIndex, totalFeedbacks]);
+
   // Custom keyboard handler
   const handleDetailModalKeys = useCallback((e) => {
     const targetTagName = e.target.tagName?.toLowerCase();
@@ -118,6 +152,20 @@ export default function FeedbackDetailModal({
         onClose();
       }
       return true; // Handled
+    }
+    
+    // Arrow keys for navigation (except when in input fields)
+    if (targetTagName !== 'input' && targetTagName !== 'textarea' && targetTagName !== 'select') {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleNavigate('prev');
+        return true; // Handled
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNavigate('next');
+        return true; // Handled
+      }
     }
     
     // Enter opens the close feedback modal (except in textarea where it adds newline)
@@ -135,7 +183,7 @@ export default function FeedbackDetailModal({
     }
     
     return false; // Not handled
-  }, [loading, onClose, isClosed]);
+  }, [loading, onClose, isClosed, handleNavigate]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId,
@@ -192,15 +240,39 @@ export default function FeedbackDetailModal({
                 </h2>
                 <p className="text-sm text-gray-500">
                   {new Date(feedback.created_at).toLocaleString()}
+                  {totalFeedbacks > 1 && (
+                    <span className="ml-2">• {currentIndex + 1} of {totalFeedbacks}</span>
+                  )}
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              {/* Navigation buttons */}
+              {totalFeedbacks > 1 && onNavigate && (
+                <>
+                  <button
+                    onClick={() => handleNavigate('prev')}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Previous feedback (Left arrow)"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleNavigate('next')}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Next feedback (Right arrow)"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Content */}
