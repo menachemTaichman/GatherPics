@@ -607,13 +607,13 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
         if 'hierarchy_rank' in data.keys():
             general_models.update_profile_hierarchy_rank(profile_id, data['hierarchy_rank'])
 
-        if 'password' in data.keys():
-            general_models.update_profile_password(profile_id, data['password'])
-
-        general_fields = ['email']
+        general_fields = ['password', 'email']
         general_data = {k: v for k, v in data.items() if k in general_fields}
         if general_data:
             general_models.edit('profiles', profile_id, general_data)
+
+        if 'password' in data.keys():
+            general_models.revoke_all_refresh_tokens(profile_id)
 
         changes = []
         if event_id:

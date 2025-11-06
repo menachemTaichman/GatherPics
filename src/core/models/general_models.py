@@ -4,7 +4,7 @@ from src.core.database.base_db import ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.database.general_db import GeneralDB
 from src.core.services.event import Event
-from src.core.errors import Forbidden
+from src.core.errors import DBPolicyError, Forbidden
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -17,18 +17,14 @@ class GeneralModels(BaseModels):
         """Get the current profile."""
         general_profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
         events_ids = self.get_childs('profiles', general_profile['profile_id'], 'events', return_ids=True)
+        general_profile['events'] = events_ids
               
         if event_id:
-            if event_id not in events_ids:
-                raise Forbidden('Profile does not have permissions in this event')
-            
-            event = Event(event_id, general_profile['profile_id'])
-            if not event:
-                raise Forbidden('Event not found')
+            event = self.get_event(event_id)
             profile_event = event.models.get_current_profile()
             profile_event.pop('profile_id')
             profile_event.pop('label')
-            return {**general_profile, **profile_event, 'events': events_ids}
+            return {**general_profile, **profile_event}
         else:
             return general_profile
 
@@ -59,6 +55,14 @@ class GeneralModels(BaseModels):
         profile['profile_id'] = self.profile_id
         return profile
     
+    def get_event(self, event_id: str) -> Event:
+        """Get an event."""
+        event = self.get_entities('events', event_id)
+        if not event:
+            raise Forbidden('Event not found')
+        
+        return Event(event_id, self.profile_id)
+    
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists."""
         if table == 'profiles' and 'restricted_to_event' in fields:
@@ -70,14 +74,7 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    def is_managable_profile(self, profile_id: str) -> bool:
-        """Check if a profile is managable by the current profile."""
-        profile = self.get_entities('profiles', profile_id)
-        if not profile:
-            return False
-        
-        return self.profile_context['hierarchy_rank'] > profile.get('hierarchy_rank') or self.profile_context['profile_id'] == profile_id
-
+    # TODO: remove this function
     def is_public_profile(self, profile_id: str) -> bool:
         """Check if a profile is public."""
         error = Forbidden('Profile does not have permission to check if this profile is public')
@@ -85,9 +82,7 @@ class GeneralModels(BaseModels):
         if not restricted_to_event_id:
             raise error
         
-        event = Event(restricted_to_event_id, self.profile_context['profile_id'])
-        if not event:
-            raise error
+        event = self.get_event(restricted_to_event_id)
         
         profile = event.models.get_entities('profiles', profile_id)
         if not profile:
@@ -95,20 +90,20 @@ class GeneralModels(BaseModels):
         
         return profile.get('is_public')
 
+    # TODO: remove
     def create_profile(self, label: str, password: str, hierarchy_rank: int, email: str | None = None, *, can_create_events: bool = False, event_id: str | None = None, can_delete: bool = False) -> str:
         """
         Create a new profile.
         Returns:
             profile_id
         """
-        if hierarchy_rank < 0:
-            raise Exception('Profile hierarchy rank cannot be less than 0')
-        
-        if hierarchy_rank >= self.profile_context['hierarchy_rank']:
-            raise Exception('Profile hierarchy rank cannot be updated to a higher rank than the current profile')
-        
-        if event_id and event_id not in self.get_childs('profiles', self.profile_context['profile_id'], 'events', return_ids=True):
-            raise Exception('Profile does not have permissions in this event')
+        if event_id:
+            event = self.get_event(event_id)
+            if not event:
+                raise Forbidden('Event not found')
+            
+            if hierarchy_rank < event.models.get_entities('profiles', self.db.profile_context['profile_id']).get('hierarchy_rank'):
+                raise Forbidden('Profile hierarchy rank cannot be less than the event manager hierarchy rank')
 
         profile_id = self.generate_id()
         self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'email': email, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
@@ -132,9 +127,6 @@ class GeneralModels(BaseModels):
         Delete a profile.
         If only_remove_from_event_id is provided, the profile will be removed from the event with the given id.
         """
-        if not self.is_managable_profile(profile_id):
-            raise Exception('Profile does not have permission to delete this profile')
-
         profile = self.get_entities('profiles', profile_id)
         restricted_to_event_id = profile.get('restricted_to_event')
         event_id = only_remove_from_event_id or restricted_to_event_id
@@ -146,26 +138,16 @@ class GeneralModels(BaseModels):
 
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
-        if not self.is_managable_profile(profile_id):
-            raise Forbidden(f'Profile does not have permission to get this profile password')
+        accessible_profiles = self.db.STRUCTURE()['profiles']['accessible_table']
+        query = f'SELECT password FROM {accessible_profiles} WHERE profile_id = ?'
+        result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
+        if not result:
+            raise Forbidden('Profile not found')
         
-        query = 'SELECT password FROM profiles WHERE profile_id = ?'
-        return self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
-    
-    def update_profile_password(self, profile_id: str, password: str):
-        """Update the password for a profile."""
-        if not self.is_managable_profile(profile_id):
-            if profile_id != self.profile_context['profile_id'] or self.is_public_profile(profile_id):
-                raise Forbidden('Profile does not have permission to update this profile password')
-        
-        self.edit('profiles', profile_id, {'password': password})
-        self.revoke_all_refresh_tokens(profile_id)
+        return result
     
     def update_profile_label(self, profile_id: str, label: str):
         """Update the label for a profile."""
-        if not self.is_managable_profile(profile_id):
-            raise Forbidden('Profile does not have permission to update this profile label')
-
         self.edit('profiles', profile_id, {'label': label})
         event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
         for event_id in event_ids:
@@ -173,12 +155,6 @@ class GeneralModels(BaseModels):
 
     def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
         """Update the hierarchy rank for a profile."""
-        if not self.is_managable_profile(profile_id) or profile_id == self.profile_context['profile_id']:
-            raise Forbidden('Profile does not have permission to update this profile hierarchy rank')
-
-        if hierarchy_rank >= self.profile_context['hierarchy_rank']:
-            raise Forbidden('Profile hierarchy rank cannot be updated to a higher rank than the current profile')
-
         self.edit('profiles', profile_id, {'hierarchy_rank': hierarchy_rank})
         event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
         for event_id in event_ids:
@@ -211,17 +187,13 @@ class GeneralModels(BaseModels):
 
     def update_profile_preferences(self, profile_id: str, preference_group: str, preference_key: str, preference_value):
         """Update the preferences for a profile."""
-        if not self.is_managable_profile(profile_id):
-            if profile_id != self.profile_context['profile_id'] or self.is_public_profile(profile_id):
-                raise Forbidden('Profile does not have permission to update this profile preferences')
-
         preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
         
         if preference_group not in preferences_constants:
-            raise Exception(f'Preference group {preference_group} not found')
+            raise DBPolicyError(f'Preference group {preference_group} not found')
         
         if preference_key not in preferences_constants[preference_group]:
-            raise Exception(f'Preference key {preference_key} not found in preference group {preference_group}')
+            raise DBPolicyError(f'Preference key {preference_key} not found in preference group {preference_group}')
         
         # Get the type for this preference and serialize the value
         value_type, _ = preferences_constants[preference_group][preference_key]
@@ -256,12 +228,9 @@ class GeneralModels(BaseModels):
         Returns:
             applicant_profile_id if new profile is created, None otherwise
         """
-        event = Event(event_id, self.profile_context['profile_id'])
-        if not event:
-            raise Forbidden('Profile does not have permission to toggle this access request')
-
+        event = self.get_event(event_id)
         if not approved_group_ids and not denied_group_ids:
-            raise Forbidden('At least one group must be approved or denied')
+            raise DBPolicyError('At least one group must be approved or denied')
 
         access_request = event.models.get_entities('access_requests', access_request_id)
         if not access_request:
@@ -288,24 +257,11 @@ class GeneralModels(BaseModels):
     # Profile-Event management
     def add_profile_to_event(self, profile_id: str, event_id: str, can_delete: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
-        print(self.get_childs('profiles', profile_id, 'events', return_ids=True))
-        if not event_id in self.get_childs('profiles', self.profile_context['profile_id'], 'events', return_ids=True):
-            raise Forbidden('Profile does not have permissions in this event')
-
-        if not self.is_managable_profile(profile_id):
-            raise Forbidden('Profile does not have permissions in this profile')
-        
         self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete': can_delete})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
         """Remove a profile from an event in the general DB and sync to event DB."""
-        if self.profile_context['profile_id'] not in self.get_childs('events', event_id, 'profiles', return_ids=True):
-            raise Forbidden('Profile does not have permissions in this event')
-        
-        if not self.is_managable_profile(profile_id):
-            raise Forbidden('Profile does not have permissions in this profile')
-        
         self.sync_profile_to_event_db(profile_id, event_id, upsert=False)
         self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.REMOVE)
     
@@ -327,45 +283,37 @@ class GeneralModels(BaseModels):
         event.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
         
     # Event management
-    def create_event(self, name: str, date: str, event_manager: str, url: str) -> str:
+    def create_event(self, data: dict) -> str:
         """Create a new event with all necessary setup.
 
         Args:
-            name: name of the event
-            date: date of the event
-            url: URL of the event
-            event_manager: profile_id of the event manager
-        
+            data: dictionary with the event data:
+            - name: name of the event
+            - date: date of the event
+            - url: URL of the event
+            - is_public: whether the event is public
+            - images_count_limit: maximum number of images that can be uploaded
+            - image_size_limit_bytes: maximum size of images that can be uploaded
         Returns:
             event_id: str
         """
-        if not self.profile_context['can_create_events']:
-            raise Forbidden('Profile does not have permission to create events')
-        
         settings = self.get_settings()
         developer_id = settings.get('developer_id')
 
-        if self.profile_context['profile_id'] not in (developer_id, event_manager):
-            raise Forbidden('Profile does not have permission to create this event')
-                
-        # Create event record
-        event_id = self.add('events', {
-            'name': name,
-            'date': date,
-            'url': url,
-        })
+        event_id = self.add('events', data)
 
         Event.create_event(event_id)
         self.add_profile_to_event(developer_id, event_id, can_delete=True)
-        self.add_profile_to_event(event_manager, event_id, can_delete=True)
+        profile_id = self.db.profile_context['profile_id']
+        if developer_id != profile_id:
+            self.add_profile_to_event(profile_id, event_id, can_delete=True)
 
         return event_id
     
     def delete_event(self, event_id: str):
         """Delete an event and its associated data."""
-        profile_id = self.profile_context['profile_id']
-        query = 'SELECT can_delete FROM profiles_events WHERE profile_id = ? AND event_id = ?'
-        can_delete = self.db.execute_query(query, (profile_id, event_id), return_format=ReturnFormat.VALUE)
+        profile_id = self.db.profile_context['profile_id']
+        can_delete = self.get_childs('events', event_id, 'profiles', [profile_id]).get(profile_id, {}).get('can_delete')
         if not can_delete:
             raise Forbidden('Profile does not have permission to delete this event')
 

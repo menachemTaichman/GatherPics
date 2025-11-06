@@ -84,7 +84,7 @@ class GeneralDB(BaseDB):
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
-                'fields': ['name', 'date', 'url', 'images_count_limit', 'image_size_limit_bytes'],
+                'fields': ['name', 'date', 'url', 'is_public', 'images_count_limit', 'image_size_limit_bytes'],
                 'relations': {
                     'profiles': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete']},
                 },
@@ -100,11 +100,11 @@ class GeneralDB(BaseDB):
             'profiles_events': {
                 'primary_key': ['profile_id', 'event_id'],
                 'accessible_table': 'accessible_profiles_events',
-                'fields': ['can_delete'],
+                'fields': ['can_edit', 'can_delete'],
             },
             'profiles_preferences': {
                 'primary_key': ['profile_id', 'preference_group', 'preference_key'],
-                'accessible_table': 'profiles_preferences',
+                'accessible_table': 'accessible_profiles_preferences',
                 'fields': ['preference_value'],
             },
             'refresh_tokens': {
@@ -190,6 +190,7 @@ class GeneralDB(BaseDB):
                 name TEXT NOT NULL,
                 date TEXT,
                 url TEXT UNIQUE,
+                is_public INTEGER DEFAULT 0,
                 images_count_limit INTEGER DEFAULT 0,
                 image_size_limit_bytes INTEGER DEFAULT 0
             ''',
@@ -209,6 +210,7 @@ class GeneralDB(BaseDB):
             'profiles_events': '''
                 profile_id TEXT NOT NULL,
                 event_id TEXT NOT NULL,
+                can_edit INTEGER DEFAULT 0,
                 can_delete INTEGER DEFAULT 0,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
                 FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
@@ -302,7 +304,10 @@ class GeneralDB(BaseDB):
     def VIEWS(self) -> dict:
         return {
             'accessible_events': """
-                SELECT * FROM events
+                SELECT *
+                FROM events
+                LEFT JOIN profiles_events pe ON events.event_id = pe.event_id AND pe.profile_id = cur_profile('profile_id')
+                WHERE is_public = 1 OR pe.event_id IS NOT NULL
             """,
             'current_profile': """
                 SELECT
@@ -315,7 +320,14 @@ class GeneralDB(BaseDB):
                     COUNT(mn.notification_id) AS total_notifications,
                     COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
                     (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
-                    CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks
+                    CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
+                    CASE WHEN
+                        p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+                        OR (
+                            p.hierarchy_rank > 0
+                            AND p.restricted_to_event IS NULL
+                        )
+                    THEN 1 ELSE 0 END AS has_dashboard
                 FROM profiles p
                 LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
                 WHERE p.profile_id = cur_profile('profile_id')
@@ -325,11 +337,21 @@ class GeneralDB(BaseDB):
                 SELECT * FROM profiles p
                 WHERE
                     cur_profile('profile_id') = p.profile_id 
-                    OR p.hierarchy_rank < cur_profile('hierarchy_rank')
+                    OR ( 
+                        p.hierarchy_rank < cur_profile('hierarchy_rank')
+                        AND (
+                            cur_profile('restricted_to_event') IS NULL
+                            OR cur_profile('restricted_to_event') = p.restricted_to_event
+                        )
+                    )
             """,
             'accessible_profiles_events': """
                 SELECT * FROM profiles_events pe
                 INNER JOIN accessible_profiles ap ON pe.profile_id = ap.profile_id
+            """,
+            'accessible_profiles_preferences': """
+                SELECT * FROM profiles_preferences pp
+                WHERE pp.profile_id = cur_profile('profile_id')
             """,
             'my_notifications': """
                 SELECT * FROM notifications
@@ -404,6 +426,68 @@ class GeneralDB(BaseDB):
     @classmethod
     def TRIGGERS(self) -> dict:
         return {
+            # events
+            'trg_accessible_events_insert': """
+                INSTEAD OF INSERT ON accessible_events
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('can_create_events') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create event')
+                    END;
+
+                    INSERT INTO events (
+                        event_id,
+                        name,
+                        date,
+                        url,
+                        is_public,
+                        images_count_limit,
+                        image_size_limit_bytes
+                    )
+                    VALUES (
+                        NEW.event_id,
+                        NEW.name,
+                        NEW.date,
+                        NEW.url,
+                        NEW.is_public,
+                        NEW.images_count_limit,
+                        NEW.image_size_limit_bytes
+                    );
+                END;
+            """,
+            'trg_accessible_events_update': """
+                INSTEAD OF UPDATE ON accessible_events
+                BEGIN
+                    SELECT CASE
+                        WHEN (
+                            SELECT can_edit
+                            FROM profiles_events
+                            WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
+                        ) = 0
+                        THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit event')
+                    END;
+
+                    UPDATE events SET
+                        is_public = NEW.is_public
+                    WHERE event_id = OLD.event_id;
+                END;
+            """,
+            'trg_accessible_events_delete': """
+                INSTEAD OF DELETE ON accessible_events
+                BEGIN
+                    SELECT CASE
+                        WHEN (
+                            SELECT can_delete
+                            FROM profiles_events
+                            WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
+                        ) = 0
+                        THEN
+                            RAISE(ABORT, 'Permission denied: cannot delete event')
+                    END;
+                END;
+            """,
+
             # accessible_profiles
             'trg_accessible_profiles_insert': """
                 INSTEAD OF INSERT ON accessible_profiles
@@ -477,6 +561,7 @@ class GeneralDB(BaseDB):
                     WHERE profile_id = OLD.profile_id;
                 END;
             """,
+
             # accessible_profiles_events
             'trg_accessible_profiles_events_insert': """
                 INSTEAD OF INSERT ON accessible_profiles_events
@@ -488,12 +573,14 @@ class GeneralDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
                         WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
                             RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
+                        WHEN NEW.can_edit = 1 AND cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot create profile event with can_edit=1 if current profile does not have can_edit=1')
                         WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile event with can_delete=1 if current profile does not have can_delete=1')
                     END;
 
-                    INSERT INTO profiles_events (profile_id, event_id, can_delete)
-                    VALUES (NEW.profile_id, NEW.event_id, NEW.can_delete);
+                    INSERT INTO profiles_events (profile_id, event_id, can_edit, can_delete)
+                    VALUES (NEW.profile_id, NEW.event_id, NEW.can_edit, NEW.can_delete);
                 END;
             """,
             'trg_accessible_profiles_events_update': """
@@ -506,11 +593,14 @@ class GeneralDB(BaseDB):
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
                         WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
                             RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
+                        WHEN NEW.can_edit = 1 AND cur_profile('can_edit') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot edit profile event with can_edit=1 if current profile does not have can_edit=1')
                         WHEN NEW.can_delete = 1 AND cur_profile('can_delete') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with can_delete=1 if current profile does not have can_delete=1')
                     END;
 
                     UPDATE profiles_events SET
+                        can_edit = NEW.can_edit,
                         can_delete = NEW.can_delete
                     WHERE profile_id = OLD.profile_id AND event_id = OLD.event_id;
                 END;
@@ -531,6 +621,22 @@ class GeneralDB(BaseDB):
                     WHERE profile_id = OLD.profile_id AND event_id = OLD.event_id;
                 END;
             """,
+
+            # accessible_profiles_preferences
+            'trg_accessible_profiles_preferences_update': """
+                INSTEAD OF UPDATE ON accessible_profiles_preferences
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> OLD.profile_id THEN
+                            RAISE(ABORT, 'Permission denied: the profile preference is not accessible')
+                    END;
+
+                    UPDATE profiles_preferences SET
+                        preference_value = NEW.preference_value
+                    WHERE profile_id = OLD.profile_id AND preference_group = OLD.preference_group AND preference_key = OLD.preference_key;
+                END;
+            """,
+
             # notifications
             'trg_accessible_notifications_insert': """
                 INSTEAD OF INSERT ON accessible_notifications
@@ -766,7 +872,45 @@ class GeneralDB(BaseDB):
                     END;
                 END;
             """,
-            
+
+            # ensure_events_valid
+            'trg_ensure_events_images_limit_valid_insert': """
+                BEFORE INSERT ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.images_count_limit < 0 OR NEW.images_count_limit > (SELECT images_count_limit FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Policy error: Invalid images count limit')
+                    END;
+                END;
+            """,
+            'trg_ensure_events_images_limit_valid_update': """
+                BEFORE UPDATE ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.images_count_limit < 0 OR NEW.images_count_limit > (SELECT images_count_limit FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Policy error: Invalid images count limit')
+                    END;
+                END;
+            """,
+            'trg_ensure_events_image_size_limit_valid_insert': """
+                BEFORE INSERT ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.image_size_limit_bytes < 0 OR NEW.image_size_limit_bytes > (SELECT image_size_limit_bytes FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Policy error: Invalid image size limit')
+                    END;
+                END;
+            """,
+            'trg_ensure_events_image_size_limit_valid_update': """
+                BEFORE UPDATE ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.image_size_limit_bytes < 0 OR NEW.image_size_limit_bytes > (SELECT image_size_limit_bytes FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Policy error: Invalid image size limit')
+                    END;
+                END;
+            """,
+
             # ensure_profiles_unique
             'trg_ensure_profiles_unique_insert': """
                 BEFORE INSERT ON profiles
@@ -805,6 +949,7 @@ class GeneralDB(BaseDB):
                     END;
                 END;
             """,
+
         }
 
     @classmethod
