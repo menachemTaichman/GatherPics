@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Bell, RefreshCw, Trash2, ChevronDown, Check, CheckCheck } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { notificationsAPI } from '../../utils/apiService';
-import { useDataStore } from '../../utils/dataManager';
+import { useDataStore, useMyNotificationsList } from '../../utils/dataManager';
 import { useToast } from '../../contexts/ToastContext';
 import { openFromNotification } from '../../utils/notificationNavigator';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -16,19 +16,17 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const permissions = usePermissions();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  // Subscribe to stable slices only to avoid unnecessary re-renders
-  const entities = useDataStore((s) => s.entities);
   const setScope = useDataStore((s) => s.setScope);
   const removeScope = useDataStore((s) => s.removeScope);
 
-  const notificationsMap = entities?.my_notifications || {};
+  const notificationsList = useMyNotificationsList();
   const notifications = useMemo(() => {
-    return Object.values(notificationsMap).sort((a, b) => {
+    return notificationsList.sort((a, b) => {
       const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
       const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
       return tb - ta;
     });
-  }, [notificationsMap]);
+  }, [notificationsList]);
 
   // Guard to run loading logic only once per open instance
   const loadedOnceRef = useRef(false);
@@ -163,8 +161,16 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
               <li key={n.id} className={"flex items-start gap-2 p-3 " + (isUnread ? 'bg-blue-50' : '')}>
                 <button
                   className="flex-1 text-left"
-                  onClick={() => {
+                  onClick={async () => {
                     openFromNotification(n, { eventUrl, navigate, isManager: !!permissions.isProfilesManager });
+                    // Mark as read when notification is clicked
+                    if (!n.read) {
+                      try {
+                        await notificationsAPI.markRead(n.id, 1);
+                      } catch (e) {
+                        // Silently fail - not critical
+                      }
+                    }
                     onClose && onClose();
                   }}
                 >

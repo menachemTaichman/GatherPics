@@ -1,8 +1,7 @@
 import sqlite3
 import os
 import uuid
-from contextlib import contextmanager
-from src.core.database.base_db import BaseDB, ReturnFormat
+from src.core.database.base_db import BaseDB
 from src.core.config import DATA_ROOT
 
 DB_PATH = os.path.join(DATA_ROOT, 'general.db')
@@ -64,11 +63,17 @@ class GeneralDB(BaseDB):
                     'sortDir': (str, 'asc')
                 },
                 'RequestsGallery': {
+                    'filterStatus': (str, 'all'),
                     'sortDir': (str, 'desc'),
                     'sortBy': (str, 'requested_at')
                 },
                 'RequestsDetail': {
                     'sortDir': (str, 'asc')
+                },
+                'FeedbacksGallery': {
+                    'filterStatus': (str, 'all'),
+                    'sortDir': (str, 'desc'),
+                    'sortBy': (str, 'created_at')
                 }
             }
         }
@@ -133,32 +138,35 @@ class GeneralDB(BaseDB):
                     'profile_id',
                     'sender_name',
                     'sender_email',
+                    'profile_is_public',
+                    'profile_label',
                     'communication_consent',
                     'title',
                     'type',
                     'message',
                     'created_at',
-                    'user_agent',
-                    'ip_address',
-                    'diagnostics',
-                    'notes',
                     'is_closed',
                     'solved',
                     'closed_at',
                     'closed_by',
+                    'closed_by_label',
                     'closed_details'
+                ],
+                'details_fields': [
+                    'user_agent',
+                    'ip_address',
+                    'diagnostics',
+                    'notes',
                 ],
                 'serializable': {
                     'diagnostics': dict,
-                }
+                },
             },
             'my_feedbacks': {
                 'original_table': 'feedbacks',
                 'primary_key': 'feedback_id',
                 'accessible_table': 'accessible_my_feedbacks',
                 'fields': [
-                    'sender_name',
-                    'sender_email',
                     'communication_consent',
                     'title',
                     'type',
@@ -247,7 +255,7 @@ class GeneralDB(BaseDB):
             'feedbacks': '''
                 feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 profile_id TEXT,
-                sender_name TEXT NOT NULL,
+                sender_name TEXT,
                 sender_email TEXT,
                 communication_consent INTEGER DEFAULT 0,
                 title TEXT,
@@ -334,9 +342,35 @@ class GeneralDB(BaseDB):
                 SELECT * FROM notifications
                 INNER JOIN accessible_profiles ap ON notifications.profile_id = ap.profile_id
             """,
+            'feedbacks_details': """
+                SELECT
+                    fe.feedback_id,
+                    fe.profile_id,
+                    p.label AS profile_label,
+                    p.is_public AS profile_is_public,
+                    CASE WHEN p.is_public = 1 THEN fe.sender_name ELSE p.label END AS sender_name,
+                    CASE WHEN p.is_public = 1 THEN fe.sender_email ELSE p.email END AS sender_email,
+                    fe.communication_consent,
+                    fe.title,
+                    fe.type,
+                    fe.message,
+                    fe.created_at,
+                    fe.user_agent,
+                    fe.ip_address,
+                    fe.diagnostics,
+                    fe.notes,
+                    fe.is_closed,
+                    fe.solved,
+                    fe.closed_at,
+                    fe.closed_by,
+                    fe.closed_details
+                FROM feedbacks fe
+                LEFT JOIN profiles p ON fe.profile_id = p.profile_id
+            """,
             'my_feedbacks': """
                 SELECT
                     feedback_id,
+                    profile_id,
                     sender_name,
                     sender_email,
                     communication_consent,
@@ -346,8 +380,11 @@ class GeneralDB(BaseDB):
                     created_at,
                     is_closed,
                     closed_at,
-                    closed_details
-                FROM feedbacks
+                    closed_details,
+                    user_agent,
+                    ip_address,
+                    diagnostics
+                FROM feedbacks_details
                 WHERE profile_id = cur_profile('profile_id')
                 AND cur_profile('is_public') = 0
             """,
@@ -355,8 +392,12 @@ class GeneralDB(BaseDB):
                 SELECT * FROM my_feedbacks
             """,
             'accessible_feedbacks': """
-                SELECT * FROM feedbacks
-                WHERE cur_profile('profile_id') = (SELECT developer_id FROM settings WHERE id = 1)
+                SELECT
+                    *,
+                    p.label AS closed_by_label
+                FROM feedbacks_details fe
+                LEFT JOIN profiles p ON fe.closed_by = p.profile_id
+                WHERE cur_profile('profile_id') = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
             """,
         }
     
@@ -386,10 +427,10 @@ class GeneralDB(BaseDB):
                 INSTEAD OF UPDATE ON accessible_profiles
                 BEGIN
                     SELECT CASE
-                        WHEN cur_profile('hierarchy_rank') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: not a profiles manager')
+                        WHEN cur_profile('is_public') = 1 THEN
+                            RAISE(ABORT, 'Permission denied: not the profile manager')
                         WHEN
-                            NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND OLD.profile_id <> cur_profile('profile_id')
+                            OLD.hierarchy_rank >= cur_profile('hierarchy_rank') AND OLD.profile_id <> cur_profile('profile_id')
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile with higher or equal rank')
                         WHEN OLD.profile_id = cur_profile('profile_id') AND (
@@ -397,9 +438,12 @@ class GeneralDB(BaseDB):
                             OR OLD.can_create_events <> NEW.can_create_events
                             OR OLD.restricted_to_event <> NEW.restricted_to_event
                             OR OLD.label <> NEW.label
+                            OR OLD.is_public <> NEW.is_public
                         )
                         THEN
                             RAISE(ABORT, 'Permission denied: the fields to update are not accessible to the current profile')
+                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: cannot update profile to a higher or equal rank than the current profile')
                         WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
@@ -412,7 +456,8 @@ class GeneralDB(BaseDB):
                         password = NEW.password,
                         hierarchy_rank = NEW.hierarchy_rank,
                         can_create_events = NEW.can_create_events,
-                        restricted_to_event = NEW.restricted_to_event
+                        restricted_to_event = NEW.restricted_to_event,
+                        is_public = NEW.is_public
                     WHERE profile_id = OLD.profile_id;
                 END;
             """,
@@ -596,13 +641,30 @@ class GeneralDB(BaseDB):
                         NEW.ip_address,
                         NEW.diagnostics
                     );
+                
+                    INSERT INTO notifications (
+                        profile_id,
+                        message,
+                        created_at,
+                        read,
+                        type,
+                        data
+                    )
+                    VALUES (
+                        (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1),
+                        'New feedback received',
+                        CURRENT_TIMESTAMP,
+                        0,
+                        'feedback',
+                        last_insert_rowid()
+                    );
                 END;
             """,
             'trg_accessible_my_feedbacks_update': """
                 INSTEAD OF UPDATE ON accessible_my_feedbacks
                 BEGIN
                     SELECT CASE
-                        WHEN NEW.profile_id <> cur_profile('profile_id') THEN
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
                             RAISE(ABORT, 'Permission denied: cannot update feedback for another profile')
                         WHEN OLD.is_closed = 1 THEN
                             RAISE(ABORT, 'Permission denied: cannot update closed feedback')
@@ -620,7 +682,7 @@ class GeneralDB(BaseDB):
                 INSTEAD OF DELETE ON accessible_my_feedbacks
                 BEGIN
                     SELECT CASE
-                        WHEN NEW.profile_id <> cur_profile('profile_id') THEN
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
                             RAISE(ABORT, 'Permission denied: cannot delete feedback for another profile')
                         WHEN OLD.is_closed = 1 THEN
                             RAISE(ABORT, 'Permission denied: cannot delete closed feedback')
@@ -649,6 +711,27 @@ class GeneralDB(BaseDB):
                         closed_by = cur_profile('profile_id'),
                         closed_details = NEW.closed_details
                     WHERE feedback_id = OLD.feedback_id;
+
+                    INSERT INTO notifications (
+                        profile_id,
+                        message,
+                        created_at,
+                        read,
+                        type,
+                        data
+                    )
+                    SELECT
+                        profile_id,
+                        'Your feedback has been updated',
+                        CURRENT_TIMESTAMP,
+                        0,
+                        'my_feedback',
+                        feedback_id
+                    FROM feedbacks
+                    INNER JOIN profiles p ON feedbacks.profile_id = p.profile_id
+                    WHERE feedback_id = OLD.feedback_id
+                    AND NEW.is_closed = 1
+                    AND p.is_public = 0;
                 END;
             """,
             'trg_accessible_feedbacks_delete': """
@@ -664,6 +747,26 @@ class GeneralDB(BaseDB):
                 END;
             """,
 
+            # prevent_reserved_event_urls
+            'trg_prevent_reserved_event_urls_insert': """
+                BEFORE INSERT ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.url = 'dashboard' THEN
+                            RAISE(ABORT, 'Policy error: The URL "dashboard" is reserved and cannot be used for events')
+                    END;
+                END;
+            """,
+            'trg_prevent_reserved_event_urls_update': """
+                BEFORE UPDATE ON events
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.url = 'dashboard' THEN
+                            RAISE(ABORT, 'Policy error: The URL "dashboard" is reserved and cannot be used for events')
+                    END;
+                END;
+            """,
+            
             # ensure_profiles_unique
             'trg_ensure_profiles_unique_insert': """
                 BEFORE INSERT ON profiles
@@ -711,6 +814,7 @@ class GeneralDB(BaseDB):
             'hierarchy_rank': 0,
             'can_create_events': False,
             'restricted_to_event': None,
+            'is_public': False,
         }
 
     @classmethod

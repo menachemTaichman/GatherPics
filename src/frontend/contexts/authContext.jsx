@@ -28,8 +28,13 @@ export function AuthProvider({ children }) {
           // Fetch current profile from API
           try {
             // Try to get event URL from current location path
+            // Skip reserved paths that are not event URLs
+            const reservedPaths = ['dashboard'];
             const pathParts = window.location.pathname.split('/').filter(Boolean);
-            const eventUrl = pathParts[0] || null;
+            const firstPathSegment = pathParts[0] || null;
+            const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 
+              ? firstPathSegment 
+              : null;
             
             await profilesAPI.getCurrentProfile(eventUrl);
             // currentProfile updated via changes in response interceptor
@@ -110,8 +115,12 @@ export function AuthProvider({ children }) {
         // Token is already in localStorage (shared), fetch fresh profile with event context
         (async () => {
           try {
+            const reservedPaths = ['dashboard'];
             const pathParts = window.location.pathname.split('/').filter(Boolean);
-            const eventUrl = pathParts[0] || null;
+            const firstPathSegment = pathParts[0] || null;
+            const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 
+              ? firstPathSegment 
+              : null;
             
             await profilesAPI.getCurrentProfile(eventUrl);
             // currentProfile updated via changes in response interceptor
@@ -147,8 +156,12 @@ export function AuthProvider({ children }) {
       
       // Store profile - fetch full profile with event context
       try {
+        const reservedPaths = ['dashboard'];
         const pathParts = window.location.pathname.split('/').filter(Boolean);
-        const eventUrl = pathParts[0] || null;
+        const firstPathSegment = pathParts[0] || null;
+        const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 
+          ? firstPathSegment 
+          : null;
         
         await profilesAPI.getCurrentProfile(eventUrl);
         // currentProfile updated via changes in response interceptor

@@ -274,6 +274,19 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
-recreate_views_triggers_and_indexes(general_models.db)
-result = general_models.get_entities('my_feedbacks')
+# upsert_profiles_preferences()
+# make the profile public
+# recreate_views_triggers_and_indexes(general_models.db)
+general_models.edit('profiles', '10d60cb9-6aec-4540-b15e-6df187f19b3c', {'is_public': 0})
+result = general_models.get_entities('feedbacks', 1, include_details=False)
 print(result)
+print('--------------------------------')
+general_profiles = general_models.db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_DICTS)
+main_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
+main_general_models = GeneralModels(main_profile_id)
+result = main_general_models.get_entities('my_feedbacks')
+result2 = main_general_models.db.execute_query('SELECT * FROM my_feedbacks;', return_format=ReturnFormat.LIST_TUPLES)
+result3 = main_general_models.db.execute_query('SELECT * FROM feedbacks;', return_format=ReturnFormat.LIST_TUPLES)
+print(result)
+print(result2)
+print(result3)

@@ -51,12 +51,13 @@ def toggle_read(notification_id):
             'entity': 'my_notification',
             'items': general_models.get_entities('my_notifications', [notification_id])
         }]
+        current_profile = general_models.get_current_profile()
         changes.append({
             'type': 'UPDATE',
             'entity': 'localStorage',
             'items': {
                 'currentProfile': {
-                    'unread_notifications': general_models.count_my_unread_notifications()
+                    'unread_notifications': current_profile['unread_notifications']
                 }
             }
         })
@@ -82,12 +83,13 @@ def mark_all_read():
             'entity': 'my_notification',
             'items': general_models.get_entities('my_notifications', marked_ids)
         })
+        current_profile = general_models.get_current_profile()
         changes.append({
             'type': 'UPDATE',
             'entity': 'localStorage',
             'items': {
                 'currentProfile': {
-                    'unread_notifications': general_models.count_my_unread_notifications()
+                    'unread_notifications': current_profile['unread_notifications']
                 }
             }
         })
@@ -112,12 +114,15 @@ def delete_my_notification(notification_id):
             'entity': 'my_notification',
             'ids': [notification_id]
         }]
+        
+        current_profile = general_models.get_current_profile()
         changes.append({
             'type': 'UPDATE',
             'entity': 'localStorage',
             'items': {
                 'currentProfile': {
-                    'total_notifications': general_models.count_my_total_notifications()
+                    'total_notifications': current_profile['total_notifications'],
+                    'unread_notifications': current_profile['unread_notifications']
                 }
             }
         })
@@ -142,49 +147,18 @@ def delete_all_my_notifications():
             'entity': 'my_notification',
             'ids': deleted_ids
         }]
+        current_profile = general_models.get_current_profile()
         changes.append({
             'type': 'UPDATE',
             'entity': 'localStorage',
             'items': {
                 'currentProfile': {
-                    'total_notifications': general_models.count_my_total_notifications(),
-                    'unread_notifications': general_models.count_my_unread_notifications()
+                    'total_notifications': current_profile['total_notifications'],
+                    'unread_notifications': current_profile['unread_notifications']
                 }
             }
         })
         return jsonify({'success': True, 'changes': changes, 'deleted_ids': deleted_ids})
-    except Forbidden as e:
-        return jsonify({'error': str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({'error': str(e)}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-
-@notification_bp.route('/my/unread-count', methods=['GET'])
-@require_auth
-def count_unread():
-    """Get count of unread notifications for current user."""
-    general_models = get_general_models()
-    try:
-        unread = general_models.count_my_unread_notifications()
-        return jsonify({'unread': unread})
-    except Forbidden as e:
-        return jsonify({'error': str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({'error': str(e)}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-
-@notification_bp.route('/my/total-count', methods=['GET'])
-@require_auth
-def count_total():
-    """Get total count of notifications for current user."""
-    general_models = get_general_models()
-    try:
-        total = general_models.count_my_total_notifications()
-        return jsonify({'total': total})
     except Forbidden as e:
         return jsonify({'error': str(e)}), 403
     except DatabaseError as e:

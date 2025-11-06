@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
 import { feedbacksAPI } from '../../utils/apiService';
 import { useFeedbackById } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
+import { useApplyScopes } from '../../utils/storeUtils';
+import CloseFeedbackModal from './CloseFeedbackModal';
+import ConfirmDelete from '../modals/ConfirmDelete';
 
 export default function FeedbackDetailModal({ 
   isOpen, 
@@ -16,8 +19,7 @@ export default function FeedbackDetailModal({
   const [loading, setLoading] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showCloseFeedbackModal, setShowCloseFeedbackModal] = useState(false);
-  const [closeDetails, setCloseDetails] = useState('');
-  const [solved, setSolved] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [notes, setNotes] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
   
@@ -25,13 +27,20 @@ export default function FeedbackDetailModal({
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'feedback-detail-modal';
 
+  // Apply scope for this feedback
+  useApplyScopes(
+    isOpen && feedbackId 
+      ? [{ entity: 'feedback', id: feedbackId, eventId: 'general' }]
+      : []
+  );
+
   // Get feedback from store
   const feedback = useFeedbackById(feedbackId);
 
   // Register modal
   useEffect(() => {
     if (isOpen) {
-      registerModal({ id: modalId, type: 'modal', allowOutsideScroll: false });
+      registerModal({ id: modalId, type: 'popup', allowOutsideScroll: true });
       return () => unregisterModal(modalId);
     }
   }, [isOpen, registerModal, unregisterModal]);
@@ -49,7 +58,7 @@ export default function FeedbackDetailModal({
       };
       fetchFeedback();
     }
-  }, [isOpen, feedbackId, showToast]);
+  }, [isOpen, feedbackId]);
 
   // Initialize notes from feedback
   useEffect(() => {
@@ -58,12 +67,6 @@ export default function FeedbackDetailModal({
       setEditingNotes(false);
     }
   }, [feedback]);
-
-  const { modalRef } = useModalFocus(isOpen, onClose, {
-    modalId,
-    modalType: 'modal',
-    allowOutsideScroll: false
-  });
 
   const handleSaveNotes = useCallback(async () => {
     setLoading(true);
@@ -82,30 +85,14 @@ export default function FeedbackDetailModal({
     }
   }, [feedbackId, notes, showToast]);
 
-  const handleCloseFeedback = useCallback(async () => {
-    setLoading(true);
-    try {
-      await feedbacksAPI.update(feedbackId, {
-        is_closed: 1,
-        solved: solved ? 1 : 0,
-        closed_details: closeDetails.trim() || null
-      });
-      
-      showToast(`Feedback ${solved ? 'resolved' : 'closed'}`, 'success');
-      setShowCloseFeedbackModal(false);
+  const handleCloseModalCallback = useCallback((success) => {
+    setShowCloseFeedbackModal(false);
+    if (success) {
       onClose();
-    } catch (error) {
-      console.error('Failed to close feedback:', error);
-      showToast(formatErrorMessage('close feedback', error), 'error');
-    } finally {
-      setLoading(false);
     }
-  }, [feedbackId, solved, closeDetails, showToast, onClose]);
+  }, [onClose]);
 
-  const handleDelete = useCallback(async () => {
-    const confirmed = window.confirm('Are you sure you want to delete this feedback?');
-    if (!confirmed) return;
-
+  const handleDeleteConfirm = useCallback(async () => {
     setLoading(true);
     try {
       await feedbacksAPI.delete(feedbackId);
@@ -119,6 +106,44 @@ export default function FeedbackDetailModal({
     }
   }, [feedbackId, showToast, onClose]);
 
+  const isClosed = feedback?.is_closed === 1;
+
+  // Custom keyboard handler
+  const handleDetailModalKeys = useCallback((e) => {
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // ESC always closes the modal
+    if (e.key === 'Escape') {
+      if (!loading) {
+        onClose();
+      }
+      return true; // Handled
+    }
+    
+    // Enter opens the close feedback modal (except in textarea where it adds newline)
+    if (e.key === 'Enter' && targetTagName !== 'textarea') {
+      if (!loading && !isClosed) {
+        e.preventDefault();
+        setShowCloseFeedbackModal(true);
+      }
+      return true; // Handled
+    }
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it
+    }
+    
+    return false; // Not handled
+  }, [loading, onClose, isClosed]);
+
+  const { modalRef } = useModalFocus(isOpen, onClose, {
+    modalId,
+    modalType: 'popup',
+    allowOutsideScroll: true,
+    customKeyHandler: handleDetailModalKeys
+  });
+
   // Parse diagnostics if available
   const diagnostics = useMemo(() => {
     if (!feedback?.diagnostics) return null;
@@ -131,8 +156,6 @@ export default function FeedbackDetailModal({
     }
   }, [feedback?.diagnostics]);
 
-  const isClosed = feedback?.is_closed === 1;
-
   if (!isOpen || !feedback) return null;
 
   return (
@@ -140,6 +163,7 @@ export default function FeedbackDetailModal({
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <motion.div
           ref={modalRef}
+          tabIndex={-1}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
@@ -181,40 +205,39 @@ export default function FeedbackDetailModal({
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Sender Info */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Sender Information</h3>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <User className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-900">{feedback.sender_name}</span>
-                </div>
-                {feedback.sender_email && (
-                  <div className="flex items-center space-x-2">
-                    <Mail className="w-4 h-4 text-gray-400" />
-                    <a href={`mailto:${feedback.sender_email}`} className="text-sm text-blue-600 hover:underline">
-                      {feedback.sender_email}
-                    </a>
-                    {feedback.communication_consent && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                        Agreed to contact
-                      </span>
-                    )}
-                  </div>
-                )}
-                {feedback.profile_id && (
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-600">Profile ID: {feedback.profile_id}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Title and Type */}
+            {/* Feedback Details */}
             <div className="bg-gray-50 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Feedback Details</h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs text-gray-600">Sender:</span>
+                  <div className="mt-1 space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-900">{feedback.sender_name}</span>
+                    </div>
+                    {feedback.profile_is_public === 1 && feedback.profile_label && (
+                      <div className="flex items-center space-x-2">
+                        <User className="w-4 h-4 text-gray-400" />
+                        <span className="text-xs text-gray-600">Profile:</span>
+                        <span className="text-sm text-gray-900">{feedback.profile_label}</span>
+                      </div>
+                    )}
+                    {feedback.sender_email && (
+                      <div className="flex items-center space-x-2">
+                        <Mail className="w-4 h-4 text-gray-400" />
+                        <a href={`mailto:${feedback.sender_email}`} className="text-sm text-blue-600 hover:underline">
+                          {feedback.sender_email}
+                        </a>
+                        {feedback.communication_consent && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                            Agreed to contact
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div>
                   <span className="text-xs text-gray-600">Title:</span>
                   <p className="text-sm font-medium text-gray-900">{feedback.title}</p>
@@ -227,14 +250,10 @@ export default function FeedbackDetailModal({
                     {feedback.type === 0 ? 'Bug Report' : 'Suggestion'}
                   </span>
                 </div>
-              </div>
-            </div>
-
-            {/* Feedback Message */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Message</h3>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-gray-900 whitespace-pre-wrap">{feedback.message}</p>
+                <div>
+                  <span className="text-xs text-gray-600">Details:</span>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap mt-1">{feedback.message}</p>
+                </div>
               </div>
             </div>
 
@@ -393,6 +412,57 @@ export default function FeedbackDetailModal({
                         </div>
                       </div>
                     )}
+
+                    {/* Network Errors (Detailed) */}
+                    {diagnostics.network_errors && diagnostics.network_errors.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-red-700 mb-2">
+                          Network Errors ({diagnostics.network_errors.length})
+                        </h4>
+                        <div className="bg-white p-3 rounded max-h-80 overflow-y-auto">
+                          {diagnostics.network_errors.map((error, idx) => (
+                            <div key={idx} className="text-[10px] font-mono mb-3 pb-3 border-b border-red-100 last:border-0">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+                                  {error.status || 'ERR'}
+                                </span>
+                                <span className="text-blue-600 font-semibold">{error.method}</span>
+                                <span className="text-gray-600">{error.duration}ms</span>
+                                {error.type && (
+                                  <span className="text-gray-400 text-[9px]">({error.type})</span>
+                                )}
+                              </div>
+                              <div className="text-gray-400 text-[9px] mb-1">{new Date(error.timestamp).toLocaleString()}</div>
+                              <div className="text-gray-900 break-all mb-1">{error.url}</div>
+                              {error.statusText && (
+                                <div className="text-red-600 mb-1">{error.statusText}</div>
+                              )}
+                              {error.error && (
+                                <div className="text-red-600 mb-1">Error: {error.error}</div>
+                              )}
+                              {error.responseBody && (
+                                <div className="mt-2">
+                                  <div className="text-gray-600 font-semibold mb-1">Response:</div>
+                                  <pre className="bg-red-50 p-2 rounded text-red-900 whitespace-pre-wrap break-words">
+                                    {typeof error.responseBody === 'string' 
+                                      ? error.responseBody 
+                                      : JSON.stringify(error.responseBody, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                              {error.headers && (
+                                <div className="mt-2">
+                                  <div className="text-gray-600 font-semibold mb-1">Headers:</div>
+                                  <pre className="bg-gray-50 p-2 rounded text-gray-700 whitespace-pre-wrap break-words text-[9px]">
+                                    {JSON.stringify(error.headers, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -408,16 +478,16 @@ export default function FeedbackDetailModal({
                     <span className="text-gray-600">Closed at:</span>
                     <span className="text-gray-900">{new Date(feedback.closed_at).toLocaleString()}</span>
                   </div>
-                  {feedback.closed_by && (
+                  {feedback.closed_by_label && (
                     <div className="flex items-center space-x-2 text-sm">
                       <User className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Closed by:</span>
-                      <span className="text-gray-900">{feedback.closed_by}</span>
+                      <span className="text-gray-900">{feedback.closed_by_label}</span>
                     </div>
                   )}
                   {feedback.closed_details && (
                     <div className="mt-3">
-                      <span className="text-xs text-gray-600">Notes:</span>
+                      <span className="text-xs text-gray-600">Closure Details:</span>
                       <p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{feedback.closed_details}</p>
                     </div>
                   )}
@@ -429,7 +499,7 @@ export default function FeedbackDetailModal({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-between">
             <button
-              onClick={handleDelete}
+              onClick={() => setShowDeleteModal(true)}
               disabled={loading}
               className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium disabled:opacity-50"
             >
@@ -459,77 +529,23 @@ export default function FeedbackDetailModal({
       </div>
 
       {/* Close Feedback Modal */}
-      {showCloseFeedbackModal && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Close Feedback</h3>
-            
-            <div className="space-y-4 mb-6">
-              <p className="text-gray-700">Close this feedback with optional notes.</p>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="mark-solved"
-                  checked={solved}
-                  onChange={(e) => setSolved(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-                  disabled={loading}
-                />
-                <label htmlFor="mark-solved" className="text-sm text-gray-700 cursor-pointer">
-                  Mark as solved
-                </label>
-              </div>
+      <CloseFeedbackModal
+        isOpen={showCloseFeedbackModal}
+        onClose={handleCloseModalCallback}
+        feedbackId={feedbackId}
+      />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={closeDetails}
-                  onChange={(e) => setCloseDetails(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                  placeholder="Add any notes about this feedback..."
-                  rows={3}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowCloseFeedbackModal(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCloseFeedback}
-                disabled={loading}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Closing...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Close Feedback</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDelete
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Feedback"
+        message="Are you sure you want to delete"
+        itemName={`Feedback #${feedbackId}`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </>
   );
 }

@@ -72,17 +72,18 @@ class BaseModels(ABC):
         results = self.db.execute_query(query, (entity_id,))
         return bool(results[0][0])
 
-    def get_entities(self, table: str, entity_ids: List[str | int] | str | int | None = None) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
+    def get_entities(self, table: str, entity_ids: List[str | int] | str | int | None = None, *, include_details: bool = False) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
         """Get entities from a table.
         Args:
             table: table name
             entity_ids: list of entity ids or single entity id or None to get all entities
+            include_details: if True, include details fields in the result
         Returns:
             dict of entities with entity ids as keys and entity data as values
             if single item is provided, return the entity data
         """
         accessible_table = self.db.STRUCTURE()[table]['accessible_table']
-        fields = self.db.get_view_fields(table)
+        fields = self.db.get_view_fields(table, include_details=include_details)
         where_clause = ''
         single_item = False
 
@@ -106,7 +107,8 @@ class BaseModels(ABC):
         if serialized_instructions:
             for entity_id, entity_data in results.items():
                 for field, value_type in serialized_instructions.items():
-                    results[entity_id][field] = self.db.deserialize_value(value_type, entity_data[field])
+                    if field in entity_data:
+                        results[entity_id][field] = self.db.deserialize_value(value_type, entity_data[field])
         
         if results and single_item:
             return results[entity_ids[0]]

@@ -34,6 +34,30 @@ export async function openFromNotification(notification, { eventUrl, navigate, i
     }
     return;
   }
+
+  if (type === 'feedback') {
+    const feedbackId = typeof data === 'number' ? data : (typeof data === 'string' ? parseInt(data, 10) : data?.feedback_id);
+    if (feedbackId) {
+      try {
+        window.dispatchEvent(new CustomEvent('feedback:open-detail', { detail: { feedbackId } }));
+      } catch (e) {
+        console.error('Error dispatching feedback event:', e);
+      }
+    }
+    return;
+  }
+
+  if (type === 'my_feedback') {
+    const feedbackId = typeof data === 'number' ? data : (typeof data === 'string' ? parseInt(data, 10) : data?.feedback_id);
+    if (feedbackId) {
+      try {
+        window.dispatchEvent(new CustomEvent('my-feedback:open', { detail: { feedbackId } }));
+      } catch (e) {
+        console.error('Error dispatching my-feedback event:', e);
+      }
+    }
+    return;
+  }
 }
 
 function parseData(data) {

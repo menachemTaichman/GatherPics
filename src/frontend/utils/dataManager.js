@@ -149,6 +149,12 @@ const ENTITY_STRUCTURE = {
   my_notifications: {
     relations: [],
   },
+  feedbacks: {
+    relations: [],
+  },
+  my_feedbacks: {
+    relations: [],
+  },
 };
 
 const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
@@ -157,7 +163,7 @@ const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
 const EVENT_ENTITY_TYPES = ['images', 'groups', 'moments', 'albums', 'faces', 'event_profiles', 'uploads', 'access_requests', 'my_access_requests'];
 
 // General entities (not scoped to events)
-const GENERAL_ENTITY_TYPES = ['profiles', 'my_notifications'];
+const GENERAL_ENTITY_TYPES = ['profiles', 'my_notifications', 'feedbacks', 'my_feedbacks'];
 
 function getEntityType(entity) {
   const normalized = normalizeEntityKey(entity);
@@ -190,6 +196,8 @@ function normalizeEntityKey(entity, eventId = null) {
     case 'access_request': return 'access_requests';
     case 'my_access_request': return 'my_access_requests';
     case 'my_notification': return 'my_notifications';
+    case 'feedback': return 'feedbacks';
+    case 'my_feedback': return 'my_feedbacks';
     case 'local_storage': return 'localStore';
     case 'localStorage': return 'localStore';
     // Already plural forms

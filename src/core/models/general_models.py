@@ -487,7 +487,7 @@ class GeneralModels(BaseModels):
         Returns:
             list of notification ids that were marked as read
         """
-        query = 'SELECT id FROM my_notifications WHERE read = 0'
+        query = 'SELECT notification_id FROM my_notifications WHERE read = 0'
         notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
         self.edit('my_notifications', notification_ids, {'read': 1, 'read_at': read_at})
         return notification_ids
@@ -498,7 +498,7 @@ class GeneralModels(BaseModels):
         Returns:
             list of notification ids that were deleted
         """
-        query = 'SELECT id FROM my_notifications'
+        query = 'SELECT notification_id FROM my_notifications'
         notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
         self.delete('my_notifications', notification_ids)
         return notification_ids

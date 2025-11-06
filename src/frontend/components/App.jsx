@@ -9,6 +9,7 @@ import { MomentsPage } from '../pages/moments';
 import { UploadsGalleryPage, UploadDetailPage } from '../pages/uploads';
 import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
 import { FeedbacksGalleryPage } from '../pages/feedbacks';
+import { DashboardPage } from '../pages/dashboard';
 import { LoadingSpinner, Toast } from './common';
 import { LoginModal } from './auth';
 import { useDataStore } from '../utils/dataManager';
@@ -21,7 +22,9 @@ import { AuthProvider, useAuth } from '../contexts/authContext';
 import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
 import RequestFormModal from './requests/RequestFormModal.jsx';
 import { RequestDetailModal } from './requests';
-import { requestsAPI } from '../utils/apiService';
+import { requestsAPI, feedbacksAPI } from '../utils/apiService';
+import { FeedbackDetailModal, FeedbackFormModal } from './feedbacks';
+import diagnosticsCapture from '../utils/diagnosticsCapture';
 
 // Cache for events list to prevent duplicate requests
 let eventsCache = null;
@@ -294,6 +297,8 @@ function AppContent({ eventUrl }) {
   const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const [openMyRequestId, setOpenMyRequestId] = useState(null);
   const [openManagerRequest, setOpenManagerRequest] = useState({ id: null, data: null });
+  const [openFeedbackId, setOpenFeedbackId] = useState(null);
+  const [openMyFeedback, setOpenMyFeedback] = useState({ id: null, data: null });
 
   // Auto-show login modal when on protected route and not authenticated
   useEffect(() => {
@@ -348,6 +353,35 @@ function AppContent({ eventUrl }) {
     window.addEventListener('requests:open-detail', handler);
     return () => window.removeEventListener('requests:open-detail', handler);
   }, [eventUrl]);
+
+  // Listen for feedback:open-detail to show FeedbackDetailModal globally
+  useEffect(() => {
+    const handler = (ev) => {
+      const fid = ev?.detail?.feedbackId;
+      if (!fid) return;
+      setOpenFeedbackId(fid);
+    };
+    window.addEventListener('feedback:open-detail', handler);
+    return () => window.removeEventListener('feedback:open-detail', handler);
+  }, []);
+
+  // Listen for my-feedback:open to show FeedbackFormModal globally
+  useEffect(() => {
+    const handler = async (ev) => {
+      const fid = ev?.detail?.feedbackId;
+      if (!fid) return;
+      try {
+        const res = await feedbacksAPI.getMyFeedbackById(fid);
+        const items = res?.changes?.[0]?.items || [];
+        const feedback = items[0] || { id: fid, feedback_id: fid };
+        setOpenMyFeedback({ id: fid, data: feedback });
+      } catch {
+        setOpenMyFeedback({ id: fid, data: { id: fid, feedback_id: fid } });
+      }
+    };
+    window.addEventListener('my-feedback:open', handler);
+    return () => window.removeEventListener('my-feedback:open', handler);
+  }, []);
 
   // Get event name from eventData (resolved by useEventUrls)
   const eventName = eventData?.name || '';
@@ -605,12 +639,6 @@ function AppContent({ eventUrl }) {
               <RequestsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
-          <Route
-            path="feedbacks"
-            element={
-              <FeedbacksGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
-            }
-          />
           <Route 
             path="" 
             element={
@@ -667,14 +695,36 @@ function AppContent({ eventUrl }) {
           urlHelpers={urlHelpers}
         />
       )}
+      {openFeedbackId && (
+        <FeedbackDetailModal
+          isOpen={!!openFeedbackId}
+          onClose={() => setOpenFeedbackId(null)}
+          feedbackId={openFeedbackId}
+        />
+      )}
+      {openMyFeedback.id && (
+        <FeedbackFormModal
+          isOpen={!!openMyFeedback.id}
+          onClose={() => setOpenMyFeedback({ id: null, data: null })}
+          feedback={openMyFeedback.data}
+        />
+      )}
     </>
   );
 }
 
 export default function App() {
-  // Initialize preferences at startup
+  // Initialize preferences and diagnostics capture at startup
   useEffect(() => {
     initializePreferences();
+    
+    // Start capturing diagnostics globally for feedback system
+    diagnosticsCapture.startCapture();
+    
+    // Cleanup on unmount
+    return () => {
+      diagnosticsCapture.stopCapture();
+    };
   }, []);
 
   return (
@@ -684,6 +734,8 @@ export default function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard/feedbacks" element={<FeedbacksGalleryPage />} />
               <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>

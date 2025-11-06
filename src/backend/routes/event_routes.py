@@ -43,6 +43,11 @@ def resolve_event():
     url = request.args.get('url', '').strip()
     if not url:
         return jsonify({"error": "url is required"}), 400
+    
+    # Check for reserved URLs (like 'dashboard') before checking event URLs
+    if url == 'dashboard':
+        return jsonify({"error": "Event not found"}), 404
+    
     gm = get_general_models(profile_id=None)
     try:
         event = gm.get_event_by_url(url)

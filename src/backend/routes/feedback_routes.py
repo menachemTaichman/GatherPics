@@ -29,7 +29,8 @@ def get_feedback(feedback_id):
     if not general_models.is_accessible('feedbacks', feedback_id):
         return jsonify({"error": f"Feedback {feedback_id} not found or not accessible"}), 404
 
-    feedback_data = general_models.get_entities('feedbacks', [feedback_id])
+    feedback_data = general_models.get_entities('feedbacks', [feedback_id], include_details=True)
+    
     changes = [{
         'type': 'UPSERT',
         'entity': 'feedback',
@@ -196,13 +197,16 @@ def create_feedback():
     try:
         feedback_data = {
             'profile_id': get_jwt_identity(),
-            'sender_name': data['sender_name'],
-            'sender_email': data.get('sender_email'),
             'message': data['message'],
             'title': data.get('title'),
             'type': data.get('type', 0),
             'communication_consent': data.get('communication_consent', 0),
         }
+        
+        if data.get('sender_name'):
+            feedback_data['sender_name'] = data['sender_name']
+        if data.get('sender_email'):
+            feedback_data['sender_email'] = data['sender_email']
         
         # Include metadata if sender agrees
         if data.get('include_metadata'):
@@ -215,6 +219,8 @@ def create_feedback():
                 diagnostics['console_logs'] = data['console_logs']
             if data.get('network_logs'):
                 diagnostics['network_logs'] = data['network_logs']
+            if data.get('network_errors'):
+                diagnostics['network_errors'] = data['network_errors']
             if data.get('browser_info'):
                 diagnostics['browser_info'] = data['browser_info']
             

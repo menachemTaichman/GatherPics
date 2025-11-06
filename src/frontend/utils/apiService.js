@@ -1223,14 +1223,6 @@ export const notificationsAPI = {
     const response = await api.delete(`/api/notifications/my/all`);
     return response.data || {};
   },
-  getUnreadCount: async () => {
-    const response = await api.get(`/api/notifications/my/unread-count`);
-    return response.data || {};
-  },
-  getTotalCount: async () => {
-    const response = await api.get(`/api/notifications/my/total-count`);
-    return response.data || {};
-  },
 };
 
 // Feedbacks API

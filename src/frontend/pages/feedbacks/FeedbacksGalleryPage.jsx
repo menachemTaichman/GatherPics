@@ -29,7 +29,7 @@ function formatDateTime(dateString) {
   }
 }
 
-export default function FeedbacksGalleryPage({ eventUrl }) {
+export default function FeedbacksGalleryPage() {
   const { isAuthenticated } = useAuth();
   const [deleteFeedback, setDeleteFeedback] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -304,9 +304,6 @@ export default function FeedbacksGalleryPage({ eventUrl }) {
                       ) : (
                         <div>
                           <p className="font-medium text-gray-900 truncate">{feedback.sender_name}</p>
-                          {feedback.sender_email && (
-                            <p className="text-xs text-gray-500 truncate">{feedback.sender_email}</p>
-                          )}
                         </div>
                       )}
                     </div>

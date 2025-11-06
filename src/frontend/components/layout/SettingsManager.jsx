@@ -101,7 +101,7 @@ export default function SettingsManager() {
           { entity: 'event_profile', id: String(profileId), eventId },
           { entity: 'profile', id: String(profileId), eventId: 'general' },
           { entity: 'all', id: 'my_access_requests', eventId },
-          ...(isPublic ? [] : [{ entity: 'all', id: 'my_feedbacks', eventId: 'general' }])
+          ...(!isPublic ? [{ entity: 'all', id: 'my_feedbacks', eventId: 'general' }] : [])
         ]
       : []
   );
@@ -121,11 +121,15 @@ export default function SettingsManager() {
     if (isOpen && activeTab === 'account' && eventUrl && currentProfile?.profile_id) {
       fetchCurrentProfile();
       fetchMyRequests();
-      if (currentProfile?.is_public !== 1) {
-        fetchMyFeedbacks();
-      }
     }
   }, [isOpen, activeTab, eventUrl, currentProfile?.id, currentProfile?.is_public, permissions.enable_new_requests]);
+
+  // Fetch my feedbacks when account or feedback tab is opened
+  useEffect(() => {
+    if (isOpen && (activeTab === 'account' || activeTab === 'feedback') && currentProfile?.is_public !== 1) {
+      fetchMyFeedbacks();
+    }
+  }, [isOpen, activeTab, currentProfile?.is_public]);
 
 
   const fetchCurrentProfile = async () => {
@@ -570,7 +574,8 @@ export default function SettingsManager() {
                   <div className="flex space-x-1">
                     {tabs.map((tab) => {
                       const Icon = tab.icon;
-                      const showBadge = tab.id === 'profiles' && pendingRequestsCount > 0;
+                      const showBadge = (tab.id === 'profiles' && pendingRequestsCount > 0) || 
+                                       (tab.id === 'feedback' && pendingFeedbacksCount > 0);
                       return (
                         <button
                           key={tab.id}
@@ -950,13 +955,13 @@ export default function SettingsManager() {
                             </div>
                             <div className="flex items-center space-x-2">
                               <div className="relative inline-block">
-                                <button
-                                  onClick={() => urlHelpers.navigateToRequests()}
-                                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                                <a
+                                  href={`/${eventUrl}/requests`}
+                                  className="text-blue-600 hover:text-blue-700 hover:underline transition-colors font-medium flex items-center space-x-1"
                                 >
                                   <FileText className="w-4 h-4" />
                                   <span>View Requests</span>
-                                </button>
+                                </a>
                                 {pendingRequestsCount > 0 && (
                                   <span className="absolute -top-1.5 -right-1.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
                                     {pendingRequestsCount}
@@ -1150,22 +1155,15 @@ export default function SettingsManager() {
                         {hasFeedbacks && (
                           <div className="bg-gray-50 rounded-lg p-4">
                             <div className="flex items-center justify-between mb-4">
-                              <div className="flex items-center space-x-2">
-                                <h4 className="text-sm font-semibold text-gray-700">Manage Feedbacks</h4>
-                                {pendingFeedbacksCount > 0 && (
-                                  <span className="px-2 py-1 text-xs bg-primary-600 text-white rounded-full">
-                                    {pendingFeedbacksCount}
-                                  </span>
-                                )}
-                              </div>
+                              <h4 className="text-sm font-semibold text-gray-700">Manage Feedbacks</h4>
                               <div className="relative">
-                                <button
-                                  onClick={() => urlHelpers.navigateToFeedbacks()}
-                                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1"
+                                <a
+                                  href="/dashboard/feedbacks"
+                                  className="text-blue-600 hover:text-blue-700 hover:underline transition-colors font-medium flex items-center space-x-1"
                                 >
                                   <FileText className="w-4 h-4" />
                                   <span>View Feedbacks</span>
-                                </button>
+                                </a>
                                 {pendingFeedbacksCount > 0 && (
                                   <span className="absolute -top-1.5 -right-1.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
                                     {pendingFeedbacksCount}

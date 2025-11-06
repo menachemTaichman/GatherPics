@@ -7,11 +7,14 @@ class DiagnosticsCapture {
   constructor() {
     this.consoleLogs = [];
     this.networkLogs = [];
+    this.networkErrors = []; // Separate storage for network errors
     this.maxConsoleLogs = 100; // Keep last 100 console entries
     this.maxNetworkLogs = 50;  // Keep last 50 network requests
+    this.maxNetworkErrors = 30; // Keep last 30 network errors
     this.isCapturing = false;
     this.originalConsole = {};
     this.originalFetch = null;
+    this.originalXHR = null;
   }
 
   /**
@@ -22,9 +25,11 @@ class DiagnosticsCapture {
     this.isCapturing = true;
     this.consoleLogs = [];
     this.networkLogs = [];
+    this.networkErrors = [];
     
     this._interceptConsole();
     this._interceptNetwork();
+    this._interceptXHR();
   }
 
   /**
@@ -36,6 +41,7 @@ class DiagnosticsCapture {
     
     this._restoreConsole();
     this._restoreNetwork();
+    this._restoreXHR();
   }
 
   /**
@@ -45,6 +51,7 @@ class DiagnosticsCapture {
     return {
       console_logs: this.consoleLogs.slice(-this.maxConsoleLogs),
       network_logs: this.networkLogs.slice(-this.maxNetworkLogs),
+      network_errors: this.networkErrors.slice(-this.maxNetworkErrors),
       browser_info: this._getBrowserInfo()
     };
   }
@@ -55,6 +62,7 @@ class DiagnosticsCapture {
   clear() {
     this.consoleLogs = [];
     this.networkLogs = [];
+    this.networkErrors = [];
   }
 
   /**
@@ -122,14 +130,47 @@ class DiagnosticsCapture {
         const duration = Date.now() - startTime;
         
         if (this.isCapturing) {
-          this.networkLogs.push({
+          const logEntry = {
             url,
             method,
             status: response.status,
+            statusText: response.statusText,
             duration,
             timestamp: new Date().toISOString(),
-            success: response.ok
-          });
+            success: response.ok,
+            type: 'fetch'
+          };
+          
+          this.networkLogs.push(logEntry);
+          
+          // If it's an error response (4xx or 5xx), capture more details
+          if (!response.ok) {
+            const clonedResponse = response.clone();
+            try {
+              const contentType = response.headers.get('content-type');
+              let responseBody = null;
+              
+              if (contentType && contentType.includes('application/json')) {
+                responseBody = await clonedResponse.json();
+              } else {
+                responseBody = await clonedResponse.text();
+              }
+              
+              this.networkErrors.push({
+                ...logEntry,
+                responseBody,
+                headers: Object.fromEntries(response.headers.entries())
+              });
+              
+              // Keep only last N error entries
+              if (this.networkErrors.length > this.maxNetworkErrors * 2) {
+                this.networkErrors = this.networkErrors.slice(-this.maxNetworkErrors);
+              }
+            } catch (e) {
+              // If we can't read the response body, just log without it
+              this.networkErrors.push(logEntry);
+            }
+          }
           
           // Keep only last N entries
           if (this.networkLogs.length > this.maxNetworkLogs * 2) {
@@ -142,15 +183,24 @@ class DiagnosticsCapture {
         const duration = Date.now() - startTime;
         
         if (this.isCapturing) {
-          this.networkLogs.push({
+          const errorEntry = {
             url,
             method,
             status: 0,
             duration,
             timestamp: new Date().toISOString(),
             success: false,
-            error: error.message
-          });
+            error: error.message,
+            type: 'fetch'
+          };
+          
+          this.networkLogs.push(errorEntry);
+          this.networkErrors.push(errorEntry);
+          
+          // Keep only last N error entries
+          if (this.networkErrors.length > this.maxNetworkErrors * 2) {
+            this.networkErrors = this.networkErrors.slice(-this.maxNetworkErrors);
+          }
         }
         
         throw error;
@@ -165,6 +215,154 @@ class DiagnosticsCapture {
     if (this.originalFetch) {
       window.fetch = this.originalFetch;
       this.originalFetch = null;
+    }
+  }
+
+  /**
+   * Intercept XMLHttpRequest
+   */
+  _interceptXHR() {
+    this.originalXHR = window.XMLHttpRequest;
+    const self = this;
+    
+    window.XMLHttpRequest = function() {
+      const xhr = new self.originalXHR();
+      const originalOpen = xhr.open;
+      const originalSend = xhr.send;
+      
+      let method = '';
+      let url = '';
+      let startTime = 0;
+      
+      // Intercept open to capture method and URL
+      xhr.open = function(m, u, ...args) {
+        method = m;
+        url = u;
+        return originalOpen.apply(this, [m, u, ...args]);
+      };
+      
+      // Intercept send to capture request/response
+      xhr.send = function(...args) {
+        startTime = Date.now();
+        
+        // Add load event listener
+        xhr.addEventListener('load', function() {
+          const duration = Date.now() - startTime;
+          
+          if (self.isCapturing) {
+            const logEntry = {
+              url,
+              method,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              duration,
+              timestamp: new Date().toISOString(),
+              success: xhr.status >= 200 && xhr.status < 300,
+              type: 'xhr'
+            };
+            
+            self.networkLogs.push(logEntry);
+            
+            // If it's an error response (4xx or 5xx), capture more details
+            if (xhr.status >= 400) {
+              try {
+                let responseBody = xhr.responseText;
+                try {
+                  // Try to parse as JSON
+                  responseBody = JSON.parse(xhr.responseText);
+                } catch (e) {
+                  // Keep as text if not JSON
+                }
+                
+                self.networkErrors.push({
+                  ...logEntry,
+                  responseBody,
+                  responseType: xhr.responseType || 'text'
+                });
+                
+                // Keep only last N error entries
+                if (self.networkErrors.length > self.maxNetworkErrors * 2) {
+                  self.networkErrors = self.networkErrors.slice(-self.maxNetworkErrors);
+                }
+              } catch (e) {
+                // If we can't read the response, just log without it
+                self.networkErrors.push(logEntry);
+              }
+            }
+            
+            // Keep only last N entries
+            if (self.networkLogs.length > self.maxNetworkLogs * 2) {
+              self.networkLogs = self.networkLogs.slice(-self.maxNetworkLogs);
+            }
+          }
+        });
+        
+        // Add error event listener
+        xhr.addEventListener('error', function() {
+          const duration = Date.now() - startTime;
+          
+          if (self.isCapturing) {
+            const errorEntry = {
+              url,
+              method,
+              status: 0,
+              duration,
+              timestamp: new Date().toISOString(),
+              success: false,
+              error: 'Network request failed',
+              type: 'xhr'
+            };
+            
+            self.networkLogs.push(errorEntry);
+            self.networkErrors.push(errorEntry);
+            
+            // Keep only last N error entries
+            if (self.networkErrors.length > self.maxNetworkErrors * 2) {
+              self.networkErrors = self.networkErrors.slice(-self.maxNetworkErrors);
+            }
+          }
+        });
+        
+        // Add timeout event listener
+        xhr.addEventListener('timeout', function() {
+          const duration = Date.now() - startTime;
+          
+          if (self.isCapturing) {
+            const errorEntry = {
+              url,
+              method,
+              status: 0,
+              duration,
+              timestamp: new Date().toISOString(),
+              success: false,
+              error: 'Request timeout',
+              type: 'xhr'
+            };
+            
+            self.networkLogs.push(errorEntry);
+            self.networkErrors.push(errorEntry);
+            
+            // Keep only last N error entries
+            if (self.networkErrors.length > self.maxNetworkErrors * 2) {
+              self.networkErrors = self.networkErrors.slice(-self.maxNetworkErrors);
+            }
+          }
+        });
+        
+        return originalSend.apply(this, args);
+      };
+      
+      return xhr;
+    };
+  }
+
+  /**
+   * Restore original XMLHttpRequest
+   */
+  _restoreXHR() {
+    if (this.originalXHR) {
+      window.XMLHttpRequest = this.originalXHR;
+      this.originalXHR = null;
     }
   }
 

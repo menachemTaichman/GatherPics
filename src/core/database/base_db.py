@@ -239,10 +239,19 @@ class BaseDB(ABC):
         return relations
 
     @classmethod
-    def get_view_fields(cls, table: str, as_table: str | None = None) -> str:
-        """Get view fields for a table."""
+    def get_view_fields(cls, table: str, as_table: str | None = None, include_details: bool = False) -> str:
+        """Get view fields for a table.
+        Args:
+            table: table name
+            as_table: table name to be used as the table prefix
+            include_details: if True, include details fields in the result
+        Returns:
+            string of fields
+        """
         id_field = cls.get_id_field(table)
         fields = [id_field] + cls.STRUCTURE()[table].get('fields', [])
+        if include_details:
+            fields.extend(cls.STRUCTURE()[table].get('details_fields', []))
         return cls._get_fields(fields, as_table)
 
     @classmethod

@@ -8,6 +8,8 @@ import { feedbacksAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
 import diagnosticsCapture from '../../utils/diagnosticsCapture';
+import { useApplyScopes } from '../../utils/storeUtils';
+import { useMyFeedbackById } from '../../utils/dataManager';
 
 export default function FeedbackFormModal({ 
   isOpen, 
@@ -35,6 +37,20 @@ export default function FeedbackFormModal({
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'feedback-form-modal';
 
+  // Extract feedback ID
+  const feedbackId = feedback?.id || feedback?.feedback_id;
+
+  // Apply scope for this feedback (only when editing/viewing)
+  useApplyScopes(
+    isOpen && feedbackId 
+      ? [{ entity: 'my_feedback', id: feedbackId, eventId: 'general' }]
+      : []
+  );
+
+  // Get feedback from store (will be updated if backend sends changes)
+  const feedbackFromStore = useMyFeedbackById(feedbackId);
+  const effectiveFeedback = feedbackFromStore || feedback;
+
   // Register modal
   useEffect(() => {
     if (isOpen) {
@@ -43,18 +59,32 @@ export default function FeedbackFormModal({
     }
   }, [isOpen, registerModal, unregisterModal]);
 
+  // Fetch feedback details when modal opens (for editing/viewing)
+  useEffect(() => {
+    if (isOpen && feedbackId) {
+      const fetchFeedback = async () => {
+        try {
+          await feedbacksAPI.getMyFeedbackById(feedbackId);
+        } catch (error) {
+          console.error('Failed to load feedback:', error);
+        }
+      };
+      fetchFeedback();
+    }
+  }, [isOpen, feedbackId]);
+
   // Initialize form with current profile data or editing feedback
   useEffect(() => {
     if (isOpen) {
-      if (feedback) {
+      if (effectiveFeedback) {
         // Editing mode
         setFormData({
-          sender_name: feedback.sender_name || '',
-          sender_email: feedback.sender_email || '',
-          title: feedback.title || '',
-          type: feedback.type || 0,
-          message: feedback.message || '',
-          communication_consent: feedback.communication_consent === 1,
+          sender_name: effectiveFeedback.sender_name || '',
+          sender_email: effectiveFeedback.sender_email || '',
+          title: effectiveFeedback.title || '',
+          type: effectiveFeedback.type || 0,
+          message: effectiveFeedback.message || '',
+          communication_consent: effectiveFeedback.communication_consent === 1,
           include_metadata: false
         });
       } else {
@@ -71,23 +101,8 @@ export default function FeedbackFormModal({
       }
       setSubmitted(false);
       setCreatedFeedbackId(null);
-      
-      // Start capturing diagnostics only when creating new
-      if (!feedback) {
-        diagnosticsCapture.startCapture();
-      }
-    } else {
-      // Stop and clear diagnostics when modal closes
-      diagnosticsCapture.stopCapture();
-      diagnosticsCapture.clear();
     }
-  }, [isOpen, currentProfile, currentProfileIsPublic, feedback]);
-
-  const { modalRef } = useModalFocus(isOpen, onClose, {
-    modalId,
-    modalType: 'modal',
-    allowOutsideScroll: false
-  });
+  }, [isOpen, currentProfile, currentProfileIsPublic, effectiveFeedback]);
 
   const handleChange = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -105,8 +120,7 @@ export default function FeedbackFormModal({
     }
 
     // Check if editing
-    const isEditing = !!feedback;
-    const feedbackId = feedback?.id || feedback?.feedback_id;
+    const isEditing = !!effectiveFeedback;
 
     setLoading(true);
     try {
@@ -124,17 +138,7 @@ export default function FeedbackFormModal({
         onClose();
       } else {
         // Create new feedback
-        const senderName = currentProfileIsPublic ? formData.sender_name.trim() : (currentProfile?.label || '');
-        
-        if (!senderName) {
-          showToast('Please enter your name', 'error');
-          setLoading(false);
-          return;
-        }
-
         const payload = {
-          sender_name: senderName,
-          sender_email: currentProfileHasEmail ? currentProfile.email : (formData.sender_email.trim() || null),
           title: formData.title.trim(),
           type: formData.type,
           message: formData.message.trim(),
@@ -142,11 +146,26 @@ export default function FeedbackFormModal({
           include_metadata: formData.include_metadata
         };
 
+        // Only include sender_name and sender_email for public profiles
+        if (currentProfileIsPublic) {
+          const senderName = formData.sender_name.trim();
+          
+          if (!senderName) {
+            showToast('Please enter your name', 'error');
+            setLoading(false);
+            return;
+          }
+
+          payload.sender_name = senderName;
+          payload.sender_email = formData.sender_email.trim() || null;
+        }
+
         // Include diagnostics if metadata checkbox is checked
         if (formData.include_metadata) {
           const diagnostics = diagnosticsCapture.getDiagnostics();
           payload.console_logs = diagnostics.console_logs;
           payload.network_logs = diagnostics.network_logs;
+          payload.network_errors = diagnostics.network_errors;
           payload.browser_info = diagnostics.browser_info;
         }
 
@@ -168,7 +187,56 @@ export default function FeedbackFormModal({
     } finally {
       setLoading(false);
     }
-  }, [formData, currentProfileIsPublic, currentProfileHasEmail, currentProfile, feedback, showToast, onClose]);
+  }, [formData, currentProfileIsPublic, currentProfileHasEmail, currentProfile, effectiveFeedback, feedbackId, showToast, onClose]);
+
+  // Check if editing and view states
+  const isEditing = !!effectiveFeedback;
+  const isClosed = effectiveFeedback?.is_closed === 1;
+  const isViewOnly = isEditing && isClosed;
+
+  // Check if form is valid for submission
+  const isFormValid = (
+    !!formData.title.trim() && 
+    !!formData.message.trim() && 
+    (isEditing || !currentProfileIsPublic || !!formData.sender_name.trim())
+  );
+
+  // Custom keyboard handler
+  const handleFormModalKeys = useCallback((e) => {
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // Ctrl+Enter or Cmd+Enter submits the form
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      if (!loading && !isViewOnly && isFormValid && !submitted) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSubmit();
+      }
+      return true; // Handled
+    }
+    
+    // ESC closes the modal
+    if (e.key === 'Escape') {
+      if (!loading) {
+        onClose();
+      }
+      return true; // Handled
+    }
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it
+    }
+    
+    return false; // Not handled
+  }, [loading, isViewOnly, isFormValid, submitted, handleSubmit, onClose]);
+
+  const { modalRef } = useModalFocus(isOpen, onClose, {
+    modalId,
+    modalType: 'modal',
+    allowOutsideScroll: false,
+    customKeyHandler: handleFormModalKeys
+  });
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -178,11 +246,6 @@ export default function FeedbackFormModal({
     }
   }, [handleSubmit]);
 
-  // Check if editing
-  const isEditing = !!feedback;
-  const isClosed = feedback?.is_closed === 1;
-  const isViewOnly = isEditing && isClosed;
-  
   // Show name field only for public profiles (and only when creating)
   const shouldShowNameField = currentProfileIsPublic && !isEditing;
   
@@ -191,10 +254,6 @@ export default function FeedbackFormModal({
   
   // Show communication consent when there's an email to send (and not viewing)
   const shouldShowCommunicationConsent = !isViewOnly && (currentProfileHasEmail || (currentProfileIsPublic && !!formData.sender_email.trim()));
-  
-  // Check if form is valid for submission
-  const senderName = currentProfileIsPublic ? formData.sender_name.trim() : (currentProfile?.label || '');
-  const isFormValid = (isEditing || !!senderName) && !!formData.title.trim() && !!formData.message.trim();
 
   if (!isOpen) return null;
 
@@ -255,48 +314,72 @@ export default function FeedbackFormModal({
             </motion.div>
           ) : (
             <div className="space-y-4">
-              {/* Name (only for public profiles) */}
-              {shouldShowNameField && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Your Name <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.sender_name}
-                      onChange={(e) => handleChange('sender_name', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Enter your name"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-              )}
+              {/* Name and Email (only for public profiles) - side by side */}
+              {(shouldShowNameField || shouldShowEmailField) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Name */}
+                  {shouldShowNameField && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Your Name <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={formData.sender_name}
+                          onChange={(e) => handleChange('sender_name', e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          placeholder="Enter your name"
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                  )}
 
-              {/* Email (only for public profiles) */}
-              {shouldShowEmailField && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="email"
-                      value={formData.sender_email}
-                      onChange={(e) => handleChange('sender_email', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="your.email@example.com"
-                      disabled={loading}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Provide your email if you'd like us to follow up
-                  </p>
+                  {/* Email */}
+                  {shouldShowEmailField && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email <span className="text-gray-500">(optional)</span>
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="email"
+                          value={formData.sender_email}
+                          onChange={(e) => handleChange('sender_email', e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          placeholder="your.email@example.com"
+                          disabled={loading}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Provide your email if you'd like us to follow up
+                      </p>
+                      
+                      {/* Communication Consent - shown when email is provided */}
+                      {shouldShowCommunicationConsent && formData.sender_email.trim() && (
+                        <div className="mt-2">
+                          <label className={`relative inline-flex items-center ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
+                            <input
+                              type="checkbox"
+                              checked={formData.communication_consent}
+                              onChange={(e) => handleChange('communication_consent', e.target.checked)}
+                              disabled={loading}
+                              className="sr-only peer"
+                            />
+                            <div className={`w-10 h-5 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
+                            <span className={`ml-3 text-sm ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
+                              I agree to be contacted via email
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -344,7 +427,7 @@ export default function FeedbackFormModal({
                       className="w-4 h-4 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
                       disabled={loading || isViewOnly}
                     />
-                    <span className="ml-2 text-sm text-gray-700">Suggestion</span>
+                    <span className="ml-2 text-sm text-gray-700">Improvement Suggestion</span>
                   </label>
                 </div>
               </div>
@@ -360,7 +443,7 @@ export default function FeedbackFormModal({
                   onKeyDown={handleKeyDown}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none disabled:bg-gray-50 disabled:text-gray-700"
                   placeholder="Tell us what you think... (bug reports, feature requests, general feedback)"
-                  rows={6}
+                  rows={4}
                   disabled={loading || isViewOnly}
                 />
                 {!isViewOnly && (
@@ -371,26 +454,44 @@ export default function FeedbackFormModal({
               </div>
 
               {/* Closed Details - shown when viewing closed feedback */}
-              {isViewOnly && feedback.closed_details && (
+              {isViewOnly && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Response from Team</h4>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{feedback.closed_details}</p>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Response from Team</h4>
+                  {effectiveFeedback.closed_at && (
+                    <p className="text-xs text-gray-600 mb-2">
+                      Closed on {new Date(effectiveFeedback.closed_at).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
+                    </p>
+                  )}
+                  {effectiveFeedback.closed_details ? (
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{effectiveFeedback.closed_details}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No response message provided</p>
+                  )}
                 </div>
               )}
 
-              {/* Communication Consent */}
-              {shouldShowCommunicationConsent && (
-                <div className="flex items-start space-x-2">
-                  <input
-                    type="checkbox"
-                    id="communication-consent"
-                    checked={formData.communication_consent}
-                    onChange={(e) => handleChange('communication_consent', e.target.checked)}
-                    className="mt-1 w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-                    disabled={loading || isViewOnly}
-                  />
-                  <label htmlFor="communication-consent" className="text-sm text-gray-700 cursor-pointer">
-                    I agree to be contacted via email regarding this feedback
+              {/* Communication Consent - for non-public profiles with email */}
+              {shouldShowCommunicationConsent && !shouldShowEmailField && (
+                <div>
+                  <label className={`relative inline-flex items-center ${(loading || isViewOnly) ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
+                    <input
+                      type="checkbox"
+                      checked={formData.communication_consent}
+                      onChange={(e) => handleChange('communication_consent', e.target.checked)}
+                      disabled={loading || isViewOnly}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-10 h-5 ${(loading || isViewOnly) ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
+                    <span className={`ml-3 text-sm font-medium ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
+                      I agree to be contacted via email regarding this feedback
+                    </span>
                   </label>
                 </div>
               )}
@@ -398,25 +499,25 @@ export default function FeedbackFormModal({
               {/* Include Diagnostics */}
               {!isEditing && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-2">
+                  <label className={`relative inline-flex items-start ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
                     <input
                       type="checkbox"
-                      id="include-metadata"
                       checked={formData.include_metadata}
                       onChange={(e) => handleChange('include_metadata', e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                       disabled={loading}
+                      className="sr-only peer"
                     />
-                    <div className="flex-1">
-                      <label htmlFor="include-metadata" className="text-sm font-medium text-gray-900 cursor-pointer">
+                    <div className={`w-10 h-5 flex-shrink-0 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
+                    <div className="ml-3 flex-1">
+                      <span className={`text-sm font-medium ${loading ? 'text-gray-400' : 'text-gray-900'}`}>
                         Include diagnostic information
-                      </label>
+                      </span>
                       <p className="text-xs text-gray-600 mt-1">
                         Help us debug issues by including browser info, console logs, and network activity. 
                         No personal data is collected.
                       </p>
                     </div>
-                  </div>
+                  </label>
                 </div>
               )}
             </div>
