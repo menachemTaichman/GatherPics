@@ -249,6 +249,36 @@ export async function getEventUrlById(eventId) {
   return null;
 }
 
+// Event management
+export const eventsAPI = {
+  getById: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const key = `EVENT_GET_BY_ID:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}`);
+      return response.data || {};
+    });
+  },
+
+  update: async (eventUrl, updates) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.put(`/api/events/${eventId}`, updates);
+    return response.data || {};
+  },
+
+  checkName: async (name, excludeEventId = null) => {
+    const payload = { name, exclude_event_id: excludeEventId };
+    const response = await api.post(`/api/events/check-name`, payload);
+    return response.data || {};
+  },
+
+  checkUrl: async (url, excludeEventId = null) => {
+    const payload = { url, exclude_event_id: excludeEventId };
+    const response = await api.post(`/api/events/check-url`, payload);
+    return response.data || {};
+  },
+};
+
 // Normalization helpers to provide consistent id fields and camelCase refs
 function normalizeFace(face) {
   if (!face || typeof face !== 'object') return face;

@@ -15,8 +15,8 @@ class GeneralModels(BaseModels):
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
         profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        events = self.get_childs('profiles', profile['profile_id'], 'events')
-        profile['events'] = events
+        _, events_relation = self.get_childs('profiles', profile['profile_id'], 'events')
+        profile['events'] = events_relation
               
         if event_id:
             event = self.get_event(event_id)
@@ -37,6 +37,11 @@ class GeneralModels(BaseModels):
     
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists."""
+        if table == 'events':
+            url = fields.get('url')
+            if url and url == 'dashboard':
+                return 'dashboard'
+
         if table == 'profiles' and 'restricted_to_event' in fields:
             within_event = super().is_exists(table, fields, exclude_id)
             if within_event:

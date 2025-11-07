@@ -157,6 +157,9 @@ const ENTITY_STRUCTURE = {
   my_feedbacks: {
     relations: [],
   },
+  events: {
+    relations: [],
+  },
 };
 
 const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
@@ -165,7 +168,7 @@ const ENTITY_TYPES = Object.keys(ENTITY_STRUCTURE);
 const EVENT_ENTITY_TYPES = ['images', 'groups', 'moments', 'albums', 'faces', 'event_profiles', 'uploads', 'access_requests', 'my_access_requests'];
 
 // General entities (not scoped to events)
-const GENERAL_ENTITY_TYPES = ['profiles', 'my_notifications', 'feedbacks', 'my_feedbacks'];
+const GENERAL_ENTITY_TYPES = ['profiles', 'my_notifications', 'feedbacks', 'my_feedbacks', 'events'];
 
 function getEntityType(entity) {
   const normalized = normalizeEntityKey(entity);
@@ -200,6 +203,8 @@ function normalizeEntityKey(entity, eventId = null) {
     case 'my_notification': return 'my_notifications';
     case 'feedback': return 'feedbacks';
     case 'my_feedback': return 'my_feedbacks';
+    case 'event': return 'events';
+    case 'events': return 'events';
     case 'local_storage': return 'localStore';
     case 'localStorage': return 'localStore';
     // Already plural forms
@@ -1113,6 +1118,7 @@ const selectorCache = {
   my_access_requests: new Map(),
   profiles_general: null,
   my_notifications_general: null,
+  events_general: null,
 };
 
 export const selectors = {
@@ -1198,6 +1204,15 @@ export const selectors = {
     }
     const arr = ref ? Object.values(ref) : [];
     selectorCache.profiles_general = { ref, arr };
+    return arr;
+  },
+  eventsAll: (state) => {
+    const ref = state.entities?.general?.events || null;
+    if (selectorCache.events_general && selectorCache.events_general.ref === ref) {
+      return selectorCache.events_general.arr;
+    }
+    const arr = ref ? Object.values(ref) : [];
+    selectorCache.events_general = { ref, arr };
     return arr;
   },
   myNotificationsAll: (state) => {
@@ -1363,6 +1378,14 @@ export function useProfilesList() {
 
 export function useProfileById(profileId) {
   return useDataStore((state) => (profileId ? state.entities?.general?.profiles?.[profileId] || null : null));
+}
+
+export function useEventsGeneralList() {
+  return useDataStore((state) => selectors.eventsAll(state));
+}
+
+export function useEventGeneralById(eventId) {
+  return useDataStore((state) => (eventId ? state.entities?.general?.events?.[eventId] || null : null));
 }
 
 export function useMyNotificationsList() {

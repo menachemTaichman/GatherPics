@@ -84,9 +84,22 @@ class GeneralDB(BaseDB):
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
-                'fields': ['name', 'date', 'url', 'is_public', 'images_count_limit', 'image_size_limit_bytes'],
+                'fields': ['name', 'date', 'url'],
+                'details_fields': [
+                    'is_public',
+                    'images_count_limit',
+                    'image_size_limit_bytes',
+                    'images_count',
+                    'faces_count',
+                    'albums_count',
+                    'moments_count',
+                ],
                 'relations': {
-                    'profiles': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete_event', 'can_edit_event']},
+                    'profiles': {
+                        'relation_table': 'profiles_events',
+                        'fields_needed': ['profile_id'],
+                        'relation_table_fields': ['can_delete_event', 'can_edit_event']
+                        },
                 },
             },
             'profiles': {
@@ -94,7 +107,11 @@ class GeneralDB(BaseDB):
                 'accessible_table': 'accessible_profiles',
                 'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public'],
                 'relations': {
-                    'events': {'relation_table': 'profiles_events', 'fields_needed': ['can_delete_event', 'can_edit_event']},
+                    'events': {
+                        'relation_table': 'profiles_events',
+                        'fields_needed': ['event_id'],
+                        'relation_table_fields': ['can_delete_event', 'can_edit_event']
+                    },
                 },
             },
             'profiles_events': {
@@ -303,11 +320,20 @@ class GeneralDB(BaseDB):
     @classmethod
     def VIEWS(self) -> dict:
         return {
+            'events_details': """
+                SELECT
+                    e.*,
+                    0 AS images_count,
+                    0 AS faces_count,
+                    0 AS albums_count,
+                    0 AS moments_count
+                FROM events e
+            """,
             'accessible_events': """
-                SELECT *
-                FROM events
-                LEFT JOIN profiles_events pe ON events.event_id = pe.event_id AND pe.profile_id = cur_profile('profile_id')
-                WHERE is_public = 1 OR pe.event_id IS NOT NULL
+                SELECT ed.*
+                FROM events_details ed
+                LEFT JOIN profiles_events pe ON ed.event_id = pe.event_id AND pe.profile_id = cur_profile('profile_id')
+                WHERE ed.is_public = 1 OR pe.event_id IS NOT NULL
             """,
             'current_profile': """
                 SELECT
@@ -346,8 +372,10 @@ class GeneralDB(BaseDB):
                     )
             """,
             'accessible_profiles_events': """
-                SELECT * FROM profiles_events pe
+                SELECT pe.*
+                FROM profiles_events pe
                 INNER JOIN accessible_profiles ap ON pe.profile_id = ap.profile_id
+                INNER JOIN events_details ed ON pe.event_id = ed.event_id
             """,
             'accessible_profiles_preferences': """
                 SELECT * FROM profiles_preferences pp

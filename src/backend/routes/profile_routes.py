@@ -193,9 +193,6 @@ def create_event_profile(event_id):
     """Create a new event profile."""
     event = get_event(event_id)
     general_models = get_general_models()
-    if not event.models.get_current_profile()['is_profiles_manager']:
-        return jsonify({"error": "Access denied"}), 403
-
     data = request.json or {}
     try:
         profile_id = _create_profile(data, event_id)

@@ -1,20 +1,9 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon, Settings, UserCog } from 'lucide-react';
-import { getCurrentProfile } from '../utils/profileService';
-import { useEventId } from '../utils/storeUtils';
+import { Users, Calendar, Image as ImageIcon } from 'lucide-react';
 import { APP_CONFIG } from '../config/appConfig';
 
 export default function EventHomePage({ eventUrl, eventData }) {
-  const currentProfile = getCurrentProfile();
-  const eventId = useEventId(eventUrl);
-  
-  // Get event-specific permissions
-  const eventPermissions = (eventId && currentProfile?.events && currentProfile.events[eventId]) || {};
-  
-  const isProfilesManager = Boolean(eventPermissions.is_profiles_manager);
-  const canEditEvent = Boolean(eventPermissions.can_edit_event);
-  
   const eventName = eventData?.name || 'Event';
 
   // Define navigation cards
@@ -54,30 +43,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-purple-200',
       show: true
-    },
-    {
-      to: `/${eventUrl}/profiles`,
-      icon: UserCog,
-      title: 'Profiles',
-      description: 'Manage event profiles',
-      iconBg: 'from-amber-100 to-amber-50',
-      iconColor: 'text-amber-600',
-      hoverBg: 'group-hover:from-amber-500 group-hover:to-amber-600',
-      hoverIcon: 'group-hover:text-white',
-      borderHover: 'hover:border-amber-200',
-      show: isProfilesManager
-    },
-    {
-      to: `/${eventUrl}/edit`,
-      icon: Settings,
-      title: 'Edit Event',
-      description: 'Configure event settings',
-      iconBg: 'from-rose-100 to-rose-50',
-      iconColor: 'text-rose-600',
-      hoverBg: 'group-hover:from-rose-500 group-hover:to-rose-600',
-      hoverIcon: 'group-hover:text-white',
-      borderHover: 'hover:border-rose-200',
-      show: canEditEvent
     }
   ];
 

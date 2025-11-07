@@ -129,9 +129,6 @@ def check_group_name(event_id):
 def update_group(event_id, group_id):
     """Update a group."""
     event = get_event(event_id)
-    if not event.models.is_accessible('groups', group_id):
-        return jsonify({"error": f"Group {group_id} not found or not accessible"}), 404
-        
     data = request.json or {}
     try:        
         changes = []
