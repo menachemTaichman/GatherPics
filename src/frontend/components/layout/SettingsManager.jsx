@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -65,6 +66,11 @@ export default function SettingsManager() {
   const [editingMyFeedback, setEditingMyFeedback] = useState(null);
   const [showDeleteMyFeedbackModal, setShowDeleteMyFeedbackModal] = useState(false);
   const [myFeedbackToDelete, setMyFeedbackToDelete] = useState(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'settings-manager';
@@ -528,38 +534,22 @@ export default function SettingsManager() {
     });
   }, [userFeedbacks]);
 
-  return (
-    <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
-        title="Settings"
-      >
-        <div className="relative">
-          <Settings className="w-4 h-4" />
-          {settingsBadgeCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-              {settingsBadgeCount}
-            </span>
-          )}
-        </div>
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsOpen(false)}>
-              <motion.div
-                ref={modalRef}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ 
-                  opacity: 1, 
-                  scale: 1
-                }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
-              >
+  const settingsModal = (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsOpen(false)}>
+            <motion.div
+              ref={modalRef}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1
+              }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
@@ -1232,12 +1222,14 @@ export default function SettingsManager() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
-            </div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          </div>
+      )}
+    </AnimatePresence>
+  );
 
-      {/* Change Password Modal for Current Profile */}
+  const nestedModals = (
+    <>
       {showChangePasswordModal && currentProfile && (
         <ChangePasswordModal
           isOpen={showChangePasswordModal}
@@ -1248,7 +1240,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Edit Profile Modal for Other Profiles */}
       {showEditProfileModal && selectedProfile && (
         <EditProfileModal
           isOpen={showEditProfileModal}
@@ -1268,7 +1259,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Delete Profile Confirmation Modal */}
       {showDeleteConfirmModal && profileToDelete && (
         <ConfirmDelete
           isOpen={showDeleteConfirmModal}
@@ -1286,7 +1276,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Delete Request Confirmation Modal */}
       {showDeleteRequestModal && requestToDelete && (
         <ConfirmDelete
           isOpen={showDeleteRequestModal}
@@ -1304,7 +1293,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Request Form Modal */}
       {showRequestFormModal && (
         <RequestFormModal
           isOpen={showRequestFormModal}
@@ -1318,7 +1306,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Feedback Form Modal */}
       {showFeedbackFormModal && (
         <FeedbackFormModal
           isOpen={showFeedbackFormModal}
@@ -1330,7 +1317,6 @@ export default function SettingsManager() {
         />
       )}
 
-      {/* Delete My Feedback Confirmation Modal */}
       {showDeleteMyFeedbackModal && myFeedbackToDelete && (
         <ConfirmDelete
           isOpen={showDeleteMyFeedbackModal}
@@ -1346,6 +1332,33 @@ export default function SettingsManager() {
           cancelText="Cancel"
           caption="This action cannot be undone."
         />
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
+        title="Settings"
+      >
+        <div className="relative">
+          <Settings className="w-4 h-4" />
+          {settingsBadgeCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+              {settingsBadgeCount}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {isClient && createPortal(
+        <>
+          {settingsModal}
+          {nestedModals}
+        </>,
+        document.body
       )}
     </>
   );
