@@ -206,7 +206,7 @@ class GeneralDB(BaseDB):
                 event_id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
                 date TEXT,
-                url TEXT UNIQUE,
+                url TEXT UNIQUE NOT NULL,
                 is_public INTEGER DEFAULT 0,
                 images_count_limit INTEGER DEFAULT 0,
                 image_size_limit_bytes INTEGER DEFAULT 0

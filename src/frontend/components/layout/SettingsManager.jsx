@@ -1,15 +1,15 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, Copy, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check, AlertCircle, Save, Layers, Calendar, Users, Image as ImageIcon } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
-import { profilesAPI, requestsAPI, feedbacksAPI, eventsAPI } from '../../utils/apiService';
+import { profilesAPI, requestsAPI, feedbacksAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useEventProfilesList, useRequestsList, useMyRequestsList, useMyFeedbacksList, useEventGeneralById } from '../../utils/dataManager';
+import { useEventProfilesList, useMyRequestsList, useMyFeedbacksList } from '../../utils/dataManager';
 import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -21,25 +21,6 @@ import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
-
-const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
-
-function normalizeDateForInput(value) {
-  if (!value) return '';
-  const isoMatch = String(value).match(ISO_DATE_REGEX);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    return `${year}-${month}-${day}`;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return '';
-  }
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -86,16 +67,6 @@ const [editingMyFeedback, setEditingMyFeedback] = useState(null);
 const [showDeleteMyFeedbackModal, setShowDeleteMyFeedbackModal] = useState(false);
 const [myFeedbackToDelete, setMyFeedbackToDelete] = useState(null);
 const [isClient, setIsClient] = useState(false);
-const baseEvent = useEventGeneralById(eventId);
-const [eventDraft, setEventDraft] = useState(null);
-const [eventLoading, setEventLoading] = useState(false);
-const [eventSaving, setEventSaving] = useState(false);
-const [eventError, setEventError] = useState('');
-const [nameConflict, setNameConflict] = useState(false);
-const [urlConflict, setUrlConflict] = useState(false);
-const [checkingName, setCheckingName] = useState(false);
-const [checkingUrl, setCheckingUrl] = useState(false);
-const canManageEvent = Boolean(currentProfile?.events?.[eventId]?.can_edit_event);
 
   useEffect(() => {
     setIsClient(true);
@@ -152,8 +123,6 @@ useEffect(() => {
           { entity: 'all', id: 'my_access_requests', eventId },
           ...(!isPublic ? [{ entity: 'all', id: 'my_feedbacks', eventId: 'general' }] : [])
         ]
-      : isOpen && activeTab === 'event' && eventId
-      ? [{ entity: 'event', id: String(eventId), eventId: 'general' }]
       : []
   );
 
@@ -208,250 +177,6 @@ useEffect(() => {
       console.error('Failed to fetch my feedbacks:', error);
     }
   };
-
-const buildEventDraft = useCallback((evt) => {
-  if (!evt) return null;
-  return {
-    name: evt.name || '',
-    url: evt.url || '',
-    date: normalizeDateForInput(evt.date),
-    is_public: evt.is_public ?? 0,
-    images_count_limit: evt.images_count_limit !== null && evt.images_count_limit !== undefined
-      ? Number(evt.images_count_limit)
-      : null,
-    image_size_limit_bytes: evt.image_size_limit_bytes !== null && evt.image_size_limit_bytes !== undefined
-      ? Number(evt.image_size_limit_bytes)
-      : null,
-  };
-}, []);
-
-const fetchEventDetails = useCallback(async () => {
-  if (!eventUrl) return;
-
-  setEventLoading(true);
-  setEventError('');
-
-  try {
-    await eventsAPI.getById(eventUrl);
-  } catch (error) {
-    console.error('Failed to load event details:', error);
-    setEventError(formatErrorMessage('load event details', error));
-    setEventDraft(null);
-    setNameConflict(false);
-    setUrlConflict(false);
-  } finally {
-    setEventLoading(false);
-  }
-}, [eventUrl]);
-
-const nameCheckTimeout = useRef();
-const urlCheckTimeout = useRef();
-
-const checkEventNameConflict = useCallback(async (value) => {
-  const trimmed = (value || '').trim();
-  if (!trimmed) {
-    setNameConflict(false);
-    return;
-  }
-
-  const original = (baseEvent?.name || '').trim();
-  if (trimmed === original) {
-    setNameConflict(false);
-    return;
-  }
-
-  const excludeId = baseEvent?.event_id || eventId;
-  if (!excludeId) return;
-
-  setCheckingName(true);
-  try {
-    const result = await eventsAPI.checkName(trimmed, excludeId);
-    setNameConflict(Boolean(result?.conflict));
-  } catch (error) {
-    console.error('Failed to check event name:', error);
-  } finally {
-    setCheckingName(false);
-  }
-}, [baseEvent?.name, baseEvent?.event_id, eventId]);
-
-const checkEventUrlConflict = useCallback(async (value) => {
-  const trimmed = (value || '').trim();
-  if (!trimmed) {
-    setUrlConflict(false);
-    return;
-  }
-
-  const original = (baseEvent?.url || '').trim();
-  if (trimmed === original) {
-    setUrlConflict(false);
-    return;
-  }
-
-  const excludeId = baseEvent?.event_id || eventId;
-  if (!excludeId) return;
-
-  setCheckingUrl(true);
-  try {
-    const result = await eventsAPI.checkUrl(trimmed, excludeId);
-    setUrlConflict(Boolean(result?.conflict));
-  } catch (error) {
-    console.error('Failed to check event URL:', error);
-  } finally {
-    setCheckingUrl(false);
-  }
-}, [baseEvent?.url, baseEvent?.event_id, eventId]);
-
-useEffect(() => {
-  if (isOpen && activeTab === 'event' && eventUrl && canManageEvent) {
-    fetchEventDetails();
-  }
-}, [isOpen, activeTab, eventUrl, canManageEvent, fetchEventDetails]);
-
-useEffect(() => {
-  if (baseEvent) {
-    setEventError('');
-    setEventDraft(buildEventDraft(baseEvent));
-    setNameConflict(false);
-    setUrlConflict(false);
-    setCheckingName(false);
-    setCheckingUrl(false);
-  } else {
-    setEventDraft(null);
-    setCheckingName(false);
-    setCheckingUrl(false);
-  }
-}, [baseEvent, buildEventDraft]);
-
-useEffect(() => {
-  return () => {
-    if (nameCheckTimeout.current) clearTimeout(nameCheckTimeout.current);
-    if (urlCheckTimeout.current) clearTimeout(urlCheckTimeout.current);
-  };
-}, []);
-
-const handleEventFieldChange = (field, value) => {
-  setEventDraft((prev) => {
-    if (!prev) return prev;
-    const nextValue = field === 'date' ? normalizeDateForInput(value) : value;
-    return { ...prev, [field]: nextValue };
-  });
-
-  if (field === 'name') {
-    const trimmed = (value || '').trim();
-    const original = (baseEvent?.name || '').trim();
-    if (!trimmed || trimmed === original) {
-      setNameConflict(false);
-    }
-    if (nameCheckTimeout.current) clearTimeout(nameCheckTimeout.current);
-    nameCheckTimeout.current = setTimeout(() => {
-      checkEventNameConflict(value);
-    }, 300);
-  }
-
-  if (field === 'url') {
-    const trimmed = (value || '').trim();
-    const original = (baseEvent?.url || '').trim();
-    if (!trimmed || trimmed === original) {
-      setUrlConflict(false);
-    }
-    if (urlCheckTimeout.current) clearTimeout(urlCheckTimeout.current);
-    urlCheckTimeout.current = setTimeout(() => {
-      checkEventUrlConflict(value);
-    }, 300);
-  }
-};
-
-const handleEventToggle = (field, checked) => {
-  handleEventFieldChange(field, checked ? 1 : 0);
-};
-
-const handleEventLimitChange = (field, value) => {
-  setEventDraft((prev) => {
-    if (!prev) return prev;
-    return {
-      ...prev,
-      [field]: value === '' || value === null ? null : Number(value),
-    };
-  });
-};
-
-const handleEventSizeLimitMbChange = (value) => {
-  setEventDraft((prev) => {
-    if (!prev) return prev;
-    if (value === '' || value === null) {
-      return { ...prev, image_size_limit_bytes: null };
-    }
-    const numeric = Number(value);
-    if (Number.isNaN(numeric) || numeric < 0) {
-      return prev;
-    }
-    return { ...prev, image_size_limit_bytes: Math.round(numeric * 1024 * 1024) };
-  });
-};
-
-const handleEventSave = async () => {
-  if (!eventDraft || !eventUrl) return;
-
-  const trimmedName = (eventDraft.name || '').trim();
-  const trimmedUrl = (eventDraft.url || '').trim();
-
-  if (!trimmedName) {
-    setEventError('Event name cannot be empty');
-    return;
-  }
-
-  if (!trimmedUrl) {
-    setEventError('Event URL cannot be empty');
-    return;
-  }
-
-  if (nameConflict || urlConflict) {
-    setEventError('Resolve conflicts before saving');
-    return;
-  }
-
-  setEventSaving(true);
-  setEventError('');
-
-  const previousUrl = baseEvent?.url;
-
-  const payload = {
-    name: trimmedName,
-    url: trimmedUrl,
-    date: eventDraft.date || null,
-    is_public: eventDraft.is_public,
-    images_count_limit: eventDraft.images_count_limit,
-    image_size_limit_bytes: eventDraft.image_size_limit_bytes,
-  };
-
-  try {
-    await eventsAPI.update(eventUrl, payload);
-    if (previousUrl && trimmedUrl !== previousUrl) {
-      showToast('Event URL updated. Update your bookmarks to the new address.', 'info');
-    }
-    showToast('Event settings updated', 'success');
-  } catch (error) {
-    console.error('Failed to update event:', error);
-    const message = formatErrorMessage('update event', error);
-    setEventError(message);
-    showToast(message, 'error');
-  } finally {
-    setEventSaving(false);
-  }
-};
-
-const handleResetEventDraft = () => {
-  if (nameCheckTimeout.current) clearTimeout(nameCheckTimeout.current);
-  if (urlCheckTimeout.current) clearTimeout(urlCheckTimeout.current);
-  if (baseEvent) {
-    setEventDraft(buildEventDraft(baseEvent));
-  } else {
-    setEventDraft(null);
-  }
-  setEventError('');
-  setNameConflict(false);
-  setUrlConflict(false);
-};
 
   const fetchProfiles = async () => {
     try {
@@ -515,7 +240,6 @@ const handleResetEventDraft = () => {
   // Filter tabs based on permissions and authentication
   const allTabs = [
     { id: 'account', label: 'Account', icon: User },
-    { id: 'event', label: 'Event', icon: Settings },
     { id: 'profiles', label: 'Profiles', icon: User },
     { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
@@ -524,7 +248,6 @@ const handleResetEventDraft = () => {
   const tabs = allTabs.filter(tab => {
     if (tab.id === 'profiles' && !permissions.isProfilesManager) return false;
     if (tab.id === 'feedback' && !isAuthenticated) return false;
-    if (tab.id === 'event' && !canManageEvent) return false;
     return true;
   });
 
@@ -816,32 +539,6 @@ const handleResetEventDraft = () => {
       return tb - ta; // desc
     });
   }, [userFeedbacks]);
-
-const hasEventChanges = useMemo(() => {
-  if (!eventDraft || !baseEvent) return false;
-
-  const draftName = (eventDraft.name || '').trim();
-  const originalName = (baseEvent.name || '').trim();
-  const draftUrl = (eventDraft.url || '').trim();
-  const originalUrl = (baseEvent.url || '').trim();
-  const draftDate = normalizeDateForInput(eventDraft.date);
-  const originalDate = normalizeDateForInput(baseEvent.date);
-  const draftPublic = Number(eventDraft.is_public ?? 0);
-  const originalPublic = Number(baseEvent.is_public ?? 0);
-  const draftImagesLimit = eventDraft.images_count_limit ?? null;
-  const originalImagesLimit = baseEvent.images_count_limit ?? null;
-  const draftSizeLimit = eventDraft.image_size_limit_bytes ?? null;
-  const originalSizeLimit = baseEvent.image_size_limit_bytes ?? null;
-
-  return (
-    draftName !== originalName ||
-    draftUrl !== originalUrl ||
-    draftDate !== originalDate ||
-    draftPublic !== originalPublic ||
-    draftImagesLimit !== originalImagesLimit ||
-    draftSizeLimit !== originalSizeLimit
-  );
-}, [eventDraft, baseEvent]);
 
   const settingsModal = (
     <AnimatePresence>
@@ -1262,212 +959,6 @@ const hasEventChanges = useMemo(() => {
                       </motion.div>
                     )}
 
-                    {activeTab === 'event' && (
-                      <motion.div
-                        key="event"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-6"
-                      >
-                        {eventLoading ? (
-                          <div className="flex items-center justify-center py-8 text-sm text-gray-500">
-                            <div className="w-4 h-4 mr-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                            Loading event settings...
-                          </div>
-                        ) : (
-                          <div className="space-y-6">
-                            {eventError && (
-                              <div className="flex items-center space-x-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">
-                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                                <span>{eventError}</span>
-                              </div>
-                            )}
-
-                            {eventDraft ? (
-                              <>
-                                <div className="space-y-6 pb-24">
-                                  <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                    <h3 className="text-sm font-semibold text-gray-700">Basics</h3>
-                                    <div className="grid gap-4 sm:grid-cols-2">
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event Name</label>
-                                        <input
-                                          type="text"
-                                          value={eventDraft.name}
-                                          onChange={(e) => handleEventFieldChange('name', e.target.value)}
-                                          className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
-                                            nameConflict
-                                              ? 'border-red-500 focus:ring-red-500'
-                                              : 'border-gray-300 focus:ring-blue-500'
-                                          }`}
-                                          placeholder="Enter event name"
-                                        />
-                                        {checkingName ? (
-                                          <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
-                                        ) : nameConflict ? (
-                                          <p className="mt-1 text-xs text-red-600">Name already in use by another event.</p>
-                                        ) : null}
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event URL</label>
-                                        <input
-                                          type="text"
-                                          value={eventDraft.url}
-                                          onChange={(e) => handleEventFieldChange('url', e.target.value)}
-                                          className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
-                                            urlConflict
-                                              ? 'border-red-500 focus:ring-red-500'
-                                              : 'border-gray-300 focus:ring-blue-500'
-                                          }`}
-                                          placeholder="friendly-event-slug"
-                                        />
-                                        {checkingUrl ? (
-                                          <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
-                                        ) : urlConflict ? (
-                                          <p className="mt-1 text-xs text-red-600">URL already in use by another event.</p>
-                                        ) : null}
-                                        {baseEvent?.url && eventDraft.url !== baseEvent.url && (
-                                          <p className="mt-1 text-xs text-amber-600">The event URL will change after saving.</p>
-                                        )}
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event Date</label>
-                                        <input
-                                          type="date"
-                                          value={eventDraft.date || ''}
-                                          onChange={(e) => handleEventFieldChange('date', e.target.value)}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                                      <div>
-                                        <p className="font-medium text-gray-900">Public Event</p>
-                                        <p className="text-sm text-gray-500">Show it in the public events list</p>
-                                      </div>
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={eventDraft.is_public === 1}
-                                          onChange={(e) => handleEventToggle('is_public', e.target.checked)}
-                                          className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                      </label>
-                                    </div>
-                                  </div>
-
-                                  <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                    <h3 className="text-sm font-semibold text-gray-700">Limits</h3>
-                                    <div className="grid gap-4 sm:grid-cols-2">
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Photo Count Limit</label>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          value={eventDraft.images_count_limit ?? ''}
-                                          onChange={(e) => {
-                                            const value = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
-                                            handleEventLimitChange('images_count_limit', value === '' ? null : value);
-                                          }}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                          placeholder="Unlimited"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">Leave empty for unlimited photos.</p>
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Max Upload Size (MB)</label>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          value={eventDraft.image_size_limit_bytes != null ? Math.round(eventDraft.image_size_limit_bytes / (1024 * 1024)) : ''}
-                                          onChange={(e) => handleEventSizeLimitMbChange(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                          placeholder="Unlimited"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">Leave empty for no size limit.</p>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid gap-3 sm:grid-cols-2">
-                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                          <ImageIcon className="h-5 w-5 text-blue-500" />
-                                        </div>
-                                        <p className="text-sm font-medium text-gray-600">Photos</p>
-                                      </div>
-                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.images_count ?? 0}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                          <Users className="h-5 w-5 text-blue-500" />
-                                        </div>
-                                        <p className="text-sm font-medium text-gray-600">Faces</p>
-                                      </div>
-                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.faces_count ?? 0}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                          <Layers className="h-5 w-5 text-blue-500" />
-                                        </div>
-                                        <p className="text-sm font-medium text-gray-600">Albums</p>
-                                      </div>
-                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.albums_count ?? 0}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                          <Calendar className="h-5 w-5 text-blue-500" />
-                                        </div>
-                                        <p className="text-sm font-medium text-gray-600">Moments</p>
-                                      </div>
-                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.moments_count ?? 0}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="sticky bottom-0 left-0 right-0 -mx-6 px-6 py-2 bg-white/95 backdrop-blur-sm border-t border-gray-200 flex justify-end gap-3">
-                                  <button
-                                    onClick={handleResetEventDraft}
-                                    disabled={!baseEvent || (!hasEventChanges && !nameConflict && !urlConflict) || eventSaving}
-                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    Reset
-                                  </button>
-                                  <button
-                                    onClick={handleEventSave}
-                                    disabled={!hasEventChanges || nameConflict || urlConflict || eventSaving}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {eventSaving ? (
-                                      <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        <span>Saving...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Save className="w-4 h-4" />
-                                        <span>Save Changes</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-center py-8 text-sm text-gray-500 bg-gray-50 rounded-lg">
-                                Event details are unavailable.
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
 
                     {activeTab === 'profiles' && (
                       <motion.div

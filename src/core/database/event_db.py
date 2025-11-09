@@ -1,8 +1,7 @@
 import sqlite3
 import uuid
-from contextlib import contextmanager
 from src.core.errors import Forbidden
-from src.core.database.base_db import BaseDB, ReturnFormat
+from src.core.database.base_db import BaseDB
 
 class EventDB(BaseDB):
     """Event-specific database for images, groups, albums, moments."""

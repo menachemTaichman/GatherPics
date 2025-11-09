@@ -1,16 +1,19 @@
 import { motion } from 'framer-motion';
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon, Upload } from 'lucide-react';
+import { Users, Calendar, Image as ImageIcon, Upload, Settings } from 'lucide-react';
 import PermissionGate from '../components/common/PermissionGate.jsx';
+import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const eventName = eventData?.name || 'Event';
+  const [showEventSettings, setShowEventSettings] = useState(false);
 
   // Define navigation cards
   const navCards = [
     {
+      id: 'timeline',
       to: `/${eventUrl}/timeline`,
       icon: Calendar,
       title: 'Timeline',
@@ -23,6 +26,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       show: true
     },
     {
+      id: 'people',
       to: `/${eventUrl}/people`,
       icon: Users,
       title: 'People',
@@ -35,6 +39,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       show: true
     },
     {
+      id: 'albums',
       to: `/${eventUrl}/albums`,
       icon: ImageIcon,
       title: 'Albums',
@@ -47,6 +52,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       show: true
     },
     {
+      id: 'uploads',
       to: `/${eventUrl}/uploads`,
       icon: Upload,
       title: 'Uploads',
@@ -58,6 +64,21 @@ export default function EventHomePage({ eventUrl, eventData }) {
       borderHover: 'hover:border-orange-200',
       show: true,
       requires: 'canUploadAndDeleteImages'
+    },
+    {
+      id: 'event-settings',
+      icon: Settings,
+      title: 'Event Settings',
+      description: 'Update event details and limits',
+      iconBg: 'from-slate-100 to-slate-50',
+      iconColor: 'text-slate-600',
+      hoverBg: 'group-hover:from-slate-500 group-hover:to-slate-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-slate-200',
+      show: true,
+      requires: 'canManageEvent',
+      isButton: true,
+      onClick: () => setShowEventSettings(true)
     }
   ];
 
@@ -68,6 +89,18 @@ export default function EventHomePage({ eventUrl, eventData }) {
   const lastRowStartIndex = lastRowCount > 0 ? visibleCards.length - lastRowCount : visibleCards.length;
 
   const renderCard = (card, index, wrapperClassName = '') => {
+    const WrapperComponent = card.isButton ? 'button' : Link;
+    const wrapperProps = card.isButton
+      ? {
+          type: 'button',
+          onClick: card.onClick || (() => {}),
+          className: 'block h-full w-full text-left group'
+        }
+      : {
+          to: card.to,
+          className: 'block h-full group'
+        };
+
     const cardContent = (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -75,10 +108,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
         transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
         className={['h-full', wrapperClassName].filter(Boolean).join(' ')}
       >
-        <Link
-          to={card.to}
-          className="block h-full group"
-        >
+        <WrapperComponent {...wrapperProps}>
           <motion.div 
             className={`h-full bg-white border border-gray-200 ${card.borderHover} hover:shadow-lg transition-all duration-300 p-6 relative overflow-hidden rounded-lg`}
             whileHover={{ y: -4 }}
@@ -98,7 +128,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
               </p>
             </div>
           </motion.div>
-        </Link>
+        </WrapperComponent>
       </motion.div>
     );
 
@@ -159,7 +189,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-16 max-w-4xl mx-auto"
+          className="text-center mb-12 max-w-4xl mx-auto"
         >
           <h1 className="text-4xl md:text-5xl font-semibold text-gray-900 mb-3 tracking-tight">
             {eventName}
@@ -179,7 +209,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
               }
 
               return (
-                <Fragment key={card.to}>
+                <Fragment key={card.id || card.to || card.title}>
                   {renderCard(card, index)}
                 </Fragment>
               );
@@ -191,7 +221,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
                   className={`flex flex-col gap-5 ${lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'} md:gap-6`}
                 >
                   {visibleCards.slice(-lastRowCount).map((card, sliceIndex) => (
-                    <Fragment key={card.to}>
+                    <Fragment key={card.id || card.to || card.title}>
                       {renderCard(
                         card,
                         visibleCards.length - lastRowCount + sliceIndex,
@@ -219,6 +249,14 @@ export default function EventHomePage({ eventUrl, eventData }) {
           </p>
         </motion.div>
       </div>
+
+      <PermissionGate requires="canManageEvent">
+        <EditEventModal
+          eventUrl={eventUrl}
+          isOpen={showEventSettings}
+          onClose={() => setShowEventSettings(false)}
+        />
+      </PermissionGate>
     </motion.div>
   );
 }
