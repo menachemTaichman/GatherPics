@@ -162,7 +162,10 @@ export default function HomePage() {
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
+      <div
+        className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden"
+        style={{ minHeight: 'calc(100vh - 4rem)' }}
+      >
         {/* Subtle animated background accent */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
@@ -191,7 +194,10 @@ export default function HomePage() {
           />
         </div>
 
-        <div className="container mx-auto px-4 py-20 relative z-10">
+        <div
+          className="container mx-auto px-4 py-20 relative z-10"
+          style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
+        >
           {/* Hero Section */}
           <div className="text-center mb-16 max-w-4xl mx-auto">
             <motion.div

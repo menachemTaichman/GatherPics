@@ -54,7 +54,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      className="min-h-screen bg-gradient-to-b from-gray-50 to-white relative overflow-hidden"
+      className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden"
+      style={{ minHeight: 'calc(100vh - 4rem)' }}
     >
       {/* Subtle animated background accent */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -84,7 +85,10 @@ export default function EventHomePage({ eventUrl, eventData }) {
         />
       </div>
 
-      <div className="container mx-auto px-4 py-20 relative z-10">
+      <div
+        className="container mx-auto px-4 py-20 relative z-10"
+        style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
+      >
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
