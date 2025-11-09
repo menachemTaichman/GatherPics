@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
+import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon } from 'lucide-react';
+import { Users, Calendar, Image as ImageIcon, Upload } from 'lucide-react';
+import PermissionGate from '../components/common/PermissionGate.jsx';
 import { APP_CONFIG } from '../config/appConfig';
 
 export default function EventHomePage({ eventUrl, eventData }) {
@@ -43,10 +45,73 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-purple-200',
       show: true
+    },
+    {
+      to: `/${eventUrl}/uploads`,
+      icon: Upload,
+      title: 'Uploads',
+      description: 'Manage your contributions',
+      iconBg: 'from-orange-100 to-orange-50',
+      iconColor: 'text-orange-600',
+      hoverBg: 'group-hover:from-orange-500 group-hover:to-orange-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-orange-200',
+      show: true,
+      requires: 'canUploadAndDeleteImages'
     }
   ];
 
   const visibleCards = navCards.filter(card => card.show);
+  const columnsPerRow = visibleCards.length >= 3 ? 3 : Math.max(visibleCards.length, 1);
+  const remainder = columnsPerRow === 3 ? visibleCards.length % 3 : 0;
+  const lastRowCount = remainder === 0 ? 0 : remainder;
+  const lastRowStartIndex = lastRowCount > 0 ? visibleCards.length - lastRowCount : visibleCards.length;
+
+  const renderCard = (card, index, wrapperClassName = '') => {
+    const cardContent = (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
+        className={['h-full', wrapperClassName].filter(Boolean).join(' ')}
+      >
+        <Link
+          to={card.to}
+          className="block h-full group"
+        >
+          <motion.div 
+            className={`h-full bg-white border border-gray-200 ${card.borderHover} hover:shadow-lg transition-all duration-300 p-6 relative overflow-hidden rounded-lg`}
+            whileHover={{ y: -4 }}
+          >
+            <div className="flex flex-col items-center text-center relative z-10">
+              <motion.div 
+                className={`w-14 h-14 bg-gradient-to-br ${card.iconBg} ${card.hoverBg} rounded-xl flex items-center justify-center mb-4 transition-all duration-300 shadow-sm`}
+                whileHover={{ scale: 1.05 }}
+              >
+                <card.icon className={`w-7 h-7 ${card.iconColor} ${card.hoverIcon} transition-colors duration-300`} />
+              </motion.div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2 transition-colors">
+                {card.title}
+              </h3>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {card.description}
+              </p>
+            </div>
+          </motion.div>
+        </Link>
+      </motion.div>
+    );
+
+    if (card.requires) {
+      return (
+        <PermissionGate key={card.to} requires={card.requires} requiresAll={card.requiresAll ?? true}>
+          {cardContent}
+        </PermissionGate>
+      );
+    }
+
+    return cardContent;
+  };
 
   return (
     <motion.div
@@ -106,40 +171,39 @@ export default function EventHomePage({ eventUrl, eventData }) {
 
         {/* Navigation Cards */}
         <div className="max-w-5xl mx-auto">
-          <div className={`grid grid-cols-1 ${visibleCards.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-5`}>
-            {visibleCards.map((card, index) => (
-              <motion.div
-                key={card.to}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
-              >
-                <Link
-                  to={card.to}
-                  className="block h-full group"
+          <div className={`grid grid-cols-1 ${columnsPerRow >= 3 ? 'md:grid-cols-3' : columnsPerRow === 2 ? 'md:grid-cols-2' : ''} gap-5`}>
+            {visibleCards.map((card, index) => {
+              const isInLastCustomRow = columnsPerRow === 3 && index >= lastRowStartIndex;
+              if (columnsPerRow === 3 && isInLastCustomRow) {
+                return null;
+              }
+
+              return (
+                <Fragment key={card.to}>
+                  {renderCard(card, index)}
+                </Fragment>
+              );
+            })}
+
+            {columnsPerRow === 3 && lastRowCount > 0 && (
+              <div className="md:col-span-3">
+                <div
+                  className={`flex flex-col gap-5 ${lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'} md:gap-6`}
                 >
-                  <motion.div 
-                    className={`h-full bg-white border border-gray-200 ${card.borderHover} hover:shadow-lg transition-all duration-300 p-6 relative overflow-hidden rounded-lg`}
-                    whileHover={{ y: -4 }}
-                  >
-                    <div className="flex flex-col items-center text-center relative z-10">
-                      <motion.div 
-                        className={`w-14 h-14 bg-gradient-to-br ${card.iconBg} ${card.hoverBg} rounded-xl flex items-center justify-center mb-4 transition-all duration-300 shadow-sm`}
-                        whileHover={{ scale: 1.05 }}
-                      >
-                        <card.icon className={`w-7 h-7 ${card.iconColor} ${card.hoverIcon} transition-colors duration-300`} />
-                      </motion.div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2 transition-colors">
-                        {card.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 leading-relaxed">
-                        {card.description}
-                      </p>
-                    </div>
-                  </motion.div>
-                </Link>
-              </motion.div>
-            ))}
+                  {visibleCards.slice(-lastRowCount).map((card, sliceIndex) => (
+                    <Fragment key={card.to}>
+                      {renderCard(
+                        card,
+                        visibleCards.length - lastRowCount + sliceIndex,
+                        lastRowCount === 1
+                          ? 'w-full md:max-w-xs'
+                          : 'w-full md:max-w-xs md:flex-1'
+                      )}
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
