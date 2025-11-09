@@ -497,7 +497,12 @@ class GeneralDB(BaseDB):
                     END;
 
                     UPDATE events SET
-                        is_public = NEW.is_public
+                        name = NEW.name,
+                        date = NEW.date,
+                        url = NEW.url,
+                        is_public = NEW.is_public,
+                        images_count_limit = NEW.images_count_limit,
+                        image_size_limit_bytes = NEW.image_size_limit_bytes
                     WHERE event_id = OLD.event_id;
                 END;
             """,

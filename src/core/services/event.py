@@ -45,17 +45,12 @@ class Event():
         self.faces_dir = os.path.join(event_dir, 'faces')
         self.high_quality_dir = os.path.join(event_dir, 'high_quality')
 
-    @property
-    def profile_context(self) -> dict | None:
-        """Get the current profile context."""
-        return self.models.db.profile_context
-
     def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, label: str | None = None, hierarchy_rank: int = 0):
         self.models.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
-        if not self.profile_context['can_upload_and_delete_images']:
+        if not self.models.db.profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
         for image_id in image_ids:
@@ -271,7 +266,7 @@ class Event():
             except Exception as e:
                 return None, None, [], e
 
-        if not self.profile_context['can_upload_and_delete_images']:
+        if not self.models.db.profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to process new images")
 
         # Check limitations before starting
@@ -333,7 +328,7 @@ class Event():
             'clusters_count': 0,
             'moments_count': 0,
             'errors': [],
-            'profile_id': self.profile_context['profile_id'],
+            'profile_id': self.models.db.profile_context['profile_id'],
         })
 
         all_faces = []

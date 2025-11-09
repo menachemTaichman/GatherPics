@@ -276,18 +276,7 @@ ids = {
 }
 
 # recreate_views_triggers_and_indexes(general_db)
-upload_moments = event.models.get_childs('uploads', 42, 'moments')
-print(upload_moments)
-print('--------------------------------')
-general_models.get_current_profile(event_id)
-results = general_models.db.execute_query('SELECT * FROM current_profile;', return_format=ReturnFormat.LIST_TUPLES)
+general_models.edit('events', event_id, {'date': "2025-06-09"})
+results = general_models.get_entities('events', event_id, include_details=True)
 print(results)
 print('--------------------------------')
-results = db.execute_query('SELECT * FROM current_profile;', return_format=ReturnFormat.LIST_TUPLES)
-print(results)
-print('--------------------------------')
-# general_models.edit('events', event_id, {'is_public': 0})
-
-# gm = GeneralModels(profile_id=None)
-# results = gm.get_entities('events')
-# print(results)

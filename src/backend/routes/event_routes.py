@@ -55,6 +55,7 @@ def update_event(event_id):
     allowed_fields = {
         'name',
         'url',
+        'date',
         'is_public',
         'images_count_limit',
         'image_size_limit_bytes',

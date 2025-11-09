@@ -31,11 +31,3 @@ def get_event(event_id: str, profile_id: str | None = None, public_code: str | N
         profile_id = getattr(g, 'profile_id', None)
     
     return Event(event_id, profile_id=profile_id, public_code=public_code)
-
-# TODO: remove and use event_routes
-def get_event_details(event_id: str, profile_id: str | None = None) -> dict[str, Any]:
-    """Get event details with profile context."""
-    general_models = get_general_models(profile_id)
-    event = general_models.get_entities('events', event_id)
-    return event
-

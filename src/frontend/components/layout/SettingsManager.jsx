@@ -22,6 +22,25 @@ import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
 
+const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
+
+function normalizeDateForInput(value) {
+  if (!value) return '';
+  const isoMatch = String(value).match(ISO_DATE_REGEX);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${month}-${day}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function SettingsManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
@@ -195,6 +214,7 @@ const buildEventDraft = useCallback((evt) => {
   return {
     name: evt.name || '',
     url: evt.url || '',
+    date: normalizeDateForInput(evt.date),
     is_public: evt.is_public ?? 0,
     images_count_limit: evt.images_count_limit !== null && evt.images_count_limit !== undefined
       ? Number(evt.images_count_limit)
@@ -312,7 +332,8 @@ useEffect(() => {
 const handleEventFieldChange = (field, value) => {
   setEventDraft((prev) => {
     if (!prev) return prev;
-    return { ...prev, [field]: value };
+    const nextValue = field === 'date' ? normalizeDateForInput(value) : value;
+    return { ...prev, [field]: nextValue };
   });
 
   if (field === 'name') {
@@ -397,6 +418,7 @@ const handleEventSave = async () => {
   const payload = {
     name: trimmedName,
     url: trimmedUrl,
+    date: eventDraft.date || null,
     is_public: eventDraft.is_public,
     images_count_limit: eventDraft.images_count_limit,
     image_size_limit_bytes: eventDraft.image_size_limit_bytes,
@@ -410,7 +432,9 @@ const handleEventSave = async () => {
     showToast('Event settings updated', 'success');
   } catch (error) {
     console.error('Failed to update event:', error);
-    setEventError(formatErrorMessage('update event', error));
+    const message = formatErrorMessage('update event', error);
+    setEventError(message);
+    showToast(message, 'error');
   } finally {
     setEventSaving(false);
   }
@@ -491,9 +515,9 @@ const handleResetEventDraft = () => {
   // Filter tabs based on permissions and authentication
   const allTabs = [
     { id: 'account', label: 'Account', icon: User },
-    { id: 'about', label: 'About', icon: Info },
     { id: 'event', label: 'Event', icon: Settings },
     { id: 'profiles', label: 'Profiles', icon: User },
+    { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
   ];
   
@@ -800,6 +824,8 @@ const hasEventChanges = useMemo(() => {
   const originalName = (baseEvent.name || '').trim();
   const draftUrl = (eventDraft.url || '').trim();
   const originalUrl = (baseEvent.url || '').trim();
+  const draftDate = normalizeDateForInput(eventDraft.date);
+  const originalDate = normalizeDateForInput(baseEvent.date);
   const draftPublic = Number(eventDraft.is_public ?? 0);
   const originalPublic = Number(baseEvent.is_public ?? 0);
   const draftImagesLimit = eventDraft.images_count_limit ?? null;
@@ -810,6 +836,7 @@ const hasEventChanges = useMemo(() => {
   return (
     draftName !== originalName ||
     draftUrl !== originalUrl ||
+    draftDate !== originalDate ||
     draftPublic !== originalPublic ||
     draftImagesLimit !== originalImagesLimit ||
     draftSizeLimit !== originalSizeLimit
@@ -882,7 +909,7 @@ const hasEventChanges = useMemo(() => {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0">
                   <AnimatePresence mode="wait">
                     {activeTab === 'account' && (
                       <motion.div
@@ -1235,94 +1262,6 @@ const hasEventChanges = useMemo(() => {
                       </motion.div>
                     )}
 
-                    {activeTab === 'about' && (
-                      <motion.div
-                        key="about"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-6"
-                      >
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About {APP_CONFIG.name}</h3>
-                          <div className="space-y-4">
-                            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6">
-                              <h4 className="text-2xl font-bold text-primary-900 mb-2">{APP_CONFIG.name}</h4>
-                              <p className="text-primary-700 mb-4">{APP_CONFIG.description}</p>
-                              <p className="text-sm text-primary-600">
-                                An intelligent photo management system that automatically organizes your photos by recognizing faces and creating smart albums.
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-6">
-                              <h4 className="font-semibold text-gray-900 mb-3">Contact</h4>
-                              <div className="flex items-center space-x-2 text-gray-700">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <a href="mailto:meTaichman@gmail.com" className="hover:text-primary-600 transition-colors">
-                                  meTaichman@gmail.com
-                                </a>
-                              </div>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-6">
-                              <h4 className="font-semibold text-gray-900 mb-3">Copyright</h4>
-                              <p className="text-sm text-gray-600">
-                                © {new Date().getFullYear()} {APP_CONFIG.name}. All rights reserved.
-                              </p>
-                              <p className="text-xs text-gray-500 mt-2">
-                                This software is provided as-is without any warranties.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {activeTab === 'about' && (
-                      <motion.div
-                        key="about"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-6"
-                      >
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About {APP_CONFIG.name}</h3>
-                          <div className="space-y-4">
-                            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6">
-                              <h4 className="text-2xl font-bold text-primary-900 mb-2">{APP_CONFIG.name}</h4>
-                              <p className="text-primary-700 mb-4">{APP_CONFIG.description}</p>
-                              <p className="text-sm text-primary-600">
-                                An intelligent photo management system that automatically organizes your photos by recognizing faces and creating smart albums.
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-6">
-                              <h4 className="font-semibold text-gray-900 mb-3">Contact</h4>
-                              <div className="flex items-center space-x-2 text-gray-700">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <a href="mailto:meTaichman@gmail.com" className="hover:text-primary-600 transition-colors">
-                                  meTaichman@gmail.com
-                                </a>
-                              </div>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-6">
-                              <h4 className="font-semibold text-gray-900 mb-3">Copyright</h4>
-                              <p className="text-sm text-gray-600">
-                                © {new Date().getFullYear()} {APP_CONFIG.name}. All rights reserved.
-                              </p>
-                              <p className="text-xs text-gray-500 mt-2">
-                                This software is provided as-is without any warranties.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-
                     {activeTab === 'event' && (
                       <motion.div
                         key="event"
@@ -1348,141 +1287,152 @@ const hasEventChanges = useMemo(() => {
 
                             {eventDraft ? (
                               <>
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                  <h3 className="text-sm font-semibold text-gray-700">Basics</h3>
-                                  <div className="grid gap-4 sm:grid-cols-2">
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">Event Name</label>
-                                      <input
-                                        type="text"
-                                        value={eventDraft.name}
-                                        onChange={(e) => handleEventFieldChange('name', e.target.value)}
-                                        className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
-                                          nameConflict
-                                            ? 'border-red-500 focus:ring-red-500'
-                                            : 'border-gray-300 focus:ring-blue-500'
-                                        }`}
-                                        placeholder="Enter event name"
-                                      />
-                                      {checkingName ? (
-                                        <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
-                                      ) : nameConflict ? (
-                                        <p className="mt-1 text-xs text-red-600">Name already in use by another event.</p>
-                                      ) : null}
+                                <div className="space-y-6 pb-24">
+                                  <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-700">Basics</h3>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event Name</label>
+                                        <input
+                                          type="text"
+                                          value={eventDraft.name}
+                                          onChange={(e) => handleEventFieldChange('name', e.target.value)}
+                                          className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
+                                            nameConflict
+                                              ? 'border-red-500 focus:ring-red-500'
+                                              : 'border-gray-300 focus:ring-blue-500'
+                                          }`}
+                                          placeholder="Enter event name"
+                                        />
+                                        {checkingName ? (
+                                          <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
+                                        ) : nameConflict ? (
+                                          <p className="mt-1 text-xs text-red-600">Name already in use by another event.</p>
+                                        ) : null}
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event URL</label>
+                                        <input
+                                          type="text"
+                                          value={eventDraft.url}
+                                          onChange={(e) => handleEventFieldChange('url', e.target.value)}
+                                          className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
+                                            urlConflict
+                                              ? 'border-red-500 focus:ring-red-500'
+                                              : 'border-gray-300 focus:ring-blue-500'
+                                          }`}
+                                          placeholder="friendly-event-slug"
+                                        />
+                                        {checkingUrl ? (
+                                          <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
+                                        ) : urlConflict ? (
+                                          <p className="mt-1 text-xs text-red-600">URL already in use by another event.</p>
+                                        ) : null}
+                                        {baseEvent?.url && eventDraft.url !== baseEvent.url && (
+                                          <p className="mt-1 text-xs text-amber-600">The event URL will change after saving.</p>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Event Date</label>
+                                        <input
+                                          type="date"
+                                          value={eventDraft.date || ''}
+                                          onChange={(e) => handleEventFieldChange('date', e.target.value)}
+                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                      </div>
                                     </div>
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">Event URL</label>
-                                      <input
-                                        type="text"
-                                        value={eventDraft.url}
-                                        onChange={(e) => handleEventFieldChange('url', e.target.value)}
-                                        className={`w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:border-transparent ${
-                                          urlConflict
-                                            ? 'border-red-500 focus:ring-red-500'
-                                            : 'border-gray-300 focus:ring-blue-500'
-                                        }`}
-                                        placeholder="friendly-event-slug"
-                                      />
-                                      {checkingUrl ? (
-                                        <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
-                                      ) : urlConflict ? (
-                                        <p className="mt-1 text-xs text-red-600">URL already in use by another event.</p>
-                                      ) : null}
-                                      {baseEvent?.url && eventDraft.url !== baseEvent.url && (
-                                        <p className="mt-1 text-xs text-amber-600">The event URL will change after saving.</p>
-                                      )}
+                                    <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                                      <div>
+                                        <p className="font-medium text-gray-900">Public Event</p>
+                                        <p className="text-sm text-gray-500">Show it in the public events list</p>
+                                      </div>
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={eventDraft.is_public === 1}
+                                          onChange={(e) => handleEventToggle('is_public', e.target.checked)}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                      </label>
                                     </div>
                                   </div>
-                                  <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                                    <div>
-                                      <p className="font-medium text-gray-900">Public Event</p>
-                                      <p className="text-sm text-gray-500">Allow attendees to access via public link</p>
+
+                                  <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-700">Limits</h3>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Photo Count Limit</label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={eventDraft.images_count_limit ?? ''}
+                                          onChange={(e) => {
+                                            const value = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                                            handleEventLimitChange('images_count_limit', value === '' ? null : value);
+                                          }}
+                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                          placeholder="Unlimited"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Leave empty for unlimited photos.</p>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Max Upload Size (MB)</label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={eventDraft.image_size_limit_bytes != null ? Math.round(eventDraft.image_size_limit_bytes / (1024 * 1024)) : ''}
+                                          onChange={(e) => handleEventSizeLimitMbChange(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                          placeholder="Unlimited"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Leave empty for no size limit.</p>
+                                      </div>
                                     </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={eventDraft.is_public === 1}
-                                        onChange={(e) => handleEventToggle('is_public', e.target.checked)}
-                                        className="sr-only peer"
-                                      />
-                                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </label>
+                                  </div>
+
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                          <ImageIcon className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-600">Photos</p>
+                                      </div>
+                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.images_count ?? 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                          <Users className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-600">Faces</p>
+                                      </div>
+                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.faces_count ?? 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                          <Layers className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-600">Albums</p>
+                                      </div>
+                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.albums_count ?? 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                          <Calendar className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-600">Moments</p>
+                                      </div>
+                                      <span className="text-base font-semibold text-blue-600">{baseEvent?.moments_count ?? 0}</span>
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                  <h3 className="text-sm font-semibold text-gray-700">Limits</h3>
-                                  <div className="grid gap-4 sm:grid-cols-2">
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">Photo Count Limit</label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={eventDraft.images_count_limit ?? ''}
-                                        onChange={(e) => {
-                                          const value = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
-                                          handleEventLimitChange('images_count_limit', value === '' ? null : value);
-                                        }}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        placeholder="Unlimited"
-                                      />
-                                      <p className="mt-1 text-xs text-gray-500">Leave empty for unlimited photos.</p>
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">Max Upload Size (MB)</label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={eventDraft.image_size_limit_bytes != null ? Math.round(eventDraft.image_size_limit_bytes / (1024 * 1024)) : ''}
-                                        onChange={(e) => handleEventSizeLimitMbChange(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        placeholder="Unlimited"
-                                      />
-                                      <p className="mt-1 text-xs text-gray-500">Leave empty for no size limit.</p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                  <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                        <ImageIcon className="h-5 w-5 text-blue-500" />
-                                      </div>
-                                      <p className="text-sm font-medium text-gray-600">Photos</p>
-                                    </div>
-                                    <span className="text-base font-semibold text-blue-600">{baseEvent?.images_count ?? 0}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                        <Users className="h-5 w-5 text-blue-500" />
-                                      </div>
-                                      <p className="text-sm font-medium text-gray-600">Faces</p>
-                                    </div>
-                                    <span className="text-base font-semibold text-blue-600">{baseEvent?.faces_count ?? 0}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                        <Layers className="h-5 w-5 text-blue-500" />
-                                      </div>
-                                      <p className="text-sm font-medium text-gray-600">Albums</p>
-                                    </div>
-                                    <span className="text-base font-semibold text-blue-600">{baseEvent?.albums_count ?? 0}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                        <Calendar className="h-5 w-5 text-blue-500" />
-                                      </div>
-                                      <p className="text-sm font-medium text-gray-600">Moments</p>
-                                    </div>
-                                    <span className="text-base font-semibold text-blue-600">{baseEvent?.moments_count ?? 0}</span>
-                                  </div>
-                                </div>
-
-                                <div className="flex justify-end gap-3">
+                                <div className="sticky bottom-0 left-0 right-0 -mx-6 px-6 py-2 bg-white/95 backdrop-blur-sm border-t border-gray-200 flex justify-end gap-3">
                                   <button
                                     onClick={handleResetEventDraft}
                                     disabled={!baseEvent || (!hasEventChanges && !nameConflict && !urlConflict) || eventSaving}
@@ -1672,6 +1622,50 @@ const hasEventChanges = useMemo(() => {
                           )}
                           </div>
                         </PermissionGate>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'about' && (
+                      <motion.div
+                        key="about"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-6"
+                      >
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-4">About {APP_CONFIG.name}</h3>
+                          <div className="space-y-4">
+                            <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg p-6">
+                              <h4 className="text-2xl font-bold text-primary-900 mb-2">{APP_CONFIG.name}</h4>
+                              <p className="text-primary-700 mb-4">{APP_CONFIG.description}</p>
+                              <p className="text-sm text-primary-600">
+                                An intelligent photo management system that automatically organizes your photos by recognizing faces and creating smart albums.
+                              </p>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-6">
+                              <h4 className="font-semibold text-gray-900 mb-3">Contact</h4>
+                              <div className="flex items-center space-x-2 text-gray-700">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <a href="mailto:meTaichman@gmail.com" className="hover:text-primary-600 transition-colors">
+                                  meTaichman@gmail.com
+                                </a>
+                              </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-6">
+                              <h4 className="font-semibold text-gray-900 mb-3">Copyright</h4>
+                              <p className="text-sm text-gray-600">
+                                © {new Date().getFullYear()} {APP_CONFIG.name}. All rights reserved.
+                              </p>
+                              <p className="text-xs text-gray-500 mt-2">
+                                This software is provided as-is without any warranties.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </motion.div>
                     )}
 

@@ -22,6 +22,21 @@ import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../../contexts/authContext';
 
+function formatDateTime(value) {
+  if (!value) return 'Unknown';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const year = parsed.getFullYear();
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+  const seconds = String(parsed.getSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+}
+
 const EMPTY_ARRAY = Object.freeze([]);
 
 // ImageViewerActions component - inline component for ImageViewer sidebar
@@ -1397,7 +1412,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
                     <div><span className="font-semibold">Name:</span> {storeImageInfo?.label || imageMeta.label}</div>
-                    <div><span className="font-semibold">Date:</span> {storeImageInfo?.date_taken || 'Unknown'}</div>
+                    <div><span className="font-semibold">Date:</span> {formatDateTime(storeImageInfo?.date_taken)}</div>
                     <div><span className="font-semibold">Original size:</span> {(() => {
                       const size = storeImageInfo?.file_size;
                       if (!size) return 'Unknown';
