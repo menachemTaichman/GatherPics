@@ -29,7 +29,19 @@ function normalizeDateForInput(value) {
   return `${year}-${month}-${day}`;
 }
 
-export default function EditEventModal({ eventUrl, isOpen, onClose }) {
+function createEmptyEventDraft() {
+  return {
+    name: '',
+    url: '',
+    date: '',
+    is_public: 0,
+    images_count_limit: null,
+    image_size_limit_bytes: null,
+  };
+}
+
+export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit', onSuccess }) {
+  const isCreateMode = mode === 'create';
   const [isClient, setIsClient] = useState(false);
   const [eventDraft, setEventDraft] = useState(null);
   const [eventLoading, setEventLoading] = useState(false);
@@ -39,11 +51,11 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
   const [urlConflict, setUrlConflict] = useState(false);
   const [checkingName, setCheckingName] = useState(false);
   const [checkingUrl, setCheckingUrl] = useState(false);
-  const eventId = useEventId(eventUrl);
+  const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
   const { showToast } = useToast();
   const { registerModal, unregisterModal } = useModalManager();
-  const modalIdRef = useRef(`event-settings-${eventId || 'unknown'}`);
+  const modalIdRef = useRef(`event-settings-${isCreateMode ? 'create' : eventId || 'unknown'}`);
   const nameCheckTimeout = useRef();
   const urlCheckTimeout = useRef();
 
@@ -51,11 +63,18 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
     setIsClient(true);
   }, []);
 
-  useApplyScopes(
-    isOpen && eventId
-      ? [{ entity: 'event', id: String(eventId), eventId: 'general' }]
-      : []
-  );
+  const scopes = useMemo(() => {
+    const scoped = [];
+    if (isOpen) {
+      scoped.push({ entity: 'all', id: 'events', eventId: 'general' });
+    }
+    if (!isCreateMode && isOpen && eventId) {
+      scoped.push({ entity: 'event', id: String(eventId), eventId: 'general' });
+    }
+    return scoped;
+  }, [isCreateMode, isOpen, eventId]);
+
+  useApplyScopes(scopes);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -88,7 +107,9 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
   const handleResetEventDraft = useCallback(() => {
     if (nameCheckTimeout.current) clearTimeout(nameCheckTimeout.current);
     if (urlCheckTimeout.current) clearTimeout(urlCheckTimeout.current);
-    if (baseEvent) {
+    if (isCreateMode) {
+      setEventDraft(createEmptyEventDraft());
+    } else if (baseEvent) {
       setEventDraft(buildEventDraft(baseEvent));
     } else {
       setEventDraft(null);
@@ -96,16 +117,18 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
     setEventError('');
     setNameConflict(false);
     setUrlConflict(false);
-  }, [baseEvent, buildEventDraft]);
+  }, [baseEvent, buildEventDraft, isCreateMode]);
 
   useEffect(() => {
     if (!isOpen) {
       handleResetEventDraft();
+    } else if (isCreateMode) {
+      handleResetEventDraft();
     }
-  }, [isOpen, handleResetEventDraft]);
+  }, [isOpen, isCreateMode, handleResetEventDraft]);
 
   const fetchEventDetails = useCallback(async () => {
-    if (!eventUrl || !isOpen) return;
+    if (!eventUrl || !isOpen || isCreateMode) return;
     setEventLoading(true);
     setEventError('');
     try {
@@ -119,14 +142,17 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
     } finally {
       setEventLoading(false);
     }
-  }, [eventUrl, isOpen]);
+  }, [eventUrl, isOpen, isCreateMode]);
 
   useEffect(() => {
-    if (!isOpen || !eventUrl) return;
+    if (!isOpen || !eventUrl || isCreateMode) return;
     fetchEventDetails();
-  }, [isOpen, eventUrl, fetchEventDetails]);
+  }, [isOpen, eventUrl, isCreateMode, fetchEventDetails]);
 
   useEffect(() => {
+    if (isCreateMode) {
+      return;
+    }
     if (baseEvent) {
       setEventError('');
       setEventDraft(buildEventDraft(baseEvent));
@@ -139,7 +165,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
       setCheckingName(false);
       setCheckingUrl(false);
     }
-  }, [baseEvent, buildEventDraft]);
+  }, [isCreateMode, baseEvent, buildEventDraft]);
 
   useEffect(() => {
     return () => {
@@ -149,10 +175,14 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
   }, []);
 
   const hasEventChanges = useMemo(() => {
-    if (!eventDraft || !baseEvent) return false;
+    if (!eventDraft) return false;
     const draftName = (eventDraft.name || '').trim();
-    const originalName = (baseEvent.name || '').trim();
     const draftUrl = (eventDraft.url || '').trim();
+    if (isCreateMode) {
+      return Boolean(draftName) && Boolean(draftUrl);
+    }
+    if (!baseEvent) return false;
+    const originalName = (baseEvent.name || '').trim();
     const originalUrl = (baseEvent.url || '').trim();
     const draftDate = normalizeDateForInput(eventDraft.date);
     const originalDate = normalizeDateForInput(baseEvent.date);
@@ -170,7 +200,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
       draftImagesLimit !== originalImagesLimit ||
       draftSizeLimit !== originalSizeLimit
     );
-  }, [eventDraft, baseEvent]);
+  }, [eventDraft, baseEvent, isCreateMode]);
 
   const checkEventNameConflict = useCallback(
     async (value) => {
@@ -180,12 +210,11 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
         return;
       }
       const original = (baseEvent?.name || '').trim();
-      if (trimmed === original) {
+      if (!isCreateMode && trimmed === original) {
         setNameConflict(false);
         return;
       }
-      const excludeId = baseEvent?.event_id || eventId;
-      if (!excludeId) return;
+      const excludeId = baseEvent?.event_id || eventId || null;
       setCheckingName(true);
       try {
         const result = await eventsAPI.checkName(trimmed, excludeId);
@@ -196,7 +225,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
         setCheckingName(false);
       }
     },
-    [baseEvent?.name, baseEvent?.event_id, eventId]
+    [baseEvent?.name, baseEvent?.event_id, eventId, isCreateMode]
   );
 
   const checkEventUrlConflict = useCallback(
@@ -207,12 +236,11 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
         return;
       }
       const original = (baseEvent?.url || '').trim();
-      if (trimmed === original) {
+      if (!isCreateMode && trimmed === original) {
         setUrlConflict(false);
         return;
       }
-      const excludeId = baseEvent?.event_id || eventId;
-      if (!excludeId) return;
+      const excludeId = baseEvent?.event_id || eventId || null;
       setCheckingUrl(true);
       try {
         const result = await eventsAPI.checkUrl(trimmed, excludeId);
@@ -223,7 +251,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
         setCheckingUrl(false);
       }
     },
-    [baseEvent?.url, baseEvent?.event_id, eventId]
+    [baseEvent?.url, baseEvent?.event_id, eventId, isCreateMode]
   );
 
   const handleEventFieldChange = useCallback(
@@ -291,7 +319,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
   }, []);
 
   const handleEventSave = useCallback(async () => {
-    if (!eventDraft || !eventUrl) return;
+    if (!eventDraft) return;
     const trimmedName = (eventDraft.name || '').trim();
     const trimmedUrl = (eventDraft.url || '').trim();
     if (!trimmedName) {
@@ -306,6 +334,10 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
       setEventError('Resolve conflicts before saving');
       return;
     }
+    if (!isCreateMode && !eventUrl) {
+      setEventError('Event URL is missing');
+      return;
+    }
     setEventSaving(true);
     setEventError('');
     const previousUrl = baseEvent?.url;
@@ -318,21 +350,33 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
       image_size_limit_bytes: eventDraft.image_size_limit_bytes,
     };
     try {
-      await eventsAPI.update(eventUrl, payload);
-      if (previousUrl && trimmedUrl !== previousUrl) {
-        showToast('Event URL updated. Update your bookmarks to the new address.', 'info');
+      let response;
+      if (isCreateMode) {
+        response = await eventsAPI.create(payload);
+        showToast('Event created', 'success');
+      } else {
+        response = await eventsAPI.update(eventUrl, payload);
+        if (previousUrl && trimmedUrl !== previousUrl) {
+          showToast('Event URL updated. Update your bookmarks to the new address.', 'info');
+        }
+        showToast('Event settings updated', 'success');
       }
-      showToast('Event settings updated', 'success');
+      onSuccess?.({
+        mode: isCreateMode ? 'create' : 'edit',
+        payload,
+        response,
+      });
       onClose?.();
     } catch (error) {
-      console.error('Failed to update event:', error);
-      const message = formatErrorMessage('update event', error);
+      console.error('Failed to save event:', error);
+      const actionLabel = isCreateMode ? 'create event' : 'update event';
+      const message = formatErrorMessage(actionLabel, error);
       setEventError(message);
       showToast(message, 'error');
     } finally {
       setEventSaving(false);
     }
-  }, [eventDraft, eventUrl, nameConflict, urlConflict, baseEvent?.url, showToast, onClose]);
+  }, [eventDraft, eventUrl, nameConflict, urlConflict, isCreateMode, baseEvent?.url, showToast, onClose, onSuccess]);
 
   const handleModalKeys = useCallback(
     (e) => {
@@ -370,6 +414,11 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
     customKeyHandler: handleModalKeys,
   });
 
+  const modalTitle = isCreateMode ? 'Create Event' : 'Edit Event';
+  const modalSubtitle = isCreateMode ? 'Set up a new event' : 'Update general event preferences';
+  const primaryButtonLabel = isCreateMode ? 'Create Event' : 'Save Changes';
+  const savingLabel = isCreateMode ? 'Creating...' : 'Saving...';
+
   const modalContent = (
     <AnimatePresence>
       {isOpen && (
@@ -392,8 +441,8 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
                   <Settings className="h-5 w-5" />
                 </div>
                 <div className="space-y-0.5">
-                  <h2 className="text-xl font-semibold text-gray-900">Edit Event</h2>
-                  <p className="text-sm text-gray-500">Update general event preferences</p>
+                  <h2 className="text-xl font-semibold text-gray-900">{modalTitle}</h2>
+                  <p className="text-sm text-gray-500">{modalSubtitle}</p>
                 </div>
               </div>
               <button
@@ -629,12 +678,12 @@ export default function EditEventModal({ eventUrl, isOpen, onClose }) {
                 {eventSaving ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Saving...</span>
+                    <span>{savingLabel}</span>
                   </>
                 ) : (
                   <>
                     <Save className="h-4 w-4" />
-                    <span>Save Changes</span>
+                    <span>{primaryButtonLabel}</span>
                   </>
                 )}
               </button>

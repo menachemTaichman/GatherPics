@@ -6,6 +6,7 @@ import { GroupsGalleryPage, GroupDetailPage } from '../pages/groups';
 import { AlbumsGalleryPage, AlbumDetailPage } from '../pages/albums';
 import { MomentsPage } from '../pages/moments';
 import { UploadsGalleryPage, UploadDetailPage } from '../pages/uploads';
+import { EventsGalleryPage } from '../pages/events';
 import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
 import { FeedbacksGalleryPage } from '../pages/feedbacks';
 import { DashboardPage } from '../pages/dashboard';
@@ -91,6 +92,7 @@ function PublicAccessPage() {
 // Main content component that receives eventUrl as a prop
 function AppContent({ eventUrl }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { urlHelpers, eventData, loading: urlLoading, error: urlError } = useEventUrls(eventUrl);
   const { 
     groups, 
@@ -335,6 +337,13 @@ function AppContent({ eventUrl }) {
             <div className="text-red-500 text-6xl mb-4">⚠️</div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Error</h1>
             <p className="text-gray-600 mb-4">{urlError}</p>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Return Home
+            </button>
           </div>
         </div>
         <LoginModal
@@ -550,6 +559,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard/events" element={<EventsGalleryPage />} />
               <Route path="/dashboard/feedbacks" element={<FeedbacksGalleryPage />} />
               <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />

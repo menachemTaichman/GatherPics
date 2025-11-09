@@ -366,9 +366,9 @@ class BaseDB(ABC):
             if return_format == ReturnFormat.VALUE:
                 results = rows[0][0] if rows else None
             elif return_format == ReturnFormat.TUPLE:
-                results = rows[0] if rows else None
+                results = rows[0] if rows else ()
             elif return_format == ReturnFormat.DICT:
-                results = dict(zip(columns, rows[0])) if rows else None
+                results = dict(zip(columns, rows[0])) if rows else {}
             elif return_format == ReturnFormat.LIST_VALUES:
                 results = [row[0] for row in rows] if rows else []
             elif return_format == ReturnFormat.LIST_TUPLES:

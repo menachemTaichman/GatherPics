@@ -1,14 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useEffect } from 'react';
-import { MessageSquare, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Header from '../../components/layout/Header';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
+import { getCurrentProfile } from '../../utils/profileService';
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const currentProfile = getCurrentProfile();
+  const editableEventsCount = Number(currentProfile?.editable_events_count || 0);
 
   // Set document title
   useEffect(() => {
@@ -23,6 +26,19 @@ export default function DashboardPage() {
   }, [isAuthenticated, isLoading, openLoginModal]);
 
   const sections = [
+    {
+      id: 'events',
+      title: 'Events',
+      description: 'Review and configure event settings',
+      icon: Calendar,
+      link: '/dashboard/events',
+      iconBg: 'from-blue-100 to-blue-50',
+      iconColor: 'text-blue-600',
+      hoverBg: 'group-hover:from-blue-500 group-hover:to-blue-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-blue-200',
+      show: editableEventsCount > 0
+    },
     {
       id: 'feedbacks',
       title: 'Feedbacks',

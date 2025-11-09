@@ -13,13 +13,93 @@ def get_events():
     gm = get_general_models()
     try:
         events = gm.get_entities('events')
-        return jsonify(events or {})
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'event',
+            'items': events,
+        }]
+        return jsonify({'changes': changes})
     except Forbidden as e:
         return jsonify({}), 200
     except DatabaseError as e:
         return jsonify({}), 200
     except Exception:
         return jsonify({}), 200
+
+
+@event_bp.route('/events', methods=['POST'])
+@require_auth
+def create_event():
+    """Create a new event."""
+    gm = get_general_models()
+    data = request.json or {}
+
+    allowed_fields = {
+        'name',
+        'url',
+        'date',
+        'is_public',
+        'images_count_limit',
+        'image_size_limit_bytes',
+    }
+
+    sanitized = {k: data.get(k) for k in allowed_fields if k in data}
+
+    name = (sanitized.get('name') or '').strip()
+    url = (sanitized.get('url') or '').strip()
+    if not name:
+        return jsonify({"error": "Event name is required"}), 400
+    if not url:
+        return jsonify({"error": "Event URL is required"}), 400
+
+    sanitized['name'] = name
+    sanitized['url'] = url
+    sanitized['date'] = sanitized.get('date') or None
+    sanitized['is_public'] = 1 if sanitized.get('is_public') else 0
+
+    images_limit = sanitized.get('images_count_limit')
+    if images_limit not in (None, ''):
+        try:
+            sanitized['images_count_limit'] = int(images_limit)
+        except (ValueError, TypeError):
+            return jsonify({"error": "images_count_limit must be an integer"}), 400
+    else:
+        sanitized['images_count_limit'] = None
+
+    size_limit = sanitized.get('image_size_limit_bytes')
+    if size_limit not in (None, ''):
+        try:
+            sanitized['image_size_limit_bytes'] = int(size_limit)
+        except (ValueError, TypeError):
+            return jsonify({"error": "image_size_limit_bytes must be an integer"}), 400
+    else:
+        sanitized['image_size_limit_bytes'] = None
+
+    try:
+        event_id = gm.create_event(sanitized)
+        event = gm.get_entities('events', [event_id], include_details=True)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'event',
+            'items': event,
+            'event_id': 'general'
+        },{
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': gm.get_current_profile()
+            }
+        }]
+        return jsonify({'success': True, 'event_id': event_id, 'changes': changes}), 201
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DBPolicyError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 
 @event_bp.route('/events/<event_id>', methods=['GET'])
 @require_auth
@@ -75,6 +155,36 @@ def update_event(event_id):
             }]
 
         return jsonify({'success': True, 'changes': changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DBPolicyError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@event_bp.route('/events/<event_id>', methods=['DELETE'])
+@require_auth
+def delete_event(event_id):
+    """Delete an event."""
+    gm = get_general_models()
+    try:
+        gm.delete_event(event_id)
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'event',
+            'ids': [event_id],
+            'event_id': 'general'
+        },{
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': gm.get_current_profile()
+            }
+        }]
+        return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
     except DBPolicyError as e:

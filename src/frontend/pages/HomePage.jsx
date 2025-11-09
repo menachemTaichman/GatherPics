@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, LayoutDashboard, LogIn } from 'lucide-react';
@@ -7,20 +7,20 @@ import { LoadingSpinner } from '../components/common';
 import { LoginModal } from '../components/auth';
 import { useAuth } from '../contexts/authContext';
 import { getCurrentProfile } from '../utils/profileService';
-import jwtService from '../utils/jwtService';
 import { APP_CONFIG } from '../config/appConfig';
-
-// Cache for events list to prevent duplicate requests
-let eventsCache = null;
-let eventsFetchPromise = null;
+import { useApplyScopes } from '../utils/storeUtils';
+import { useEventsGeneralList } from '../utils/dataManager';
+import { eventsAPI } from '../utils/apiService';
 
 export default function HomePage() {
-  const [events, setEvents] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const { requireAuth, isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const currentProfile = getCurrentProfile();
+  const eventsFromStore = useEventsGeneralList();
+
+  useApplyScopes([{ entity: 'all', id: 'events', eventId: 'general' }]);
 
   // Trigger for refetching events (incremented when auth state changes)
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -47,78 +47,52 @@ export default function HomePage() {
     };
   }, []);
 
+  const eventsArray = useMemo(() => {
+    if (!Array.isArray(eventsFromStore)) return [];
+    return eventsFromStore.map((evt) => {
+      const eventId = evt?.event_id || evt?.id;
+      return { ...evt, event_id: eventId };
+    });
+  }, [eventsFromStore]);
+
+  const hasEvents = eventsArray.length > 0;
+  const hasEventsRef = useRef(hasEvents);
+
   useEffect(() => {
-    let isMounted = true;
+    if (authLoading) return;
 
-    async function fetchEvents() {
-      // Wait for auth to finish loading before fetching events
-      if (authLoading) {
-        return;
-      }
-      // Return cached data if available
-      if (eventsCache) {
-        setEvents(eventsCache);
-        setLoading(false);
-        return;
-      }
-
-      // If a fetch is already in progress, wait for it
-      if (eventsFetchPromise) {
-        try {
-          const result = await eventsFetchPromise;
-          if (isMounted) {
-            setEvents(result);
-            setLoading(false);
-          }
-        } catch (err) {
-          if (isMounted) {
-            setError('Failed to load events');
-            setLoading(false);
-          }
-        }
-        return;
-      }
-
-      // Start new fetch - include auth headers if available
-      eventsFetchPromise = (async () => {
-        try {
-          const token = jwtService.getTokenSync();
-          const headers = token ? { Authorization: `Bearer ${token}` } : {};
-          
-          const response = await fetch('/api/events', {
-            credentials: 'include',
-            headers
-          });
-          if (!response.ok) {
-            throw new Error('Failed to fetch events');
-          }
-          const data = await response.json();
-          eventsCache = data;
-          return data;
-        } catch (err) {
-          throw err;
-        } finally {
-          eventsFetchPromise = null;
-        }
-      })();
-
-      try {
-        const result = await eventsFetchPromise;
-        if (isMounted) {
-          setEvents(result);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError('Failed to load events');
-          setLoading(false);
-        }
-      }
+    let cancelled = false;
+    const hadEvents = hasEventsRef.current;
+    if (!hadEvents) {
+      setLoading(true);
     }
+    setError(null);
 
-    fetchEvents();
-    return () => { isMounted = false; };
-  }, [fetchTrigger, authLoading]);
+    eventsAPI
+      .list()
+      .catch(() => {
+        if (!cancelled) {
+          setError('Failed to load events');
+        }
+      })
+      .finally(() => {
+        if (!cancelled && !hadEvents) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, fetchTrigger]);
+
+  useEffect(() => {
+    hasEventsRef.current = hasEvents;
+    if (hasEvents) {
+      setLoading(false);
+      setError(null);
+    }
+  }, [hasEvents]);
 
   const handleEventClick = (e, eventUrl, eventData) => {
     e.preventDefault();
@@ -154,8 +128,6 @@ export default function HomePage() {
       </div>
     );
   }
-
-  const hasEvents = Object.keys(events).length > 0;
   const hasDashboard = isAuthenticated && currentProfile?.has_dashboard;
   const showActionButtons = hasDashboard || !isAuthenticated;
 
@@ -267,11 +239,14 @@ export default function HomePage() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {Object.entries(events).map(([event_id, event], index) => (
+                {eventsArray.map((event, index) => {
+                  const eventId = event.event_id || event.id;
+                  if (!eventId) return null;
+                  return (
                   <motion.a
-                    key={event_id}
+                    key={eventId}
                     href={`/${event.url}`}
-                    onClick={(e) => handleEventClick(e, event.url, { ...event, id: event_id, event_id })}
+                    onClick={(e) => handleEventClick(e, event.url, { ...event, id: eventId, event_id: eventId })}
                     className="block bg-white border border-gray-200 rounded-lg hover:border-primary-200 hover:shadow-lg transition-all duration-300 overflow-hidden group cursor-pointer"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -306,7 +281,8 @@ export default function HomePage() {
                       </div>
                     </div>
                   </motion.a>
-                ))}
+                );
+                })}
               </div>
             </motion.div>
           )}

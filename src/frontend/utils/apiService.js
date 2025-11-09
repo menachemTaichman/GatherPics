@@ -54,6 +54,46 @@ api.interceptors.request.use(
   }
 );
 
+function normalizeChangeItems(entity, items) {
+  const normalizedEntity = String(entity || '').toLowerCase();
+  const rawItems = Array.isArray(items)
+    ? items
+    : items && typeof items === 'object'
+      ? Object.entries(items).map(([id, value]) => ({ id, ...value }))
+      : [];
+
+  if (normalizedEntity === 'event' || normalizedEntity === 'events') {
+    return rawItems
+      .map((evt) => {
+        if (!evt) return null;
+        const eventId = evt.event_id || evt.id || evt.eventId || evt.url || evt.slug;
+        if (!eventId) return null;
+        return {
+          ...evt,
+          id: eventId,
+          event_id: eventId,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  return rawItems;
+}
+
+function normalizeChanges(changes, defaultEventId) {
+  return changes.map((ch) => {
+    const items = normalizeChangeItems(ch?.entity, ch?.items);
+    return {
+      ...ch,
+      entity: ch?.entity === 'events' ? 'event' : ch?.entity,
+      items,
+      event_id: ch?.event_id || defaultEventId || 'general',
+      ignoreScope: ch?.ignoreScope !== undefined ? ch.ignoreScope : true,
+      broadcast: false,
+    };
+  });
+}
+
 // Response interceptor - Handle changes and 401 errors
 api.interceptors.response.use(
   (response) => {
@@ -69,13 +109,13 @@ api.interceptors.response.use(
       const defaultEventId = eventIdMatch ? eventIdMatch[1] : 'general';
       
       // Inject event_id into changes that don't have it
-      const enrichedChanges = changes.map(ch => ({
-        ...ch,
-        event_id: ch.event_id || defaultEventId
-      }));
-      
+      const enrichedChanges = normalizeChanges(changes, defaultEventId);
+
       store.applyChanges(enrichedChanges);
-      
+
+      // Expose normalized changes for consumers that need to derive follow-up logic
+      response.data.__appliedChanges = enrichedChanges;
+
       // Remove changes from response to prevent double application
       const { changes: _, ...responseDataWithoutChanges } = response.data;
       response.data = responseDataWithoutChanges;
@@ -251,6 +291,22 @@ export async function getEventUrlById(eventId) {
 
 // Event management
 export const eventsAPI = {
+  list: async () => {
+    const response = await api.get(`/api/events`);
+    return response.data || {};
+  },
+
+  create: async (data) => {
+    const response = await api.post(`/api/events`, data);
+    return response.data || {};
+  },
+
+  delete: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}`);
+    return response.data || {};
+  },
+
   getById: async (eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `EVENT_GET_BY_ID:${eventId}`;

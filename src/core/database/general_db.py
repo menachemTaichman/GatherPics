@@ -62,6 +62,11 @@ class GeneralDB(BaseDB):
                     'mode': (str, 'groups'),
                     'sortDir': (str, 'asc')
                 },
+                'EventsGallery': {
+                    'filterVisibility': (str, 'all'),
+                    'sortDir': (str, 'desc'),
+                    'sortBy': (str, 'date')
+                },
                 'RequestsGallery': {
                     'filterStatus': (str, 'all'),
                     'sortDir': (str, 'desc'),
@@ -208,8 +213,8 @@ class GeneralDB(BaseDB):
                 date TEXT,
                 url TEXT UNIQUE NOT NULL,
                 is_public INTEGER DEFAULT 0,
-                images_count_limit INTEGER DEFAULT 0,
-                image_size_limit_bytes INTEGER DEFAULT 0
+                images_count_limit INTEGER NOT NULL DEFAULT 0,
+                image_size_limit_bytes INTEGER NOT NULL DEFAULT 0
             ''',
             # TODO: synchronize is_public field
             'profiles': '''
@@ -347,15 +352,14 @@ class GeneralDB(BaseDB):
                     COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
                     (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
                     CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
+                    CASE WHEN SUM(pe.can_edit_event) > 0 THEN 1 ELSE 0 END AS editable_events_count,
                     CASE WHEN
-                        p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
-                        OR (
-                            p.hierarchy_rank > 0
-                            AND p.restricted_to_event IS NULL
-                        )
+                        SUM(pe.can_edit_event) > 0
+                        OR p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
                     THEN 1 ELSE 0 END AS has_dashboard
                 FROM profiles p
                 LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
+                LEFT JOIN profiles_events pe ON p.profile_id = pe.profile_id
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             """,
@@ -481,6 +485,9 @@ class GeneralDB(BaseDB):
                         NEW.images_count_limit,
                         NEW.image_size_limit_bytes
                     );
+
+                    INSERT OR IGNORE INTO profiles_events (profile_id, event_id, can_edit_event, can_delete_event)
+                    VALUES (cur_profile('profile_id'), NEW.event_id, 1, 1);
                 END;
             """,
             'trg_accessible_events_update': """
@@ -518,6 +525,9 @@ class GeneralDB(BaseDB):
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot delete event')
                     END;
+
+                    DELETE FROM events
+                    WHERE event_id = OLD.event_id;
                 END;
             """,
 
@@ -602,7 +612,9 @@ class GeneralDB(BaseDB):
                     SELECT CASE
                         WHEN cur_profile('hierarchy_rank') = 0 THEN
                             RAISE(ABORT, 'Permission denied: not a profiles manager')
-                        WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
+                        WHEN
+                            cur_profile('hierarchy_rank') <= (SELECT hierarchy_rank FROM profiles WHERE profile_id = NEW.profile_id)
+                        THEN
                             RAISE(ABORT, 'Permission denied: cannot edit profile event with higher or equal rank')
                         WHEN cur_profile('profile_id') NOT IN (SELECT profile_id FROM profiles_events WHERE event_id = NEW.event_id) THEN
                             RAISE(ABORT, 'Permission denied: the current profile does not have permissions in the event')
@@ -941,6 +953,17 @@ class GeneralDB(BaseDB):
                         WHEN NEW.image_size_limit_bytes < 0 OR NEW.image_size_limit_bytes > (SELECT image_size_limit_bytes FROM settings WHERE id = 1 LIMIT 1) THEN
                             RAISE(ABORT, 'Policy error: Invalid image size limit')
                     END;
+                END;
+            """,
+
+            # ensure_developer_in_event
+            'trg_ensure_developer_in_event_insert': """
+                AFTER INSERT ON events
+                BEGIN
+                    INSERT OR IGNORE INTO profiles_events (profile_id, event_id, can_edit_event, can_delete_event)
+                    SELECT developer_id, NEW.event_id, 1, 1
+                    FROM settings
+                    WHERE settings.id = 1;
                 END;
             """,
 

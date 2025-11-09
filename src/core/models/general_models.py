@@ -232,9 +232,9 @@ class GeneralModels(BaseModels):
         return applicant_profile_id
 
     # Profile-Event management
-    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True):
+    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True, can_edit_event: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
-        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event})
+        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event, 'can_edit_event': can_edit_event})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
@@ -274,24 +274,17 @@ class GeneralModels(BaseModels):
         Returns:
             event_id: str
         """
-        settings = self.get_settings()
-        developer_id = settings.get('developer_id')
 
         event_id = self.add('events', data)
-
         Event.create_event(event_id)
-        self.add_profile_to_event(developer_id, event_id, can_delete_event=True)
-        profile_id = self.db.profile_context['profile_id']
-        if developer_id != profile_id:
-            self.add_profile_to_event(profile_id, event_id, can_delete_event=True)
 
         return event_id
     
     def delete_event(self, event_id: str):
         """Delete an event and its associated data."""
         profile_id = self.db.profile_context['profile_id']
-        can_delete_event = self.get_childs('events', event_id, 'profiles', [profile_id]).get(profile_id, {}).get('can_delete_event')
-        if not can_delete_event:
+        _, relation_data = self.get_childs('events', event_id, 'profiles', [profile_id])
+        if not relation_data.get(profile_id, {}).get('can_delete_event'):
             raise Forbidden('Profile does not have permission to delete this event')
 
         Event.delete_event(event_id)         
