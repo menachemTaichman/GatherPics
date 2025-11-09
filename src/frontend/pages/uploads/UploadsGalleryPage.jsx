@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, ArrowUp, ArrowDown, Plus } from 'lucide-react';
-import { uploadsAPI, imagesAPI } from '../../utils/apiService';
+import { uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
@@ -10,7 +10,7 @@ import { sortUploads } from '../../utils/sorting';
 import { getPreference, setPreference } from '../../utils/settings';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ConfirmDelete } from '../../components/modals';
-import { UploadImagesModal } from '../../components/uploads';
+import { UploadFormModal } from '../../components/uploads';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 
@@ -40,7 +40,6 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
   const [notesValue, setNotesValue] = useState('');
   const [deleteUpload, setDeleteUpload] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadLimits, setUploadLimits] = useState(null);
   
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -77,23 +76,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
     }
   }, [eventUrl, showToast]);
 
-  const fetchUploadLimits = useCallback(async () => {
-    if (!eventUrl) return;
-    try {
-      const limits = await imagesAPI.getUploadLimits(eventUrl);
-      setUploadLimits(limits);
-    } catch (error) {
-      console.error('Failed to fetch upload limits:', error);
-    }
-  }, [eventUrl]);
-
   useAuthRefresh(fetchUploads, [eventUrl]);
-
-  useEffect(() => {
-    if (eventUrl && isAuthenticated) {
-      fetchUploadLimits();
-    }
-  }, [eventUrl, isAuthenticated, fetchUploadLimits]);
 
   const sortedUploads = useMemo(() => {
     // Skip sorting for placeholders
@@ -153,8 +136,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
   };
 
   const handleUploadComplete = async (result) => {
-    // Refresh upload limits and uploads list after successful upload
-    await fetchUploadLimits();
+    // Refresh uploads list after successful upload
     await fetchUploads();
   };
 
@@ -393,11 +375,10 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
       {/* Upload Images Modal */}
       {showUploadModal && (
-        <UploadImagesModal
+        <UploadFormModal
           isOpen={showUploadModal}
           onClose={() => setShowUploadModal(false)}
           eventUrl={eventUrl}
-          uploadLimits={uploadLimits}
           onUploadComplete={handleUploadComplete}
           onUploadSuccess={handleUploadSuccess}
         />

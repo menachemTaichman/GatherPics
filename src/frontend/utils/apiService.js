@@ -568,15 +568,6 @@ export const imagesAPI = {
     return response.data;
   },
 
-  getUploadLimits: async (eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const key = `GET_UPLOAD_LIMITS:${eventId}`;
-    return await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/upload/limits`);
-      return response.data;
-    });
-  },
-
   upload: async (files, assignMoments, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const formData = new FormData();

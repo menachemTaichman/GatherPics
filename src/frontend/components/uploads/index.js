@@ -1,4 +1,4 @@
-export { default as UploadImagesModal } from './UploadImagesModal';
+export { default as UploadFormModal } from './UploadFormModal';
 
 
 
