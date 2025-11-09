@@ -29,67 +29,156 @@ export default function DashboardPage() {
       description: 'View and manage user feedback',
       icon: MessageSquare,
       link: '/dashboard/feedbacks',
-      color: 'primary'
+      iconBg: 'from-primary-100 to-primary-50',
+      iconColor: 'text-primary-600',
+      hoverBg: 'group-hover:from-primary-500 group-hover:to-primary-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-primary-200'
     }
   ];
 
+  const visibleSections = sections.filter(section => section.show !== false);
+  const columnsPerRow = 3;
+  const remainder = visibleSections.length % columnsPerRow;
+  const fullRowsCount = visibleSections.length - remainder;
+  const lastRowCount = remainder === 0 ? (visibleSections.length > 0 && visibleSections.length < columnsPerRow ? visibleSections.length : 0) : remainder;
+  const mainSections = visibleSections.slice(0, fullRowsCount);
+  const trailingSections = visibleSections.slice(fullRowsCount);
+
+  const renderCard = (section, index, wrapperClassName = '') => {
+    const Icon = section.icon;
+    return (
+      <motion.div
+        key={section.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
+        className={['h-full', wrapperClassName].filter(Boolean).join(' ')}
+      >
+        <Link
+          to={section.link}
+          className={`block h-full group ${!isAuthenticated ? 'pointer-events-none' : ''}`}
+          tabIndex={isAuthenticated ? 0 : -1}
+          aria-disabled={!isAuthenticated}
+        >
+          <motion.div
+            className={`relative h-full overflow-hidden rounded-lg border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-lg ${section.borderHover} ${
+              !isAuthenticated ? 'opacity-60' : ''
+            }`}
+            whileHover={{ y: isAuthenticated ? -4 : 0 }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-white opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="flex h-full flex-col items-center text-center relative z-10">
+              <motion.div
+                className={`mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${section.iconBg} ${section.hoverBg} shadow-sm transition-all duration-300`}
+                whileHover={{ scale: isAuthenticated ? 1.05 : 1 }}
+              >
+                <Icon className={`h-7 w-7 ${section.iconColor} ${section.hoverIcon} transition-colors duration-300`} />
+              </motion.div>
+              <h3 className="mb-2 text-xl font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
+                {section.title}
+              </h3>
+              <p className="text-sm leading-relaxed text-gray-600">{section.description}</p>
+              {!isAuthenticated && !isLoading && (
+                <span className="mt-4 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-600">
+                  Sign in to access
+                </span>
+              )}
+            </div>
+          </motion.div>
+        </Link>
+      </motion.div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100">
       <Header />
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center mb-4">
-            <LayoutDashboard className="w-12 h-12 text-primary-600 mr-3" />
-            <h1 className="text-5xl font-bold text-gray-900">
-              Dashboard
-            </h1>
-          </div>
-          <p className="text-xl text-gray-600">
-            System management and administration
-          </p>
+      <div className="relative">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div
+            className="absolute top-0 right-0 h-96 w-96 rounded-full bg-primary-100/30 blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.2, 0.3]
+            }}
+            transition={{
+              duration: 8,
+              repeat: Infinity,
+              ease: 'easeInOut'
+            }}
+          />
+          <motion.div
+            className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-purple-100/20 blur-3xl"
+            animate={{
+              scale: [1, 1.3, 1],
+              opacity: [0.2, 0.3, 0.2]
+            }}
+            transition={{
+              duration: 10,
+              repeat: Infinity,
+              ease: 'easeInOut'
+            }}
+          />
         </div>
 
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {sections.map((section) => (
-              <Link
-                key={section.id}
-                to={section.link}
-                className={`block bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group ${
-                  !isAuthenticated ? 'opacity-50 pointer-events-none' : ''
-                }`}
-              >
-                <motion.div
-                  whileHover={{ scale: isAuthenticated ? 1.02 : 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="p-6"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-12 h-12 bg-${section.color}-100 rounded-lg flex items-center justify-center`}>
-                        <section.icon className={`w-6 h-6 text-${section.color}-600`} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                          {section.title}
-                        </h3>
-                      </div>
-                    </div>
-                    <svg 
-                      className="w-6 h-6 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
+          className="relative z-10"
+        >
+          <div
+            className="container mx-auto px-4 py-20"
+            style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="mx-auto mb-12 max-w-4xl text-center"
+            >
+              <div className="mb-5 flex items-center justify-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600/10">
+                  <LayoutDashboard className="h-8 w-8 text-primary-600" />
+                </div>
+                <div className="text-left">
+                  <h1 className="text-4xl font-semibold tracking-tight text-gray-900 md:text-5xl">Dashboard</h1>
+                  <p className="text-base text-gray-500 md:text-lg">System management and administration</p>
+                </div>
+              </div>
+              {!isAuthenticated && !isLoading && (
+                <p className="text-sm font-medium text-primary-600">
+                  Please sign in to explore dashboard tools.
+                </p>
+              )}
+            </motion.div>
+
+            <div className="mx-auto max-w-5xl">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                {mainSections.map((section, index) => renderCard(section, index))}
+
+                {lastRowCount > 0 && (
+                  <div className="md:col-span-3">
+                    <div
+                      className={`flex flex-col gap-6 ${
+                        lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'
+                      } md:gap-6`}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                      {trailingSections.map((section, sliceIndex) =>
+                        renderCard(
+                          section,
+                          fullRowsCount + sliceIndex,
+                          lastRowCount === 1 ? 'w-full md:max-w-xs' : 'w-full md:max-w-xs md:flex-1'
+                        )
+                      )}
+                    </div>
                   </div>
-                  <p className="text-gray-600 text-sm">{section.description}</p>
-                </motion.div>
-              </Link>
-            ))}
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Login Modal */}
