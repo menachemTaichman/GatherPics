@@ -310,10 +310,39 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const imageId = currentImageId;
   
   // Apply scopes after computing current image id so image.albums updates always pass
-  useApplyScopes([
-    ...(parent && entity ? [{ entity, id: String(parent), eventId }] : []),
-    ...(imageId ? [{ entity: 'image', id: String(imageId), eventId }] : []),
-  ]);
+  const parentScopeKey = useMemo(() => {
+    if (!eventId || !entity || parent === null || parent === undefined) return null;
+    return `${eventId}:${entity}:${parent}`;
+  }, [eventId, entity, parent]);
+
+  const parentScopeDecisionRef = useRef({ key: null, shouldAdd: false });
+  if (parentScopeDecisionRef.current.key !== parentScopeKey) {
+    let count = 0;
+    if (parentScopeKey) {
+      try {
+        const store = useDataStore.getState();
+        count = store.scopeCounts?.[parentScopeKey] || 0;
+      } catch {}
+    }
+    parentScopeDecisionRef.current = {
+      key: parentScopeKey,
+      shouldAdd: !!parentScopeKey && count === 0,
+    };
+  }
+  const shouldAddParentScope = parentScopeDecisionRef.current.shouldAdd;
+
+  const appliedScopes = useMemo(() => {
+    const scopes = [];
+    if (shouldAddParentScope && parent !== null && parent !== undefined && entity) {
+      scopes.push({ entity, id: String(parent), eventId });
+    }
+    if (imageId) {
+      scopes.push({ entity: 'image', id: String(imageId), eventId });
+    }
+    return scopes;
+  }, [shouldAddParentScope, parent, entity, eventId, imageId]);
+
+  useApplyScopes(appliedScopes);
   const imageMeta = { id: imageId, label: imageId };
   const displayFilename = imageMeta.label;
 
@@ -489,16 +518,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return () => { try { unregisterModal(imageViewerModalId); } catch {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const prevScopedImageIdRef = useRef(null);
-  useEffect(() => {
-    if (prevScopedImageIdRef.current === imageId) return;
-    prevScopedImageIdRef.current = imageId;
-    const { updateModalScopes } = useModalStore.getState();
-    try {
-      updateModalScopes(imageViewerModalId, imageId ? [{ entity: 'image', id: String(imageId), eventId }] : []);
-    } catch {}
-  }, [imageId, imageViewerModalId, eventId]);
 
   // Scroll lock and focus trapping handled by useModalFocus (popup)
 

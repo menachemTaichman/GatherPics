@@ -262,9 +262,6 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       
       setLoading(true);
       try {
-        // Set scope to this album for relation updates
-        try { useDataStore.getState().setScope({ entity: 'album', id: String(album.id), eventId }); } catch {}
-        
         // Fetch album details (includes images via RELATION_SET)
         await albumsAPI.getById(album.id, eventUrl);
       } catch (error) {

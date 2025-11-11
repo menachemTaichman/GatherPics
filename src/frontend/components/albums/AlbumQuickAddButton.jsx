@@ -100,14 +100,21 @@ export default function AlbumQuickAddButton({
   }, [open, MODAL_ID, registerModal, unregisterModal]);
 
   useEffect(() => {
+    if (!open || !eventId) return;
+    const scope = { entity: 'all', id: 'albums', eventId };
+    const store = useDataStore.getState();
+    store.addScope?.(scope);
+    return () => {
+      store.removeScope?.(scope);
+    };
+  }, [open, eventId]);
+
+  useEffect(() => {
     if (!open) return;
     let mounted = true;
     (async () => {
       setLoading(true);
       try {
-        // Set scope to allow album operations
-        useDataStore.getState().setScope({ entity: 'all', id: 'albums', eventId });
-        
         // Fetch all albums (no filtering in API call)
         await albumsAPI.getAll(eventUrl);
         // Albums will be automatically stored in the data store via the response interceptor
