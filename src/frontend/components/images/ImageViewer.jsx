@@ -245,7 +245,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined }) {
   const permissions = usePermissions(); // <-- add this near the top of the component
   const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
@@ -254,7 +254,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const { isAuthenticated } = useAuth();
   // urlHelpers provided by parent, already memoized by eventId
   
-  const includeArchived = usePreference('general.includeArchived', false);
+  const includeArchivedPreference = usePreference('general.includeArchived', false);
+  const includeArchived = includeArchivedOverride !== undefined && includeArchivedOverride !== null
+    ? includeArchivedOverride
+    : includeArchivedPreference;
   
   
   

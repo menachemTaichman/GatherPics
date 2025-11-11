@@ -26,7 +26,7 @@ import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
 import useImageSelection from '../../hooks/useImageSelection';
 import { useDataStore, useAlbumsList } from '../../utils/dataManager';
-import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId, EMPTY_SCOPES } from '../../utils/storeUtils';
 import { albumsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useImageComponent } from '../../hooks/useImage.jsx';
@@ -36,6 +36,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { PermissionGate } from '../../components/common';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -48,6 +49,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const [album, setAlbum] = useState(null);
   const permissions = usePermissions();
   const { isAuthenticated } = useAuth();
+  const { archiveAlbumId, favoritesAlbumId } = useEventDefaultAlbums(eventId, eventUrl);
   
   // Use the hook at component level to avoid conditional hook calls
   const albumRepresentativeComponent = useImageComponent(
@@ -90,20 +92,31 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     try { return decodeURIComponent(album_name || ''); } catch { return album_name || ''; }
   }, [album_name]);
 
-  // Determine if this is the archived album - for archived, always include archived images
+  const albumIdentifier = album?.id || album?.album_id || null;
+  const archiveId = archiveAlbumId ? String(archiveAlbumId) : null;
+  const favoritesId = favoritesAlbumId ? String(favoritesAlbumId) : null;
+
   const isArchivedAlbum = useMemo(() => {
-    return (decodedAlbumName || '').toLowerCase() === 'archive';
-  }, [decodedAlbumName]);
+    if (!archiveId || !albumIdentifier) return false;
+    return String(albumIdentifier) === archiveId;
+  }, [archiveId, albumIdentifier]);
 
-  // Determine if this is a default album (favorites or archive)
-  const isDefaultAlbum = useMemo(() => {
-    const label = (decodedAlbumName || '').toLowerCase();
-    return ['archive', 'favorites'].includes(label);
-  }, [decodedAlbumName]);
+  const isFavoritesAlbum = useMemo(() => {
+    if (!favoritesId || !albumIdentifier) return false;
+    return String(albumIdentifier) === favoritesId;
+  }, [favoritesId, albumIdentifier]);
 
+  const isDefaultAlbum = isArchivedAlbum || isFavoritesAlbum;
+
+  const albumScopes = useMemo(() => {
+    if (!eventId || !album?.id) return EMPTY_SCOPES;
+    return [{ entity: 'album', id: String(album.id), eventId }];
+  }, [eventId, album?.id]);
+
+  const includeArchivedPreference = usePreference('general.includeArchived', false);
   // For archived album, always include archived; otherwise use preference
-  const includeArchived = isArchivedAlbum ? true : usePreference('general.includeArchived', false);
-  useApplyScopes(album?.id ? [{ entity: 'album', id: String(album.id), eventId }] : []);
+  const includeArchived = isArchivedAlbum ? true : includeArchivedPreference;
+  useApplyScopes(albumScopes);
   const relatedImages = useChilds(eventId, 'albums', album?.id, 'images', { 
     includeArchived, 
     sortBy: 'date', 
@@ -798,7 +811,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
       {/* Modals */}
       {viewerOpen && (
-        <ImageViewer {...viewerProps} />
+        <ImageViewer {...viewerProps} includeArchivedOverride={includeArchived} />
       )}
 
       {/* Delete Confirmation Modal */}

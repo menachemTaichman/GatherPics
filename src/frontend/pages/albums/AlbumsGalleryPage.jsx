@@ -13,6 +13,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 
 export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -28,6 +29,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
   const [imageClasses, setImageClasses] = useState({});
+  const { defaultAlbumIds, archiveAlbumId } = useEventDefaultAlbums(eventId, eventUrl);
+  const defaultAlbumsReady = Boolean(defaultAlbumIds);
   
   // New album creation states
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
@@ -104,9 +107,17 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   // Use albums from store or placeholders when not authenticated
   const currentAlbums = isAuthenticated ? storeAlbums : placeholderAlbums;
 
+  const isDefaultAlbum = useCallback((album) => {
+    if (!album || !defaultAlbumIds) return false;
+    const albumId = album.id || album.album_id;
+    if (!albumId) return false;
+    return defaultAlbumIds.has(String(albumId));
+  }, [defaultAlbumIds]);
+
   const filteredAndSortedAlbums = useMemo(() => {
     // Skip filtering for placeholders
     if (!isAuthenticated) return currentAlbums;
+    if (!defaultAlbumsReady) return [];
     
     let filtered = currentAlbums.filter(album => {
       // Filter by search term
@@ -115,9 +126,15 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       return matchesSearch;
     });
 
-    // Separate default albums (favorites, archive) from custom albums
-    const defaultAlbums = filtered.filter(a => ['archive', 'favorites'].includes((a.label || '').toLowerCase()));
-    const customAlbums = filtered.filter(a => !['archive', 'favorites'].includes((a.label || '').toLowerCase()));
+    const defaultAlbums = [];
+    const customAlbums = [];
+    filtered.forEach((album) => {
+      if (isDefaultAlbum(album)) {
+        defaultAlbums.push(album);
+      } else {
+        customAlbums.push(album);
+      }
+    });
 
     // Sort custom albums by name
     customAlbums.sort((a, b) => {
@@ -126,9 +143,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       return sortOrder === 'asc' ? na.localeCompare(nb) : nb.localeCompare(na);
     });
 
-    // Default albums always come first
     return [...defaultAlbums, ...customAlbums];
-  }, [currentAlbums, searchTerm, sortOrder, isAuthenticated]);
+  }, [currentAlbums, searchTerm, sortOrder, isAuthenticated, isDefaultAlbum, defaultAlbumsReady]);
 
   const handleImageLoad = (albumId, e) => {
     const img = e.target;
@@ -141,7 +157,9 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
 
   // For archived album, always use count_images instead of actual_count_images
   const getAlbumImageCount = (album) => {
-    if ((album.label || '').toLowerCase() === 'archive') {
+    if (!album) return 0;
+    const albumId = album.id || album.album_id;
+    if (archiveAlbumId && albumId && String(albumId) === String(archiveAlbumId)) {
       return album.images_count || 0;
     }
     return getImageCount(album);
@@ -341,7 +359,18 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       {/* Content Area */}
       <div className="px-8 py-8">
         {/* Gallery Grid */}
-        {filteredAndSortedAlbums.length === 0 ? (
+        {!defaultAlbumsReady ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12"
+          >
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-500">
+              Loading albums...
+            </p>
+          </motion.div>
+        ) : (filteredAndSortedAlbums.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -418,7 +447,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
               );
             })}
           </motion.div>
-        )}
+        ))}
       </div>
       
       {/* Floating Create Album Button */}

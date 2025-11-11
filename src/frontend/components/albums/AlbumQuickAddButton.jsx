@@ -10,6 +10,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useEventId } from '../../utils/storeUtils';
+import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
@@ -21,6 +22,8 @@ export default function AlbumQuickAddButton({
   onAlbumAdded // Callback when album is added
 }) {
   const eventId = useEventId(eventUrl);
+  const { defaultAlbumIds } = useEventDefaultAlbums(eventId, eventUrl);
+  const defaultAlbumsReady = Boolean(defaultAlbumIds);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -76,10 +79,16 @@ export default function AlbumQuickAddButton({
   // Convert albums entities to array and sort by label
   const albums = useMemo(() => {
     if (!albumsEntities) return [];
-    return Object.values(albumsEntities)
-      .filter(album => !['archive', 'favorites'].includes((album.label || '').toLowerCase()))
+    if (!defaultAlbumIds) return [];
+    const values = Object.values(albumsEntities);
+    return values
+      .filter((album) => {
+        const albumId = album?.id || album?.album_id;
+        if (!albumId) return true;
+        return !defaultAlbumIds.has(String(albumId));
+      })
       .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
-  }, [albumsEntities]);
+  }, [albumsEntities, defaultAlbumIds]);
 
   // Modal registration
   useEffect(() => {
@@ -263,7 +272,7 @@ export default function AlbumQuickAddButton({
   // Render dropdown content
   const renderDropdownContent = () => (
     <div className="w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg">
-      {loading ? (
+      {loading || !defaultAlbumsReady ? (
         <div className="p-3 text-sm text-gray-500">Loading albums...</div>
       ) : (albums.length === 0 ? (
         <div className="p-3 text-sm text-gray-500">No albums</div>

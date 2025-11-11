@@ -199,65 +199,55 @@ export function useChilds(eventId, parent, parentId, child, options = {}) {
       options.sortBy, options.sortOrder, options.filteredIds?.join(',')]);
 }
 
+export const EMPTY_SCOPES = Object.freeze([]);
+
 // Apply and cleanup scopes against the data store
-export function useApplyScopes(scopes = []) {
+export function useApplyScopes(scopes = EMPTY_SCOPES) {
   const prevKeysRef = useRef(new Set());
 
-  // Normalize scopes and build a stable signature
-  const { keysSet: nextKeys, signature, normalized } = useMemo(() => {
+  useEffect(() => {
+    const ds = useDataStore.getState();
+    const prevKeys = prevKeysRef.current;
+
     const normalized = Array.isArray(scopes)
       ? scopes
-          .filter((s) => s && s.entity && s.id !== undefined && s.id !== null)
-          .map((s) => ({ entity: s.entity, id: String(s.id), eventId: s.eventId || 'general' }))
-      : [];
-    const keyList = Array.from(
-      new Set(normalized.map((s) => `${s.eventId}:${s.entity}:${s.id}`))
-    ).sort();
-    
-    return {
-      keysSet: new Set(keyList),
-      signature: keyList.join('|'),
-      normalized,
-    };
-  }, [scopes]);
+          .map((s) => {
+            if (!s || !s.entity || s.id === undefined || s.id === null) return null;
+            const eventId = s.eventId;
+            if (eventId === undefined || eventId === null) return null;
+            return { entity: s.entity, id: String(s.id), eventId: String(eventId) };
+          })
+          .filter(Boolean)
+      : EMPTY_SCOPES;
 
-  // Apply only the diffs between previous and next scope keys
-  useEffect(() => {
-    try {
-      const ds = useDataStore.getState();
-      const prevKeys = prevKeysRef.current;
+    const nextKeys = new Set();
+    normalized.forEach((s) => {
+      nextKeys.add(`${s.eventId}:${s.entity}:${s.id}`);
+    });
 
-      // Compute removals (in prev but not in next)
-      const toRemove = [];
-      prevKeys.forEach((k) => {
-        if (!nextKeys.has(k)) toRemove.push(k);
-      });
+    const toRemove = [];
+    prevKeys.forEach((k) => {
+      if (!nextKeys.has(k)) toRemove.push(k);
+    });
 
-      // Compute additions (in next but not in prev)
-      const toAdd = [];
-      nextKeys.forEach((k) => {
-        if (!prevKeys.has(k)) toAdd.push(k);
-      });
+    const toAdd = [];
+    nextKeys.forEach((k) => {
+      if (!prevKeys.has(k)) toAdd.push(k);
+    });
 
-      // Apply removals first
-      for (const key of toRemove) {
-        const [eventId, entity, id] = key.split(':');
-        ds.removeScope && ds.removeScope({ entity, id, eventId });
-        prevKeys.delete(key);
-      }
+    for (const key of toRemove) {
+      const [eventId, entity, id] = key.split(':');
+      ds.removeScope && ds.removeScope({ entity, id, eventId });
+      prevKeys.delete(key);
+    }
 
-      // Apply additions
-      for (const key of toAdd) {
-        const [eventId, entity, id] = key.split(':');
-        ds.addScope && ds.addScope({ entity, id, eventId });
-        prevKeys.add(key);
-      }
+    for (const key of toAdd) {
+      const [eventId, entity, id] = key.split(':');
+      ds.addScope && ds.addScope({ entity, id, eventId });
+      prevKeys.add(key);
+    }
+  }, [JSON.stringify(scopes)]);
 
-      // logging removed
-    } catch {}
-  }, [signature]);
-
-  // Cleanup on unmount: remove what we still hold
   useEffect(() => {
     return () => {
       try {

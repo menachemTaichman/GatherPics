@@ -73,18 +73,6 @@ const MomentCard = forwardRef(({
   const allSelectedInMoment = images.length > 0 && selectedInMoment.length === images.length;
   const someSelectedInMoment = selectedInMoment.length > 0 && selectedInMoment.length < images.length;
 
-  // Helper function to check if image is favorite
-  const isImageFavorite = (img) => {
-    if (!img) return false;
-    if (img.is_favorite !== undefined && img.is_favorite !== null) {
-      return !!img.is_favorite;
-    }
-    if (img.is_favorites !== undefined && img.is_favorites !== null) {
-      return !!img.is_favorites;
-    }
-    return Array.isArray(img.albums) && img.albums.some(a => (a || '').toLowerCase() === 'favorites');
-  };
-
   // Handle image load to determine aspect ratio (same approach as GroupDetail)
   const handleImageLoad = useCallback((imageId, e) => {
     const img = e.target;

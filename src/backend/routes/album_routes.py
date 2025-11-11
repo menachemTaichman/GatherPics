@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, _parse_bool, ChildOperation, Event, Forbidden, DatabaseError, DBPolicyError
+from src.backend.helpers import get_event, ChildOperation, Event, Forbidden, DatabaseError, DBPolicyError
 
 album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 
@@ -9,12 +9,10 @@ album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
-    exclude_defaults = _parse_bool(request.args.get('exclude_defaults'), False)
     event = get_event(event_id)
-    table = 'albums_actual' if exclude_defaults else 'albums'
-    albums = event.models.get_entities(table)
+    albums = event.models.get_entities('albums')
     changes = [{
-        'type': 'INSERT',
+        'type': 'UPSERT',
         'entity': 'album',
         'items': albums
     }]

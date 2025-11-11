@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth, optional_auth
-from src.backend.helpers import get_general_models, Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, Forbidden, DatabaseError, get_event as get_event_instance
 from src.core.errors import DBPolicyError
 
 event_bp = Blueprint('events', __name__, url_prefix='/api')
@@ -26,6 +26,103 @@ def get_events():
     except Exception:
         return jsonify({}), 200
 
+@event_bp.route('/events/<event_id>', methods=['GET'])
+@require_auth
+def get_event(event_id):
+    """Get single event details (auth required to include access-controlled fields if any)."""
+    gm = get_general_models()
+    event_instance = get_event_instance(event_id)
+    try:
+        event_items = gm.get_entities('events', [event_id], include_details=True)
+        if not event_items:
+            return jsonify({"error": "Event not found"}), 404
+
+        archive_album_id = event_instance.models.get_archive_album()
+        favorites_album_id = event_instance.models.get_favorites_album()
+        event_items[event_id]['archive_album_id'] = archive_album_id
+        event_items[event_id]['favorites_album_id'] = favorites_album_id
+
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'event',
+            'items': event_items,
+            'event_id': 'general'
+        }]
+        return jsonify({'changes': changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@event_bp.route('/events/<event_id>', methods=['PUT'])
+@require_auth
+def update_event(event_id):
+    """Update basic event settings (name, URL, visibility, limits)."""
+    gm = get_general_models()
+    data = request.json or {}
+
+    allowed_fields = {
+        'name',
+        'url',
+        'date',
+        'is_public',
+        'images_count_limit',
+        'image_size_limit_bytes',
+    }
+
+    sanitized = {k: data[k] for k in data.keys() if k in allowed_fields}
+
+    try:
+        if sanitized:
+            gm.edit('events', event_id, sanitized)
+            updated = gm.get_entities('events', [event_id], include_details=True)
+            changes = [{
+                'type': 'UPSERT',
+                'entity': 'event',
+                'items': updated,
+                'event_id': 'general'
+            }]
+
+        return jsonify({'success': True, 'changes': changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DBPolicyError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@event_bp.route('/events/<event_id>', methods=['DELETE'])
+@require_auth
+def delete_event(event_id):
+    """Delete an event."""
+    gm = get_general_models()
+    try:
+        gm.delete_event(event_id)
+        changes = [{
+            'type': 'REMOVE',
+            'entity': 'event',
+            'ids': [event_id],
+            'event_id': 'general'
+        },{
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': gm.get_current_profile()
+            }
+        }]
+        return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DBPolicyError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @event_bp.route('/events', methods=['POST'])
 @require_auth
@@ -100,100 +197,6 @@ def create_event():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
-@event_bp.route('/events/<event_id>', methods=['GET'])
-@require_auth
-def get_event(event_id):
-    """Get single event details (auth required to include access-controlled fields if any)."""
-    gm = get_general_models()
-    try:
-        event = gm.get_entities('events', [event_id], include_details=True)
-        if not event:
-            return jsonify({"error": "Event not found"}), 404
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'event',
-            'items': event,
-            'event_id': 'general'
-        }]
-        return jsonify({'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@event_bp.route('/events/<event_id>', methods=['PUT'])
-@require_auth
-def update_event(event_id):
-    """Update basic event settings (name, URL, visibility, limits)."""
-    gm = get_general_models()
-    data = request.json or {}
-
-    allowed_fields = {
-        'name',
-        'url',
-        'date',
-        'is_public',
-        'images_count_limit',
-        'image_size_limit_bytes',
-    }
-
-    sanitized = {k: data[k] for k in data.keys() if k in allowed_fields}
-
-    try:
-        if sanitized:
-            gm.edit('events', event_id, sanitized)
-            updated = gm.get_entities('events', [event_id], include_details=True)
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'event',
-                'items': updated,
-                'event_id': 'general'
-            }]
-
-        return jsonify({'success': True, 'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@event_bp.route('/events/<event_id>', methods=['DELETE'])
-@require_auth
-def delete_event(event_id):
-    """Delete an event."""
-    gm = get_general_models()
-    try:
-        gm.delete_event(event_id)
-        changes = [{
-            'type': 'REMOVE',
-            'entity': 'event',
-            'ids': [event_id],
-            'event_id': 'general'
-        },{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'currentProfile': gm.get_current_profile()
-            }
-        }]
-        return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
 @event_bp.route('/events/resolve', methods=['GET'])
 def resolve_event():
     """Resolve event by URL slug. Public endpoint used by client resolver."""
@@ -226,7 +229,6 @@ def get_event_url(event_id):
     except Exception:
         return jsonify({"error": "Event not found"}), 404
 
-
 @event_bp.route('/events/check-name', methods=['POST'])
 @require_auth
 def check_event_name():
@@ -240,7 +242,6 @@ def check_event_name():
 
     conflict_id = gm.is_exists('events', {'name': name}, exclude_id=exclude_event_id)
     return jsonify({'conflict': bool(conflict_id), 'conflicting_event': conflict_id})
-
 
 @event_bp.route('/events/check-url', methods=['POST'])
 @require_auth
