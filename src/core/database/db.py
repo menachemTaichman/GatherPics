@@ -699,26 +699,31 @@ class DB:
             'accessible_events': """
                 SELECT
                     e.*,
-                    COUNT(i.image_id) AS images_count,
-                    COUNT(f.face_id) AS faces_count,
-                    COUNT(a.album_id) AS albums_count,
-                    COUNT(m.moment_id) AS moments_count
+                    COALESCE(
+                        (SELECT COUNT(image_id)
+                        FROM images
+                        WHERE event_id = e.event_id
+                        AND ep.can_manage_event = 1)
+                    , 0) AS images_count,
+                    COALESCE(
+                        (SELECT COUNT(face_id)
+                        FROM faces INNER JOIN images ON faces.image_id = images.image_id
+                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
+                    , 0) AS faces_count,
+                    COALESCE(
+                        (SELECT COUNT(album_id)
+                        FROM albums
+                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
+                    , 0) AS albums_count,
+                    COALESCE(
+                        (SELECT COUNT(moment_id)
+                        FROM moments
+                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
+                    , 0) AS moments_count
                 FROM events e
                 LEFT JOIN events_profiles ep ON
                     e.event_id = ep.event_id
                     AND ep.profile_id = cur_profile('profile_id')
-                LEFT JOIN images i ON
-                    e.event_id = i.event_id
-                    AND ep.can_manage_event = 1
-                LEFT JOIN (faces fh INNER JOIN images ih ON fh.image_id = ih.image_id) f ON
-                    e.event_id = f.event_id AND
-                    ep.can_manage_event = 1
-                LEFT JOIN albums a ON
-                    e.event_id = a.event_id AND
-                    ep.can_manage_event = 1
-                LEFT JOIN moments m ON
-                    e.event_id = m.event_id AND
-                    ep.can_manage_event = 1
                 WHERE e.is_public = 1 OR ep.profile_id IS NOT NULL
                 GROUP BY e.event_id
             """,
