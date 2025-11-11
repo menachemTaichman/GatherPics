@@ -422,7 +422,9 @@ class DB:
                 developer_id TEXT,
                 image_size_limit_bytes INTEGER DEFAULT 0,
                 images_count_limit INTEGER DEFAULT 0,
-                FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL
+                event_in_deletion TEXT DEFAULT NULL,
+                FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
+                FOREIGN KEY (event_in_deletion) REFERENCES events(event_id) ON DELETE SET NULL
             ''',
             'events': '''
                 event_id TEXT PRIMARY KEY NOT NULL,
@@ -694,7 +696,7 @@ class DB:
     def VIEWS(self) -> dict:
         return {
             # events
-            'events_details': """
+            'accessible_events': """
                 SELECT
                     e.*,
                     COUNT(i.image_id) AS images_count,
@@ -702,25 +704,23 @@ class DB:
                     COUNT(a.album_id) AS albums_count,
                     COUNT(m.moment_id) AS moments_count
                 FROM events e
-                LEFT JOIN images i ON e.event_id = i.event_id
-                LEFT JOIN faces f ON e.event_id = f.event_id
-                LEFT JOIN albums a ON e.event_id = a.event_id
-                LEFT JOIN moments m ON e.event_id = m.event_id
-            """,
-            'accessible_events': """
-                SELECT
-                    e.*,
-                    COUNT(ai.image_id) AS images_count,
-                    COUNT(af.face_id) AS faces_count,
-                    COUNT(aa.album_id) AS albums_count,
-                    COUNT(am.moment_id) AS moments_count
-                FROM events e
-                LEFT JOIN events_profiles ep ON e.event_id = ep.event_id AND ep.profile_id = cur_profile('profile_id')
-                LEFT JOIN accessible_images ai
-                LEFT JOIN accessible_faces af
-                LEFT JOIN accessible_albums aa
-                LEFT JOIN accessible_moments am
-                WHERE e.is_public = 1 OR ep.event_id IS NOT NULL
+                LEFT JOIN events_profiles ep ON
+                    e.event_id = ep.event_id
+                    AND ep.profile_id = cur_profile('profile_id')
+                LEFT JOIN images i ON
+                    e.event_id = i.event_id
+                    AND ep.can_manage_event = 1
+                LEFT JOIN (faces fh INNER JOIN images ih ON fh.image_id = ih.image_id) f ON
+                    e.event_id = f.event_id AND
+                    ep.can_manage_event = 1
+                LEFT JOIN albums a ON
+                    e.event_id = a.event_id AND
+                    ep.can_manage_event = 1
+                LEFT JOIN moments m ON
+                    e.event_id = m.event_id AND
+                    ep.can_manage_event = 1
+                WHERE e.is_public = 1 OR ep.profile_id IS NOT NULL
+                GROUP BY e.event_id
             """,
 
             # profiles
@@ -1015,6 +1015,15 @@ class DB:
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             """,
+            'current_profile_events': '''
+                SELECT
+                    ep.event_id,
+                    ep.can_manage_event,
+                    ep.can_delete_event
+                FROM events_profiles ep
+                WHERE ep.profile_id = cur_profile('profile_id')
+                GROUP BY ep.event_id
+            ''',
 
             # event profiles
             'accessible_events_profiles': """
@@ -1228,8 +1237,18 @@ class DB:
                         NEW.image_size_limit_bytes
                     );
 
-                    INSERT OR IGNORE INTO events_profiles (profile_id, event_id, can_manage_event, can_delete_event)
-                    VALUES (cur_profile('profile_id'), NEW.event_id, 1, 1);
+                    INSERT OR IGNORE INTO events_profiles (
+                        profile_id,
+                        event_id,
+                        can_manage_event,
+                        can_delete_event,
+                        can_upload_and_delete_images,
+                        can_edit,
+                        all_images,
+                        all_groups,
+                        all_albums
+                    )
+                    VALUES (cur_profile('profile_id'), NEW.event_id, 1, 1, 1, 1, 1, 1, 1);
                 END;
             """,
             'trg_accessible_events_update': """
@@ -1261,8 +1280,8 @@ class DB:
                     SELECT CASE
                         WHEN (
                             SELECT can_delete_event
-                            FROM profiles_events
-                            WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
+                            FROM events_profiles
+                            WHERE event_id = OLD.event_id AND profile_id = cur_profile('profile_id')
                         ) = 0
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot delete event')
@@ -2628,23 +2647,34 @@ class DB:
             'trg_ensure_defaults_in_event_insert': """
                 AFTER INSERT ON events
                 BEGIN
-                    INSERT OR IGNORE INTO events_profiles (event_id, profile_id, can_manage_event, can_delete_event)
-                    SELECT NEW.event_id, developer_id, 1, 1
+                    INSERT OR IGNORE INTO events_profiles (
+                        event_id,
+                        profile_id,
+                        can_manage_event,
+                        can_delete_event,
+                        can_upload_and_delete_images,
+                        can_edit,
+                        all_images,
+                        all_groups,
+                        all_albums
+                    )
+                    SELECT
+                        NEW.event_id, developer_id, 1, 1, 1, 1, 1, 1, 1
                     FROM settings
                     WHERE settings.id = 1;
 
-                    INSERT INTO albums (album_id, label)
-                    SELECT uuid, 'Archive'
+                    INSERT INTO albums (event_id, album_id, label)
+                    SELECT NEW.event_id, uuid, 'Archive'
                     FROM uuid
                     LIMIT 1;
 
-                    INSERT INTO albums (album_id, label)
-                    SELECT uuid, 'Favorites'
+                    INSERT INTO albums (event_id, album_id, label)
+                    SELECT NEW.event_id, uuid, 'Favorites'
                     FROM uuid
                     LIMIT 1;
 
-                    INSERT INTO groups (group_id, label)
-                    SELECT uuid, 'Unassociated'
+                    INSERT INTO groups (event_id, group_id, label)
+                    SELECT NEW.event_id, uuid, 'Unassociated'
                     FROM uuid
                     LIMIT 1;
                 END;
@@ -2773,9 +2803,9 @@ class DB:
                         AND (
                             SELECT ar.applicant_profile_id
                             FROM access_requests ar
-                            INNER JOIN profiles p ON p.profile_id = ar.applicant_profile_id
+                            INNER JOIN events_profiles ep ON ep.profile_id = ar.applicant_profile_id
                             WHERE ar.access_request_id = access_requests_groups.access_request_id
-                            AND p.all_groups = 0
+                            AND ep.all_groups = 0
                         ) = NEW.profile_id
                         AND approved IS NULL
                     ;
@@ -2795,9 +2825,9 @@ class DB:
                         OLD.profile_id = (
                             SELECT ar.applicant_profile_id
                             FROM access_requests ar
-                            INNER JOIN profiles p ON p.profile_id = ar.applicant_profile_id
+                            INNER JOIN events_profiles ep ON ep.profile_id = ar.applicant_profile_id
                             WHERE ar.access_request_id = access_requests_groups.access_request_id
-                            AND p.all_groups = 1
+                            AND ep.all_groups = 1
                         )
                         AND group_id = OLD.group_id
                     ) AND approved IS NULL;
@@ -2821,7 +2851,10 @@ class DB:
                 BEFORE DELETE ON albums
                 BEGIN
                     SELECT CASE
-                        WHEN LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites' THEN
+                        WHEN
+                            (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites')
+                            AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) <> OLD.event_id
+                        THEN
                             RAISE(ABORT, 'Policy error: cannot delete default albums')
                     END;
                 END;
@@ -2843,7 +2876,10 @@ class DB:
                 BEFORE DELETE ON groups
                 BEGIN
                     SELECT CASE
-                        WHEN LOWER(OLD.label) = 'unassociated' THEN
+                        WHEN
+                            LOWER(OLD.label) = 'unassociated'
+                            AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) <> OLD.event_id
+                        THEN
                             RAISE(ABORT, 'Policy error: cannot delete default group')
                     END;
                 END;

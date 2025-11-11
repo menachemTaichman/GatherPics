@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
@@ -271,7 +272,9 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes(db)
+recreate_views_triggers_and_indexes(general_models.db)
 
-result = event.models.db.execute_query('SELECT *, cur_event_profile(?) as cur_event FROM groups;', ['event_id'], return_format=ReturnFormat.LIST_DICTS)
+
+result = general_models.db.execute_query('SELECT * FROM accessible_events;', return_format=ReturnFormat.LIST_DICTS)
+# result = event.models.db.execute_query('SELECT * FROM events;', return_format=ReturnFormat.LIST_DICTS)
 print(result)

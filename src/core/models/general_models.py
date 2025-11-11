@@ -14,13 +14,16 @@ class GeneralModels(BaseModels):
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
         profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        profile['events'] = {}
+        profile['events'] = self.db.execute_query('SELECT * FROM current_profile_events', return_format=ReturnFormat.DICT_DICTS)
 
         if event_id:
+            if not profile['events'].get(event_id):
+                raise Forbidden('Event not found')
+            
             event = self.get_event(event_id)
             profile_event = event.models.get_current_profile()
             profile_event.pop('profile_id')
-            profile['events'][event_id] = profile_event
+            profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
 
         return profile
 
@@ -276,12 +279,11 @@ class GeneralModels(BaseModels):
     
     def delete_event(self, event_id: str):
         """Delete an event and its associated data."""
-        profile_id = self.db.profile_context['profile_id']
-        _, relation_data = self.get_childs('events', event_id, 'profiles', [profile_id])
-        if not relation_data.get(profile_id, {}).get('can_delete_event'):
+        current_profile = self.get_current_profile()['events'].get(event_id)
+        if not current_profile.get('can_delete_event'):
             raise Forbidden('Profile does not have permission to delete this event')
 
-        Event.delete_event(event_id)         
+        Event.delete_event(event_id)
         self.delete('events', event_id)
     
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:

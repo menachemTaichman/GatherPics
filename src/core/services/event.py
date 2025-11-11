@@ -26,7 +26,8 @@ class Event():
         face_utils = FaceUtils(event_id)
         face_utils.rek_helper.delete_collection()
         event_dir = os.path.join(DATA_ROOT, event_id)
-        shutil.rmtree(event_dir)
+        if os.path.exists(event_dir):
+            shutil.rmtree(event_dir)
    
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         event_dir = os.path.join(DATA_ROOT, event_id)
