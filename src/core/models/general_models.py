@@ -1,8 +1,7 @@
 from typing import Dict, Any
 import secrets
-from src.core.database.base_db import ReturnFormat
+from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
-from src.core.database.general_db import GeneralDB
 from src.core.services.event import Event
 from src.core.errors import DBPolicyError, Forbidden
 
@@ -10,20 +9,18 @@ class GeneralModels(BaseModels):
     """Models manager for general database operations."""
 
     def __init__(self, profile_id: str | None = None):
-        self.db = GeneralDB(profile_id)
+        self.db = DB(profile_id=profile_id)
 
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
         profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        _, events_relation = self.get_childs('profiles', profile['profile_id'], 'events')
-        profile['events'] = events_relation
-              
+        profile['events'] = {}
+
         if event_id:
             event = self.get_event(event_id)
             profile_event = event.models.get_current_profile()
             profile_event.pop('profile_id')
-            profile_event.pop('label')
-            profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
+            profile['events'][event_id] = profile_event
 
         return profile
 
@@ -78,16 +75,13 @@ class GeneralModels(BaseModels):
             event = self.get_event(event_id)
             if not event:
                 raise Forbidden('Event not found')
-            
-            if hierarchy_rank < event.models.get_entities('profiles', self.db.profile_context['profile_id']).get('hierarchy_rank'):
-                raise Forbidden('Profile hierarchy rank cannot be less than the event manager hierarchy rank')
 
         profile_id = self.generate_id()
         self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'email': email, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
         if event_id:
             self.add_profile_to_event(profile_id, event_id, can_delete_event)
 
-        preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+        preferences = DB.CONSTANTS()['profiles_preferences']
         for preference_group, keys_dict in preferences.items():
             values = []
             for preference_key, (value_type, default_value) in keys_dict.items():
@@ -95,7 +89,7 @@ class GeneralModels(BaseModels):
                 serialized_value = self.db.serialize_value(value_type, default_value)
                 values.append([profile_id, preference_group, preference_key, serialized_value])
 
-            self.db.insert_many('profiles_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
+            self.db.insert_many('my_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
 
         return profile_id
 
@@ -140,7 +134,7 @@ class GeneralModels(BaseModels):
     def get_profile_preferences(self, profile_id: str) -> dict:
         """Get the preferences for a profile."""
         # Start with defaults from CONSTANTS
-        preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
+        preferences_constants = DB.CONSTANTS()['profiles_preferences']
         preferences = {}
         
         # Initialize with default values
@@ -150,7 +144,7 @@ class GeneralModels(BaseModels):
                 preferences[group][key] = default_value
         
         # Query database for stored values
-        query = 'SELECT preference_group, preference_key, preference_value FROM profiles_preferences WHERE profile_id = ?'
+        query = 'SELECT preference_group, preference_key, preference_value FROM my_preferences WHERE profile_id = ?'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.LIST_TUPLES)
         
         # Update defaults with stored values
@@ -164,7 +158,7 @@ class GeneralModels(BaseModels):
 
     def update_profile_preferences(self, profile_id: str, preference_group: str, preference_key: str, preference_value):
         """Update the preferences for a profile."""
-        preferences_constants = GeneralDB.CONSTANTS()['profiles_preferences']
+        preferences_constants = self.db.CONSTANTS()['profiles_preferences']
         
         if preference_group not in preferences_constants:
             raise DBPolicyError(f'Preference group {preference_group} not found')
@@ -176,7 +170,7 @@ class GeneralModels(BaseModels):
         value_type, _ = preferences_constants[preference_group][preference_key]
         serialized_value = self.db.serialize_value(value_type, preference_value)
         
-        self.db.update('profiles_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
+        self.db.update('my_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
     def ensure_access_request_notifications(self, event: Event, request_id: str):
         """
@@ -232,9 +226,9 @@ class GeneralModels(BaseModels):
         return applicant_profile_id
 
     # Profile-Event management
-    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True, can_edit_event: bool = True):
+    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True, can_manage_event: bool = True):
         """Add a profile to an event in the general DB and sync to event DB."""
-        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event, 'can_edit_event': can_edit_event})
+        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event, 'can_manage_event': can_manage_event})
         self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
     
     def remove_profile_from_event(self, profile_id: str, event_id: str):
@@ -292,7 +286,7 @@ class GeneralModels(BaseModels):
     
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
-        fields = GeneralDB.get_view_fields('events')
+        fields = self.db.get_view_fields('events')
         query = f'SELECT {fields} FROM events WHERE url = ?'
         return self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
 

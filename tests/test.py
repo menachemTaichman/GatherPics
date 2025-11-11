@@ -1,12 +1,7 @@
-from cmath import rect
-from flask.config import T
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
-from src.core.database.base_db import BaseDB
-from src.core.database.event_db import EventDB
+from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
-from src.core.database.general_db import GeneralDB
-from src.core.database.base_db import ReturnFormat
 from src.core.errors import DatabaseError
 import os
 
@@ -17,7 +12,7 @@ event = Event(event_id, profile_id=profile_id)
 db = event.models.db
 general_db = general_models.db
 
-def drop_views_triggers_and_indexes(db: BaseDB):
+def drop_views_triggers_and_indexes(db: DB):
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
     views = db.execute_query('SELECT name FROM sqlite_master WHERE type="view"')
     triggers = db.execute_query('SELECT name FROM sqlite_master WHERE type="trigger"')
@@ -41,7 +36,7 @@ def drop_views_triggers_and_indexes(db: BaseDB):
         except Exception as e:
             print(f'Error dropping index {index[0]}: {e}')
 
-def create_views_triggers_and_indexes(db: BaseDB):
+def create_views_triggers_and_indexes(db: DB):
 
     # import them again
     for view_name, view_query in db.VIEWS().items():
@@ -53,43 +48,44 @@ def create_views_triggers_and_indexes(db: BaseDB):
     for index_name, index_query in db.INDEXES().items():
         db.execute_query(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
 
-def recreate_views_triggers_and_indexes(db: BaseDB):
+def recreate_views_triggers_and_indexes(db: DB):
     drop_views_triggers_and_indexes(db)
     create_views_triggers_and_indexes(db)
 
-def recreate_tables_with_data(db: BaseDB):
+def recreate_tables_with_data(db: DB):
     TABLES = db.TABLES()
 
     creation_order = []
     cyclic_pairs = []
 
-    if isinstance(db, GeneralDB):
-        creation_order = [
-            'events',
-            'profiles',
-            'profiles_events',
-            'profiles_preferences',
-            'refresh_tokens',
-            'settings'
-        ]
-    elif isinstance(db, EventDB):
-        creation_order = [
-            'groups',
-            'faces',
-            'albums',
-            'profiles',
-            'images',
-            'moments',
-            'albums_images',
-            'profile_images',
-            'profile_albums'
-        ]
+    creation_order = [
+        'events',
+        'profiles',
+        'events_profiles',
+        'profiles_preferences',
+        'refresh_tokens',
+        'notifications',
+        'feedbacks',
+        'settings',
+        'groups',
+        'faces',
+        'albums',
+        'images',
+        'moments',
+        'albums_images',
+        'events_profiles_images',
+        'events_profiles_albums',
+        'events_profiles_groups',
+        'uploads',
+        'access_requests',
+        'access_requests_groups',
+    ]
 
-        # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
-        cyclic_pairs = [
-            ('moments', 'images', 'representative_image'),
-            ('groups', 'faces', 'representative_face')
-        ]
+    # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
+    cyclic_pairs = [
+        ('moments', 'images', 'representative_image'),
+        ('groups', 'faces', 'representative_face')
+    ]
 
     # ------------------------------------------------------
 
@@ -247,7 +243,7 @@ def upsert_profiles_preferences(profile_ids: list[str] | None = None, upsert: bo
         if not upsert:
             general_models.db.execute_query(f"DELETE FROM profiles_preferences WHERE profile_id = ?", [profile_id])
 
-        preferences = GeneralDB.CONSTANTS()['profiles_preferences']
+        preferences = DB.CONSTANTS()['profiles_preferences']
         for preference_group, keys_dict in preferences.items():
             for preference_key, (value_type, default_value) in keys_dict.items():
                 # Serialize the default value before storing
@@ -275,5 +271,7 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# recreate_views_triggers_and_indexes(general_db)
+recreate_views_triggers_and_indexes(db)
 
+result = event.models.db.execute_query('SELECT *, cur_event_profile(?) as cur_event FROM groups;', ['event_id'], return_format=ReturnFormat.LIST_DICTS)
+print(result)

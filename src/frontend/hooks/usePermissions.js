@@ -57,7 +57,7 @@ export function usePermissions(eventUrl = null) {
       // From event_db profiles table
       canUploadAndDeleteImages: Boolean(eventPermissions.can_upload_and_delete_images),
       canEdit: Boolean(eventPermissions.can_edit),
-      canManageEvent: Boolean(eventPermissions.can_edit_event),
+      canManageEvent: Boolean(eventPermissions.can_manage_event),
       
       // From event_db - calculated in profiles_details view
       hasArchiveAlbum: Boolean(eventPermissions.has_archive_album),

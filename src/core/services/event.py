@@ -3,7 +3,7 @@ import shutil
 from datetime import datetime
 from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
-from src.core.database.event_db import EventDB
+from src.core.database.db import DB
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core.config import DATA_ROOT
 
@@ -20,11 +20,7 @@ class Event():
         os.makedirs(os.path.join(event_dir, 'to_process'), exist_ok=True)
         os.makedirs(os.path.join(event_dir, 'faces'), exist_ok=True)
         os.makedirs(os.path.join(event_dir, 'high_quality'), exist_ok=True)
-        
-        # Create event DB
-        event_db_path = os.path.join(event_dir, f'{event_id}.db')
-        _ = EventDB.create_db(event_db_path)
-        
+                
     @staticmethod
     def delete_event(event_id: str):
         face_utils = FaceUtils(event_id)
@@ -328,7 +324,6 @@ class Event():
             'clusters_count': 0,
             'moments_count': 0,
             'errors': [],
-            'profile_id': self.models.db.profile_context['profile_id'],
         })
 
         all_faces = []

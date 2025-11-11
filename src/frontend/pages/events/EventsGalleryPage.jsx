@@ -114,7 +114,7 @@ export default function EventsGalleryPage() {
   const editableEventIds = useMemo(() => {
     return new Set(
       Object.entries(profileEvents)
-        .filter(([, perms]) => perms && (perms.can_edit_event === 1 || perms.can_edit_event === true))
+        .filter(([, perms]) => perms && (perms.can_manage_event === 1 || perms.can_manage_event === true))
         .map(([id]) => String(id))
     );
   }, [profileEvents]);

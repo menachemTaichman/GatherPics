@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from src.core.database.base_db import BaseDB, ReturnFormat
+from src.core.database.db import DB, ReturnFormat
 from abc import ABC
 import uuid
 from enum import Enum
@@ -11,7 +11,7 @@ class ChildOperation(Enum):
 
 class BaseModels(ABC):
 
-    def __init__(self, db: BaseDB | None = None) -> None:
+    def __init__(self, db: DB) -> None:
         """
         Initialize the base models.
         Set self.db to the database instance.

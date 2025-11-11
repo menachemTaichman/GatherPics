@@ -1,22 +1,18 @@
 from typing import List, Dict, Any
-from src.core.database.base_db import ReturnFormat
+from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
-from src.core.database.event_db import EventDB
 from src.core.errors import DBPolicyError
-from src.core.config import DATA_ROOT
-import os
 import secrets
 from datetime import datetime
 
 class EventModels(BaseModels):
 
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
-        db_path = os.path.join(DATA_ROOT, event_id, f'{event_id}.db')
-        self.db = EventDB(db_path, profile_id, public_code)
+        self.db = DB(event_id=event_id, profile_id=profile_id, public_code=public_code)
 
     def get_current_profile(self) -> dict[str, Any]:
         """Get the current profile."""
-        return self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
+        return self.db.execute_query('SELECT * FROM current_event_profile', return_format=ReturnFormat.DICT)
 
     def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
         """Get representative of an entity.

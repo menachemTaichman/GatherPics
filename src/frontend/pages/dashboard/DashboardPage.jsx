@@ -11,7 +11,7 @@ import { getCurrentProfile } from '../../utils/profileService';
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const currentProfile = getCurrentProfile();
-  const editableEventsCount = Number(currentProfile?.editable_events_count || 0);
+  const hasManageableEvents = currentProfile?.has_manageable_events === 1;
 
   // Set document title
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function DashboardPage() {
       hoverBg: 'group-hover:from-blue-500 group-hover:to-blue-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-blue-200',
-      show: editableEventsCount > 0
+      show: hasManageableEvents
     },
     {
       id: 'feedbacks',
