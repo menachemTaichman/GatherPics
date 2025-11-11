@@ -247,7 +247,7 @@ export default function EventsGalleryPage() {
   }, []);
 
   const handleModalSuccess = useCallback(async ({ mode }) => {
-    if (mode === 'create' || mode === 'delete') {
+    if (mode === 'create') {
       try {
         await profilesAPI.getCurrentProfile();
         setProfileVersion((prev) => prev + 1);
@@ -545,6 +545,7 @@ export default function EventsGalleryPage() {
           mode={modalState.mode}
           onClose={closeModal}
           onSuccess={handleModalSuccess}
+          onToast={showToast}
         />
       )}
 

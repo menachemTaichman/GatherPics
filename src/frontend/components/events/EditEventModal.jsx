@@ -40,7 +40,14 @@ function createEmptyEventDraft() {
   };
 }
 
-export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit', onSuccess }) {
+export default function EditEventModal({
+  eventUrl,
+  isOpen,
+  onClose,
+  mode = 'edit',
+  onSuccess,
+  onToast,
+}) {
   const isCreateMode = mode === 'create';
   const [isClient, setIsClient] = useState(false);
   const [eventDraft, setEventDraft] = useState(null);
@@ -54,6 +61,13 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
   const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
   const { showToast } = useToast();
+  const emitToast = useCallback(
+    (message, type) => {
+      const handler = onToast ?? showToast;
+      handler?.(message, type);
+    },
+    [onToast, showToast]
+  );
   const { registerModal, unregisterModal } = useModalManager();
   const modalIdRef = useRef(`event-settings-${isCreateMode ? 'create' : eventId || 'unknown'}`);
   const nameCheckTimeout = useRef();
@@ -318,7 +332,7 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
     });
   }, []);
 
-  const handleEventSave = useCallback(async () => {
+  const handleEventSave = useCallback(async (source = 'ui') => {
     if (!eventDraft) return;
     const trimmedName = (eventDraft.name || '').trim();
     const trimmedUrl = (eventDraft.url || '').trim();
@@ -350,21 +364,36 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
       image_size_limit_bytes: eventDraft.image_size_limit_bytes,
     };
     try {
+      console.debug('[EditEventModal] handleEventSave start', {
+        source,
+        mode: isCreateMode ? 'create' : 'edit',
+        canSaveEvent: hasEventChanges && !nameConflict && !urlConflict && !eventSaving,
+      });
       let response;
       if (isCreateMode) {
         response = await eventsAPI.create(payload);
-        showToast('Event created', 'success');
+        emitToast('Event created', 'success');
       } else {
         response = await eventsAPI.update(eventUrl, payload);
-        if (previousUrl && trimmedUrl !== previousUrl) {
-          showToast('Event URL updated. Update your bookmarks to the new address.', 'info');
+        const urlChanged = Boolean(previousUrl && trimmedUrl !== previousUrl);
+        if (urlChanged) {
+          emitToast('Event URL updated. Update your bookmarks to the new address.', 'info');
         }
-        showToast('Event settings updated', 'success');
+        emitToast('Event settings updated', 'success');
       }
+      const urlChanged = Boolean(previousUrl && trimmedUrl !== previousUrl);
+      console.debug('[EditEventModal] handleEventSave success', {
+        source,
+        mode: isCreateMode ? 'create' : 'edit',
+        urlChanged,
+      });
       onSuccess?.({
         mode: isCreateMode ? 'create' : 'edit',
         payload,
         response,
+        previousUrl: previousUrl ?? null,
+        nextUrl: trimmedUrl,
+        urlChanged,
       });
       onClose?.();
     } catch (error) {
@@ -372,14 +401,37 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
       const actionLabel = isCreateMode ? 'create event' : 'update event';
       const message = formatErrorMessage(actionLabel, error);
       setEventError(message);
-      showToast(message, 'error');
+      emitToast(message, 'error');
     } finally {
       setEventSaving(false);
     }
-  }, [eventDraft, eventUrl, nameConflict, urlConflict, isCreateMode, baseEvent?.url, showToast, onClose, onSuccess]);
+  }, [
+    eventDraft,
+    eventUrl,
+    nameConflict,
+    urlConflict,
+    isCreateMode,
+    baseEvent?.url,
+    emitToast,
+    onClose,
+    onSuccess,
+  ]);
+
+  const canSaveEvent = useMemo(
+    () => hasEventChanges && !nameConflict && !urlConflict && !eventSaving,
+    [hasEventChanges, nameConflict, urlConflict, eventSaving]
+  );
 
   const handleModalKeys = useCallback(
     (e) => {
+      console.debug('[EditEventModal] handleModalKeys', {
+        key: e.key,
+        targetTag: e.target?.tagName,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+      });
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       if (e.key !== 'Enter') return false;
       if (e.shiftKey) return false;
@@ -395,16 +447,20 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
         if (tagName === 'input' && (inputType === 'checkbox' || inputType === 'radio')) {
           return false;
         }
-        e.preventDefault();
-        if (!eventSaving && hasEventChanges && !nameConflict && !urlConflict) {
-          handleEventSave();
+        if (!canSaveEvent) {
+          e.preventDefault();
+          console.debug('[EditEventModal] handleModalKeys blocked submit', { canSaveEvent });
+          return true;
         }
+        console.debug('[EditEventModal] handleModalKeys triggering save', { canSaveEvent });
+        e.preventDefault();
+        handleEventSave('enter-key');
         return true;
       }
 
       return false;
     },
-    [eventSaving, hasEventChanges, nameConflict, urlConflict, handleEventSave]
+    [canSaveEvent, handleEventSave]
   );
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
@@ -671,8 +727,9 @@ export default function EditEventModal({ eventUrl, isOpen, onClose, mode = 'edit
 
             <div className="flex justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
               <button
-                onClick={handleEventSave}
-                disabled={!hasEventChanges || nameConflict || urlConflict || eventSaving}
+                type="button"
+                onClick={() => handleEventSave('button')}
+                disabled={!canSaveEvent}
                 className="flex items-center space-x-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {eventSaving ? (

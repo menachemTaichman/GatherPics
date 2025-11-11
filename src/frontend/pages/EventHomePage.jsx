@@ -5,10 +5,12 @@ import { Users, Calendar, Image as ImageIcon, Upload, Settings } from 'lucide-re
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
+import { useToast } from '../contexts/ToastContext';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const eventName = eventData?.name || 'Event';
   const [showEventSettings, setShowEventSettings] = useState(false);
+  const { showToast } = useToast();
 
   // Define navigation cards
   const navCards = [
@@ -255,6 +257,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
           eventUrl={eventUrl}
           isOpen={showEventSettings}
           onClose={() => setShowEventSettings(false)}
+          onToast={showToast}
         />
       </PermissionGate>
     </motion.div>

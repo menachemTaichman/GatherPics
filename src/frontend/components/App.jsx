@@ -36,6 +36,11 @@ function AppContentWrapper() {
   return <AppContent eventUrl={eventUrl} />;
 }
 
+function ToastOutlet() {
+  const { toast } = useToast();
+  return <Toast toast={toast} />;
+}
+
 // Public access page component
 function PublicAccessPage() {
   const { eventUrl, publicCode } = useParams();
@@ -104,7 +109,6 @@ function AppContent({ eventUrl }) {
     deleteGroup
   } = useDataStore();
   
-  const { toast, showToast } = useToast();
   const [loading, setLocalLoading] = useState(true);
   const { isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const [openMyRequestId, setOpenMyRequestId] = useState(null);
@@ -500,7 +504,6 @@ function AppContent({ eventUrl }) {
       />
 
       {/* Toast Notification */}
-      <Toast toast={toast} />
       {openMyRequestId && (
         <RequestFormModal
           isOpen={!!openMyRequestId}
@@ -554,6 +557,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <ToastOutlet />
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <div className="min-h-screen bg-gray-50">
             <Routes>
