@@ -13,16 +13,15 @@ class GeneralModels(BaseModels):
 
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
-        profile = self.db.execute_query('SELECT * FROM current_profile', return_format=ReturnFormat.DICT)
-        profile['events'] = self.db.execute_query('SELECT * FROM current_profile_events', return_format=ReturnFormat.DICT_DICTS)
-
+        profile = self.get_entities('current_profile', self.db.profile_context['profile_id'])
+        _, events_relation = self.get_childs('current_profile', self.db.profile_context['profile_id'], 'events')
+        profile['events'] = events_relation
         if event_id:
             if not profile['events'].get(event_id):
                 raise Forbidden('Event not found')
             
             event = self.get_event(event_id)
-            profile_event = event.models.get_current_profile()
-            profile_event.pop('profile_id')
+            profile_event = event.models.get_entities('current_event_profile', event_id)
             profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
 
         return profile
@@ -51,38 +50,14 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    # TODO: remove this function
-    def is_public_profile(self, profile_id: str) -> bool:
-        """Check if a profile is public."""
-        error = Forbidden('Profile does not have permission to check if this profile is public')
-        restricted_to_event_id = self.get_entities('profiles', profile_id).get('restricted_to_event')
-        if not restricted_to_event_id:
-            raise error
-        
-        event = self.get_event(restricted_to_event_id)
-        
-        profile = event.models.get_entities('profiles', profile_id)
-        if not profile:
-            raise error
-        
-        return profile.get('is_public')
-
-    # TODO: remove
-    def create_profile(self, label: str, password: str, hierarchy_rank: int, email: str | None = None, *, can_create_events: bool = False, event_id: str | None = None, can_delete_event: bool = False) -> str:
+    # TODO: intigrate default preferences into the db and remove this method
+    def add_profile(self, data: dict) -> str:
         """
         Create a new profile.
         Returns:
             profile_id
         """
-        if event_id:
-            event = self.get_event(event_id)
-            if not event:
-                raise Forbidden('Event not found')
-
-        profile_id = self.generate_id()
-        self.add('profiles', {'profile_id': profile_id, 'label': label, 'password': password, 'hierarchy_rank': hierarchy_rank, 'email': email, 'restricted_to_event': event_id, 'can_create_events': can_create_events})
-        if event_id:
-            self.add_profile_to_event(profile_id, event_id, can_delete_event)
+        profile_id = self.add('profiles', data)
 
         preferences = DB.CONSTANTS()['profiles_preferences']
         for preference_group, keys_dict in preferences.items():
@@ -103,16 +78,19 @@ class GeneralModels(BaseModels):
         """
         profile = self.get_entities('profiles', profile_id)
         restricted_to_event_id = profile.get('restricted_to_event')
-        event_id = only_remove_from_event_id or restricted_to_event_id
-        if event_id:
-            self.remove_profile_from_event(profile_id, event_id)
-        
         if not only_remove_from_event_id or restricted_to_event_id:
             self.delete('profiles', profile_id)
+            return
 
+        if only_remove_from_event_id:
+            self.edit_childs('events', only_remove_from_event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+        
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
-        accessible_profiles = self.db.STRUCTURE()['profiles']['accessible_table']
+        if self.db.profile_context['profile_id'] != profile_id:
+            accessible_profiles = self.db.STRUCTURE()['profiles']['accessible_table']
+        else:
+            accessible_profiles = 'current_profile'
         query = f'SELECT password FROM {accessible_profiles} WHERE profile_id = ?'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
         if not result:
@@ -120,20 +98,6 @@ class GeneralModels(BaseModels):
         
         return result
     
-    def update_profile_label(self, profile_id: str, label: str):
-        """Update the label for a profile."""
-        self.edit('profiles', profile_id, {'label': label})
-        event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
-        for event_id in event_ids:
-            self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
-
-    def update_profile_hierarchy_rank(self, profile_id: str, hierarchy_rank: int):
-        """Update the hierarchy rank for a profile."""
-        self.edit('profiles', profile_id, {'hierarchy_rank': hierarchy_rank})
-        event_ids = self.get_childs('profiles', profile_id, 'events', return_ids=True)
-        for event_id in event_ids:
-            self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
-
     def get_profile_preferences(self, profile_id: str) -> dict:
         """Get the preferences for a profile."""
         # Start with defaults from CONSTANTS
@@ -175,6 +139,34 @@ class GeneralModels(BaseModels):
         
         self.db.update('my_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
 
+    def generate_public_access_code(self, profile_id: str):
+        """Generate a 12-character public access code for a profile."""
+        
+        # Generate a 12-character code
+        code = secrets.token_urlsafe(9)[:12]  # Remove padding chars, take first 12
+        
+        # Ensure uniqueness
+        while self.is_exists('profiles', {'public_access_code': code}):
+            code = secrets.token_urlsafe(9)[:12]
+        
+        # Update profile with the code
+        self.edit('profiles', profile_id, {'public_access_code': code})
+
+    def get_public_access_code(self, profile_id: str) -> str:
+        """Get the public access code for a profile."""
+        query = f'SELECT public_access_code FROM accessible_profiles WHERE profile_id = ?'
+        result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
+        if not result:
+            raise Forbidden('Profile not found')
+        
+        return result
+
+    def revoke_public_access_code(self, profile_id: str):
+        """Revoke public access code for a profile."""
+        self.edit('profiles', profile_id, {'public_access_code': None})
+    
+
+    # TODO: isnt already in the db? remove this method, and the create_access_request method
     def ensure_access_request_notifications(self, event: Event, request_id: str):
         """
         Ensure access request notifications are created for the managers of the access request.
@@ -215,7 +207,7 @@ class GeneralModels(BaseModels):
             label = profile_name or access_request['applicant_name']
             email = access_request['applicant_email']
             password = secrets.token_urlsafe(6)
-            applicant_profile_id = self.create_profile(label, password, 0, email=email, event_id=event_id)
+            applicant_profile_id = self.add_profile(label, password, 0, email=email, event_id=event_id)
         
         applicant_profile_id = event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
         if applicant_profile_id:
@@ -228,34 +220,6 @@ class GeneralModels(BaseModels):
 
         return applicant_profile_id
 
-    # Profile-Event management
-    def add_profile_to_event(self, profile_id: str, event_id: str, can_delete_event: bool = True, can_manage_event: bool = True):
-        """Add a profile to an event in the general DB and sync to event DB."""
-        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.ADD, data={'can_delete_event': can_delete_event, 'can_manage_event': can_manage_event})
-        self.sync_profile_to_event_db(profile_id, event_id, upsert=True)
-    
-    def remove_profile_from_event(self, profile_id: str, event_id: str):
-        """Remove a profile from an event in the general DB and sync to event DB."""
-        self.sync_profile_to_event_db(profile_id, event_id, upsert=False)
-        self.edit_childs('profiles', profile_id, 'events', [event_id], operation=ChildOperation.REMOVE)
-    
-    def sync_profile_to_event_db(self, profile_id: str, event_id: str, upsert: bool = True):
-        """Updates event DB when profile is added/removed from an event."""        
-        # Get event data to find DB path
-        event_data = self.get_entities('events', event_id)
-        if not event_data:
-            return
-
-        event = self.get_event(event_id)
-        hierarchy_rank = -1
-        label = None
-        if upsert:
-            profile = self.get_entities('profiles', profile_id)
-            hierarchy_rank = profile.get('hierarchy_rank')
-            label = profile.get('label')
-        
-        event.sync_profile_to_event_db(profile_id, upsert=upsert, label=label, hierarchy_rank=hierarchy_rank)
-        
     # Event management
     def create_event(self, data: dict) -> str:
         """Create a new event with all necessary setup.

@@ -5,6 +5,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
+import { getCurrentProfileId } from '../../utils/profileService';
 
 export default function ChangePasswordModal({ isOpen, onClose, profileId, profileLabel, eventUrl }) {
   const [password, setPassword] = useState('');
@@ -88,7 +89,12 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
     setError('');
     
     try {
-      await profilesAPI.updatePassword(profileId, password);
+      const currentProfileId = getCurrentProfileId();
+      if (currentProfileId && String(currentProfileId) === String(profileId)) {
+        await profilesAPI.updateCurrentProfile({ password }, eventUrl);
+      } else {
+        await profilesAPI.updatePassword(profileId, password);
+      }
       showToast('Password updated successfully', 'success');
       onClose();
     } catch (error) {

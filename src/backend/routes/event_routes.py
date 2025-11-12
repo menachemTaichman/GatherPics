@@ -208,7 +208,7 @@ def resolve_event():
     if url == 'dashboard':
         return jsonify({"error": "Event not found"}), 404
     
-    gm = get_general_models(profile_id=None)
+    gm = get_general_models()
     try:
         event = gm.get_event_by_url(url)
         if not event:
@@ -220,7 +220,7 @@ def resolve_event():
 @event_bp.route('/events/<event_id>/url', methods=['GET'])
 def get_event_url(event_id):
     """Get event URL by ID (public)."""
-    gm = get_general_models(profile_id=None)
+    gm = get_general_models()
     try:
         url = gm.get_event_url(event_id)
         if not url:

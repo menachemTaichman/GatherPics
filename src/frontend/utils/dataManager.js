@@ -197,6 +197,7 @@ function normalizeEntityKey(entity, eventId = null) {
       // 'profile' maps to 'event_profiles' for event-scoped, 'profiles' for general
       // This will be determined by event_id in the change processing
       return eventId && eventId !== 'general' ? 'event_profiles' : 'profiles';
+    case 'event_profile': return 'event_profiles';
     case 'upload': return 'uploads';
     case 'access_request': return 'access_requests';
     case 'my_access_request': return 'my_access_requests';

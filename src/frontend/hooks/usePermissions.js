@@ -52,7 +52,7 @@ export function usePermissions(eventUrl = null) {
       canCreateEvents: Boolean(profile.can_create_events),
       
       // From event_db - derived from hierarchy_rank in profiles_details view
-      isProfilesManager: Boolean(eventPermissions.is_profiles_manager),
+      isProfilesManager: Boolean(profile.is_profiles_manager),
       
       // From event_db profiles table
       canUploadAndDeleteImages: Boolean(eventPermissions.can_upload_and_delete_images),

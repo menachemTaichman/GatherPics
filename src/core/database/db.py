@@ -118,7 +118,7 @@ class DB:
                 'relations': {
                     'profiles': {
                         'relation_table': 'events_profiles',
-                        'fields_needed': ['profile_id'],
+                        'fields_needed': ['profile_id', 'label', 'hierarchy_rank', 'is_public', 'restricted_to_event'],
                         'relation_table_fields': [
                             'can_delete_event',
                             'can_manage_event',
@@ -150,6 +150,55 @@ class DB:
                         ]
                     },
                 },
+            },
+            'current_profile': {
+                'primary_key': 'profile_id',
+                'accessible_table': 'current_profile',
+                'fields': [
+                    'profile_id',
+                    'label',
+                    'email',
+                    'hierarchy_rank',
+                    'can_create_events',
+                    'restricted_to_event',
+                    'is_public',
+                    'is_profiles_manager',
+                    'total_notifications',
+                    'unread_notifications',
+                    'pending_feedbacks',
+                    'has_feedbacks',
+                    'has_manageable_events',
+                    'has_dashboard',
+                ],
+                'relations': {
+                    'events': {
+                        'relation_table': 'current_profile_events',
+                        'fields_needed': ['event_id'],
+                        'relation_table_fields': [
+                            'can_manage_event',
+                            'can_delete_event',
+                        ],
+                    },
+                },
+            },
+            'current_event_profile': {
+                'primary_key': 'event_id',
+                'accessible_table': 'current_event_profile',
+                'fields': [
+                    'can_manage_event',
+                    'can_delete_event',
+                    'can_upload_and_delete_images',
+                    'all_images',
+                    'all_groups',
+                    'all_albums',
+                    'has_archive_album',
+                    'has_favorites_album',
+                    'has_images',
+                    'has_groups',
+                    'has_albums',
+                    'enable_new_requests',
+                    'pending_access_requests_count',
+                ],
             },
             'my_preferences': {
                 'primary_key': ['profile_id', 'preference_group', 'preference_key'],
@@ -225,7 +274,7 @@ class DB:
                 }
             },
             'events_profiles': {
-                'primary_key': ['event_id', 'profile_id'],
+                'primary_key': ['profile_id'],
                 'accessible_table': 'accessible_events_profiles',
                 'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'all_images', 'all_groups', 'all_albums'],
                 'relations': {
@@ -379,6 +428,12 @@ class DB:
                 'original_table': 'albums_images',
                 'primary_key': ['album_id', 'image_id'],
                 'accessible_table': 'accessible_albums_images_actual',
+            },
+
+            # Relations tables
+            'current_profile_events': {
+                'primary_key': ['profile_id', 'event_id'],
+                'accessible_table': 'current_profile_events',
             },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
@@ -744,6 +799,106 @@ class DB:
                 WHERE profile_id = cur_profile('profile_id')
             """,
 
+            # current profile
+            'current_event_profile': '''
+                SELECT
+                    ep.event_id,
+                    ep.profile_id,
+                    can_manage_event,
+                    can_delete_event,
+                    can_upload_and_delete_images,
+                    can_edit,
+                    all_images,
+                    all_groups,
+                    all_albums,
+                    CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
+                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
+                    CASE WHEN COUNT(i.image_id) > 0 OR all_images = 1 THEN 1 ELSE 0 END as has_images,
+                    CASE WHEN SUM(g.is_accessible) > 0 OR all_groups = 1 THEN 1 ELSE 0 END as has_groups,
+                    CASE WHEN COUNT(a.album_id) > 0 OR all_albums = 1 THEN 1 ELSE 0 END as has_albums,
+                    CASE WHEN SUM(g.is_accessible) <> COUNT(g.group_id) THEN 1 ELSE 0 END as enable_new_requests,
+                    COUNT(DISTINCT aar.access_request_id) as pending_access_requests_count
+                FROM events_profiles ep
+                LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
+                LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
+                LEFT JOIN accessible_images i
+                LEFT JOIN accessible_groups g
+                LEFT JOIN accessible_albums a ON (LOWER(a.label) <> 'archive' AND LOWER(a.label) <> 'favorites')
+                LEFT JOIN accessible_access_requests aar ON aar.is_closed = 0
+                WHERE ep.event_id = cur_event_profile('event_id')
+                AND ep.profile_id = cur_profile('profile_id')
+                GROUP BY ep.profile_id
+            ''',
+            'current_profile': """
+                SELECT
+                    p.profile_id,
+                    p.label,
+                    p.password,
+                    p.email,
+                    p.hierarchy_rank,
+                    p.can_create_events,
+                    p.restricted_to_event,
+                    p.is_public,
+                    p.hierarchy_rank > 0 AS is_profiles_manager,
+                    COUNT(mn.notification_id) AS total_notifications,
+                    COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
+                    (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
+                    CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
+                    CASE WHEN COALESCE(SUM(cep.can_manage_event), 0) > 0 THEN 1 ELSE 0 END AS has_manageable_events,
+                    CASE WHEN
+                        COALESCE(SUM(cep.can_manage_event), 0) > 0
+                        OR p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+                    THEN 1 ELSE 0 END AS has_dashboard
+                FROM profiles p
+                LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
+                LEFT JOIN current_event_profile cep ON p.profile_id = cep.profile_id
+                WHERE p.profile_id = cur_profile('profile_id')
+                GROUP BY p.profile_id
+            """,
+            'current_profile_events': '''
+                SELECT
+                    ep.profile_id,
+                    ep.event_id,
+                    ep.can_manage_event,
+                    ep.can_delete_event
+                FROM events_profiles ep
+                WHERE ep.profile_id = cur_profile('profile_id')
+                GROUP BY ep.event_id
+            ''',
+
+            # event profiles
+            'accessible_events_profiles': """
+                SELECT ep.*
+                FROM events_profiles ep
+                INNER JOIN profiles p ON ep.profile_id = p.profile_id
+                INNER JOIN accessible_events ae ON ep.event_id = ae.event_id
+                WHERE p.hierarchy_rank < cur_profile('hierarchy_rank')
+            """,
+            'accessible_events_profiles_images': '''
+                SELECT epi.*
+                FROM events_profiles_images epi
+                INNER JOIN accessible_events_profiles aep
+                ON epi.profile_id = aep.profile_id
+                AND aep.event_id = epi.event_id
+                WHERE aep.event_id = cur_event_profile('event_id')
+            ''',
+            'accessible_events_profiles_groups': '''
+                SELECT epg.*
+                FROM events_profiles_groups epg
+                INNER JOIN accessible_events_profiles aep
+                ON epg.profile_id = aep.profile_id
+                AND epg.event_id = aep.event_id
+                WHERE aep.event_id = cur_event_profile('event_id')
+            ''',
+            'accessible_events_profiles_albums': '''
+                SELECT epa.*
+                FROM events_profiles_albums epa
+                INNER JOIN accessible_events_profiles aep
+                ON epa.profile_id = aep.profile_id
+                AND epa.event_id = aep.event_id
+                WHERE aep.event_id = cur_event_profile('event_id')
+            ''',
+
             # notifications
             'my_notifications': """
                 SELECT * FROM notifications
@@ -965,94 +1120,6 @@ class DB:
                 LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
                 LEFT JOIN accessible_images ai ON aia.image_id = ai.image_id
                 GROUP BY aa.album_id
-            ''',
-
-            # current profile
-            'current_event_profile': '''
-                SELECT
-                    ep.profile_id,
-                    can_manage_event,
-                    can_delete_event,
-                    can_upload_and_delete_images,
-                    can_edit,
-                    all_images,
-                    all_groups,
-                    all_albums,
-                    CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
-                    CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
-                    CASE WHEN COUNT(i.image_id) > 0 OR all_images = 1 THEN 1 ELSE 0 END as has_images,
-                    CASE WHEN SUM(g.is_accessible) > 0 OR all_groups = 1 THEN 1 ELSE 0 END as has_groups,
-                    CASE WHEN COUNT(a.album_id) > 0 OR all_albums = 1 THEN 1 ELSE 0 END as has_albums,
-                    CASE WHEN SUM(g.is_accessible) <> COUNT(g.group_id) THEN 1 ELSE 0 END as enable_new_requests,
-                    COUNT(DISTINCT aar.access_request_id) as pending_access_requests_count
-                FROM events_profiles ep
-                LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
-                LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
-                LEFT JOIN accessible_images i
-                LEFT JOIN accessible_groups g
-                LEFT JOIN accessible_albums a ON (LOWER(a.label) <> 'archive' AND LOWER(a.label) <> 'favorites')
-                LEFT JOIN accessible_access_requests aar ON aar.is_closed = 0
-                WHERE ep.event_id = cur_event_profile('event_id')
-                AND ep.profile_id = cur_profile('profile_id')
-                GROUP BY ep.profile_id
-            ''',
-            'current_profile': """
-                SELECT
-                    p.profile_id,
-                    p.label,
-                    p.email,
-                    p.hierarchy_rank,
-                    p.can_create_events,
-                    p.restricted_to_event,
-                    p.is_public,
-                    COUNT(mn.notification_id) AS total_notifications,
-                    COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
-                    (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
-                    CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
-                    CASE WHEN COALESCE(SUM(cep.can_manage_event), 0) > 0 THEN 1 ELSE 0 END AS has_manageable_events,
-                    CASE WHEN
-                        COALESCE(SUM(cep.can_manage_event), 0) > 0
-                        OR p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
-                    THEN 1 ELSE 0 END AS has_dashboard
-                FROM profiles p
-                LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
-                LEFT JOIN current_event_profile cep ON p.profile_id = cep.profile_id
-                WHERE p.profile_id = cur_profile('profile_id')
-                GROUP BY p.profile_id
-            """,
-            'current_profile_events': '''
-                SELECT
-                    ep.event_id,
-                    ep.can_manage_event,
-                    ep.can_delete_event
-                FROM events_profiles ep
-                WHERE ep.profile_id = cur_profile('profile_id')
-                GROUP BY ep.event_id
-            ''',
-
-            # event profiles
-            'accessible_events_profiles': """
-                SELECT ep.*
-                FROM events_profiles ep
-                INNER JOIN profiles p ON ep.profile_id = p.profile_id
-                INNER JOIN accessible_events ae ON ep.event_id = ae.event_id
-                WHERE ep.event_id = cur_event_profile('event_id')
-                AND p.hierarchy_rank < cur_profile('hierarchy_rank')
-            """,
-            'accessible_events_profiles_images': '''
-                SELECT epi.*
-                FROM events_profiles_images epi
-                INNER JOIN accessible_events_profiles ep ON epi.profile_id = ep.profile_id
-            ''',
-            'accessible_events_profiles_groups': '''
-                SELECT epg.*
-                FROM events_profiles_groups epg
-                INNER JOIN accessible_events_profiles ep ON epg.profile_id = ep.profile_id
-            ''',
-            'accessible_events_profiles_albums': '''
-                SELECT epa.*
-                FROM events_profiles_albums epa
-                INNER JOIN accessible_events_profiles ep ON epa.profile_id = ep.profile_id
             ''',
 
             # uploads
@@ -1306,11 +1373,11 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot update current profile to a public profile')
                     END;
 
-                    UPDATE current_profile SET
+                    UPDATE profiles SET
                         label = NEW.label,
                         email = NEW.email,
                         password = NEW.password
-                    WHERE profile_id = OLD.profile_id;
+                    WHERE profile_id = cur_profile('profile_id');
                 END;
             """,
 
@@ -1329,8 +1396,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot create profile to a different event than the current profile')
                     END;
 
-                    INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event)
-                    VALUES (NEW.profile_id, NEW.label, NEW.email, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event);
+                    INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event, is_public)
+                    VALUES (NEW.profile_id, NEW.label, NEW.email, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event, NEW.is_public);
                 END;
             """,
             'trg_accessible_profiles_update': """
@@ -1340,7 +1407,7 @@ class DB:
                         WHEN OLD.profile_id NOT IN (
                             SELECT profile_id FROM accessible_profiles ap
                             WHERE ap.profile_id = OLD.profile_id
-                            AND accessible_profiles.is_editable = 1
+                            AND ap.is_editable = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
@@ -1358,7 +1425,8 @@ class DB:
                         hierarchy_rank = NEW.hierarchy_rank,
                         can_create_events = NEW.can_create_events,
                         restricted_to_event = NEW.restricted_to_event,
-                        is_public = NEW.is_public
+                        is_public = NEW.is_public,
+                        public_access_code = NEW.public_access_code
                     WHERE profile_id = OLD.profile_id;
                 END;
             """,
@@ -1712,7 +1780,7 @@ class DB:
                     SELECT epg.event_id, OLD.profile_id, epg.group_id
                     FROM events_profiles_groups epg
                     INNER JOIN events_profiles ep ON epg.event_id = ep.event_id AND epg.profile_id = ep.profile_id
-                    WHERE epi.event_id = cur_event_profile('event_id')
+                    WHERE epg.event_id = cur_event_profile('event_id')
                     AND ep.profile_id = cur_profile('profile_id')
                     AND NEW.all_groups = 1 
                     AND OLD.all_groups = 0;
@@ -2731,16 +2799,9 @@ class DB:
                     SELECT CASE
                         WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
                             RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                        WHEN NEW.is_public = 1 AND NEW.restricted_to_event IS NULL THEN
+                            RAISE(ABORT, 'Policy error: cannot set profile to public if it is not restricted to an event')
                     END;
-                END;
-            """,
-            'trg_insert_ensure_profiles_public_access_code': """
-                AFTER INSERT ON profiles
-                BEGIN
-                    UPDATE profiles
-                    SET public_access_code = NULL
-                    WHERE profile_id = NEW.profile_id
-                    AND is_public = 0;
                 END;
             """,
             'trg_update_ensure_profiles_publicity': """
@@ -2749,16 +2810,43 @@ class DB:
                     SELECT CASE
                         WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
                             RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                        WHEN NEW.is_public = 1 AND NEW.restricted_to_event IS NULL THEN
+                            RAISE(ABORT, 'Policy error: cannot set profile to public if it is not restricted to an event')
+                    END;
+                END;
+            """,
+            'trg_insert_ensure_profiles_public_access_code': """
+                BEFORE INSERT ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.is_public = 0 AND NEW.public_access_code IS NOT NULL THEN
+                            RAISE(ABORT, 'Policy error: cannot set public access code if profile is not public')
                     END;
                 END;
             """,
             'trg_update_ensure_profiles_public_access_code': """
                 AFTER UPDATE ON profiles
                 BEGIN
+                    -- use IF
                     UPDATE profiles
                     SET public_access_code = NULL
                     WHERE profile_id = OLD.profile_id
                     AND is_public = 0;
+                END;
+            """,
+
+            # revoke refresh tokens when profile password is updated
+            'trg_revoke_refresh_tokens_when_profile_password_updated': """
+                AFTER UPDATE ON profiles
+                BEGIN
+                    -- use IF
+                    UPDATE refresh_tokens SET
+                        revoked = 1,
+                        revoked_at = CURRENT_TIMESTAMP
+                    WHERE profile_id = OLD.profile_id
+                    AND revoked = 0
+                    AND password <> OLD.password
+                    AND (password IS NOT NULL OR password <> '' OR OLD.password IS NOT NULL OR OLD.password <> '');
                 END;
             """,
 

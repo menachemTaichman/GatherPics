@@ -10,10 +10,6 @@ class EventModels(BaseModels):
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         self.db = DB(event_id=event_id, profile_id=profile_id, public_code=public_code)
 
-    def get_current_profile(self) -> dict[str, Any]:
-        """Get the current profile."""
-        return self.db.execute_query('SELECT * FROM current_event_profile', return_format=ReturnFormat.DICT)
-
     def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
         """Get representative of an entity.
         Args:
@@ -438,21 +434,6 @@ class EventModels(BaseModels):
         return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
 
     # -------- Profiles helpers --------
-    def sync_profile_to_event_db(self, profile_id: str, upsert: bool = True, label: str | None = None, hierarchy_rank: int = 0) -> None:
-        """Sync profile to event db."""
-        if upsert:
-            query = f"""
-                INSERT INTO profiles (profile_id, label, hierarchy_rank) VALUES (?, ?, ?)
-                ON CONFLICT (profile_id) DO UPDATE SET label = ?, hierarchy_rank = ?
-            """
-            self.db.execute_query(query, (profile_id, label, hierarchy_rank, label, hierarchy_rank))
-        else:
-            query = f"""
-                DELETE FROM profiles WHERE profile_id = ?
-            """
-            self.db.execute_query(query, (profile_id,))
-            self.delete('profiles', profile_id)
-
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
         """Edit entities accessibility for a profile.
         Args:
@@ -560,23 +541,3 @@ class EventModels(BaseModels):
             self.db.execute_query(query, (closed_details, access_request_id))
 
         return applicant_profile_id
-
-    # -------- Public Access Code helpers --------
-    def generate_public_access_code(self, profile_id: str) -> str:
-        """Generate a 12-character public access code for a profile."""
-        
-        # Generate a 12-character code
-        code = secrets.token_urlsafe(9)[:12]  # Remove padding chars, take first 12
-        
-        # Ensure uniqueness
-        while self.db.execute_query('SELECT 1 FROM profiles WHERE public_access_code = ?', (code,), return_format=ReturnFormat.VALUE):
-            code = secrets.token_urlsafe(9)[:12]
-        
-        # Update profile with the code
-        self.edit('profiles', profile_id, {'public_access_code': code})
-        return self.get_entities('profiles', profile_id)['public_access_code']
-
-    def revoke_public_access_code(self, profile_id: str):
-        """Revoke public access code for a profile."""
-        self.edit('profiles', profile_id, {'public_access_code': None})
-    

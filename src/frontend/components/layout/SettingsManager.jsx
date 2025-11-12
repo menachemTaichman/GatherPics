@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check } from 'lucide-react';
@@ -9,7 +9,7 @@ import { profilesAPI, requestsAPI, feedbacksAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useEventProfilesList, useMyRequestsList, useMyFeedbacksList } from '../../utils/dataManager';
+import { useEventProfilesList, useMyRequestsList, useMyFeedbacksList, useProfilesList } from '../../utils/dataManager';
 import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -36,6 +36,7 @@ export default function SettingsManager() {
   // Profile management state
   const currentProfile = getCurrentProfile();
   const allProfiles = useEventProfilesList(eventId);
+  const generalProfiles = useProfilesList();
   const pendingRequestsCount = usePendingRequestsCount(eventId);
   const pendingFeedbacksCount = Number(currentProfile?.pending_feedbacks || 0);
   const hasFeedbacks = currentProfile?.has_feedbacks === 1;
@@ -54,6 +55,8 @@ const [profileToDelete, setProfileToDelete] = useState(null);
 const [profileNameConflict, setProfileNameConflict] = useState(false);
 const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
 const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
+const [publicAccessCodes, setPublicAccessCodes] = useState({});
+const publicAccessFetchesRef = useRef(new Set());
   
   // Requests state
   const [showRequestFormModal, setShowRequestFormModal] = useState(false);
@@ -113,28 +116,48 @@ useEffect(() => {
   // Apply scopes based on active tab
   const profileId = currentProfile?.id || currentProfile?.profile_id;
   const isPublic = currentProfile?.is_public === 1;
-  useApplyScopes(
-    isOpen && activeTab === 'profiles'
-      ? [{ entity: 'all', id: 'event_profiles', eventId }]
-      : isOpen && activeTab === 'account' && profileId
-      ? [
-          { entity: 'event_profile', id: String(profileId), eventId },
-          { entity: 'profile', id: String(profileId), eventId: 'general' },
-          { entity: 'all', id: 'my_access_requests', eventId },
-          ...(!isPublic ? [{ entity: 'all', id: 'my_feedbacks', eventId: 'general' }] : [])
-        ]
-      : []
-  );
+
+  const scopeConfig = useMemo(() => {
+    if (!isOpen) {
+      return [];
+    }
+
+    if (activeTab === 'profiles') {
+      const scopes = [{ entity: 'all', id: 'profiles', eventId: 'general' }];
+      if (eventId) {
+        scopes.push({ entity: 'all', id: 'event_profiles', eventId });
+      }
+      return scopes;
+    }
+
+    if (activeTab === 'account' && profileId) {
+      const scopes = [
+        ...(eventId ? [{ entity: 'event_profile', id: String(profileId), eventId }] : []),
+        { entity: 'profile', id: String(profileId), eventId: 'general' },
+      ];
+
+      if (eventId) {
+        scopes.push({ entity: 'all', id: 'my_access_requests', eventId });
+      }
+
+      if (!isPublic) {
+        scopes.push({ entity: 'all', id: 'my_feedbacks', eventId: 'general' });
+      }
+
+      return scopes;
+    }
+
+    return [];
+  }, [activeTab, eventId, isOpen, isPublic, profileId]);
+
+  useApplyScopes(scopeConfig);
 
   // Fetch profiles when profiles tab is opened
   useEffect(() => {
     if (isOpen && isAuthenticated && activeTab === 'profiles' && eventUrl) {
       fetchProfiles();
-      if (permissions.isProfilesManager) {
-        fetchCurrentProfile();
-      }
     }
-  }, [isOpen, isAuthenticated, activeTab, eventUrl, permissions.isProfilesManager]);
+  }, [isOpen, isAuthenticated, activeTab, eventUrl]);
 
   // Fetch current profile when account tab is opened
   useEffect(() => {
@@ -186,6 +209,39 @@ useEffect(() => {
       console.error('Failed to fetch profiles:', error);
     }
   };
+
+  const fetchPublicAccessCode = useCallback(
+    async (profileId, { notifyOnError = false } = {}) => {
+      if (!profileId) return null;
+      const idStr = String(profileId);
+      if (publicAccessFetchesRef.current.has(idStr)) {
+        return publicAccessCodes[idStr] ?? null;
+      }
+      publicAccessFetchesRef.current.add(idStr);
+      try {
+        const response = await profilesAPI.getPublicAccessCode(idStr);
+        const publicCode = response?.public_code || null;
+        setPublicAccessCodes((prev) => {
+          if (prev[idStr] === publicCode) return prev;
+          return { ...prev, [idStr]: publicCode };
+        });
+        return publicCode;
+      } catch (error) {
+        console.error('Failed to fetch public access code:', error);
+        setPublicAccessCodes((prev) => {
+          if (prev[idStr] === null) return prev;
+          return { ...prev, [idStr]: null };
+        });
+        if (notifyOnError) {
+          showToast(formatErrorMessage('load public access code', error), 'error');
+        }
+        return null;
+      } finally {
+        publicAccessFetchesRef.current.delete(idStr);
+      }
+    },
+    [publicAccessCodes, showToast]
+  );
 
   // Email editing handlers
   const handleEmailEdit = useCallback(() => {
@@ -318,7 +374,14 @@ useEffect(() => {
   };
 
   const handleEditProfile = (profile) => {
-    setSelectedProfile(profile);
+    const mergedProfile = {
+      ...(profile.generalProfile || {}),
+      ...(profile.eventProfile || {}),
+      id: profile.id,
+      public_access_code: profile.public_access_code,
+      restricted_to_event: profile.restricted_to_event,
+    };
+    setSelectedProfile(mergedProfile);
     setShowEditProfileModal(true);
   };
 
@@ -359,6 +422,7 @@ useEffect(() => {
       showToast(errorMsg, 'error');
     } finally {
       setProfileToDelete(null);
+      setShowDeleteConfirmModal(false);
     }
   };
 
@@ -375,7 +439,12 @@ useEffect(() => {
   // Public access code management functions
   const handleCopyPublicLink = async (profile) => {
     try {
-      const publicCode = profile.public_access_code;
+      let publicCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, profile.id)
+        ? publicAccessCodes[profile.id]
+        : undefined;
+      if (publicCode === undefined) {
+        publicCode = await fetchPublicAccessCode(profile.id, { notifyOnError: true });
+      }
       if (!publicCode) {
         showToast('No public access code available. Generate one first.', 'error');
         return;
@@ -392,7 +461,7 @@ useEffect(() => {
 
   const handleResetPublicCode = async (profile) => {
     try {
-      const result = await profilesAPI.resetPublicAccessCode(profile.id, eventUrl);
+      const result = await profilesAPI.resetPublicAccessCode(profile.id);
       showToast('Public access code reset', 'success');
       
       // Auto-copy the new link
@@ -407,6 +476,11 @@ useEffect(() => {
         }
       }
       
+      setPublicAccessCodes((prev) => ({
+        ...prev,
+        [profile.id]: result.public_code || null,
+      }));
+
       // Refresh profiles list
       await fetchProfiles();
     } catch (error) {
@@ -417,8 +491,12 @@ useEffect(() => {
 
   const handleRemovePublicCode = async (profile) => {
     try {
-      await profilesAPI.removePublicAccessCode(profile.id, eventUrl);
+      await profilesAPI.removePublicAccessCode(profile.id);
       showToast('Public access code removed', 'success');
+      setPublicAccessCodes((prev) => ({
+        ...prev,
+        [profile.id]: null,
+      }));
       // Refresh profiles list
       await fetchProfiles();
     } catch (error) {
@@ -428,13 +506,56 @@ useEffect(() => {
   };
 
   // Get other profiles (exclude current) and sort by rank desc, then label asc
-  const currentProfileIdToCompare = currentProfile?.id || currentProfile?.profile_id;
-  const otherProfiles = allProfiles
-    .filter(p => {
-      const profileIdToCheck = p.id || p.profile_id;
-      return profileIdToCheck !== currentProfileIdToCompare;
-    })
-    .sort((a, b) => {
+  const generalProfilesById = useMemo(() => {
+    const map = new Map();
+    generalProfiles.forEach((profile) => {
+      const generalId = profile?.id || profile?.profile_id;
+      if (generalId) {
+        map.set(String(generalId), profile);
+      }
+    });
+    return map;
+  }, [generalProfiles]);
+
+  const eventProfilesForDisplay = useMemo(() => {
+    return allProfiles
+      .map((eventProfile) => {
+        const baseId = eventProfile?.id || eventProfile?.profile_id;
+        if (!baseId) return null;
+        const baseIdStr = String(baseId);
+        const generalProfile = generalProfilesById.get(baseIdStr);
+        const label = generalProfile?.label ?? eventProfile?.label ?? '';
+        const hierarchyRank = Number(
+          generalProfile?.hierarchy_rank ??
+          eventProfile?.hierarchy_rank ??
+          0
+        );
+        const isPublicProfile =
+          (generalProfile?.is_public ?? eventProfile?.is_public ?? 0) === 1;
+        const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
+          ? publicAccessCodes[baseIdStr]
+          : undefined;
+        const restrictedToEvent =
+          generalProfile?.restricted_to_event ??
+          eventProfile?.restricted_to_event ??
+          null;
+
+        return {
+          id: baseIdStr,
+          label,
+          hierarchy_rank: hierarchyRank,
+          is_public: isPublicProfile ? 1 : 0,
+          public_access_code: publicAccessCode,
+          restricted_to_event: restrictedToEvent,
+          eventProfile,
+          generalProfile,
+        };
+      })
+      .filter(Boolean);
+  }, [allProfiles, generalProfilesById, publicAccessCodes]);
+
+  const otherProfiles = useMemo(() => {
+    return [...eventProfilesForDisplay].sort((a, b) => {
       // Sort by rank descending, then by label ascending
       const rankA = a.hierarchy_rank || 0;
       const rankB = b.hierarchy_rank || 0;
@@ -443,6 +564,18 @@ useEffect(() => {
       }
       return (a.label || '').localeCompare(b.label || ''); // ascending
     });
+  }, [eventProfilesForDisplay]);
+
+  useEffect(() => {
+    eventProfilesForDisplay.forEach((profile) => {
+      if (profile.is_public === 1) {
+        const existing = publicAccessCodes[profile.id];
+        if (existing === undefined) {
+          fetchPublicAccessCode(profile.id);
+        }
+      }
+    });
+  }, [eventProfilesForDisplay, publicAccessCodes, fetchPublicAccessCode]);
 
   // Requests handlers
   const handleCreateRequest = () => {

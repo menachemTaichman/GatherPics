@@ -1117,23 +1117,26 @@ export const profilesAPI = {
   // === Public Access Code Management ===
   
   // Generate public access code for a profile
-  generatePublicAccessCode: async (profileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+  generatePublicAccessCode: async (profileId) => {
+    const response = await api.post(`/api/profiles/${profileId}/public-access-code`);
     return response.data;
   },
   
   // Reset public access code for a profile (generates new one)
-  resetPublicAccessCode: async (profileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+  resetPublicAccessCode: async (profileId) => {
+    const response = await api.post(`/api/profiles/${profileId}/public-access-code`);
     return response.data;
   },
   
   // Remove public access code for a profile
-  removePublicAccessCode: async (profileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/public-access-code`);
+  removePublicAccessCode: async (profileId) => {
+    const response = await api.delete(`/api/profiles/${profileId}/public-access-code`);
+    return response.data;
+  },
+
+  // Get public access code for a profile
+  getPublicAccessCode: async (profileId) => {
+    const response = await api.get(`/api/profiles/${profileId}/public-access-code`);
     return response.data;
   }
 };

@@ -272,9 +272,12 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes(general_models.db)
+# recreate_views_triggers_and_indexes(general_models.db)
 
+event_data = {'can_upload_and_delete_images': 0, 'can_edit': 0, 'all_images': 1, 'all_groups': 0, 'all_albums': 1}
+profile_to_edit = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
+event.models.edit('events_profiles', profile_to_edit, event_data)
+profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_to_edit])
+print(profiles)
+print(event_profiles)
 
-result = general_models.db.execute_query('SELECT * FROM accessible_events;', return_format=ReturnFormat.LIST_DICTS)
-# result = event.models.db.execute_query('SELECT * FROM events;', return_format=ReturnFormat.LIST_DICTS)
-print(result)
