@@ -4,7 +4,7 @@ import { X, Key, Check, Minus, Info, Loader2 } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { useEventProfilesList } from '../../utils/dataManager';
+import { useEventProfilesList, useProfilesList } from '../../utils/dataManager';
 import { profilesAPI } from '../../utils/apiService';
 import { getCurrentProfileId } from '../../utils/profileService';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
@@ -247,8 +247,33 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
 
   // Get all event profiles and filter out the current one
   const allProfiles = useEventProfilesList(eventId);
+  const generalProfiles = useProfilesList();
+  const generalProfilesById = useMemo(() => {
+    const map = {};
+    generalProfiles.forEach((profile) => {
+      if (profile?.id) {
+        map[profile.id] = profile;
+      }
+    });
+    return map;
+  }, [generalProfiles]);
   const currentProfileId = getCurrentProfileId();
-  const otherProfiles = allProfiles.filter(p => p.id !== currentProfileId);
+  const mergedProfiles = useMemo(() => {
+    return allProfiles.map((profile) => {
+      const baseId = profile?.profile_id || profile?.id;
+      const generalProfile = baseId ? generalProfilesById[baseId] : null;
+      if (!generalProfile) return profile;
+      if (generalProfile.label === profile.label) return profile;
+      return {
+        ...profile,
+        label: generalProfile.label,
+      };
+    });
+  }, [allProfiles, generalProfilesById]);
+  const otherProfiles = mergedProfiles.filter((profile) => {
+    const baseId = profile?.profile_id || profile?.id;
+    return profile?.id !== currentProfileId && baseId !== currentProfileId;
+  });
 
   const [error, setError] = useState('');
   const [profilesLoading, setProfilesLoading] = useState(true);
@@ -260,9 +285,17 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
   });
 
   // Apply scopes to allow event_profiles to be inserted into the store
-  useApplyScopes(
-    isOpen ? [{ entity: 'all', id: 'event_profiles', eventId }] : []
-  );
+  const scopes = useMemo(() => {
+    if (!isOpen) return [];
+    const activeScopes = [];
+    if (eventId) {
+      activeScopes.push({ entity: 'all', id: 'event_profiles', eventId });
+    }
+    activeScopes.push({ entity: 'all', id: 'profiles', eventId: 'general' });
+    return activeScopes;
+  }, [isOpen, eventId]);
+
+  useApplyScopes(scopes);
 
   // Register modal (scopes managed by useApplyScopes above)
   useEffect(() => {

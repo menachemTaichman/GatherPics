@@ -185,6 +185,7 @@ def update_my_request(event_id, request_id):
 def delete_request(event_id, request_id):
     """Delete an access request."""
     event = get_event(event_id)
+    general_models = get_general_models()
     if not event.models.is_accessible('access_requests', request_id):
         return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
     
@@ -197,13 +198,13 @@ def delete_request(event_id, request_id):
             'entity': 'access_request',
             'ids': [request_id]
         },
-        # {
-        #     'type': 'UPSERT',
-        #     'entity': 'localStorage',
-        #     'items': {
-        #         'currentProfile': general_models.get_current_profile()
-        #     }
-        # }
+        {
+            'type': 'UPSERT',
+            'entity': 'localStorage',
+            'items': {
+                'currentProfile': general_models.get_current_profile()
+            }
+        }
         ]
         return jsonify(response)
     except Forbidden as e:
@@ -217,6 +218,7 @@ def delete_request(event_id, request_id):
 @require_auth
 def delete_all_requests(event_id):
     """Delete all access requests for this event."""
+    general_models = get_general_models()
     event = get_event(event_id)
     try:
         deleted_ids = event.models.delete_all('access_requests')
@@ -228,7 +230,7 @@ def delete_all_requests(event_id):
             'type': 'UPSERT',
             'entity': 'localStorage',
             'items': {
-                'currentProfile': event.models.get_current_profile()
+                'currentProfile': general_models.get_current_profile()
             }
         }]
         return jsonify({'success': True, 'changes': changes, 'deleted_ids': deleted_ids})

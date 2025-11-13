@@ -446,7 +446,7 @@ class EventModels(BaseModels):
         """
         if entity not in ['images', 'albums', 'groups']:
             raise ValueError(f"Invalid entity: {entity}")
-        profile = self.get_entities('profiles', profile_id)
+        profile = self.get_entities('events_profiles', profile_id)
         if not profile:
             return []
 
@@ -455,42 +455,8 @@ class EventModels(BaseModels):
             add = not add
 
         operation = ChildOperation.ADD if add else ChildOperation.REMOVE
-        valid_ids, _ = self.edit_childs('profiles', profile_id, child=entity, child_ids=ids, operation=operation)
+        valid_ids, _ = self.edit_childs('events_profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
-
-    def get_access_request_managers(self, access_request_id: str, exclude_ids: list[str] = None) -> list[str]:
-        """
-        Get the managers of an access request.
-        Args:
-            access_request_id: access request id
-            exclude_ids: list of profile ids to exclude
-        Returns:
-            list of manager profile ids
-        """
-        query = f"""
-            SELECT p.profile_id
-            FROM profiles p
-            WHERE EXISTS (
-                SELECT 1
-                FROM access_requests_groups aar
-                LEFT JOIN events_profiles_groups pg
-                ON pg.event_id = aar.event_id
-                AND pg.profile_id = p.profile_id
-                AND pg.group_id = aar.group_id
-                WHERE aar.access_request_id = ?
-                AND (
-                    (p.all_groups = 1 AND pg.group_id IS NULL)
-                    OR (p.all_groups = 0 AND pg.group_id IS NOT NULL)
-                )
-            )
-        """
-        params = [access_request_id]
-        if exclude_ids:
-            query += f"""
-                AND p.profile_id NOT IN ({','.join(['?'] * len(exclude_ids))})
-            """
-            params.extend(exclude_ids)
-        return self.db.execute_query(query, params, return_format=ReturnFormat.LIST_VALUES)
 
     def toggle_access_request(
         self,
