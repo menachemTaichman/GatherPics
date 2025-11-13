@@ -274,10 +274,14 @@ ids = {
 
 # recreate_views_triggers_and_indexes(general_models.db)
 
-event_data = {'can_upload_and_delete_images': 0, 'can_edit': 0, 'all_images': 1, 'all_groups': 0, 'all_albums': 1}
-profile_to_edit = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
-event.models.edit('events_profiles', profile_to_edit, event_data)
-profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_to_edit])
-print(profiles)
-print(event_profiles)
-
+updated_image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
+changes = []
+all_parents = event.models.get_parents('images', updated_image_ids)
+for entity, parent_to_images in all_parents.items():
+    parent_ids = list(parent_to_images.keys())
+    changes.append({
+        'type': 'UPDATE',
+        'entity': entity,
+        'items': event.models.get_entities(entity, parent_ids)
+    })
+print(changes)

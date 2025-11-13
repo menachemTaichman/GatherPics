@@ -8,7 +8,7 @@ from datetime import timedelta, datetime, timezone
 import secrets
 import traceback
 
-from src.backend.helpers import get_event, get_general_models
+from src.backend.helpers import get_general_models, Forbidden
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
@@ -159,15 +159,16 @@ def logout():
 def authenticate_public_access(event_id, public_code):
     """Authenticate using public access code and return refresh token."""
     try:
-        event = get_event(event_id, public_code=public_code)
-
-        profile_id = event.profile_context['profile_id']
+        general_models = get_general_models()
+        profile_id = general_models.authenticate_public_access(event_id, public_code)
         
         # Create access token
         access_token = create_access_token(identity=profile_id, expires_delta=timedelta(hours=1))
         
         return create_auth_response(access_token, profile_id)
-        
+    
+    except Forbidden as e:
+        return jsonify({'error': str(e)}), 403
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 

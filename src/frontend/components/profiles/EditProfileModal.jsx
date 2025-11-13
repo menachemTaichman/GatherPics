@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Lock, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2 } from 'lucide-react';
+import { X, User, Key, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
-import { useDataStore, useProfileById } from '../../utils/dataManager';
+import { useEventGeneralById, useProfileById } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
+import { usePermissions } from '../../hooks/usePermissions';
+import PermissionGate from '../common/PermissionGate';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false }) {
   const eventId = useEventId(eventUrl);
@@ -39,12 +41,33 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const profileAlbums = useChilds(eventId, 'event_profiles', profile?.id, 'albums', { sortBy: 'name', sortOrder: 'asc' });
   const profileGroups = useChilds(eventId, 'event_profiles', profile?.id, 'groups', { sortBy: 'name', sortOrder: 'asc' });
 
-  const restrictedToEventId = generalProfile?.restricted_to_event ?? null;
-  const matchesCurrentEvent =
-    !!restrictedToEventId && !!eventId
-      ? String(restrictedToEventId) === String(eventId)
-      : false;
-  const disablePublicToggle = !isCreating && !!generalProfile && !matchesCurrentEvent;
+const permissions = usePermissions(eventUrl);
+
+const restrictedToEventId = (editingProfile?.restricted_to_event ?? generalProfile?.restricted_to_event) || null;
+const restrictedEvent = useEventGeneralById(restrictedToEventId);
+const restrictedEventName =
+  editingProfile?.restricted_to_event_name ??
+  generalProfile?.restricted_to_event_name ??
+  restrictedEvent?.name ??
+  null;
+const matchesCurrentEvent =
+  !!restrictedToEventId && !!eventId
+    ? String(restrictedToEventId) === String(eventId)
+    : false;
+const publicToggleRestrictedByEvent = !isCreating && !!generalProfile && !matchesCurrentEvent;
+const publicToggleRestrictedByRank = (editingProfile?.hierarchy_rank ?? 0) > 0;
+const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank;
+const publicToggleTooltip = publicToggleRestrictedByRank
+  ? 'Public profiles must use rank 0.'
+  : publicToggleRestrictedByEvent
+    ? 'Public access is only available for profiles restricted to this event.'
+    : undefined;
+const disableRestrictionToggle = Boolean(currentProfile?.restricted_to_event);
+const restrictionTooltip = disableRestrictionToggle
+  ? 'You are restricted to an event and cannot change restrictions'
+  : `Manage restrictions`
+const disableEventManagementToggles = editingProfile?.is_public === 1;
+const disableRankSelection = editingProfile?.is_public === 1;
 
   // Custom keyboard handler to allow child modal to work
   const handleEditProfileKeys = (e) => {
@@ -121,7 +144,11 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         all_images: initialProfile.all_images || 0,
         all_groups: initialProfile.all_groups || 0,
         all_albums: initialProfile.all_albums || 0,
-        is_public: initialProfile.is_public || 0
+        is_public: initialProfile.is_public || 0,
+        can_manage_event: initialProfile.can_manage_event || 0,
+        can_delete_event: initialProfile.can_delete_event || 0,
+        restricted_to_event: initialProfile.restricted_to_event || null,
+        restricted_to_event_name: initialProfile.restricted_to_event_name || null
       });
       setNameConflict(false);
     }
@@ -202,7 +229,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
         all_images: editingProfile.all_images,
         all_groups: editingProfile.all_groups,
         all_albums: editingProfile.all_albums,
-        is_public: editingProfile.is_public
+        is_public: editingProfile.is_public,
+        can_manage_event: editingProfile.can_manage_event,
+        can_delete_event: editingProfile.can_delete_event
       };
 
       if (isCreating) {
@@ -309,6 +338,11 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const maxRank = (currentProfile?.hierarchy_rank || 0) - 1;
   const rankOptions = Array.from({ length: Math.max(0, maxRank) + 1 }, (_, i) => i);
 
+  const hasEmailField = editingProfile.is_public !== 1;
+  const basicInfoGridLayout = hasEmailField
+    ? 'md:grid-cols-[15rem_15rem_auto_auto_auto]'
+    : 'md:grid-cols-[15rem_auto_auto_auto]';
+
   return (
     <AnimatePresence>
       <div key="edit-profile-modal-overlay" className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -353,9 +387,9 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                   <span>Basic Information</span>
                 </h3>
 
-                <div className="flex gap-3">
+                <div className={`flex flex-col gap-3 md:grid ${basicInfoGridLayout} md:justify-center md:items-start md:gap-3`}>
                   {/* Label */}
-                  <div className="flex-1">
+                  <div className="w-full md:w-full">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Profile Name
                     </label>
@@ -364,7 +398,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                         type="text"
                         value={editingProfile.label}
                         onChange={(e) => handleFieldChange('label', e.target.value)}
-                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                           nameConflict ? 'border-red-500' : 'border-gray-300'
                         }`}
                         placeholder="Enter profile name"
@@ -379,8 +413,8 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                   </div>
 
                   {/* Email - only for non-public profiles */}
-                  {editingProfile.is_public !== 1 && (
-                    <div className="flex-1">
+                  {hasEmailField && (
+                    <div className="w-full md:w-full">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Email
                       </label>
@@ -388,43 +422,88 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                         type="email"
                         value={editingProfile.email || ''}
                         onChange={(e) => handleFieldChange('email', e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus;border-transparent"
                         placeholder="Enter email (optional)"
                       />
                     </div>
                   )}
 
                   {/* Hierarchy Rank */}
-                  <div className="w-32">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <div className="flex flex-col gap-1 md:justify-self-center md:w-32">
+                    <label className="block text-xs font-medium text-gray-600">
                       Rank
                     </label>
-                    <select
-                      value={editingProfile.hierarchy_rank}
-                      onChange={(e) => handleFieldChange('hierarchy_rank', parseInt(e.target.value, 10))}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {rankOptions.map(rank => (
-                        <option key={`rank-${rank}`} value={rank}>
-                          {rank}
-                        </option>
-                      ))}
-                    </select>
+                    {disableRankSelection ? (
+                      <div
+                        className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 opacity-80 flex items-center"
+                        title="Public profiles use default rank"
+                      >
+                        {editingProfile.hierarchy_rank}
+                      </div>
+                    ) : (
+                      <select
+                        value={editingProfile.hierarchy_rank}
+                        onChange={(e) => handleFieldChange('hierarchy_rank', parseInt(e.target.value, 10))}
+                        className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {rankOptions.map(rank => (
+                          <option key={`rank-${rank}`} value={rank}>
+                            {rank}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Restricted to Event */}
+                  <div className="flex flex-col gap-1 items-center text-center md:justify-self-center">
+                    <label className="block text-xs font-medium text-gray-600">
+                      Restriction
+                    </label>
+                    <div className="relative flex flex-col items-center pb-2">
+                      <div className="flex items-center gap-2">
+                        <PermissionGate requires="canManageEvent">
+                          <button
+                            type="button"
+                            onClick={() => showToast('Restriction toggle coming soon', 'info')}
+                            disabled={disableRestrictionToggle}
+                            className={`w-10 h-10 flex items-center justify-center rounded-lg border transition-colors ${
+                              restrictedToEventId
+                                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                                : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                            } ${disableRestrictionToggle ? 'cursor-not-allowed opacity-60 hover:bg-gray-100 hover:text-gray-500' : ''}`}
+                            title={restrictionTooltip}
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </button>
+                        </PermissionGate>
+                        {!permissions.canManageEvent && (
+                          <div
+                            className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500"
+                            title={restrictionTooltip}
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                      <span className="absolute top-full left-1/2 -translate-x-1/2 translate-y-[1px] whitespace-nowrap text-[11px] text-gray-500 text-center">
+                        {restrictedToEventId ? (restrictedEventName || `Event ${restrictedToEventId}`) : 'Not restricted'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Password */}
-                  <div className="w-40">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <div className="flex flex-col gap-1 md:justify-self-center">
+                    <label className="block text-xs font-medium text-gray-600">
                       Password
                     </label>
                     <button
                       onClick={() => setShowPasswordModal(true)}
                       disabled={isCreating}
-                      className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       title={isCreating ? 'Save profile first to set password' : 'Change password'}
                     >
-                      <Lock className="w-4 h-4" />
-                      <span>Change</span>
+                      <Key className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -438,7 +517,95 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                 </h3>
 
                 <div className="space-y-3">
-                  {/* Can Upload and Delete Images */}
+                  {/* Public Profile */}
+                  <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">Public Profile</p>
+                      <p className="text-sm text-gray-500">Accessible via link, managed by admins only</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <label
+                        className={`relative inline-flex items-center ${disablePublicToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                        title={disablePublicToggle ? publicToggleTooltip : undefined}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editingProfile.is_public === 1}
+                          onChange={(e) => handleFieldChange('is_public', e.target.checked ? 1 : 0)}
+                          className="sr-only peer"
+                          disabled={disablePublicToggle}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                      {disablePublicToggle && (
+                        <p className="mt-1 text-xs text-gray-500 text-right">
+                          {publicToggleTooltip}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Manage Event */}
+                  <PermissionGate requires="canManageEvent">
+                    <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">Manage Event</p>
+                        <p className="text-sm text-gray-500">Can update event settings, permissions, and approvals</p>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${disableEventManagementToggles ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.can_manage_event === 1}
+                            onChange={(e) => handleFieldChange('can_manage_event', e.target.checked ? 1 : 0)}
+                            className="sr-only peer"
+                            disabled={disableEventManagementToggles}
+                          />
+                          <div
+                            className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${disableEventManagementToggles ? '' : 'peer-checked:bg-blue-600'}`}
+                            title={disableEventManagementToggles ? 'Public profiles cannot manage events' : undefined}
+                          ></div>
+                        </label>
+                        {disableEventManagementToggles && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            Public profiles cannot manage events.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </PermissionGate>
+
+                  {/* Delete Event */}
+                  <PermissionGate requires="canManageEvent">
+                    <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">Delete Event</p>
+                        <p className="text-sm text-gray-500">Can permanently delete this event and all related data</p>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${disableEventManagementToggles ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.can_delete_event === 1}
+                            onChange={(e) => handleFieldChange('can_delete_event', e.target.checked ? 1 : 0)}
+                            className="sr-only peer"
+                            disabled={disableEventManagementToggles}
+                          />
+                          <div
+                            className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${disableEventManagementToggles ? '' : 'peer-checked:bg-blue-600'}`}
+                            title={disableEventManagementToggles ? 'Public profiles cannot delete events' : undefined}
+                          ></div>
+                        </label>
+                        {disableEventManagementToggles && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            Public profiles cannot delete events.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </PermissionGate>
+
+                  {/* Upload & Delete Images */}
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">Upload & Delete Images</p>
@@ -485,7 +652,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                         onChange={(e) => handleFieldChange('all_images', e.target.checked ? 1 : 0)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after;border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after;border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
 
@@ -502,7 +669,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                         onChange={(e) => handleFieldChange('all_albums', e.target.checked ? 1 : 0)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after;border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
 
@@ -519,36 +686,8 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
                         onChange={(e) => handleFieldChange('all_groups', e.target.checked ? 1 : 0)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after;border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
-                  </div>
-
-                  {/* Save Preferences */}
-                  <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Public Profile</p>
-                      <p className="text-sm text-gray-500">Accessible via link, managed by admins only</p>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <label
-                        className={`relative inline-flex items-center ${disablePublicToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                        title={disablePublicToggle ? 'Public access is only available for profiles restricted to this event.' : undefined}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editingProfile.is_public === 1}
-                          onChange={(e) => handleFieldChange('is_public', e.target.checked ? 1 : 0)}
-                          className="sr-only peer"
-                          disabled={disablePublicToggle}
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                      {disablePublicToggle && (
-                        <p className="mt-1 text-xs text-gray-500 text-right">
-                          Public access is only available for profiles restricted to this event.
-                        </p>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>

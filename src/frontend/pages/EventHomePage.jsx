@@ -1,16 +1,145 @@
 import { motion } from 'framer-motion';
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Calendar, Image as ImageIcon, Upload, Settings } from 'lucide-react';
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
+import { ImageComponent } from '../hooks/useImage.jsx';
+import { API_BASE } from '../utils/apiService';
+import { useApplyScopes } from '../utils/storeUtils';
+import { useEventGeneralById } from '../utils/dataManager';
+import { usePermissions } from '../hooks/usePermissions';
 
 export default function EventHomePage({ eventUrl, eventData }) {
-  const eventName = eventData?.name || 'Event';
   const [showEventSettings, setShowEventSettings] = useState(false);
   const { showToast } = useToast();
+  const [headerVisible, setHeaderVisible] = useState(false);
+  const hideTimeoutRef = useRef(null);
+  const headerOriginalStylesRef = useRef(null);
+
+  const eventId = eventData?.id || eventData?.event_id || null;
+  useApplyScopes(eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
+
+  const storeEvent = useEventGeneralById(eventId);
+  const resolvedEvent = storeEvent || eventData || null;
+
+  const eventName = resolvedEvent?.name || 'Event';
+  const permissions = usePermissions();
+  const canSeeAlbums = Boolean(eventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit);
+
+  const [heroCacheBuster, setHeroCacheBuster] = useState(() => Date.now());
+
+  useEffect(() => {
+    setHeroCacheBuster(Date.now());
+  }, [resolvedEvent?.representative_image]);
+
+  const representativeCacheKey = useMemo(() => {
+    const imageKey = resolvedEvent?.representative_image ? String(resolvedEvent.representative_image) : 'none';
+    return `${imageKey}-${heroCacheBuster}`;
+  }, [resolvedEvent?.representative_image, heroCacheBuster]);
+
+  const heroImageUrl = useMemo(() => {
+    if (!eventId) return null;
+    return `${API_BASE}/api/events/${eventId}/representative/display?v=${encodeURIComponent(representativeCacheKey)}`;
+  }, [eventId, representativeCacheKey]);
+
+  const primaryDate = resolvedEvent?.date || resolvedEvent?.start || resolvedEvent?.start_date || null;
+  const formattedDate = useMemo(() => {
+    if (!primaryDate) return null;
+    try {
+      const parsed = new Date(primaryDate);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return null;
+    }
+  }, [primaryDate]);
+
+  const applyHeaderVisibility = useCallback((visible) => {
+    const headerEl = document.querySelector('[data-main-header]');
+    if (!headerEl) return;
+    if (!headerOriginalStylesRef.current) {
+      headerOriginalStylesRef.current = {
+        position: headerEl.style.position,
+        width: headerEl.style.width,
+        left: headerEl.style.left,
+        right: headerEl.style.right,
+        top: headerEl.style.top,
+        opacity: headerEl.style.opacity,
+        pointerEvents: headerEl.style.pointerEvents,
+        transform: headerEl.style.transform,
+        transition: headerEl.style.transition,
+      };
+    }
+    headerEl.style.position = 'fixed';
+    headerEl.style.left = '0';
+    headerEl.style.right = '0';
+    headerEl.style.top = '0';
+    headerEl.style.width = '100%';
+    headerEl.style.opacity = visible ? '1' : '0';
+    headerEl.style.pointerEvents = visible ? 'auto' : 'none';
+    headerEl.style.transform = visible ? 'translateY(0)' : 'translateY(-120%)';
+    headerEl.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+  }, []);
+
+  const clearHideTimeout = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      window.clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+  }, []);
+
+  const AUTO_HIDE_DELAY_MS = 1800;
+
+  const scheduleHide = useCallback(() => {
+    clearHideTimeout();
+    hideTimeoutRef.current = window.setTimeout(() => {
+      hideTimeoutRef.current = null;
+      setHeaderVisible(false);
+    }, AUTO_HIDE_DELAY_MS);
+  }, [AUTO_HIDE_DELAY_MS, clearHideTimeout]);
+
+  const handleInteraction = useCallback(() => {
+    setHeaderVisible(true);
+    scheduleHide();
+  }, [scheduleHide]);
+
+  const restoreHeaderStyles = useCallback(() => {
+    const headerEl = document.querySelector('[data-main-header]');
+    if (!headerEl || !headerOriginalStylesRef.current) return;
+    const original = headerOriginalStylesRef.current;
+    headerEl.style.position = original.position || '';
+    headerEl.style.width = original.width || '';
+    headerEl.style.left = original.left || '';
+    headerEl.style.right = original.right || '';
+    headerEl.style.top = original.top || '';
+    headerEl.style.opacity = original.opacity || '';
+    headerEl.style.pointerEvents = original.pointerEvents || '';
+    headerEl.style.transform = original.transform || '';
+    headerEl.style.transition = original.transition || '';
+  }, []);
+
+  useEffect(() => {
+    applyHeaderVisibility(headerVisible);
+  }, [applyHeaderVisibility, headerVisible]);
+
+  useEffect(() => {
+    applyHeaderVisibility(false);
+    const events = ['pointermove', 'wheel', 'keydown', 'touchstart', 'scroll'];
+    events.forEach((event) => window.addEventListener(event, handleInteraction, { passive: true }));
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, handleInteraction));
+      clearHideTimeout();
+      applyHeaderVisibility(true);
+      restoreHeaderStyles();
+    };
+  }, [applyHeaderVisibility, clearHideTimeout, handleInteraction, restoreHeaderStyles]);
 
   // Define navigation cards
   const navCards = [
@@ -25,7 +154,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverBg: 'group-hover:from-blue-500 group-hover:to-blue-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-blue-200',
-      show: true
+      show: Boolean(eventUrl) && permissions.has_images,
+      requires: 'has_images'
     },
     {
       id: 'people',
@@ -38,7 +168,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverBg: 'group-hover:from-emerald-500 group-hover:to-emerald-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-emerald-200',
-      show: true
+      show: Boolean(eventUrl) && permissions.has_groups,
+      requires: 'has_groups'
     },
     {
       id: 'albums',
@@ -51,7 +182,9 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverBg: 'group-hover:from-purple-500 group-hover:to-purple-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-purple-200',
-      show: true
+      show: Boolean(eventUrl) && canSeeAlbums,
+      requires: ['has_albums', 'hasArchiveAlbum', 'hasFavoritesAlbum', 'canEdit'],
+      requiresAll: false
     },
     {
       id: 'uploads',
@@ -64,7 +197,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverBg: 'group-hover:from-orange-500 group-hover:to-orange-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-orange-200',
-      show: true,
+      show: Boolean(eventUrl) && permissions.canUploadAndDeleteImages,
       requires: 'canUploadAndDeleteImages'
     },
     {
@@ -77,7 +210,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       hoverBg: 'group-hover:from-slate-500 group-hover:to-slate-600',
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-slate-200',
-      show: true,
+      show: Boolean(eventUrl) && permissions.canManageEvent,
       requires: 'canManageEvent',
       isButton: true,
       onClick: () => setShowEventSettings(true)
@@ -183,7 +316,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       </div>
 
       <div
-        className="container mx-auto px-4 py-20 relative z-10"
+        className="container mx-auto px-4 pt-0 pb-20 relative z-10 mt-[-4.5rem]"
         style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
       >
         {/* Header */}
@@ -191,14 +324,56 @@ export default function EventHomePage({ eventUrl, eventData }) {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-12 max-w-4xl mx-auto"
+          className="mb-16"
+          style={{ marginTop: '-4.5rem' }}
         >
-          <h1 className="text-4xl md:text-5xl font-semibold text-gray-900 mb-3 tracking-tight">
-            {eventName}
-          </h1>
-          <p className="text-lg text-gray-600 leading-relaxed">
-            Choose how you'd like to explore this event
-          </p>
+          <div className="relative -mx-4 sm:-mx-8 md:-mx-12 lg:-mx-16 xl:-mx-24">
+            <div className="relative isolate overflow-hidden bg-gray-900 shadow-2xl min-h-[380px] sm:min-h-[460px] md:min-h-[560px]">
+              <div className="absolute inset-0">
+                {ImageComponent(
+                  heroImageUrl,
+                  {
+                    width: 1600,
+                    height: 640,
+                    className: 'h-full w-full object-cover',
+                    alt: eventName ? `${eventName} highlight` : 'Event highlight',
+                    loading: 'eager',
+                  }
+                )}
+              </div>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/70 via-black/40 to-black/35" />
+              <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary-500/40 blur-3xl" />
+              <div className="pointer-events-none absolute -left-16 bottom-0 h-64 w-64 rounded-full bg-purple-500/30 blur-3xl" />
+              <div className="relative z-10 flex h-full flex-col justify-between px-8 pb-8 pt-28 sm:px-10 sm:pb-10 sm:pt-36 md:px-12 md:pb-12 md:pt-40">
+                <div>
+                  <span className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur">
+                    {APP_CONFIG.name}
+                  </span>
+                  <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+                    {eventName}
+                  </h1>
+                </div>
+                <div className="mt-6 flex flex-wrap gap-3 text-xs font-medium text-white/80 sm:text-sm">
+                  {formattedDate && (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                      <Calendar className="h-4 w-4" />
+                      {formattedDate}
+                    </span>
+                  )}
+                  {resolvedEvent?.location && (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                      {resolvedEvent.location}
+                    </span>
+                  )}
+                  {resolvedEvent?.images_count ? (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                      {resolvedEvent.images_count} photos
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
 
         {/* Navigation Cards */}

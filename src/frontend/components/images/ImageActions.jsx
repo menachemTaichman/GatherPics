@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { albumsAPI, groupsAPI, momentsAPI, imagesAPI } from '../../utils/apiService';
 import useBucketStore from '../../utils/bucketStore';
 import { useDataStore, selectors } from '../../utils/dataManager';
@@ -83,10 +82,11 @@ export default function useImageActions({
         const actualCount = newFavoriteStatus ? result.len_added : result.len_removed;
         const countText = actualCount // === 1 ? '' : `${actualCount} `;
         
+        const favoritesHref = `/${eventUrl}/albums/${encodeURIComponent('Favorites')}`;
         showToast(
           <span>
             {countText} {action}{' '}
-            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Favorites')}`} className="underline hover:text-gray-100">Favorites</Link>
+            <a href={favoritesHref} className="underline hover:text-gray-100">Favorites</a>
           </span>,
           'success'
         );
@@ -119,10 +119,11 @@ export default function useImageActions({
         const actualCount = newArchivedStatus ? result.len_added : result.len_removed;
         const countText = actualCount // actualCount === 1 ? '' : `${actualCount} `;
         
+        const archiveHref = `/${eventUrl}/albums/${encodeURIComponent('Archive')}`;
         showToast(
           <span>
             {countText} {action}{' '}
-            <Link to={`/${eventUrl}/albums/${encodeURIComponent('Archive')}`} className="underline hover:text-gray-100">Archive</Link>
+            <a href={archiveHref} className="underline hover:text-gray-100">Archive</a>
           </span>,
           'success'
         );

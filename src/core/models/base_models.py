@@ -259,7 +259,7 @@ class BaseModels(ABC):
         if single_parent:
             return parents_to_childs[parents[0]]
         
-        return parents
+        return parents_to_childs
 
     def add(self, table: str, data: dict) -> str | None:
         """

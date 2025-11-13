@@ -105,7 +105,7 @@ class DB:
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
-                'fields': ['name', 'date', 'url'],
+                'fields': ['name', 'date', 'url', 'representative_image'],
                 'details_fields': [
                     'is_public',
                     'images_count_limit',
@@ -118,7 +118,7 @@ class DB:
                 'relations': {
                     'profiles': {
                         'relation_table': 'events_profiles',
-                        'fields_needed': ['profile_id', 'label', 'hierarchy_rank', 'is_public', 'restricted_to_event'],
+                        'fields_needed': ['profile_id', 'label', 'hierarchy_rank', 'is_public', 'restricted_to_event', 'has_public_access_code', 'restricted_to_event_name'],
                         'relation_table_fields': [
                             'can_delete_event',
                             'can_manage_event',
@@ -134,7 +134,7 @@ class DB:
             'profiles': {
                 'primary_key': 'profile_id',
                 'accessible_table': 'accessible_profiles',
-                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public'],
+                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name'],
                 'relations': {
                     'events': {
                         'relation_table': 'events_profiles',
@@ -188,6 +188,7 @@ class DB:
                     'can_manage_event',
                     'can_delete_event',
                     'can_upload_and_delete_images',
+                    'can_edit',
                     'all_images',
                     'all_groups',
                     'all_albums',
@@ -276,7 +277,7 @@ class DB:
             'events_profiles': {
                 'primary_key': ['profile_id'],
                 'accessible_table': 'accessible_events_profiles',
-                'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'all_images', 'all_groups', 'all_albums'],
+                'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
                 'relations': {
                     'images': {'relation_table': 'events_profiles_images', 'fields_needed': ['date_taken']},
                     'groups': {'relation_table': 'events_profiles_groups', 'fields_needed': ['label']},
@@ -483,12 +484,14 @@ class DB:
             ''',
             'events': '''
                 event_id TEXT PRIMARY KEY NOT NULL,
-                name TEXT NOT NULL,
+                name TEXT COLLATE NOCASE UNIQUE NOT NULL,
                 date TEXT,
-                url TEXT UNIQUE NOT NULL,
+                url TEXT COLLATE NOCASE UNIQUE NOT NULL,
                 is_public INTEGER DEFAULT 0,
                 images_count_limit INTEGER NOT NULL DEFAULT 0,
-                image_size_limit_bytes INTEGER NOT NULL DEFAULT 0
+                image_size_limit_bytes INTEGER NOT NULL DEFAULT 0,
+                representative_image TEXT,
+                FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL
             ''',
             'profiles': '''
                 profile_id TEXT PRIMARY KEY NOT NULL,
@@ -710,7 +713,9 @@ class DB:
     @classmethod
     def INDEXES(self) -> list:
         return {
+            'idx_events_name': 'events(name)',
             'idx_events_url': 'events(url)',
+            'idx_events_representative_image': 'events(representative_image)',
             'idx_profiles_label': 'profiles(label)',
             'idx_profiles_restricted_to_event': 'profiles(restricted_to_event)',
             'idx_profiles_public_access_code': 'profiles(public_access_code)',
@@ -787,11 +792,14 @@ class DB:
             'accessible_profiles': """
                 SELECT
                     p.*,
+                    ae.name AS restricted_to_event_name,
                     CASE WHEN
                         cur_profile('restricted_to_event') IS NULL
                         OR cur_profile('restricted_to_event') = p.restricted_to_event
-                    THEN 1 ELSE 0 END AS is_editable
+                    THEN 1 ELSE 0 END AS is_editable,
+                    public_access_code IS NOT NULL AS has_public_access_code
                 FROM profiles p
+                LEFT JOIN accessible_events ae ON p.restricted_to_event = ae.event_id
                 WHERE p.hierarchy_rank < cur_profile('hierarchy_rank')
             """,
             'my_preferences': """
@@ -1297,7 +1305,8 @@ class DB:
                         url,
                         is_public,
                         images_count_limit,
-                        image_size_limit_bytes
+                        image_size_limit_bytes,
+                        representative_image
                     )
                     VALUES (
                         NEW.event_id,
@@ -1306,7 +1315,8 @@ class DB:
                         NEW.url,
                         NEW.is_public,
                         NEW.images_count_limit,
-                        NEW.image_size_limit_bytes
+                        NEW.image_size_limit_bytes,
+                        NEW.representative_image
                     );
 
                     INSERT OR IGNORE INTO events_profiles (
@@ -1342,7 +1352,8 @@ class DB:
                         url = NEW.url,
                         is_public = NEW.is_public,
                         images_count_limit = NEW.images_count_limit,
-                        image_size_limit_bytes = NEW.image_size_limit_bytes
+                        image_size_limit_bytes = NEW.image_size_limit_bytes,
+                        representative_image = NEW.representative_image
                     WHERE event_id = OLD.event_id;
                 END;
             """,
@@ -1394,6 +1405,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot create profile with can_create_events=1 if current profile does not have can_create_events=1')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile to a different event than the current profile')
+                        WHEN NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM accessible_events) THEN
+                            RAISE(ABORT, 'Permission denied: the event is not accessible')
                     END;
 
                     INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event, is_public)
@@ -1416,6 +1429,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile to a different event than the current profile')
+                        WHEN NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM accessible_events) THEN
+                            RAISE(ABORT, 'Permission denied: the event is not accessible')
                     END;
 
                     UPDATE profiles SET
@@ -2845,8 +2860,8 @@ class DB:
                         revoked_at = CURRENT_TIMESTAMP
                     WHERE profile_id = OLD.profile_id
                     AND revoked = 0
-                    AND password <> OLD.password
-                    AND (password IS NOT NULL OR password <> '' OR OLD.password IS NOT NULL OR OLD.password <> '');
+                    AND NEW.password <> OLD.password
+                    AND (NEW.password IS NOT NULL OR NEW.password <> '' OR OLD.password IS NOT NULL OR OLD.password <> '');
                 END;
             """,
 

@@ -4,7 +4,7 @@ import io
 import zipfile
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event
+from src.backend.helpers import get_event, get_general_models
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 
@@ -69,6 +69,30 @@ def get_high_quality_image_webp(event_id, image_id):
 @require_auth
 def get_original_image_webp(event_id, image_id):
     return get_file_webp(event_id, 'original', image_id)
+
+@file_bp.route('/representative/display', methods=['GET', 'HEAD'])
+@require_auth
+def get_event_display_representative_webp(event_id):
+    general_models = get_general_models()
+    event = general_models.get_entities('events', event_id)
+    if not event:
+        abort(404)
+    representative_image = event['representative_image']
+    if not representative_image:
+        return '', 204
+    return get_file_webp(event_id, 'display', representative_image)
+
+@file_bp.route('/representative/thumb', methods=['GET', 'HEAD'])
+@require_auth
+def get_event_thumb_representative_webp(event_id):
+    general_models = get_general_models()
+    event = general_models.get_entities('events', event_id)
+    if not event:
+        abort(404)
+    representative_image = event['representative_image']
+    if not representative_image:
+        return '', 204
+    return get_file_webp(event_id, 'thumb', representative_image)
 
 @file_bp.route('/<entity>/<parent_id>/representative', methods=['GET', 'HEAD'])
 @require_auth

@@ -8,8 +8,8 @@ import { ConfirmDelete } from '../modals';
 import { ManageAccessModal } from '../profiles';
 import useImageActions from './ImageActions';
 import { AlbumQuickAddButton } from '../albums';
-import { imagesAPI, handleAPIError, API_BASE, albumsAPI } from '../../utils/apiService';
-import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
+import { imagesAPI, handleAPIError, API_BASE, albumsAPI, eventsAPI } from '../../utils/apiService';
+import { useDataStore, selectors as storeSelectors, useEventGeneralById } from '../../utils/dataManager';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
@@ -46,29 +46,36 @@ function ImageViewerActions({
   eventUrl,
   showToast,
   urlHelpers,
-  placeholderDataUrl,
   onImageUpdated,
   entity,
   entityId,
-  eventId
+  eventId,
+  imageActions
 }) {
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+  const [settingEventRepresentative, setSettingEventRepresentative] = useState(false);
   const permissions = usePermissions();
+  const eventInfo = useEventGeneralById(eventId);
 
-  const imageActions = useImageActions({
-    imageIds: imageId,
-    eventUrl,
-    urlHelpers,
-    placeholderDataUrl,
-    onImageUpdated,
-    onAlbumAdded: (album) => {
-      if (onImageUpdated) {
-        onImageUpdated({ album_added: album });
-      }
-    },
-    entity,
-    entityId
-  });
+  const isEventRepresentative = Boolean(eventInfo && imageId && eventInfo.representative_image === imageId);
+  const eventRepresentativeTooltip = isEventRepresentative
+    ? 'Current event cover photo'
+    : 'Set as event cover photo';
+
+  const handleSetEventRepresentative = async () => {
+    if (!imageId || !eventUrl || settingEventRepresentative || isEventRepresentative) {
+      return;
+    }
+    try {
+      setSettingEventRepresentative(true);
+      await eventsAPI.update(eventUrl, { representative_image: imageId });
+      showToast('Event cover updated', 'success');
+    } catch (error) {
+      showToast(formatErrorMessage('set event cover', error), 'error');
+    } finally {
+      setSettingEventRepresentative(false);
+    }
+  };
 
   // Get entity label for modal
   const entityLabel = entity === 'group' 
@@ -76,11 +83,7 @@ function ImageViewerActions({
     : (useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment');
 
   // Check if action buttons group has any visible buttons
-  const hasActionButtons = (
-    (permissions.hasFavoritesAlbum && (permissions.canEdit || imageActions.isFavorite)) ||
-    (permissions.hasArchiveAlbum && (permissions.canEdit || imageActions.isArchived)) ||
-    permissions.canEdit // for album button
-  );
+  const hasActionButtons = true;
 
   // Check if management buttons exist
   const hasManagementButtons = (
@@ -91,56 +94,6 @@ function ImageViewerActions({
   return (
     <>
       <div className="flex items-center space-x-2">
-        {/* Favorites */}
-        <PermissionGate requires="hasFavoritesAlbum">
-          {permissions.canEdit ? (
-            <button
-              onClick={imageActions.toggleFavorite}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-50 ${imageActions.isFavorite ? 'text-red-600' : 'text-gray-700'}`}
-              title={imageActions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              aria-pressed={imageActions.isFavorite}
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-              </svg>
-            </button>
-          ) : imageActions.isFavorite ? (
-            <div
-              className={`w-8 h-8 border border-transparent rounded-md flex items-center justify-center text-red-600`}
-              title="In favorites"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-              </svg>
-            </div>
-          ) : null}
-        </PermissionGate>
-
-        {/* Archive toggle */}
-        <PermissionGate requires="hasArchiveAlbum">
-          {permissions.canEdit ? (
-            <button
-              onClick={imageActions.toggleArchive}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
-              title={imageActions.isArchived ? 'Remove from archive' : 'Move to archive'}
-              aria-pressed={imageActions.isArchived}
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill={imageActions.isArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
-                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
-              </svg>
-            </button>
-          ) : imageActions.isArchived ? (
-            <div
-              className={`w-8 h-8 border border-transparent rounded-md flex items-center justify-center text-gray-700`}
-              title="In archive"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="#d1d5db" stroke="currentColor" strokeWidth="2">
-                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
-              </svg>
-            </div>
-          ) : null}
-        </PermissionGate>
-
         {/* Add to album */}
         {permissions.canEdit && (
           <PermissionGate requires="canEdit">
@@ -200,6 +153,25 @@ function ImageViewerActions({
               title={imageActions.representativeTooltip}
             >
               <Star className={`w-4 h-4 ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
+            </button>
+          </PermissionGate>
+        )}
+
+        {/* Set as event representative */}
+        {imageId && (
+          <PermissionGate requires="canManageEvent">
+            <button
+              onClick={handleSetEventRepresentative}
+              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                isEventRepresentative
+                  ? 'bg-gradient-to-br from-red-500 to-rose-500 text-white hover:from-red-500 hover:to-rose-500'
+                  : 'text-red-600 hover:bg-red-50'
+              } ${settingEventRepresentative ? 'opacity-75 cursor-not-allowed' : ''}`}
+              title={eventRepresentativeTooltip}
+              aria-pressed={isEventRepresentative}
+              disabled={settingEventRepresentative || isEventRepresentative}
+            >
+              <Star className={`w-4 h-4 ${isEventRepresentative ? 'fill-current' : ''}`} />
             </button>
           </PermissionGate>
         )}
@@ -626,6 +598,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     // No need to manually update state - the store is automatically updated by the response interceptor
     // The component will re-render when the store changes due to our subscriptions
   };
+
+  const imageActions = useImageActions({
+    imageIds: imageId,
+    eventUrl,
+    urlHelpers,
+    placeholderDataUrl: null,
+    onImageUpdated: handleImageUpdated,
+    onAlbumAdded: handleAlbumAdded,
+    entity,
+    entityId: parent
+  });
 
   // Circular navigation
   const handleNavigate = (direction, index) => {
@@ -1282,6 +1265,87 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     <X className="w-5 h-5" />
                   </button>
 
+                  {/* Favorites / Archive controls - bottom-left */}
+                  <div className="absolute bottom-5 left-4 pointer-events-auto flex items-center space-x-4">
+                    {(() => {
+                      const favoriteTooltip = imageActions.isFavorite
+                        ? (permissions.canEdit ? 'Remove from Favorites' : 'In Favorites')
+                        : (permissions.canEdit ? 'Add to Favorites' : 'Favorites');
+                      const archiveTooltip = imageActions.isArchived
+                        ? (permissions.canEdit ? 'Remove from Archive' : 'In Archive')
+                        : (permissions.canEdit ? 'Move to Archive' : 'Archive');
+                      
+                      return (
+                        <>
+                        <PermissionGate requires="hasFavoritesAlbum">
+                          {(permissions.canEdit || imageActions.isFavorite) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!permissions.canEdit) return;
+                                imageActions.toggleFavorite();
+                              }}
+                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
+                              }`}
+                              title={favoriteTooltip}
+                              aria-pressed={imageActions.isFavorite}
+                              disabled={!permissions.canEdit}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className={`w-6 h-6 ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
+                                fill={imageActions.isFavorite ? 'currentColor' : 'none'}
+                                stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
+                                strokeWidth="2"
+                                role="img"
+                                focusable="false"
+                                style={{ color: imageActions.isFavorite ? '#ef4444' : '#ffffff' }}
+                              >
+                                <title>{favoriteTooltip}</title>
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                              </svg>
+                            </button>
+                          )}
+                        </PermissionGate>
+
+                        <PermissionGate requires="hasArchiveAlbum">
+                          {imageActions.isArchived && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!permissions.canEdit) return;
+                                imageActions.toggleArchive();
+                              }}
+                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
+                              }`}
+                              title={archiveTooltip}
+                              aria-pressed={imageActions.isArchived}
+                              disabled={!permissions.canEdit}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className={`w-6 h-6 ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
+                                fill="none"
+                                stroke={imageActions.isArchived ? 'white' : '#6b7280'}
+                                strokeWidth="2"
+                                role="img"
+                                focusable="false"
+                              >
+                                <title>{archiveTooltip}</title>
+                                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
+                              </svg>
+                            </button>
+                          )}
+                        </PermissionGate>
+                        </>
+                      );
+                    })()}
+                  </div>
+
                   {/* Navigation - top-center */}
                   {filteredImages.length > 1 && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
@@ -1422,11 +1486,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   eventUrl={eventUrl}
                   showToast={showToast}
                   urlHelpers={urlHelpers}
-                  placeholderDataUrl={null}
                   onImageUpdated={handleImageUpdated}
                   entity={entity}
                   entityId={parent}
                   eventId={eventId}
+                  imageActions={imageActions}
                 />
 
                 {/* Details Section */}

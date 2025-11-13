@@ -70,6 +70,7 @@ def update_event(event_id):
         'is_public',
         'images_count_limit',
         'image_size_limit_bytes',
+        'representative_image',
     }
 
     sanitized = {k: data[k] for k in data.keys() if k in allowed_fields}

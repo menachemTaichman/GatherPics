@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings } from 'lucide-react';
+import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { eventsAPI } from '../../utils/apiService';
+import { eventsAPI, API_BASE } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useEventGeneralById } from '../../utils/dataManager';
+import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useEventId, useApplyScopes } from '../../utils/storeUtils';
 import { useModalManager } from '../../utils/modalManager';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -58,6 +59,8 @@ export default function EditEventModal({
   const [urlConflict, setUrlConflict] = useState(false);
   const [checkingName, setCheckingName] = useState(false);
   const [checkingUrl, setCheckingUrl] = useState(false);
+  const [removingRepresentative, setRemovingRepresentative] = useState(false);
+  const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
   const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
   const { showToast } = useToast();
@@ -72,6 +75,7 @@ export default function EditEventModal({
   const modalIdRef = useRef(`event-settings-${isCreateMode ? 'create' : eventId || 'unknown'}`);
   const nameCheckTimeout = useRef();
   const urlCheckTimeout = useRef();
+  const enterSubmitRef = useRef(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -99,6 +103,17 @@ export default function EditEventModal({
     });
     return () => unregisterModal(modalIdRef.current);
   }, [isOpen, registerModal, unregisterModal]);
+
+  useEffect(() => {
+    setCoverCacheBuster(Date.now());
+  }, [baseEvent?.representative_image]);
+
+  const representativeThumbUrl = useMemo(() => {
+    if (!eventId || !baseEvent?.representative_image) return null;
+    const imageKey = String(baseEvent.representative_image);
+    const cacheKey = `${imageKey}-${coverCacheBuster}`;
+    return `${API_BASE}/api/events/${eventId}/representative/thumb?v=${encodeURIComponent(cacheKey)}`;
+  }, [eventId, baseEvent?.representative_image, coverCacheBuster]);
 
   const buildEventDraft = useCallback((evt) => {
     if (!evt) return null;
@@ -132,6 +147,26 @@ export default function EditEventModal({
     setNameConflict(false);
     setUrlConflict(false);
   }, [baseEvent, buildEventDraft, isCreateMode]);
+
+  const handleRemoveRepresentative = useCallback(async () => {
+    if (isCreateMode || !eventUrl || !baseEvent?.representative_image || removingRepresentative) {
+      return;
+    }
+    setRemovingRepresentative(true);
+    try {
+      await eventsAPI.update(eventUrl, { representative_image: null });
+      setEventError('');
+      emitToast('Event cover removed', 'success');
+      setCoverCacheBuster(Date.now());
+    } catch (error) {
+      console.error('Failed to remove event representative image:', error);
+      const message = formatErrorMessage('remove event cover', error);
+      setEventError(message);
+      emitToast(message, 'error');
+    } finally {
+      setRemovingRepresentative(false);
+    }
+  }, [baseEvent?.representative_image, emitToast, eventId, eventUrl, isCreateMode, removingRepresentative]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -364,11 +399,6 @@ export default function EditEventModal({
       image_size_limit_bytes: eventDraft.image_size_limit_bytes,
     };
     try {
-      console.debug('[EditEventModal] handleEventSave start', {
-        source,
-        mode: isCreateMode ? 'create' : 'edit',
-        canSaveEvent: hasEventChanges && !nameConflict && !urlConflict && !eventSaving,
-      });
       let response;
       if (isCreateMode) {
         response = await eventsAPI.create(payload);
@@ -382,11 +412,6 @@ export default function EditEventModal({
         emitToast('Event settings updated', 'success');
       }
       const urlChanged = Boolean(previousUrl && trimmedUrl !== previousUrl);
-      console.debug('[EditEventModal] handleEventSave success', {
-        source,
-        mode: isCreateMode ? 'create' : 'edit',
-        urlChanged,
-      });
       onSuccess?.({
         mode: isCreateMode ? 'create' : 'edit',
         payload,
@@ -424,17 +449,8 @@ export default function EditEventModal({
 
   const handleModalKeys = useCallback(
     (e) => {
-      console.debug('[EditEventModal] handleModalKeys', {
-        key: e.key,
-        targetTag: e.target?.tagName,
-        metaKey: e.metaKey,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        altKey: e.altKey,
-      });
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      if (e.key !== 'Enter') return false;
-      if (e.shiftKey) return false;
+      if (e.key !== 'Enter' || e.shiftKey) return false;
 
       const tagName = e.target.tagName?.toLowerCase();
       const inputType = e.target.type?.toLowerCase?.();
@@ -443,24 +459,45 @@ export default function EditEventModal({
         tagName === 'textarea' ||
         tagName === 'select';
 
-      if (isInteractiveInput) {
-        if (tagName === 'input' && (inputType === 'checkbox' || inputType === 'radio')) {
-          return false;
-        }
-        if (!canSaveEvent) {
-          e.preventDefault();
-          console.debug('[EditEventModal] handleModalKeys blocked submit', { canSaveEvent });
-          return true;
-        }
-        console.debug('[EditEventModal] handleModalKeys triggering save', { canSaveEvent });
+      if (!isInteractiveInput) {
+        return false;
+      }
+
+      if (tagName === 'input' && (inputType === 'checkbox' || inputType === 'radio')) {
+        return false;
+      }
+
+      if (!canSaveEvent) {
         e.preventDefault();
-        handleEventSave('enter-key');
+        enterSubmitRef.current = false;
         return true;
       }
 
+      enterSubmitRef.current = true;
       return false;
     },
-    [canSaveEvent, handleEventSave]
+    [canSaveEvent]
+  );
+
+  const handleFormSubmit = useCallback(
+    (e) => {
+      e.preventDefault();
+      if (eventSaving) {
+        enterSubmitRef.current = false;
+        return;
+      }
+      if (!canSaveEvent) {
+        enterSubmitRef.current = false;
+        return;
+      }
+      const submitter = e.nativeEvent?.submitter;
+      const source = enterSubmitRef.current
+        ? 'enter-key'
+        : submitter?.dataset?.submitSource || 'form-submit';
+      enterSubmitRef.current = false;
+      handleEventSave(source);
+    },
+    [canSaveEvent, eventSaving, handleEventSave]
   );
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
@@ -482,7 +519,7 @@ export default function EditEventModal({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={onClose}
         >
-          <motion.div
+          <motion.form
             ref={modalRef}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -490,6 +527,8 @@ export default function EditEventModal({
             transition={{ duration: 0.3 }}
             onClick={(e) => e.stopPropagation()}
             className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl"
+            onSubmit={handleFormSubmit}
+            noValidate
           >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <div className="flex items-center space-x-3">
@@ -613,6 +652,57 @@ export default function EditEventModal({
                               <div className="after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer h-6 w-11 rounded-full bg-gray-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white" />
                             </label>
                           </div>
+                          {!isCreateMode && (
+                            <div className="mt-4 rounded-lg bg-white px-4 py-3">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="font-medium text-gray-900">Cover Photo</p>
+                                  <p className="text-sm text-gray-500">
+                                    Displayed on the event homepage.
+                                  </p>
+                                </div>
+                                {baseEvent?.representative_image ? (
+                                  <div className="relative inline-block">
+                                    <div className="h-24 w-24 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shadow-sm">
+                                      {ImageComponent(representativeThumbUrl, {
+                                        width: 96,
+                                        height: 96,
+                                        className: 'h-full w-full object-cover',
+                                        alt: 'Event cover',
+                                      })}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleRemoveRepresentative}
+                                      disabled={removingRepresentative}
+                                      className="absolute -bottom-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                                      title="Remove cover photo"
+                                    >
+                                      {removingRepresentative ? (
+                                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                      ) : (
+                                        <Minus className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="h-24 w-24 overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 text-gray-400">
+                                    {ImageComponent(null, {
+                                      width: 96,
+                                      height: 96,
+                                      className: 'h-full w-full object-cover rounded-xl bg-gray-100 text-gray-400',
+                                      alt: 'Event cover placeholder',
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              {!baseEvent?.representative_image && (
+                                <p className="mt-3 text-sm text-gray-500">
+                                  Choose a photo from the timeline or albums to set an event cover.
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         <div className="rounded-lg bg-gray-50 p-4">
@@ -727,9 +817,9 @@ export default function EditEventModal({
 
             <div className="flex justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
               <button
-                type="button"
-                onClick={() => handleEventSave('button')}
+                type="submit"
                 disabled={!canSaveEvent}
+                data-submit-source="primary-button"
                 className="flex items-center space-x-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {eventSaving ? (
@@ -745,7 +835,7 @@ export default function EditEventModal({
                 )}
               </button>
             </div>
-          </motion.div>
+          </motion.form>
         </div>
       )}
     </AnimatePresence>

@@ -85,13 +85,16 @@ export default function Header() {
   }, [notifOpen]);
 
   return (
-    <motion.header 
+    <header 
+      data-main-header="true"
       className="bg-white/90 backdrop-blur-md shadow-sm border-b border-gray-200 sticky top-0 z-40"
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5 }}
     >
-      <div className="w-full px-8">
+      <motion.div
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full px-8"
+      >
         <div className="flex justify-between items-center h-16">
           {/* Logo and Title */}
           <Link to="/" className="flex items-center space-x-3 group">
@@ -216,12 +219,12 @@ export default function Header() {
             )}
           </nav>
         </div>
-      </div>
+      </motion.div>
       <BucketDrawer />
       {notifOpen && notifButtonRef && (
         <NotificationsDropdown buttonRef={notifButtonRef} isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
       )}
-    </motion.header>
+    </header>
   );
 } 
 

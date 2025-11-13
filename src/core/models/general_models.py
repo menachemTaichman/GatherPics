@@ -308,7 +308,25 @@ class GeneralModels(BaseModels):
         """
         query = 'SELECT profile_id FROM profiles WHERE label = ? AND password = ?'
         return self.db.execute_query(query, (label, password), return_format=ReturnFormat.VALUE)
-    
+
+    def authenticate_public_access(self, event_id: str, public_code: str) -> str:
+        """Authenticate a profile by public access code.
+        
+        Returns:
+            profile_id if authenticated, None otherwise
+        """
+        query = '''
+            SELECT profile_id
+            FROM profiles
+            WHERE public_access_code = ?
+            AND restricted_to_event = ?
+        '''
+        profile_id = self.db.execute_query(query, (public_code, event_id), return_format=ReturnFormat.VALUE)
+        if not profile_id:
+            raise Forbidden('Public access code is invalid')
+        
+        return profile_id
+
     def create_refresh_token(self, profile_id: str, token: str, expires_at: str, user_agent: str = None, ip_address: str = None) -> int:
         """Create a new refresh token."""
         result = self.add('refresh_tokens', {

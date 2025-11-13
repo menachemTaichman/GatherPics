@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, LayoutDashboard, LogIn } from 'lucide-react';
@@ -10,7 +10,8 @@ import { getCurrentProfile } from '../utils/profileService';
 import { APP_CONFIG } from '../config/appConfig';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useEventsGeneralList } from '../utils/dataManager';
-import { eventsAPI } from '../utils/apiService';
+import { eventsAPI, API_BASE } from '../utils/apiService';
+import { ImageComponent } from '../hooks/useImage.jsx';
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,22 @@ export default function HomePage() {
 
   const hasEvents = eventsArray.length > 0;
   const hasEventsRef = useRef(hasEvents);
+  const representativeCacheMapRef = useRef(new Map());
+
+  const getEventRepresentativeThumbUrl = useCallback((event) => {
+    const eventId = event?.event_id || event?.id;
+    if (!eventId) return null;
+    const imageKey = event?.representative_image ? String(event.representative_image) : 'none';
+    const cacheMap = representativeCacheMapRef.current;
+    const existing = cacheMap.get(eventId);
+    let cacheBuster = existing?.cacheBuster ?? Date.now();
+    if (!existing || existing.imageKey !== imageKey) {
+      cacheBuster = Date.now();
+      cacheMap.set(eventId, { imageKey, cacheBuster });
+    }
+    const cacheKey = `${imageKey}-${cacheBuster}`;
+    return `${API_BASE}/api/events/${eventId}/representative/thumb?v=${encodeURIComponent(cacheKey)}`;
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -242,42 +259,58 @@ export default function HomePage() {
                 {eventsArray.map((event, index) => {
                   const eventId = event.event_id || event.id;
                   if (!eventId) return null;
+                  const thumbUrl = getEventRepresentativeThumbUrl(event);
                   return (
                   <motion.a
                     key={eventId}
                     href={`/${event.url}`}
                     onClick={(e) => handleEventClick(e, event.url, { ...event, id: eventId, event_id: eventId })}
-                    className="block bg-white border border-gray-200 rounded-lg hover:border-primary-200 hover:shadow-lg transition-all duration-300 overflow-hidden group cursor-pointer"
+                    className="group block h-full cursor-pointer"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.4 + index * 0.05 }}
                     whileHover={{ y: -4 }}
                   >
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                          {event.name}
-                        </h3>
-                        <svg 
-                          className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-all flex-shrink-0" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition-all duration-300 group-hover:border-primary-200 group-hover:shadow-lg">
+                      <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-gray-200 to-gray-100">
+                        {ImageComponent(
+                          thumbUrl,
+                          {
+                            width: 480,
+                            height: 320,
+                            className: 'h-full w-full object-cover transition-transform duration-500 group-hover:scale-105',
+                            alt: event.name ? `${event.name} cover` : 'Event cover',
+                            loading: 'lazy'
+                          }
+                        )}
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/15 to-transparent opacity-60 transition-opacity duration-500 group-hover:opacity-70" />
                       </div>
-                      {event.date && (
-                        <div className="flex items-center text-gray-500 text-sm mb-3">
-                          <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <div className="flex flex-1 flex-col p-6">
+                        <div className="mb-3 flex items-start justify-between">
+                          <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
+                            {event.name}
+                          </h3>
+                          <svg 
+                            className="h-5 w-5 flex-shrink-0 text-gray-400 transition-all group-hover:text-primary-600" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
-                          {event.date}
                         </div>
-                      )}
-                      <div className="flex items-center text-primary-600 text-sm">
-                        <User className="w-4 h-4 mr-2" />
-                        View Photos
+                        {event.date && (
+                          <div className="mb-3 flex items-center text-sm text-gray-500">
+                            <svg className="mr-2 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {event.date}
+                          </div>
+                        )}
+                        <div className="mt-auto flex items-center text-sm text-primary-600">
+                          <User className="mr-2 h-4 w-4" />
+                          View Photos
+                        </div>
                       </div>
                     </div>
                   </motion.a>

@@ -547,7 +547,13 @@ def generate_public_access_code(profile_id):
         # Check if profile is public
         general_models.generate_public_access_code(profile_id)
         public_code = general_models.get_public_access_code(profile_id)
-        return jsonify({"success": True, "public_code": public_code})
+        profile = general_models.get_entities('profiles', [profile_id])
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': profile
+        }]
+        return jsonify({"success": True, "public_code": public_code, "changes": changes})
     
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403

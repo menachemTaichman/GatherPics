@@ -56,6 +56,7 @@ const [profileNameConflict, setProfileNameConflict] = useState(false);
 const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
 const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
 const [publicAccessCodes, setPublicAccessCodes] = useState({});
+const [publicAccessFlags, setPublicAccessFlags] = useState({});
 const publicAccessFetchesRef = useRef(new Set());
   
   // Requests state
@@ -210,38 +211,40 @@ useEffect(() => {
     }
   };
 
-  const fetchPublicAccessCode = useCallback(
-    async (profileId, { notifyOnError = false } = {}) => {
-      if (!profileId) return null;
-      const idStr = String(profileId);
-      if (publicAccessFetchesRef.current.has(idStr)) {
-        return publicAccessCodes[idStr] ?? null;
+  const fetchPublicAccessCode = useCallback(async (profileId, { notifyOnError = false } = {}) => {
+    if (!profileId) return null;
+    const idStr = String(profileId);
+    if (publicAccessFetchesRef.current.has(idStr)) {
+      return publicAccessCodes[idStr] ?? null;
+    }
+    publicAccessFetchesRef.current.add(idStr);
+    try {
+      const response = await profilesAPI.getPublicAccessCode(idStr);
+      const publicCode = response?.public_code || null;
+      setPublicAccessCodes((prev) => {
+        if (prev[idStr] === publicCode) return prev;
+        return { ...prev, [idStr]: publicCode };
+      });
+      setPublicAccessFlags((prev) => {
+        const nextValue = publicCode ? 1 : 0;
+        if (prev[idStr] === nextValue) return prev;
+        return { ...prev, [idStr]: nextValue };
+      });
+      return publicCode;
+    } catch (error) {
+      console.error('Failed to fetch public access code:', error);
+      if (notifyOnError) {
+        showToast(formatErrorMessage('load public access code', error), 'error');
       }
-      publicAccessFetchesRef.current.add(idStr);
-      try {
-        const response = await profilesAPI.getPublicAccessCode(idStr);
-        const publicCode = response?.public_code || null;
-        setPublicAccessCodes((prev) => {
-          if (prev[idStr] === publicCode) return prev;
-          return { ...prev, [idStr]: publicCode };
-        });
-        return publicCode;
-      } catch (error) {
-        console.error('Failed to fetch public access code:', error);
-        setPublicAccessCodes((prev) => {
-          if (prev[idStr] === null) return prev;
-          return { ...prev, [idStr]: null };
-        });
-        if (notifyOnError) {
-          showToast(formatErrorMessage('load public access code', error), 'error');
-        }
-        return null;
-      } finally {
-        publicAccessFetchesRef.current.delete(idStr);
-      }
-    },
-    [publicAccessCodes, showToast]
-  );
+      setPublicAccessFlags((prev) => {
+        if (prev[idStr] === 0) return prev;
+        return { ...prev, [idStr]: 0 };
+      });
+      return null;
+    } finally {
+      publicAccessFetchesRef.current.delete(idStr);
+    }
+  }, [publicAccessCodes, showToast]);
 
   // Email editing handlers
   const handleEmailEdit = useCallback(() => {
@@ -480,9 +483,11 @@ useEffect(() => {
         ...prev,
         [profile.id]: result.public_code || null,
       }));
+      setPublicAccessFlags((prev) => ({
+        ...prev,
+        [profile.id]: result.public_code ? 1 : 0,
+      }));
 
-      // Refresh profiles list
-      await fetchProfiles();
     } catch (error) {
       console.error('Failed to reset public access code:', error);
       showToast(formatErrorMessage('reset public access code', error), 'error');
@@ -497,8 +502,10 @@ useEffect(() => {
         ...prev,
         [profile.id]: null,
       }));
-      // Refresh profiles list
-      await fetchProfiles();
+      setPublicAccessFlags((prev) => ({
+        ...prev,
+        [profile.id]: 0,
+      }));
     } catch (error) {
       console.error('Failed to remove public access code:', error);
       showToast(formatErrorMessage('remove public access code', error), 'error');
@@ -532,6 +539,15 @@ useEffect(() => {
         );
         const isPublicProfile =
           (generalProfile?.is_public ?? eventProfile?.is_public ?? 0) === 1;
+        const hasPublicAccessSource =
+          generalProfile?.has_public_access_code ??
+          eventProfile?.has_public_access_code ??
+          0;
+        const hasPublicAccessOverride = Object.prototype.hasOwnProperty.call(publicAccessFlags, baseIdStr)
+          ? publicAccessFlags[baseIdStr]
+          : undefined;
+        const hasPublicAccessCode =
+          (hasPublicAccessOverride ?? hasPublicAccessSource) === 1;
         const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
           ? publicAccessCodes[baseIdStr]
           : undefined;
@@ -545,6 +561,7 @@ useEffect(() => {
           label,
           hierarchy_rank: hierarchyRank,
           is_public: isPublicProfile ? 1 : 0,
+          has_public_access_code: hasPublicAccessCode ? 1 : 0,
           public_access_code: publicAccessCode,
           restricted_to_event: restrictedToEvent,
           eventProfile,
@@ -552,7 +569,7 @@ useEffect(() => {
         };
       })
       .filter(Boolean);
-  }, [allProfiles, generalProfilesById, publicAccessCodes]);
+  }, [allProfiles, generalProfilesById, publicAccessCodes, publicAccessFlags]);
 
   const otherProfiles = useMemo(() => {
     return [...eventProfilesForDisplay].sort((a, b) => {
@@ -566,16 +583,6 @@ useEffect(() => {
     });
   }, [eventProfilesForDisplay]);
 
-  useEffect(() => {
-    eventProfilesForDisplay.forEach((profile) => {
-      if (profile.is_public === 1) {
-        const existing = publicAccessCodes[profile.id];
-        if (existing === undefined) {
-          fetchPublicAccessCode(profile.id);
-        }
-      }
-    });
-  }, [eventProfilesForDisplay, publicAccessCodes, fetchPublicAccessCode]);
 
   // Requests handlers
   const handleCreateRequest = () => {
@@ -1188,12 +1195,12 @@ useEffect(() => {
                                     {/* Public access code buttons - only show for public profiles */}
                                     {profile.is_public ? (
                                       <>
-                                        {profile.public_access_code ? (
+                                        {profile.has_public_access_code === 1 ? (
                                           <>
                                             <button
                                               onClick={() => handleCopyPublicLink(profile)}
                                               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                              title={`Copy public link: ${window.location.origin}/${eventUrl}/public-access/${profile.public_access_code}`}
+                                              title="Copy public link"
                                             >
                                               <Link className="w-4 h-4 text-blue-600" />
                                             </button>
@@ -1214,7 +1221,7 @@ useEffect(() => {
                                             <Link className="w-4 h-4 text-green-600" />
                                           </button>
                                         )}
-                                        {profile.public_access_code ? (
+                                        {profile.has_public_access_code === 1 ? (
                                           <button
                                             onClick={() => handleRemovePublicCode(profile)}
                                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
