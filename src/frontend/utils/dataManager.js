@@ -411,7 +411,7 @@ export const useDataStore = create((set, get) => {
     archiveAlbumId: null,
 
     // Per-tab scopes: what relations to apply (components add/remove)
-    scope: {},
+    scope: null,
     scopes: {},
     scopeCounts: {},
 
@@ -605,23 +605,21 @@ export const useDataStore = create((set, get) => {
     setFavoritesAlbumId: (id) => set({ favoritesAlbumId: id }),
     setArchiveAlbumId: (id) => set({ archiveAlbumId: id }),
     setScope: (scope) => set((state) => {
-      const prev = state.scope || {};
-      if ((prev.entity || '') === (scope?.entity || '') && 
-          String(prev.id || '') === String(scope?.id || '') &&
-          String(prev.eventId || '') === String(scope?.eventId || '')) {
+      const prev = state.scope || null;
+      const next = scope && scope.entity
+        ? { entity: scope.entity, id: scope.id, eventId: scope.eventId }
+        : null;
+      if (
+        prev &&
+        next &&
+        prev.entity === next.entity &&
+        String(prev.id || '') === String(next.id || '') &&
+        String(prev.eventId || 'general') === String(next.eventId || 'general')
+      ) {
         return {};
       }
-      
-      const scopes = {};
-      if (scope?.entity) {
-        const key = `${scope.eventId || 'general'}:${scope.entity}:${scope.id ?? ''}`;
-        scopes[key] = { entity: scope.entity, id: scope.id, eventId: scope.eventId };
-      }
-      return { 
-        scope: { entity: scope?.entity, id: scope?.id, eventId: scope?.eventId }, 
-        scopes, 
-        scopeCounts: scopes && Object.keys(scopes).length ? { [Object.keys(scopes)[0]]: 1 } : {} 
-      };
+      if (!prev && !next) return {};
+      return { scope: next };
     }),
     addScope: (scope) => set((state) => {
       if (!scope?.entity) return {};
@@ -636,19 +634,38 @@ export const useDataStore = create((set, get) => {
       return { scopes: nextScopes, scopeCounts: counts };
     }),
     removeScope: (scope) => set((state) => {
-      if (!scope?.entity) return {};
+      if (!scope?.entity) {
+        return {};
+      }
       const key = `${scope.eventId || 'general'}:${scope.entity}:${scope.id ?? ''}`;
       const counts = { ...(state.scopeCounts || {}) };
-      const curr = counts[key] || 0;
-      if (curr <= 1) {
-        delete counts[key];
-        const nextScopes = { ...(state.scopes || {}) };
-        delete nextScopes[key];
-        return { scopes: nextScopes, scopeCounts: counts };
-      } else {
-        counts[key] = curr - 1;
-        return { scopeCounts: counts };
+      const exists = Object.prototype.hasOwnProperty.call(counts, key);
+      const updates = {};
+      if (exists) {
+        const curr = counts[key];
+        if (curr <= 1) {
+          delete counts[key];
+          updates.scopeCounts = counts;
+          if (state.scopes && Object.prototype.hasOwnProperty.call(state.scopes, key)) {
+            const nextScopes = { ...(state.scopes || {}) };
+            delete nextScopes[key];
+            updates.scopes = nextScopes;
+          }
+        } else {
+          counts[key] = curr - 1;
+          updates.scopeCounts = counts;
+        }
       }
+      const prevScope = state.scope;
+      if (
+        prevScope &&
+        prevScope.entity === scope.entity &&
+        String(prevScope.id || '') === String(scope.id || '') &&
+        String(prevScope.eventId || 'general') === String(scope.eventId || 'general')
+      ) {
+        updates.scope = null;
+      }
+      return updates;
     }),
 
     // Core change applier (supports new relation entities dict)
@@ -1036,7 +1053,12 @@ export const useDataStore = create((set, get) => {
           
           const ids = ch.ids || [];
           const map = { ...(eventEntities[key] || {}) };
-          ids.forEach((id) => { delete map[id]; });
+          ids.forEach((id) => {
+            const keyToDelete = String(id);
+            if (keyToDelete in map) {
+              delete map[keyToDelete];
+            }
+          });
           eventEntities[key] = map;
           // Removal broadcast as-is
           const { broadcast: effBroadcastRemove } = resolveFlags(ch);

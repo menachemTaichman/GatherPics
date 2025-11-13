@@ -17,7 +17,7 @@ def get_my_notifications():
             'entity': 'my_notification',
             'items': items
         }]
-        return jsonify({'changes': changes, 'items': items})
+        return jsonify({'changes': changes})
     except Forbidden as e:
         return jsonify({'error': str(e)}), 403
     except DatabaseError as e:

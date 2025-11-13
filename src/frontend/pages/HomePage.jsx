@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, LayoutDashboard, LogIn } from 'lucide-react';
 import { Header } from '../components/layout';
@@ -217,13 +217,13 @@ export default function HomePage() {
                 className="flex flex-wrap gap-4 justify-center mt-8"
               >
                 {hasDashboard && (
-                  <button
-                    onClick={() => navigate('/dashboard')}
+                  <Link
+                    to="/dashboard"
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
                   >
                     <LayoutDashboard className="w-5 h-5 mr-2" />
                     Go to Dashboard
-                  </button>
+                  </Link>
                 )}
                 {!isAuthenticated && (
                   <button

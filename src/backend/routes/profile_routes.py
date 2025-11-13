@@ -47,7 +47,7 @@ def create_profile():
         allowed_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
         data = {k: v for k, v in request_data.items() if k in allowed_fields}
 
-        profile_id = general_models.add_profile(data)
+        profile_id = general_models.add('profiles', data)
         changes = [{
             'type': 'UPSERT',
             'entity': 'profile',
@@ -208,14 +208,15 @@ def create_event_profile(event_id):
     request_data = request.json or {}
     try:
         general_models = get_general_models()
-
+        event = get_event(event_id)
         allowed_general_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
         allowed_event_fields = ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups']
         general_data = {k: v for k, v in request_data.items() if k in allowed_general_fields}
+        general_data['restricted_to_event'] = event_id
         event_data = {k: v for k, v in request_data.items() if k in allowed_event_fields}
 
-        profile_id = general_models.add_profile(general_data)
-        general_models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
+        profile_id = general_models.add('profiles', general_data)
+        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
         profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
         changes = [{
             'type': 'UPSERT',
@@ -297,13 +298,11 @@ def get_current_profile():
 
 @profile_bp.route("/api/profiles/current/preferences", methods=["GET"])
 @require_auth
-def get_current_profile_preferences():
+def get_my_preferences():
     """Get preferences for the current profile."""
     general_models = get_general_models()
-    profile_id = get_jwt_identity()
-    
     try:
-        preferences = general_models.get_profile_preferences(profile_id)
+        preferences = general_models.get_my_preferences()
         changes = [{
             'type': 'UPSERT',
             'entity': 'localStorage',
@@ -317,10 +316,9 @@ def get_current_profile_preferences():
 
 @profile_bp.route("/api/profiles/current/preferences", methods=["PUT"])
 @require_auth
-def update_current_profile_preferences():
+def update_my_preferences():
     """Update a single preference for the current profile."""
     general_models = get_general_models()
-    profile_id = get_jwt_identity()
     
     data = request.json or {}
     preference_group = data.get('preference_group')
@@ -331,8 +329,8 @@ def update_current_profile_preferences():
         return jsonify({"error": "preference_group, preference_key, and preference_value are required"}), 400
     
     try:
-        general_models.update_profile_preferences(profile_id, preference_group, preference_key, preference_value)
-        preferences = general_models.get_profile_preferences(profile_id)
+        general_models.update_my_preferences(preference_group, preference_key, preference_value)
+        preferences = general_models.get_my_preferences()
         changes = [{
             'type': 'UPSERT',
             'entity': 'localStorage',

@@ -273,15 +273,3 @@ ids = {
 }
 
 # recreate_views_triggers_and_indexes(general_models.db)
-
-updated_image_ids = ['778a6e66-04bd-4a36-b769-527ddb7da4bc']
-changes = []
-all_parents = event.models.get_parents('images', updated_image_ids)
-for entity, parent_to_images in all_parents.items():
-    parent_ids = list(parent_to_images.keys())
-    changes.append({
-        'type': 'UPDATE',
-        'entity': entity,
-        'items': event.models.get_entities(entity, parent_ids)
-    })
-print(changes)

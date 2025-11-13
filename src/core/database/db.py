@@ -20,79 +20,79 @@ class ReturnFormat(Enum):
 
 class DB:
     
-    @staticmethod
-    def CONSTANTS() -> dict:
-        return {
-            'profiles_preferences': {
-                'general': {
-                    'select': (bool, False),
-                    'size': (float, 1.0),
-                    'includeArchived': (bool, False)
-                },
-                'ImageViewer': {
-                    'albumsHeight': (int, 200),
-                    'albumsOpen': (bool, False),
-                    'facesOpen': (bool, False),
-                    'sidebarOpen': (bool, False)
-                },
-                'GroupDetail': {
-                    'sortDir': (str, 'asc')
-                },
-                'Moments': {
-                    'sortDir': (str, 'asc'),
-                    'carouselExpanded': (bool, True)
-                },
-                'EditMomentImagesModal': {
-                    'filter': (str, 'all'),
-                    'sortDir': (str, 'asc')
-                },
-                'GroupsGallery': {
-                    'sortDir': (str, 'desc'),
-                    'sortBy': (str, 'name')
-                },
-                'AlbumsGallery': {
-                    'sortBy': (str, 'name'),
-                    'sortDir': (str, 'asc')
-                },
-                'AlbumsDetail': {
-                    'sortDir': (str, 'asc')
-                },
-                'BucketDrawer': {
-                    'mode': (str, 'download'),
-                    'quality': (str, 'high'),
-                    'excludeAlready': (bool, True),
-                    'alreadyDownloaded': (list, []),
-                    'alreadyUploaded': (list, []),
-                    'queue': (list, [])
-                },
-                'UploadsGallery': {
-                    'sortDir': (str, 'desc'),
-                    'sortBy': (str, 'started_at')
-                },
-                'UploadDetail': {
-                    'mode': (str, 'groups'),
-                    'sortDir': (str, 'asc')
-                },
-                'EventsGallery': {
-                    'filterVisibility': (str, 'all'),
-                    'sortDir': (str, 'desc'),
-                    'sortBy': (str, 'date')
-                },
-                'RequestsGallery': {
-                    'filterStatus': (str, 'all'),
-                    'sortDir': (str, 'desc'),
-                    'sortBy': (str, 'requested_at')
-                },
-                'RequestsDetail': {
-                    'sortDir': (str, 'asc')
-                },
-                'FeedbacksGallery': {
-                    'filterStatus': (str, 'all'),
-                    'sortDir': (str, 'desc'),
-                    'sortBy': (str, 'created_at')
-                }
-            }
-        }
+    # @staticmethod
+    # def CONSTANTS() -> dict:
+    #     return {
+    #         'profiles_preferences': {
+    #             'general': {
+    #                 'select': (bool, False),
+    #                 'size': (float, 1.0),
+    #                 'includeArchived': (bool, False)
+    #             },
+    #             'ImageViewer': {
+    #                 'albumsHeight': (int, 200),
+    #                 'albumsOpen': (bool, False),
+    #                 'facesOpen': (bool, False),
+    #                 'sidebarOpen': (bool, False)
+    #             },
+    #             'GroupDetail': {
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'Moments': {
+    #                 'sortDir': (str, 'asc'),
+    #                 'carouselExpanded': (bool, True)
+    #             },
+    #             'EditMomentImagesModal': {
+    #                 'filter': (str, 'all'),
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'GroupsGallery': {
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'name')
+    #             },
+    #             'AlbumsGallery': {
+    #                 'sortBy': (str, 'name'),
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'AlbumsDetail': {
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'BucketDrawer': {
+    #                 'mode': (str, 'download'),
+    #                 'quality': (str, 'high'),
+    #                 'excludeAlready': (bool, True),
+    #                 'alreadyDownloaded': (list, []),
+    #                 'alreadyUploaded': (list, []),
+    #                 'queue': (list, [])
+    #             },
+    #             'UploadsGallery': {
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'started_at')
+    #             },
+    #             'UploadDetail': {
+    #                 'mode': (str, 'groups'),
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'EventsGallery': {
+    #                 'filterVisibility': (str, 'all'),
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'date')
+    #             },
+    #             'RequestsGallery': {
+    #                 'filterStatus': (str, 'all'),
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'requested_at')
+    #             },
+    #             'RequestsDetail': {
+    #                 'sortDir': (str, 'asc')
+    #             },
+    #             'FeedbacksGallery': {
+    #                 'filterStatus': (str, 'all'),
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'created_at')
+    #             }
+    #         }
+    #     }
 
     @staticmethod
     def STRUCTURE() -> dict:
@@ -482,6 +482,13 @@ class DB:
                 FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
                 FOREIGN KEY (event_in_deletion) REFERENCES events(event_id) ON DELETE SET NULL
             ''',
+            'default_preferences': '''
+                preference_group TEXT NOT NULL,
+                preference_key TEXT NOT NULL,
+                value_type TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (preference_group, preference_key)
+            ''',
             'events': '''
                 event_id TEXT PRIMARY KEY NOT NULL,
                 name TEXT COLLATE NOCASE UNIQUE NOT NULL,
@@ -509,8 +516,9 @@ class DB:
                 profile_id TEXT NOT NULL,
                 preference_group TEXT NOT NULL,
                 preference_key TEXT NOT NULL,
-                preference_value TEXT,
+                preference_value TEXT NOT NULL,
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+                FOREIGN KEY (preference_group, preference_key) REFERENCES default_preferences(preference_group, preference_key) ON DELETE CASCADE,
                 PRIMARY KEY (profile_id, preference_group, preference_key)
             ''',
             'refresh_tokens': '''
@@ -803,8 +811,14 @@ class DB:
                 WHERE p.hierarchy_rank < cur_profile('hierarchy_rank')
             """,
             'my_preferences': """
-                SELECT * FROM profiles_preferences
-                WHERE profile_id = cur_profile('profile_id')
+                SELECT
+                    pp.*,
+                    dp.value_type
+                FROM profiles_preferences pp
+                INNER JOIN default_preferences dp
+                ON pp.preference_group = dp.preference_group
+                AND pp.preference_key = dp.preference_key
+                WHERE pp.profile_id = cur_profile('profile_id')
             """,
 
             # current profile
@@ -965,10 +979,11 @@ class DB:
                     diagnostics
                 FROM feedbacks_details
                 WHERE profile_id = cur_profile('profile_id')
-                AND cur_profile('is_public') = 0
             """,
             'accessible_my_feedbacks': """
                 SELECT * FROM my_feedbacks
+                INNER JOIN current_profile cp ON my_feedbacks.profile_id = cp.profile_id
+                WHERE cp.is_public = 0
             """,
             'accessible_feedbacks': """
                 SELECT
@@ -1241,13 +1256,13 @@ class DB:
             'my_access_requests': '''
                 SELECT ard.*
                 FROM access_requests_details ard
-                WHERE ard.profile_id = cur_profile('profile_id')
+                WHERE ard.applicant_profile_id = cur_profile('profile_id')
             ''',
             'accessible_my_access_requests': '''
                 SELECT mar.*
                 FROM my_access_requests mar
-                INNER JOIN accessible_profiles ap ON mar.profile_id = ap.profile_id
-                WHERE ap.is_public = 0
+                INNER JOIN current_profile cp ON mar.applicant_profile_id = cp.profile_id
+                WHERE cp.is_public = 0
             ''',
             'my_access_requests_groups': '''
                 SELECT argd.*
@@ -1676,7 +1691,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN NEW.profile_id NOT IN (
                             SELECT profile_id
-                            FROM accessible_events_profiles
+                            FROM accessible_profiles ap
+                            WHERE ap.is_editable = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NEW.all_images = 1 and cur_event_profile('all_images') = 0 THEN
@@ -2545,6 +2561,44 @@ class DB:
                     WHERE agh.group_id = NEW.group_id
                     AND agh.is_accessible = 0
                     AND LOWER(agh.label) <> 'unassociated';
+
+                    -- ensure notifications
+                    INSERT INTO notifications (
+                        profile_id,
+                        message,
+                        type,
+                        data
+                    )
+                    SELECT
+                        p.profile_id,
+                        'A new access request was created',
+                        'access_request',
+                        json_object('access_request_id', NEW.access_request_id, 'event_id', cur_event_profile('event_id'))
+                    FROM events_profiles ep
+                    INNER JOIN profiles p ON ep.profile_id = p.profile_id
+                    WHERE
+                        ep.event_id = cur_event_profile('event_id')
+                        AND p.hierarchy_rank > 0
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM notifications n
+                            WHERE n.type = 'access_request'
+                            AND n.profile_id = p.profile_id
+                            AND n.data->>'access_request_id' = NEW.access_request_id
+                            AND n.data->>'event_id' = cur_event_profile('event_id')
+                        )
+                        AND EXISTS (
+                            SELECT 1
+                            FROM groups g
+                            LEFT JOIN events_profiles_groups epg
+                            ON epg.event_id = ep.event_id
+                            AND epg.profile_id = ep.profile_id
+                            AND epg.group_id = g.group_id
+                            AND g.group_id = NEW.group_id
+                            WHERE (ep.all_groups = 1 AND epg.group_id IS NULL)
+                            OR (ep.all_groups = 0 AND epg.group_id IS NOT NULL)
+                        );
+
                 END;
             """,
             'trg_delete_accessible_my_access_requests_groups': """
@@ -2631,12 +2685,11 @@ class DB:
                     END;
 
                     -- TODO: use IF
-                    INSERT INTO events_profiles_groups (event_id, profile_id, group_id, accessible)
+                    INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
                     SELECT
                         aar.event_id as event_id,
                         aar.applicant_profile_id as profile_id,
-                        OLD.group_id as group_id,
-                        CASE WHEN aep.all_groups = 0 AND NEW.approved = 1 THEN 1 ELSE 0 END as accessible
+                        OLD.group_id as group_id
                     FROM accessible_access_requests aar
                     INNER JOIN accessible_events_profiles aep
                         ON aep.profile_id = aar.applicant_profile_id
@@ -2804,6 +2857,25 @@ class DB:
                         ) THEN
                             RAISE(ABORT, 'Policy error: Profile label already exists')
                     END;
+                END;
+            """,
+
+            # insert default preferences into profiles_preferences
+            'trg_profiles_insert_default_preferences': """
+                AFTER INSERT ON profiles
+                BEGIN
+                    INSERT OR IGNORE INTO profiles_preferences (
+                        profile_id,
+                        preference_group,
+                        preference_key,
+                        preference_value
+                    )
+                    SELECT
+                        NEW.profile_id,
+                        dp.preference_group,
+                        dp.preference_key,
+                        dp.value
+                    FROM default_preferences dp;
                 END;
             """,
 
@@ -2995,7 +3067,22 @@ class DB:
         }
 
     @staticmethod
-    def serialize_value(value_type: type, value: Any) -> str:
+    def resolve_value_type(value_type: str) -> type:
+        """Resolve a value type from a string."""
+        type_map = {
+            'bool': bool,
+            'int': int,
+            'float': float,
+            'str': str,
+            'list': list,
+            'dict': dict,
+        }
+        return type_map.get(value_type, str)
+
+    @staticmethod
+    def serialize_value(value_type: type | str, value: Any) -> str:
+        if isinstance(value_type, str):
+            value_type = DB.resolve_value_type(value_type)
         """Convert a Python value to a string for database storage."""
         
         if value_type == bool:
@@ -3010,8 +3097,10 @@ class DB:
             return str(value)
     
     @staticmethod
-    def deserialize_value(value_type: type, value_str: str) -> bool | int | float | list | dict | str:
+    def deserialize_value(value_type: type | str, value_str: str) -> bool | int | float | list | dict | str:
         """Convert a database string to a Python value."""
+        if isinstance(value_type, str):
+            value_type = DB.resolve_value_type(value_type)
         if value_type == bool:
             return value_str.lower() in ('true', '1', 'yes') or int(value_str) == 1
         elif value_type == int:

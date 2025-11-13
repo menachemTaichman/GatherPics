@@ -473,8 +473,9 @@ class EventModels(BaseModels):
             WHERE EXISTS (
                 SELECT 1
                 FROM access_requests_groups aar
-                LEFT JOIN profile_groups pg
-                ON pg.profile_id = p.profile_id
+                LEFT JOIN events_profiles_groups pg
+                ON pg.event_id = aar.event_id
+                AND pg.profile_id = p.profile_id
                 AND pg.group_id = aar.group_id
                 WHERE aar.access_request_id = ?
                 AND (

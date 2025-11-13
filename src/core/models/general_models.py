@@ -50,27 +50,6 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    # TODO: intigrate default preferences into the db and remove this method
-    def add_profile(self, data: dict) -> str:
-        """
-        Create a new profile.
-        Returns:
-            profile_id
-        """
-        profile_id = self.add('profiles', data)
-
-        preferences = DB.CONSTANTS()['profiles_preferences']
-        for preference_group, keys_dict in preferences.items():
-            values = []
-            for preference_key, (value_type, default_value) in keys_dict.items():
-                # Serialize the default value before storing
-                serialized_value = self.db.serialize_value(value_type, default_value)
-                values.append([profile_id, preference_group, preference_key, serialized_value])
-
-            self.db.insert_many('my_preferences', ['profile_id', 'preference_group', 'preference_key', 'preference_value'], values)
-
-        return profile_id
-
     def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None):
         """
         Delete a profile.
@@ -83,7 +62,8 @@ class GeneralModels(BaseModels):
             return
 
         if only_remove_from_event_id:
-            self.edit_childs('events', only_remove_from_event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+            event = self.get_event(only_remove_from_event_id)
+            event.models.edit_childs('events', only_remove_from_event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
         
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
@@ -98,46 +78,46 @@ class GeneralModels(BaseModels):
         
         return result
     
-    def get_profile_preferences(self, profile_id: str) -> dict:
+    def get_my_preferences(self) -> dict:
         """Get the preferences for a profile."""
-        # Start with defaults from CONSTANTS
-        preferences_constants = DB.CONSTANTS()['profiles_preferences']
+
+        query = '''
+            SELECT preference_group, preference_key, preference_value, value_type
+            FROM my_preferences
+        '''
+        results = self.db.execute_query(query, return_format=ReturnFormat.LIST_TUPLES)
         preferences = {}
-        
-        # Initialize with default values
-        for group, keys_dict in preferences_constants.items():
-            preferences[group] = {}
-            for key, (value_type, default_value) in keys_dict.items():
-                preferences[group][key] = default_value
-        
-        # Query database for stored values
-        query = 'SELECT preference_group, preference_key, preference_value FROM my_preferences WHERE profile_id = ?'
-        result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.LIST_TUPLES)
-        
-        # Update defaults with stored values
-        for group, key, value_str in result:
-            if group in preferences and key in preferences[group]:
-                value_type, _ = preferences_constants[group][key]
-                # Deserialize from string to proper type and update
-                preferences[group][key] = self.db.deserialize_value(value_type, value_str)
+        for group, key, value_str, value_type in results:
+            preferences.setdefault(group, {})
+            preferences[group][key] = self.db.deserialize_value(value_type, value_str)
 
         return preferences
 
-    def update_profile_preferences(self, profile_id: str, preference_group: str, preference_key: str, preference_value):
+    def update_my_preferences(self, preference_group: str, preference_key: str, preference_value):
         """Update the preferences for a profile."""
-        preferences_constants = self.db.CONSTANTS()['profiles_preferences']
-        
-        if preference_group not in preferences_constants:
-            raise DBPolicyError(f'Preference group {preference_group} not found')
-        
-        if preference_key not in preferences_constants[preference_group]:
-            raise DBPolicyError(f'Preference key {preference_key} not found in preference group {preference_group}')
-        
-        # Get the type for this preference and serialize the value
-        value_type, _ = preferences_constants[preference_group][preference_key]
-        serialized_value = self.db.serialize_value(value_type, preference_value)
-        
-        self.db.update('my_preferences', {'profile_id': profile_id, 'preference_group': preference_group, 'preference_key': preference_key}, {'preference_value': serialized_value})
+        type_label = self.db.execute_query(
+            '''
+                SELECT value_type
+                FROM default_preferences
+                WHERE preference_group = ? AND preference_key = ?
+            ''',
+            (preference_group, preference_key),
+            return_format=ReturnFormat.VALUE
+        )
+
+        if not type_label:
+            raise DBPolicyError(f'Preference {preference_group}.{preference_key} not found')
+
+        serialized_value = self.db.serialize_value(type_label, preference_value)
+
+        self.db.update(
+            'my_preferences',
+            {
+                'preference_group': preference_group,
+                'preference_key': preference_key
+            },
+            {'preference_value': serialized_value}
+        )
 
     def generate_public_access_code(self, profile_id: str):
         """Generate a 12-character public access code for a profile."""
@@ -165,29 +145,6 @@ class GeneralModels(BaseModels):
         """Revoke public access code for a profile."""
         self.edit('profiles', profile_id, {'public_access_code': None})
     
-
-    # TODO: isnt already in the db? remove this method, and the create_access_request method
-    def ensure_access_request_notifications(self, event: Event, request_id: str):
-        """
-        Ensure access request notifications are created for the managers of the access request.
-        """
-        query = f'''
-            SELECT n.profile_id
-            FROM notifications n
-            WHERE n.type = 'access_request'
-            AND n.data->>'access_request_id' = ?
-            AND n.data->>'event_id' = ?
-        '''
-        exclude_ids = self.db.execute_query(query, (request_id, event.event_id), return_format=ReturnFormat.LIST_VALUES)
-        managers = event.models.get_access_request_managers(request_id, exclude_ids)
-        for manager in managers:
-            self.add('notifications', {
-                'profile_id': manager,
-                'message': 'A new access request was created',
-                'type': 'access_request',
-                'data': {'access_request_id': request_id, 'event_id': event.event_id}
-            })
-
     def toggle_access_request(self, event_id: str, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
         """
         Toggle an access request.
@@ -207,14 +164,22 @@ class GeneralModels(BaseModels):
             label = profile_name or access_request['applicant_name']
             email = access_request['applicant_email']
             password = secrets.token_urlsafe(6)
-            applicant_profile_id = self.add_profile(label, password, 0, email=email, event_id=event_id)
+            data = {
+                'label': label,
+                'password': password,
+                'hierarchy_rank': 0,
+                'email': email,
+                'restricted_to_event': event_id
+            }
+            applicant_profile_id = self.add('profiles', data)
+            event.models.edit_childs('events', event_id, 'profiles', [applicant_profile_id], operation=ChildOperation.ADD)
         
         applicant_profile_id = event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
         if applicant_profile_id:
             self.add('notifications', {
                 'profile_id': applicant_profile_id,
                 'message': 'Your access request was processed',
-                'type': 'access_request',
+                'type': 'my_access_request',
                 'data': {'access_request_id': access_request_id, 'event_id': event.event_id}
             })
 
@@ -273,16 +238,6 @@ class GeneralModels(BaseModels):
             progress_callback=progress_callback
         )
 
-    def create_access_request(self, event_id: str, request_data: dict, group_ids: list[str]) -> str:
-        """Create an access request."""
-        event = self.get_event(event_id)
-        request_id = event.models.add('my_access_requests', request_data)
-        if group_ids and isinstance(group_ids, list):
-            event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
-            self.ensure_access_request_notifications(event, request_id)
-        
-        return request_id
-    
     # Settings
     def get_settings(self) -> Dict[str, Any]:
         """Get system settings."""

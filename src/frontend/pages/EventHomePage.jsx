@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon, Upload, Settings } from 'lucide-react';
+import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText } from 'lucide-react';
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
@@ -199,6 +199,20 @@ export default function EventHomePage({ eventUrl, eventData }) {
       borderHover: 'hover:border-orange-200',
       show: Boolean(eventUrl) && permissions.canUploadAndDeleteImages,
       requires: 'canUploadAndDeleteImages'
+    },
+    {
+      id: 'access-requests',
+      to: `/${eventUrl}/requests`,
+      icon: FileText,
+      title: 'Access Requests',
+      description: 'Review pending access requests',
+      iconBg: 'from-sky-100 to-sky-50',
+      iconColor: 'text-sky-700',
+      hoverBg: 'group-hover:from-sky-500 group-hover:to-sky-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-sky-200',
+      show: Boolean(eventUrl) && permissions.isProfilesManager,
+      requires: 'isProfilesManager'
     },
     {
       id: 'event-settings',

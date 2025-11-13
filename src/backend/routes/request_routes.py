@@ -95,7 +95,6 @@ def get_my_request(event_id, request_id):
 def create_access_request(event_id):
     """Create a new access request."""
     event = get_event(event_id)
-    general_models = get_general_models()
     data = request.json or {}
     
     try:
@@ -109,7 +108,13 @@ def create_access_request(event_id):
             'applicant_profile_id': data.get('applicant_profile_id'),
             'communication_consent': data.get('communication_consent'),
         }
-        request_id = general_models.create_access_request(event_id, request_data, data.get('group_ids'))
+        group_ids = data.get('group_ids')
+        if not (group_ids and isinstance(group_ids, list)):
+            return jsonify({"error": "group_ids parameter is required"}), 400
+        
+        request_id = event.models.add('my_access_requests', request_data)
+        event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
+
         created_request = event.models.get_entities('my_access_requests', [request_id])
         changes = []
         if created_request:
@@ -134,7 +139,6 @@ def create_access_request(event_id):
 def update_my_request(event_id, request_id):
     """Update current user's own request."""
     event = get_event(event_id)
-    general_models = get_general_models()
         
     data = request.json or {}
     try:
@@ -144,19 +148,13 @@ def update_my_request(event_id, request_id):
         if sanitized:
             event.models.edit('my_access_requests', request_id, sanitized)
 
-        edited = False
         # Handle groups to add
         if 'groups_to_add' in data and isinstance(data['groups_to_add'], list) and len(data['groups_to_add']) > 0:
             event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_add'], operation=ChildOperation.ADD)
-            edited = True
 
         # Handle groups to remove
         if 'groups_to_remove' in data and isinstance(data['groups_to_remove'], list) and len(data['groups_to_remove']) > 0:
             event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_remove'], operation=ChildOperation.REMOVE)
-            edited = True
-            
-        if edited:
-            general_models.ensure_access_request_notifications(event, request_id)
             
         updated_request = event.models.get_entities('my_access_requests', [request_id])
         groups, relation_data = event.models.get_childs('my_access_requests', request_id, 'groups')
@@ -199,13 +197,14 @@ def delete_request(event_id, request_id):
             'entity': 'access_request',
             'ids': [request_id]
         },
-        {
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'currentProfile': event.models.get_current_profile()
-            }
-        }]
+        # {
+        #     'type': 'UPSERT',
+        #     'entity': 'localStorage',
+        #     'items': {
+        #         'currentProfile': general_models.get_current_profile()
+        #     }
+        # }
+        ]
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
@@ -247,7 +246,7 @@ def delete_my_request(event_id, request_id):
     event = get_event(event_id)
     
     try:
-        event.models.delete('access_requests', request_id)
+        event.models.delete('my_access_requests', request_id)
         
         response = {"success": True, "deleted_ids": [request_id]}
         response['changes'] = [{
@@ -306,7 +305,7 @@ def toggle_request(event_id, request_id):
             'type': 'UPSERT',
             'entity': 'localStorage',
             'items': {
-                'currentProfile': event.models.get_current_profile()
+                'currentProfile': general_models.get_current_profile()
             }
         })
         

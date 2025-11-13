@@ -16,7 +16,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const permissions = usePermissions();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const setScope = useDataStore((s) => s.setScope);
+  const addScope = useDataStore((s) => s.addScope);
   const removeScope = useDataStore((s) => s.removeScope);
 
   const notificationsList = useMyNotificationsList();
@@ -28,23 +28,31 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     });
   }, [notificationsList]);
 
+  const scopeConfigRef = useRef({ entity: 'all', id: 'my_notifications', eventId: 'general' });
   // Guard to run loading logic only once per open instance
   const loadedOnceRef = useRef(false);
   useEffect(() => {
+    const scopeConfig = scopeConfigRef.current;
     if (!isOpen) {
       loadedOnceRef.current = false;
-      // Remove scope when closing dropdown
-      try { removeScope && removeScope({ entity: 'all', id: 'my_notifications', eventId: 'general' }); } catch {}
       return;
     }
-    if (loadedOnceRef.current) return;
+    try { addScope && addScope(scopeConfig); } catch {}
+    loadedOnceRef.current = false;
+    return () => {
+      loadedOnceRef.current = false;
+      try { removeScope && removeScope(scopeConfig); } catch {}
+    };
+  }, [isOpen, addScope, removeScope]);
+
+  useEffect(() => {
+    if (!isOpen || loadedOnceRef.current) return;
     loadedOnceRef.current = true;
+    const scopeConfig = scopeConfigRef.current;
     let mounted = true;
     (async () => {
       setLoading(true);
       try {
-        // Ensure notifications upserts are allowed by scopes (once per open)
-        setScope({ entity: 'all', id: 'my_notifications', eventId: 'general' });
         await notificationsAPI.getMy();
       } catch (e) {
         // ignore
@@ -53,13 +61,11 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
       }
     })();
     return () => { mounted = false; };
-  }, [isOpen, eventUrl, setScope]);
+  }, [isOpen, eventUrl]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      // Keep scope and reload notifications; counts handled elsewhere
-      setScope({ entity: 'all', id: 'my_notifications', eventId: 'general' });
       await notificationsAPI.getMy();
     } catch (e) {
       // ignore
