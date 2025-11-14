@@ -4,7 +4,7 @@ import io
 import zipfile
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models
+from src.backend.helpers import get_event, get_general_models, Event
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 
@@ -75,24 +75,38 @@ def get_original_image_webp(event_id, image_id):
 def get_event_display_representative_webp(event_id):
     general_models = get_general_models()
     event = general_models.get_entities('events', event_id)
+    event_instance = Event(event_id)
     if not event:
         abort(404)
     representative_image = event['representative_image']
     if not representative_image:
         return '', 204
-    return get_file_webp(event_id, 'display', representative_image)
+    file_path = os.path.join(event_instance.display_dir, f'{representative_image}.webp')
+    if not os.path.exists(file_path):
+        abort(404)
+    
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
 @file_bp.route('/representative/thumb', methods=['GET', 'HEAD'])
-@require_auth
 def get_event_thumb_representative_webp(event_id):
     general_models = get_general_models()
     event = general_models.get_entities('events', event_id)
+    event_instance = Event(event_id)
     if not event:
         abort(404)
     representative_image = event['representative_image']
     if not representative_image:
         return '', 204
-    return get_file_webp(event_id, 'thumb', representative_image)
+
+    file_path = os.path.join(event_instance.thumb_dir, f'{representative_image}.webp')
+    if not os.path.exists(file_path):
+        abort(404)
+    
+    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
 @file_bp.route('/<entity>/<parent_id>/representative', methods=['GET', 'HEAD'])
 @require_auth

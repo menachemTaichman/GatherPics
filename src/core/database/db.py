@@ -105,15 +105,10 @@ class DB:
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
-                'fields': ['name', 'date', 'url', 'representative_image'],
+                'fields': ['name', 'date', 'url', 'representative_image', 'is_public', 'images_count', 'faces_count', 'albums_count', 'moments_count'],
                 'details_fields': [
-                    'is_public',
                     'images_count_limit',
                     'image_size_limit_bytes',
-                    'images_count',
-                    'faces_count',
-                    'albums_count',
-                    'moments_count',
                 ],
                 'relations': {
                     'profiles': {
@@ -763,37 +758,155 @@ class DB:
     @classmethod
     def VIEWS(self) -> dict:
         return {
+            # all profiles accessibility
+            'images_accessibility': '''
+                SELECT
+                    i.event_id,
+                    i.image_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        (ep.all_images = 1 AND epi.image_id IS NULL)
+                        OR (ep.all_images = 0 AND epi.image_id IS NOT NULL)
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM images i
+                JOIN events_profiles ep ON i.event_id = ep.event_id
+                LEFT JOIN events_profiles_images epi ON
+                    i.image_id = epi.image_id
+                    AND ep.profile_id = epi.profile_id
+                    AND i.image_id = epi.image_id
+            ''',
+            'groups_accessibility_helper': '''
+                SELECT
+                    g.event_id,
+                    g.group_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        ((ep.all_groups = 1 AND epg.group_id IS NULL)
+                        OR (ep.all_groups = 0 AND epg.group_id IS NOT NULL))
+                        AND (ep.can_edit = 1 OR LOWER(g.label) <> 'unassociated')
+                    THEN 1 ELSE 0 END AS is_accessible_helper
+                FROM groups g
+                JOIN events_profiles ep ON g.event_id = ep.event_id
+                LEFT JOIN events_profiles_groups epg ON
+                    g.group_id = epg.group_id
+                    AND ep.profile_id = epg.profile_id
+                    AND g.group_id = epg.group_id
+            ''',
+            'faces_accessibility': '''
+                SELECT
+                    ep.event_id,
+                    f.face_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        (ia.is_accessible = 1 AND gah.is_accessible_helper = 1)
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM faces f
+                INNER JOIN images i ON f.image_id = i.image_id
+                JOIN events_profiles ep ON i.event_id = ep.event_id
+                INNER JOIN images_accessibility ia ON f.image_id = ia.image_id AND ia.profile_id = ep.profile_id
+                INNER JOIN groups_accessibility_helper gah ON f.group_id = gah.group_id AND gah.profile_id = ep.profile_id
+            ''',
+            'groups_accessibility': '''
+                SELECT
+                    gah.event_id,
+                    gah.group_id,
+                    gah.profile_id,
+                    CASE WHEN
+                        gah.is_accessible_helper = 1
+                        AND (ep.can_edit = 1 OR 
+                            EXISTS (
+                                SELECT 1
+                                FROM faces_accessibility fa
+                                INNER JOIN faces f ON fa.face_id = f.face_id
+                                WHERE f.group_id = gah.group_id
+                                AND fa.profile_id = gah.profile_id
+                                AND fa.is_accessible = 1
+                            )
+                        )
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM groups_accessibility_helper gah
+                JOIN events_profiles ep ON gah.event_id = ep.event_id AND gah.profile_id = ep.profile_id
+            ''',
+            'moments_accessibility': '''
+                SELECT
+                    ep.event_id,
+                    m.moment_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        (ep.can_edit = 1 OR EXISTS (
+                            SELECT 1
+                            FROM images_accessibility ia
+                            INNER JOIN images i ON i.image_id = ia.image_id
+                            WHERE i.moment_id = m.moment_id
+                            AND ia.profile_id = ep.profile_id
+                            AND ia.is_accessible = 1
+                        ))
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM moments m
+                JOIN events_profiles ep ON m.event_id = ep.event_id
+            ''',
+            'albums_accessibility': '''
+                SELECT
+                    a.event_id,
+                    a.album_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        ((ep.all_albums = 1 AND epa.album_id IS NULL)
+                        OR (ep.all_albums = 0 AND epa.album_id IS NOT NULL))
+                        AND (ep.can_edit = 1 OR EXISTS (
+                            SELECT 1
+                            FROM images_accessibility ia
+                            INNER JOIN albums_images ai ON ai.image_id = ia.image_id
+                            WHERE ai.album_id = a.album_id
+                            AND ia.profile_id = ep.profile_id
+                            AND ia.is_accessible = 1
+                        ))
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM albums a
+                JOIN events_profiles ep ON a.event_id = ep.event_id
+                LEFT JOIN events_profiles_albums epa ON
+                    a.album_id = epa.album_id
+                    AND ep.profile_id = epa.profile_id
+                    AND a.album_id = epa.album_id
+            ''',
+
             # events
             'accessible_events': """
                 SELECT
                     e.*,
-                    COALESCE(
-                        (SELECT COUNT(image_id)
-                        FROM images
-                        WHERE event_id = e.event_id
-                        AND ep.can_manage_event = 1)
-                    , 0) AS images_count,
-                    COALESCE(
-                        (SELECT COUNT(face_id)
-                        FROM faces INNER JOIN images ON faces.image_id = images.image_id
-                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
-                    , 0) AS faces_count,
-                    COALESCE(
-                        (SELECT COUNT(album_id)
-                        FROM albums
-                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
-                    , 0) AS albums_count,
-                    COALESCE(
-                        (SELECT COUNT(moment_id)
-                        FROM moments
-                        WHERE event_id = e.event_id AND ep.can_manage_event = 1)
-                    , 0) AS moments_count
+                    (
+                        SELECT COUNT(*)
+                        FROM images_accessibility ia
+                        WHERE ia.event_id = e.event_id
+                        AND ia.profile_id = ep.profile_id
+                        AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE 0 END
+                    ) AS images_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM faces_accessibility fa
+                        WHERE fa.event_id = e.event_id
+                        AND fa.profile_id = ep.profile_id
+                        AND fa.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN fa.is_accessible ELSE 0 END
+                    ) AS faces_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM albums_accessibility aa
+                        WHERE aa.event_id = e.event_id
+                        AND aa.profile_id = ep.profile_id
+                        AND aa.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN aa.is_accessible ELSE 0 END
+                    ) AS albums_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM moments_accessibility ma
+                        WHERE ma.event_id = e.event_id
+                        AND ma.profile_id = ep.profile_id
+                        AND ma.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ma.is_accessible ELSE 0 END
+                    ) AS moments_count
                 FROM events e
                 LEFT JOIN events_profiles ep ON
                     e.event_id = ep.event_id
                     AND ep.profile_id = cur_profile('profile_id')
                 WHERE e.is_public = 1 OR ep.profile_id IS NOT NULL
-                GROUP BY e.event_id
             """,
 
             # profiles
@@ -866,14 +979,14 @@ class DB:
                     COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
                     (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
                     CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
-                    CASE WHEN COALESCE(SUM(cep.can_manage_event), 0) > 0 THEN 1 ELSE 0 END AS has_manageable_events,
+                    CASE WHEN COALESCE(SUM(cpe.can_manage_event), 0) > 0 THEN 1 ELSE 0 END AS has_manageable_events,
                     CASE WHEN
-                        COALESCE(SUM(cep.can_manage_event), 0) > 0
+                        COALESCE(SUM(cpe.can_manage_event), 0) > 0
                         OR p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
                     THEN 1 ELSE 0 END AS has_dashboard
                 FROM profiles p
                 LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
-                LEFT JOIN current_event_profile cep ON p.profile_id = cep.profile_id
+                LEFT JOIN current_profile_events cpe ON p.profile_id = cpe.profile_id
                 WHERE p.profile_id = cur_profile('profile_id')
                 GROUP BY p.profile_id
             """,

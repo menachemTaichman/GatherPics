@@ -4,6 +4,7 @@ import { setCurrentProfile, getCurrentProfile } from '../utils/profileService';
 import { initializePreferences } from '../utils/settings';
 import { useModalStore } from '../utils/modalManager';
 import { profilesAPI } from '../utils/apiService';
+import { useDataStore } from '../utils/dataManager';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +14,7 @@ export function AuthProvider({ children }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [pendingNavigation, setPendingNavigation] = useState(null);
+  const clearData = useDataStore((state) => state.clearData);
 
   // Check if user is authenticated on mount
   useEffect(() => {
@@ -25,7 +27,7 @@ export function AuthProvider({ children }) {
           await jwtService.refresh();
           setIsAuthenticated(true);
           
-          // Fetch current profile from API
+          // Fetch current profile from API (only if not on an event page, as App.jsx will handle event-specific profile fetching)
           try {
             // Try to get event URL from current location path
             // Skip reserved paths that are not event URLs
@@ -36,8 +38,11 @@ export function AuthProvider({ children }) {
               ? firstPathSegment 
               : null;
             
-            await profilesAPI.getCurrentProfile(eventUrl);
-            // currentProfile updated via changes in response interceptor
+            // Only fetch profile if not on an event page (App.jsx will handle event-specific fetching)
+            if (!eventUrl) {
+              await profilesAPI.getCurrentProfile(null);
+              // currentProfile updated via changes in response interceptor
+            }
           } catch (error) {
             console.error('Failed to fetch current profile:', error);
           }
@@ -76,6 +81,19 @@ export function AuthProvider({ children }) {
       window.removeEventListener('auth:required', handleAuthRequired);
     };
   }, []);
+
+  // Clear data store on logout (works for both this tab and cross-tab logout)
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      clearData();
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [clearData]);
 
   // Listen for auth events from other tabs
   useEffect(() => {
