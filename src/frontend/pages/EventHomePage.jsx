@@ -18,6 +18,11 @@ export default function EventHomePage({ eventUrl, eventData }) {
   const [headerVisible, setHeaderVisible] = useState(false);
   const hideTimeoutRef = useRef(null);
   const headerOriginalStylesRef = useRef(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const heroRef = useRef(null);
+  const heroHeightRef = useRef(null);
+  const heroInnerRef = useRef(null);
+  const [naturalHeight, setNaturalHeight] = useState(null);
 
   const eventId = eventData?.id || eventData?.event_id || null;
   useApplyScopes(eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
@@ -54,6 +59,20 @@ export default function EventHomePage({ eventUrl, eventData }) {
       return parsed.toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return null;
+    }
+  }, [primaryDate]);
+
+  const shortFormattedDate = useMemo(() => {
+    if (!primaryDate) return null;
+    try {
+      const parsed = new Date(primaryDate);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed.toLocaleDateString(undefined, {
+        month: 'short',
         day: 'numeric',
       });
     } catch {
@@ -140,6 +159,96 @@ export default function EventHomePage({ eventUrl, eventData }) {
       restoreHeaderStyles();
     };
   }, [applyHeaderVisibility, clearHideTimeout, handleInteraction, restoreHeaderStyles]);
+
+  useEffect(() => {
+    let ticking = false;
+    let scrollTimeout = null;
+    
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY;
+          // Once scrolled past threshold, keep it small. Only restore full height when at very top (0)
+          const scrollDownThreshold = 150;
+          const newIsScrolled = scrollY > scrollDownThreshold;
+          
+          // Clear any pending scroll timeout
+          if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+          }
+          
+          // Small debounce to reduce rapid toggling during fast scrolling
+          scrollTimeout = setTimeout(() => {
+            if (newIsScrolled !== isScrolled) {
+              console.log('🔄 Scroll state change:', { 
+                scrollY: scrollY.toFixed(2), 
+                scrollDownThreshold,
+                isScrolled: newIsScrolled,
+                wasScrolled: isScrolled
+              });
+              setIsScrolled(newIsScrolled);
+            }
+          }, 10); // 10ms debounce for smoother feel
+          
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+    };
+  }, [isScrolled]);
+
+  useEffect(() => {
+    // Measure natural height on mount
+    if (heroInnerRef.current && !naturalHeight) {
+      const height = heroInnerRef.current.offsetHeight;
+      console.log('📐 Measured natural height:', height);
+      setNaturalHeight(height);
+    }
+  }, [naturalHeight]);
+
+  useEffect(() => {
+    if (heroInnerRef.current && naturalHeight) {
+      const innerEl = heroInnerRef.current;
+      const targetHeight = isScrolled ? 150 : naturalHeight;
+      
+      // Ensure transition is set first - longer duration and smoother easing for less bounce
+      const transitionValue = 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), min-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), max-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      innerEl.style.transition = transitionValue;
+      
+      // Use double requestAnimationFrame to ensure browser has applied transition before changing height
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          innerEl.style.height = `${targetHeight}px`;
+          innerEl.style.minHeight = `${targetHeight}px`;
+          if (isScrolled) {
+            innerEl.style.maxHeight = '150px';
+          } else {
+            innerEl.style.removeProperty('max-height');
+          }
+        });
+      });
+      
+      // Log after transition completes
+      setTimeout(() => {
+        const computedHeight = window.getComputedStyle(innerEl).height;
+        const actualHeight = innerEl.offsetHeight;
+        console.log('📏 Hero height update:', { 
+          isScrolled, 
+          targetHeight,
+          computedHeight,
+          actualHeight,
+          naturalHeight,
+          styleHeight: innerEl.style.height
+        });
+      }, 600);
+    }
+  }, [isScrolled, naturalHeight]);
 
   // Define navigation cards
   const navCards = [
@@ -334,61 +443,128 @@ export default function EventHomePage({ eventUrl, eventData }) {
         style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
       >
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-16"
-          style={{ marginTop: '-4.5rem' }}
+        <div 
+          ref={heroHeightRef}
+          className="mb-16 relative min-h-[380px] sm:min-h-[460px] md:min-h-[560px]"
+          style={{ 
+            marginTop: '-4.5rem'
+          }}
         >
-          <div className="relative -mx-4 sm:-mx-8 md:-mx-12 lg:-mx-16 xl:-mx-24">
-            <div className="relative isolate overflow-hidden bg-gray-900 shadow-2xl min-h-[380px] sm:min-h-[460px] md:min-h-[560px]">
-              <div className="absolute inset-0">
-                {ImageComponent(
-                  heroImageUrl,
-                  {
-                    width: 1600,
-                    height: 640,
-                    className: 'h-full w-full object-cover',
-                    alt: eventName ? `${eventName} highlight` : 'Event highlight',
-                    loading: 'eager',
-                  }
-                )}
-              </div>
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/70 via-black/40 to-black/35" />
-              <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary-500/40 blur-3xl" />
-              <div className="pointer-events-none absolute -left-16 bottom-0 h-64 w-64 rounded-full bg-purple-500/30 blur-3xl" />
-              <div className="relative z-10 flex h-full flex-col justify-between px-8 pb-8 pt-28 sm:px-10 sm:pb-10 sm:pt-36 md:px-12 md:pb-12 md:pt-40">
-                <div>
-                  <span className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur">
-                    {APP_CONFIG.name}
-                  </span>
-                  <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-                    {eventName}
-                  </h1>
+          {/* Spacer to maintain space when hero shrinks */}
+          {naturalHeight && (
+            <div 
+              style={{ 
+                height: isScrolled ? `${naturalHeight - 150}px` : '0px',
+                transition: 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                overflow: 'hidden'
+              }}
+            />
+          )}
+          <motion.div
+            ref={heroRef}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className={`transition-all duration-700 ease-out ${isScrolled ? 'fixed top-0 left-0 right-0 z-50' : 'relative'}`}
+            style={isScrolled ? { 
+              marginTop: 0,
+              marginLeft: 0,
+              marginRight: 0
+            } : {}}
+          >
+            <div className={`relative ${isScrolled ? 'w-full' : '-mx-4 sm:-mx-8 md:-mx-12 lg:-mx-16 xl:-mx-24'}`}>
+              <div 
+                ref={heroInnerRef}
+                className={`relative isolate overflow-hidden bg-gray-900 shadow-2xl w-full ${!naturalHeight ? 'min-h-[380px] sm:min-h-[460px] md:min-h-[560px]' : ''}`}
+                style={{
+                  transition: 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), min-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), max-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                  willChange: 'height, min-height, max-height',
+                  transform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden'
+                }}
+              >
+                <div className="absolute inset-0">
+                  {ImageComponent(
+                    heroImageUrl,
+                    {
+                      width: 1600,
+                      height: 640,
+                      className: 'h-full w-full object-cover',
+                      alt: eventName ? `${eventName} highlight` : 'Event highlight',
+                      loading: 'eager',
+                    }
+                  )}
                 </div>
-                <div className="mt-6 flex flex-wrap gap-3 text-xs font-medium text-white/80 sm:text-sm">
-                  {formattedDate && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                      <Calendar className="h-4 w-4" />
-                      {formattedDate}
-                    </span>
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/70 via-black/40 to-black/35" />
+                {!isScrolled && (
+                  <>
+                    <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary-500/40 blur-3xl" />
+                    <div className="pointer-events-none absolute -left-16 bottom-0 h-64 w-64 rounded-full bg-purple-500/30 blur-3xl" />
+                  </>
+                )}
+                <div className={`relative z-10 flex h-full flex-col ${isScrolled ? 'justify-start px-4 sm:px-6 py-3 sm:py-4' : 'justify-start px-8 pb-8 pt-28 sm:px-10 sm:pb-10 sm:pt-36 md:px-12 md:pb-12 md:pt-40'} transition-all duration-500 ease-in-out`}>
+                  {isScrolled ? (
+                    <div className="flex flex-col gap-2.5 sm:gap-3">
+                      <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-white/80 backdrop-blur whitespace-nowrap w-fit">
+                        {APP_CONFIG.name}
+                      </span>
+                      <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-white">
+                        {eventName}
+                      </h1>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs font-medium text-white/80">
+                        {formattedDate && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
+                            <Calendar className="h-4 w-4 shrink-0" />
+                            <span className="hidden sm:inline">{formattedDate}</span>
+                            {shortFormattedDate && <span className="sm:hidden">{shortFormattedDate}</span>}
+                          </span>
+                        )}
+                        {resolvedEvent?.location && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
+                            {resolvedEvent.location}
+                          </span>
+                        )}
+                        {resolvedEvent?.images_count ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
+                            {resolvedEvent.images_count} photos
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur">
+                        {APP_CONFIG.name}
+                      </span>
+                      <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+                        {eventName}
+                      </h1>
+                      <div className="mt-6 flex flex-wrap gap-3 text-xs font-medium text-white/80 sm:text-sm">
+                        {formattedDate && (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                            <Calendar className="h-4 w-4" />
+                            {formattedDate}
+                          </span>
+                        )}
+                        {resolvedEvent?.location && (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                            {resolvedEvent.location}
+                          </span>
+                        )}
+                        {resolvedEvent?.images_count ? (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                            {resolvedEvent.images_count} photos
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
                   )}
-                  {resolvedEvent?.location && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                      {resolvedEvent.location}
-                    </span>
-                  )}
-                  {resolvedEvent?.images_count ? (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                      {resolvedEvent.images_count} photos
-                    </span>
-                  ) : null}
                 </div>
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
 
         {/* Navigation Cards */}
         <div className="max-w-5xl mx-auto">

@@ -699,7 +699,7 @@ def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child
                 'type': 'RELATION_ADD',
                 'relation': f'profile.{child}',
                 'parentId': profile_id,
-                'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
+                'entities': event.models.get_childs('events_profiles', profile_id, child, child_ids)
             }]
         else:
             changes = [{

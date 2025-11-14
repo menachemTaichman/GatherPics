@@ -1864,10 +1864,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
                             SELECT 1
-                            FROM accessible_events_profiles_images
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND profile_id = NEW.profile_id
-                            AND image_id = NEW.image_id
+                            FROM accessible_images
+                            WHERE image_id = NEW.image_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the image is not accessible')
                     END;
@@ -1889,10 +1887,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
                             SELECT 1
-                            FROM accessible_events_profiles_images
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND profile_id = OLD.profile_id
-                            AND image_id = OLD.image_id
+                            FROM accessible_images
+                            WHERE image_id = OLD.image_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the image is not accessible')
                     END;
@@ -1918,10 +1914,9 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
                             SELECT 1
-                            FROM accessible_events_profiles_groups
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND profile_id = NEW.profile_id
-                            AND group_id = NEW.group_id
+                            FROM accessible_groups
+                            WHERE group_id = NEW.group_id
+                            AND is_accessible = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
@@ -1943,10 +1938,9 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
                             SELECT 1
-                            FROM accessible_events_profiles_groups
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND profile_id = OLD.profile_id
-                            AND group_id = OLD.group_id
+                            FROM accessible_groups
+                            WHERE group_id = OLD.group_id
+                            AND is_accessible = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
@@ -1971,7 +1965,8 @@ class DB:
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
-                            SELECT 1 FROM accessible_events_profiles_albums WHERE event_id = cur_event_profile('event_id') AND profile_id = NEW.profile_id AND album_id = NEW.album_id
+                            SELECT 1 FROM accessible_albums
+                            WHERE album_id = NEW.album_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the album is not accessible')
                     END;
@@ -1992,10 +1987,16 @@ class DB:
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NOT EXISTS (
-                            SELECT 1 FROM accessible_events_profiles_albums WHERE event_id = cur_event_profile('event_id') AND profile_id = OLD.profile_id AND album_id = OLD.album_id
+                            SELECT 1 FROM accessible_albums
+                            WHERE album_id = OLD.album_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the album is not accessible')
                     END;
+
+                    DELETE FROM events_profiles_albums
+                    WHERE event_id = cur_event_profile('event_id')
+                    AND profile_id = OLD.profile_id
+                    AND album_id = OLD.album_id;
                 END;
             """,
 

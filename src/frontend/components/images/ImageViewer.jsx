@@ -257,10 +257,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       }
     });
     
-    // Convert to image objects
+    // Convert to image objects and filter by includeArchived
     const allImages = Array.from(allImageIds)
       .map(imageId => entities?.images?.[imageId])
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((img) => includeArchived || !img.is_archived);
     
     const filtered = filterImages(allImages, allGroups, filterMode, onlySelected);
     
@@ -268,7 +269,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const sorted = sortImages(filtered, sortBy, sortOrder);
     
     return sorted;
-  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder]);
+  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived]);
   
   useEffect(() => {
   }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);
@@ -1311,7 +1312,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         </PermissionGate>
 
                         <PermissionGate requires="hasArchiveAlbum">
-                          {imageActions.isArchived && (
+                          {(permissions.canEdit || imageActions.isArchived) && (
                             <button
                               type="button"
                               onClick={(e) => {

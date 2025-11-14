@@ -624,10 +624,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         }
       });
       
-      // Convert to image objects
+      // Convert to image objects and filter by includeArchived
       const allImages = Array.from(allImageIds)
         .map(imageId => storeImages[imageId])
-        .filter(Boolean);
+        .filter(Boolean)
+        .filter((img) => includeArchived || !img.is_archived);
       
       images = filterImages(allImages, allGroups, filterMode, onlySelected);
     }
@@ -635,7 +636,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     const out = sortImages(images, 'date', sortOrder);
     
     return out;
-  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected]);
+  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected, includeArchived]);
 
   // Memoize filtered imageIds to prevent infinite re-renders in GroupsFilter
   // Use the already filtered images from sortedImages instead of all images from main group

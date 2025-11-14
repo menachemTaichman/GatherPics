@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, LayoutDashboard, LogIn } from 'lucide-react';
+import { LayoutDashboard, LogIn } from 'lucide-react';
 import { Header } from '../components/layout';
 import { LoadingSpinner } from '../components/common';
 import { LoginModal } from '../components/auth';
@@ -12,6 +12,20 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventsGeneralList } from '../utils/dataManager';
 import { eventsAPI, API_BASE } from '../utils/apiService';
 import { ImageComponent } from '../hooks/useImage.jsx';
+
+function formatDateDDMMYYYY(dateString) {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return dateString;
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch {
+    return dateString;
+  }
+}
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -112,6 +126,11 @@ export default function HomePage() {
   }, [hasEvents]);
 
   const handleEventClick = (e, eventUrl, eventData) => {
+    // Allow default behavior for modifier keys (Ctrl/Cmd/Shift for new tab/window)
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      return;
+    }
+    
     e.preventDefault();
     
     if (isAuthenticated) {
@@ -244,7 +263,7 @@ export default function HomePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="max-w-5xl mx-auto"
+              className="max-w-[1100px] mx-auto"
             >
               <div className="text-center mb-10">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-2">
@@ -255,7 +274,7 @@ export default function HomePage() {
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="flex flex-wrap justify-center gap-5">
                 {eventsArray.map((event, index) => {
                   const eventId = event.event_id || event.id;
                   if (!eventId) return null;
@@ -265,7 +284,7 @@ export default function HomePage() {
                     key={eventId}
                     href={`/${event.url}`}
                     onClick={(e) => handleEventClick(e, event.url, { ...event, id: eventId, event_id: eventId })}
-                    className="group block h-full cursor-pointer"
+                    className="group block h-full cursor-pointer w-full md:w-[calc(50%-0.625rem)] lg:w-[calc(50%-0.625rem)] xl:w-[calc(33.333%-1.333rem)]"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.4 + index * 0.05 }}
@@ -286,12 +305,12 @@ export default function HomePage() {
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/15 to-transparent opacity-60 transition-opacity duration-500 group-hover:opacity-70" />
                       </div>
                       <div className="flex flex-1 flex-col p-6">
-                        <div className="mb-3 flex items-start justify-between">
+                        <div className="mb-3 flex items-center justify-between">
                           <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
                             {event.name}
                           </h3>
                           <svg 
-                            className="h-5 w-5 flex-shrink-0 text-gray-400 transition-all group-hover:text-primary-600" 
+                            className="h-5 w-5 flex-shrink-0 text-gray-400 transition-all group-hover:text-primary-600 ml-2" 
                             fill="none" 
                             stroke="currentColor" 
                             viewBox="0 0 24 24"
@@ -304,13 +323,9 @@ export default function HomePage() {
                             <svg className="mr-2 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            {event.date}
+                            {formatDateDDMMYYYY(event.date)}
                           </div>
                         )}
-                        <div className="mt-auto flex items-center text-sm text-primary-600">
-                          <User className="mr-2 h-4 w-4" />
-                          View Photos
-                        </div>
                       </div>
                     </div>
                   </motion.a>
