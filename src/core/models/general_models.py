@@ -222,6 +222,7 @@ class GeneralModels(BaseModels):
         event = self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
         if not event:
             return self.db.execute_query("SELECT event_id FROM events WHERE url = ?", (url,), return_format=ReturnFormat.DICT)
+        return event
 
     def get_event_url(self, event_id: str) -> str | None:
         """Get event URL by event ID."""
