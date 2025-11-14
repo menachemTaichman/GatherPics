@@ -273,26 +273,8 @@ ids = {
 }
 
 
-missing_face = 'c61090e9-80bd-428e-8885-0f583a74703d'
+# recreate_views_triggers_and_indexes(general_models.db)
 
-recreate_views_triggers_and_indexes(general_models.db)
-
-profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-child = 'images'
-child_ids = ids[child]
-set_accessible = False
-affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
-if added:
-    changes = [{
-        'type': 'RELATION_ADD',
-        'relation': f'profile.{child}',
-        'parentId': profile_id,
-        'entities': event.models.get_childs('profiles', profile_id, child, child_ids)
-    }]
-else:
-    changes = [{
-        'type': 'RELATION_REMOVE',
-        'relation': f'profile.{child}',
-        'parentId': profile_id,
-        'ids': affected_ids
-    }]
+general_models = GeneralModels()
+result = general_models.get_entities('events', '75cb6635-879d-4386-b023-366444dc0fb2')
+print(result)

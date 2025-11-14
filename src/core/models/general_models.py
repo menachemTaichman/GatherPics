@@ -218,8 +218,10 @@ class GeneralModels(BaseModels):
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
         fields = self.db.get_view_fields('events')
-        query = f'SELECT {fields} FROM events WHERE url = ?'
-        return self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
+        query = f'SELECT {fields} FROM accessible_events WHERE url = ?'
+        event = self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
+        if not event:
+            return self.db.execute_query("SELECT event_id FROM events WHERE url = ?", (url,), return_format=ReturnFormat.DICT)
 
     def get_event_url(self, event_id: str) -> str | None:
         """Get event URL by event ID."""

@@ -11,10 +11,12 @@ import { API_BASE } from '../utils/apiService';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useEventGeneralById } from '../utils/dataManager';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAuth } from '../contexts/authContext';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const [showEventSettings, setShowEventSettings] = useState(false);
   const { showToast } = useToast();
+  const { isAuthenticated } = useAuth();
   const [headerVisible, setHeaderVisible] = useState(false);
   const hideTimeoutRef = useRef(null);
   const headerOriginalStylesRef = useRef(null);
@@ -34,11 +36,48 @@ export default function EventHomePage({ eventUrl, eventData }) {
   const permissions = usePermissions();
   const canSeeAlbums = Boolean(eventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit);
 
+  // Track previous representative_image value to detect actual changes
+  const prevRepresentativeImageRef = useRef(undefined);
   const [heroCacheBuster, setHeroCacheBuster] = useState(() => Date.now());
 
   useEffect(() => {
-    setHeroCacheBuster(Date.now());
+    // Only update cache buster when representative_image actually changes value
+    // Skip update if this is the first time we're seeing a value (prevRef is undefined)
+    // This prevents double image loads: one with initial cache buster, one after useEffect runs
+    const currentImage = resolvedEvent?.representative_image ?? null;
+    const prevImage = prevRepresentativeImageRef.current;
+    
+    // Only update if:
+    // 1. We've seen a value before (prevImage !== undefined) AND it changed, OR
+    // 2. We're transitioning from a value to null (or vice versa) after initial render
+    if (prevImage !== undefined && prevImage !== currentImage) {
+      setHeroCacheBuster(Date.now());
+    }
+    
+    // Always update the ref to track the current value
+    prevRepresentativeImageRef.current = currentImage;
   }, [resolvedEvent?.representative_image]);
+
+  // Refresh cache buster on auth:login to reload image after sign in
+  useEffect(() => {
+    const handleAuthLogin = () => {
+      // Refresh cache buster to force image reload after sign in
+      setHeroCacheBuster(Date.now());
+    };
+
+    const handleAuthLogout = () => {
+      // Clear cache buster on logout to ensure image is cleared
+      setHeroCacheBuster(Date.now());
+    };
+
+    window.addEventListener('auth:login', handleAuthLogin);
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:login', handleAuthLogin);
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, []);
 
   const representativeCacheKey = useMemo(() => {
     const imageKey = resolvedEvent?.representative_image ? String(resolvedEvent.representative_image) : 'none';
@@ -46,9 +85,10 @@ export default function EventHomePage({ eventUrl, eventData }) {
   }, [resolvedEvent?.representative_image, heroCacheBuster]);
 
   const heroImageUrl = useMemo(() => {
-    if (!eventId) return null;
+    // Don't show image if not authenticated or no event data
+    if (!isAuthenticated || !eventId || !resolvedEvent) return null;
     return `${API_BASE}/api/events/${eventId}/representative/display?v=${encodeURIComponent(representativeCacheKey)}`;
-  }, [eventId, representativeCacheKey]);
+  }, [isAuthenticated, eventId, resolvedEvent, representativeCacheKey]);
 
   const primaryDate = resolvedEvent?.date || resolvedEvent?.start || resolvedEvent?.start_date || null;
   const formattedDate = useMemo(() => {
@@ -114,7 +154,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
     }
   }, []);
 
-  const AUTO_HIDE_DELAY_MS = 1800;
+  const AUTO_HIDE_DELAY_MS = 500;
 
   const scheduleHide = useCallback(() => {
     clearHideTimeout();
