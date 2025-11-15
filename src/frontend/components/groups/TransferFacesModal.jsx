@@ -241,13 +241,36 @@ export default function TransferFacesModal({
       const imageText = transferredCount === 1 ? 'photo' : 'photos';
       const targetGroupId = result.target_group_id;
       
-      // Get the target group from the freshly updated store
+      // Get the target group name - try multiple sources
+      let targetGroupName = null;
+      let targetGroup = null;
+      
+      // First, try to get from the freshly updated store
       const updatedGroups = storeSelectors.groupsAll(useDataStore.getState());
-      const targetGroup = updatedGroups.find(g => g.id === targetGroupId);
+      targetGroup = updatedGroups.find(g => g.id === targetGroupId);
       
       if (targetGroup) {
+        targetGroupName = targetGroup.label;
+      } else {
+        // If not in store yet, try to get from the currently loaded groups
+        targetGroup = groups.find(g => g.id === targetGroupId);
+        if (targetGroup) {
+          targetGroupName = targetGroup.label;
+        } else if (newGroupName.trim()) {
+          // If a new group was created, use the name that was entered
+          targetGroupName = newGroupName.trim();
+        } else if (selectedGroupId) {
+          // Fallback: try to find the selected group from current groups
+          const selectedGroup = groups.find(g => g.id === selectedGroupId);
+          if (selectedGroup) {
+            targetGroupName = selectedGroup.label;
+          }
+        }
+      }
+      
+      if (targetGroupName) {
         // Show success toast with link to target group
-        const link = `/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`;
+        const link = `/${eventUrl}/people/${encodeURIComponent(targetGroupName)}`;
         
         // Extract affected items for highlighting based on mode
         let highlightState;
@@ -274,12 +297,12 @@ export default function TransferFacesModal({
                   });
                 }
               }}
-            >{targetGroup.label}</a>
+            >{targetGroupName}</a>
           </span>,
           'success'
         );
       } else {
-        // Fallback if group not found in store (shouldn't happen)
+        // Fallback if group name couldn't be determined
         showToast(`${transferredCount} ${imageText} transferred`, 'success');
       }
 
