@@ -196,12 +196,12 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
       <div className="flex items-center space-x-2">
         <button
           onClick={handleAllow}
-          disabled={isLoadingAny}
+          disabled={isLoadingAny || status === 'allowed'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
             status === 'allowed'
               ? 'bg-green-100 text-green-700 hover:bg-green-200'
               : 'bg-green-600 text-white hover:bg-green-700'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          } disabled:opacity-50`}
         >
           {isLoadingAllow ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -212,12 +212,12 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         </button>
         <button
           onClick={handleDeny}
-          disabled={isLoadingAny}
+          disabled={isLoadingAny || status === 'denied'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
             status === 'denied'
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-red-600 text-white hover:bg-red-700'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          } disabled:opacity-50`}
         >
           {isLoadingDeny ? (
             <Loader2 className="w-4 h-4 animate-spin" />
