@@ -172,9 +172,27 @@ class GeneralModels(BaseModels):
                 'restricted_to_event': event_id
             }
             applicant_profile_id = self.add('profiles', data)
-            event.models.edit_childs('events', event_id, 'profiles', [applicant_profile_id], operation=ChildOperation.ADD)
+            requester_profile_id = access_request['profile_id']
+            requester_profile, requester_event_profile = self.get_childs('events', event_id, 'profiles', [requester_profile_id])
+            requester_event_profile = requester_event_profile[requester_profile_id]
+            relation_fields = [
+                'can_delete_event',
+                'can_manage_event',
+                'can_upload_and_delete_images',
+                'all_images',
+                'all_groups',
+                'all_albums',
+                'can_edit',
+            ]
+            data = {field: requester_event_profile[field] for field in relation_fields}
+            event.models.edit_childs('events', event_id, 'profiles', [applicant_profile_id], operation=ChildOperation.ADD, data=data)
+            for child in ['images', 'albums', 'groups']:
+                requester_profile_childs = event.models.get_childs('events_profiles', requester_profile_id, child)
+                event.models.edit_childs('events_profiles', applicant_profile_id, child, requester_profile_childs, operation=ChildOperation.ADD)
+
+            event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         
-        applicant_profile_id = event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details, applicant_profile_id)
+        event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
         if applicant_profile_id:
             self.add('notifications', {
                 'profile_id': applicant_profile_id,

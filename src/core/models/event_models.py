@@ -1,8 +1,7 @@
 from typing import List, Dict, Any
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
-from src.core.errors import DBPolicyError
-import secrets
+from src.core.errors import DBPolicyError, Forbidden
 from datetime import datetime
 
 class EventModels(BaseModels):
@@ -458,14 +457,7 @@ class EventModels(BaseModels):
         valid_ids, _ = self.edit_childs('events_profiles', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
-    def toggle_access_request(
-        self,
-        access_request_id: str,
-        approved_group_ids: list[str] | None = None,
-        denied_group_ids: list[str] | None = None,
-        closed_details: str | None = None,
-        applicant_profile_id: str | None = None
-    ) -> str | None:
+    def toggle_access_request(self, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None):
         """
         Approve or deny an access request for groups.
         Args:
@@ -473,25 +465,13 @@ class EventModels(BaseModels):
             approved_group_ids: list of group ids to approve
             denied_group_ids: list of group ids to deny
             closed_details: details of the closed request to add to the closed details list
-            applicant_profile_id: applicant profile id, if None, use the existing applicant profile id
-        Returns:
-            applicant profile id if the request was not completely rejected, None otherwise
         """
-        if applicant_profile_id:
-            self.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         access_request = self.get_entities('access_requests', access_request_id)
         if not access_request:
-            raise ValueError(f"Access request not found for id {access_request_id}")
-        applicant_profile_id = access_request['applicant_profile_id']
-        if approved_group_ids and not applicant_profile_id:
-            raise ValueError(f"Applicant profile id not found for access request {access_request_id}")            
+            raise Forbidden(f"Access request not found for id {access_request_id}")
         
-        request_groups = self.get_childs('access_requests', access_request_id, 'groups', return_ids=True)
-        accessible_groups = [group_id for group_id, group in self.get_entities('groups', request_groups).items() if group['is_accessible']]
-
         edited = False
         for response, group_ids in {1: approved_group_ids, 0: denied_group_ids}.items():
-            group_ids = list(set(group_ids) & set(accessible_groups) & set(request_groups))
             if not group_ids:
                 continue
             data = {'approved': response, 'closed_at': datetime.now()}
@@ -506,5 +486,3 @@ class EventModels(BaseModels):
             """
             closed_details = self.db.serialize_value(list, access_request['closed_details'] + [closed_details])
             self.db.execute_query(query, (closed_details, access_request_id))
-
-        return applicant_profile_id

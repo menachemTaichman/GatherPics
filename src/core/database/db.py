@@ -759,14 +759,31 @@ class DB:
     def VIEWS(self) -> dict:
         return {
             # all profiles accessibility
+            'albums_accessibility_helper': '''
+                SELECT
+                    a.event_id,
+                    a.album_id,
+                    ep.profile_id,
+                    CASE WHEN
+                        (ep.all_albums = 1 AND epa.album_id IS NULL)
+                        OR (ep.all_albums = 0 AND epa.album_id IS NOT NULL)
+                    THEN 1 ELSE 0 END AS is_accessible
+                FROM albums a
+                JOIN events_profiles ep ON a.event_id = ep.event_id
+                LEFT JOIN events_profiles_albums epa ON
+                    a.album_id = epa.album_id
+                    AND ep.profile_id = epa.profile_id
+                    AND a.album_id = epa.album_id
+            ''',
             'images_accessibility': '''
                 SELECT
                     i.event_id,
                     i.image_id,
                     ep.profile_id,
                     CASE WHEN
-                        (ep.all_images = 1 AND epi.image_id IS NULL)
-                        OR (ep.all_images = 0 AND epi.image_id IS NOT NULL)
+                        ((ep.all_images = 1 AND epi.image_id IS NULL)
+                        OR (ep.all_images = 0 AND epi.image_id IS NOT NULL))
+                        AND (aah.is_accessible = 1 OR aah.is_accessible IS NULL)
                     THEN 1 ELSE 0 END AS is_accessible
                 FROM images i
                 JOIN events_profiles ep ON i.event_id = ep.event_id
@@ -774,6 +791,13 @@ class DB:
                     i.image_id = epi.image_id
                     AND ep.profile_id = epi.profile_id
                     AND i.image_id = epi.image_id
+                LEFT JOIN (
+                    albums_images ai
+                    INNER JOIN albums a ON
+                        ai.album_id = a.album_id
+                        AND LOWER(a.label) = 'archive'
+                    INNER JOIN albums_accessibility_helper aah ON aah.album_id = ai.album_id
+                ) ON i.image_id = ai.image_id AND aah.profile_id = ep.profile_id
             ''',
             'groups_accessibility_helper': '''
                 SELECT
@@ -847,27 +871,22 @@ class DB:
             ''',
             'albums_accessibility': '''
                 SELECT
-                    a.event_id,
-                    a.album_id,
+                    aah.event_id,
+                    aah.album_id,
                     ep.profile_id,
                     CASE WHEN
-                        ((ep.all_albums = 1 AND epa.album_id IS NULL)
-                        OR (ep.all_albums = 0 AND epa.album_id IS NOT NULL))
+                        aah.is_accessible = 1
                         AND (ep.can_edit = 1 OR EXISTS (
                             SELECT 1
                             FROM images_accessibility ia
                             INNER JOIN albums_images ai ON ai.image_id = ia.image_id
-                            WHERE ai.album_id = a.album_id
+                            WHERE ai.album_id = aah.album_id
                             AND ia.profile_id = ep.profile_id
                             AND ia.is_accessible = 1
                         ))
                     THEN 1 ELSE 0 END AS is_accessible
-                FROM albums a
-                JOIN events_profiles ep ON a.event_id = ep.event_id
-                LEFT JOIN events_profiles_albums epa ON
-                    a.album_id = epa.album_id
-                    AND ep.profile_id = epa.profile_id
-                    AND a.album_id = epa.album_id
+                FROM albums_accessibility_helper aah
+                JOIN events_profiles ep ON aah.event_id = ep.event_id AND aah.profile_id = ep.profile_id
             ''',
 
             # events
@@ -1441,9 +1460,9 @@ class DB:
                         NEW.name,
                         NEW.date,
                         NEW.url,
-                        NEW.is_public,
-                        NEW.images_count_limit,
-                        NEW.image_size_limit_bytes,
+                        COALESCE(NEW.is_public, 0),
+                        COALESCE(NEW.images_count_limit, 0),
+                        COALESCE(NEW.image_size_limit_bytes, NULL),
                         NEW.representative_image
                     );
 
@@ -1538,7 +1557,16 @@ class DB:
                     END;
 
                     INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event, is_public)
-                    VALUES (NEW.profile_id, NEW.label, NEW.email, NEW.password, NEW.hierarchy_rank, NEW.can_create_events, NEW.restricted_to_event, NEW.is_public);
+                    VALUES (
+                        NEW.profile_id,
+                        NEW.label,
+                        NEW.email,
+                        NEW.password,
+                        COALESCE(NEW.hierarchy_rank, 0),
+                        COALESCE(NEW.can_create_events, 0),
+                        NEW.restricted_to_event,
+                        COALESCE(NEW.is_public, 0)
+                    );
                 END;
             """,
             'trg_accessible_profiles_update': """
@@ -1675,9 +1703,9 @@ class DB:
                         NEW.profile_id,
                         NEW.sender_name,
                         NEW.sender_email,
-                        NEW.communication_consent,
+                        COALESCE(NEW.communication_consent, 0),
                         NEW.title,
-                        NEW.type,
+                        COALESCE(NEW.type, 0),
                         NEW.message,
                         COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
                         NEW.user_agent,
@@ -1830,13 +1858,13 @@ class DB:
                     VALUES (
                         NEW.profile_id,
                         cur_event_profile('event_id'),
-                        NEW.can_manage_event,
-                        NEW.can_delete_event,
-                        NEW.can_upload_and_delete_images,
-                        NEW.can_edit,
-                        NEW.all_images,
-                        NEW.all_groups,
-                        NEW.all_albums
+                        COALESCE(NEW.can_manage_event, 0),
+                        COALESCE(NEW.can_delete_event, 0),
+                        COALESCE(NEW.can_upload_and_delete_images, 0),
+                        COALESCE(NEW.can_edit, 0),
+                        COALESCE(NEW.all_images, 0),
+                        COALESCE(NEW.all_groups, 0),
+                        COALESCE(NEW.all_albums, 0)
                     );
 
                     -- Create the events_profiles_images and events_profiles_groups and events_profiles_albums tables
@@ -2176,10 +2204,10 @@ class DB:
                         NEW.face_id,
                         NEW.image_id,
                         NEW.group_id,
-                        NEW.width,
-                        NEW.height,
-                        NEW.left,
-                        NEW.top
+                        COALESCE(NEW.width, 0),
+                        COALESCE(NEW.height, 0),
+                        COALESCE(NEW.left, 0),
+                        COALESCE(NEW.top, 0)
                     );
                 END;
             """,
@@ -2240,9 +2268,9 @@ class DB:
                         cur_event_profile('event_id'),
                         NEW.date_taken,
                         NEW.label,
-                        NEW.file_size,
-                        NEW.width,
-                        NEW.height,
+                        COALESCE(NEW.file_size, 0),
+                        COALESCE(NEW.width, 0),
+                        COALESCE(NEW.height, 0),
                         NEW.moment_id,
                         NEW.upload_id
                     );
@@ -2500,10 +2528,10 @@ class DB:
                         NEW.started_at,
                         NEW.completed_at,
                         NEW.status,
-                        NEW.images_count,
-                        NEW.faces_count,
-                        NEW.clusters_count,
-                        NEW.moments_count,
+                        COALESCE(NEW.images_count, 0),
+                        COALESCE(NEW.faces_count, 0),
+                        COALESCE(NEW.clusters_count, 0),
+                        COALESCE(NEW.moments_count, 0),
                         NEW.errors,
                         NEW.notes
                     );
@@ -2799,7 +2827,7 @@ class DB:
                     END;
 
                     -- TODO: use IF
-                    INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
+                    INSERT OR IGNORE INTO events_profiles_groups (event_id, profile_id, group_id)
                     SELECT
                         aar.event_id as event_id,
                         aar.applicant_profile_id as profile_id,
@@ -2807,24 +2835,23 @@ class DB:
                     FROM accessible_access_requests aar
                     INNER JOIN accessible_events_profiles aep
                         ON aep.profile_id = aar.applicant_profile_id
-                        AND aar.access_request_id = OLD.access_request_id
-                    LEFT JOIN events_profiles_groups epg ON epg.event_id = aar.event_id AND epg.profile_id = aar.applicant_profile_id AND epg.group_id = OLD.group_id
-                    WHERE epg.event_id IS NULL AND NEW.approved IS NOT NULL
-                    AND ((aep.all_groups = 0 AND NEW.approved = 1) OR (aep.all_groups = 1 AND NEW.approved = 0));
-                
+                    WHERE aar.access_request_id = OLD.access_request_id
+                    AND aep.all_groups = 0 AND NEW.approved = 1;
+
                     DELETE FROM events_profiles_groups
-                    WHERE event_id = cur_event_profile('event_id')
-                    AND profile_id = (SELECT aar.applicant_profile_id FROM accessible_access_requests aar WHERE OLD.access_request_id = aar.access_request_id)
-                    AND group_id = OLD.group_id
-                    AND EXISTS (
-                        SELECT 1
-                        FROM accessible_events_profiles aep
-                        INNER JOIN accessible_access_requests aar
-                            ON aar.applicant_profile_id = aep.profile_id
-                            AND aar.access_request_id = OLD.access_request_id
-                        WHERE
-                            aep.all_groups = 1 AND NEW.approved = 1
-                            OR (aep.all_groups = 0 AND NEW.approved = 0)
+                    WHERE rowid IN (
+                        SELECT epg.rowid
+                        FROM events_profiles ep
+                        INNER JOIN events_profiles_groups epg ON
+                            ep.event_id = epg.event_id
+                            AND ep.profile_id = epg.profile_id
+                        INNER JOIN access_requests ar ON
+                            ar.applicant_profile_id = ep.profile_id
+                            AND ar.event_id = ep.event_id
+                        WHERE ar.access_request_id = OLD.access_request_id
+                        AND epg.group_id = OLD.group_id
+                        AND ep.all_groups = 1
+                        AND NEW.approved = 1
                     );
 
                     UPDATE access_requests_groups SET
@@ -2832,8 +2859,7 @@ class DB:
                         closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
                         closed_by = cur_profile('profile_id')
                     WHERE access_request_id = OLD.access_request_id
-                    AND group_id = OLD.group_id
-                    AND approved IS NULL;
+                    AND group_id = OLD.group_id;
 
                     INSERT INTO ensure_access_requests_closed (access_request_id, closed_at)
                     VALUES (OLD.access_request_id, NEW.closed_at);

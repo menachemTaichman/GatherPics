@@ -272,9 +272,4 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-
-# recreate_views_triggers_and_indexes(general_models.db)
-
-general_models = GeneralModels()
-result = general_models.get_entities('events', '75cb6635-879d-4386-b023-366444dc0fb2')
-print(result)
+# recreate_views_triggers_and_indexes(db)

@@ -335,7 +335,7 @@ export default function RequestDetailModal({
       return;
     }
 
-    if (approvedGroupIds.length > 0 && isNewProfileRequest) {
+    if (approvedGroupIds.length > 0 && !requestData?.applicant_profile_id) {
       if (!profileName || !profileName.trim()) {
         showToast('Profile name is required for new profiles', 'error');
         return;
@@ -356,7 +356,7 @@ export default function RequestDetailModal({
         approvedGroupIds.length > 0 ? approvedGroupIds : null,
         deniedGroupIds.length > 0 ? deniedGroupIds : null,
         closedDetails.trim() || null,
-        (approvedGroupIds.length > 0 && isNewProfileRequest) ? profileName.trim() : null,
+        (approvedGroupIds.length > 0 && !requestData?.applicant_profile_id) ? profileName.trim() : null,
         requestData.applicant_profile_id || null,
         eventUrl
       );
@@ -678,7 +678,7 @@ export default function RequestDetailModal({
               </div>
 
               {/* Profile Name for New Profiles */}
-              {isNewProfileRequest && !requestData.closed_at && (
+              {!requestData?.applicant_profile_id && (
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">New Profile</h3>
                   <div>
@@ -691,7 +691,7 @@ export default function RequestDetailModal({
                       onChange={(e) => {
                         const value = e.target.value;
                         setProfileName(value);
-                        if (isNewProfileRequest) {
+                        if (!requestData?.applicant_profile_id) {
                           // Debounce name conflict check
                           if (checkNameConflict._timeout) clearTimeout(checkNameConflict._timeout);
                           checkNameConflict._timeout = setTimeout(() => {
