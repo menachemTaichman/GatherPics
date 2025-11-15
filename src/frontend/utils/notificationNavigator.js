@@ -2,7 +2,11 @@ import { requestsAPI, getEventUrlById } from './apiService';
 
 export async function openFromNotification(notification, { eventUrl, navigate, isManager = false }) {
   const type = notification.type || notification.notification_type || '';
-  const data = parseData(notification.data);
+  let data = parseData(notification.data);
+  // Fallback: if parseData returns null but notification.data exists, use it directly
+  if (data === null && notification.data !== null && notification.data !== undefined) {
+    data = notification.data;
+  }
 
   if (type === 'access_request' && data?.access_request_id) {
     const requestId = data.access_request_id;
@@ -58,10 +62,28 @@ export async function openFromNotification(notification, { eventUrl, navigate, i
   }
 
   if (type === 'feedback') {
-    const feedbackId = typeof data === 'number' ? data : (typeof data === 'string' ? parseInt(data, 10) : data?.feedback_id);
-    if (feedbackId) {
+    let feedbackId;
+    if (typeof data === 'number') {
+      feedbackId = data;
+    } else if (typeof data === 'string') {
+      feedbackId = parseInt(data, 10);
+    } else if (data && typeof data === 'object') {
+      feedbackId = data.feedback_id;
+    }
+    
+    // Ensure feedbackId is a valid number
+    feedbackId = Number(feedbackId);
+    if (feedbackId && !isNaN(feedbackId) && feedbackId > 0) {
       try {
-        window.dispatchEvent(new CustomEvent('feedback:open-detail', { detail: { feedbackId } }));
+        // Use setTimeout to ensure event listener is ready, and make event bubble
+        setTimeout(() => {
+          const event = new CustomEvent('feedback:open-detail', { 
+            detail: { feedbackId },
+            bubbles: true,
+            cancelable: true
+          });
+          window.dispatchEvent(event);
+        }, 0);
       } catch (e) {
         console.error('Error dispatching feedback event:', e);
       }
@@ -70,10 +92,28 @@ export async function openFromNotification(notification, { eventUrl, navigate, i
   }
 
   if (type === 'my_feedback') {
-    const feedbackId = typeof data === 'number' ? data : (typeof data === 'string' ? parseInt(data, 10) : data?.feedback_id);
-    if (feedbackId) {
+    let feedbackId;
+    if (typeof data === 'number') {
+      feedbackId = data;
+    } else if (typeof data === 'string') {
+      feedbackId = parseInt(data, 10);
+    } else if (data && typeof data === 'object') {
+      feedbackId = data.feedback_id;
+    }
+    
+    // Ensure feedbackId is a valid number
+    feedbackId = Number(feedbackId);
+    if (feedbackId && !isNaN(feedbackId) && feedbackId > 0) {
       try {
-        window.dispatchEvent(new CustomEvent('my-feedback:open', { detail: { feedbackId } }));
+        // Use setTimeout to ensure event listener is ready, and make event bubble
+        setTimeout(() => {
+          const event = new CustomEvent('my-feedback:open', { 
+            detail: { feedbackId },
+            bubbles: true,
+            cancelable: true
+          });
+          window.dispatchEvent(event);
+        }, 0);
       } catch (e) {
         console.error('Error dispatching my-feedback event:', e);
       }
@@ -83,9 +123,10 @@ export async function openFromNotification(notification, { eventUrl, navigate, i
 }
 
 function parseData(data) {
-  if (!data) return null;
+  if (!data && data !== 0) return null;
   if (typeof data === 'object') return data;
-  try { return JSON.parse(data); } catch { return null; }
+  if (typeof data === 'number') return data;
+  try { return JSON.parse(data); } catch { return data; }
 }
 
 async function navigateAndDispatchRequest({ requestId, targetEventId, currentEventUrl, navigate, dispatchEvent }) {

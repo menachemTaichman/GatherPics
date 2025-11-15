@@ -116,6 +116,7 @@ function AppContent({ eventUrl }) {
   const [openFeedbackId, setOpenFeedbackId] = useState(null);
   const [openMyFeedback, setOpenMyFeedback] = useState({ id: null, data: null });
 
+
   // Auto-show login modal when on protected route and not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -170,15 +171,17 @@ function AppContent({ eventUrl }) {
     return () => window.removeEventListener('requests:open-detail', handler);
   }, [eventUrl]);
 
-  // Listen for feedback:open-detail to show FeedbackDetailModal globally
+  // Listen for feedback:open-detail to show FeedbackDetailModal globally (kept for backward compatibility)
   useEffect(() => {
     const handler = (ev) => {
       const fid = ev?.detail?.feedbackId;
       if (!fid) return;
       setOpenFeedbackId(fid);
     };
-    window.addEventListener('feedback:open-detail', handler);
-    return () => window.removeEventListener('feedback:open-detail', handler);
+    window.addEventListener('feedback:open-detail', handler, true);
+    return () => {
+      window.removeEventListener('feedback:open-detail', handler, true);
+    };
   }, []);
 
   // Listen for my-feedback:open to show FeedbackFormModal globally
@@ -541,6 +544,9 @@ function AppContent({ eventUrl }) {
 }
 
 export default function App() {
+  const [globalOpenFeedbackId, setGlobalOpenFeedbackId] = useState(null);
+  const [globalOpenMyFeedback, setGlobalOpenMyFeedback] = useState({ id: null, data: null });
+
   // Initialize preferences and diagnostics capture at startup
   useEffect(() => {
     initializePreferences();
@@ -551,6 +557,39 @@ export default function App() {
     // Cleanup on unmount
     return () => {
       diagnosticsCapture.stopCapture();
+    };
+  }, []);
+
+  // Listen for feedback:open-detail globally (works from any route)
+  useEffect(() => {
+    const handler = (ev) => {
+      const fid = ev?.detail?.feedbackId;
+      if (!fid) return;
+      setGlobalOpenFeedbackId(fid);
+    };
+    window.addEventListener('feedback:open-detail', handler, true);
+    return () => {
+      window.removeEventListener('feedback:open-detail', handler, true);
+    };
+  }, []);
+
+  // Listen for my-feedback:open globally (works from any route)
+  useEffect(() => {
+    const handler = async (ev) => {
+      const fid = ev?.detail?.feedbackId;
+      if (!fid) return;
+      try {
+        const res = await feedbacksAPI.getMyFeedbackById(fid);
+        const items = res?.changes?.[0]?.items || [];
+        const feedback = items[0] || { id: fid, feedback_id: fid };
+        setGlobalOpenMyFeedback({ id: fid, data: feedback });
+      } catch {
+        setGlobalOpenMyFeedback({ id: fid, data: { id: fid, feedback_id: fid } });
+      }
+    };
+    window.addEventListener('my-feedback:open', handler, true);
+    return () => {
+      window.removeEventListener('my-feedback:open', handler, true);
     };
   }, []);
 
@@ -570,6 +609,22 @@ export default function App() {
             </Routes>
           </div>
         </Router>
+        {/* Global FeedbackDetailModal - works from any route */}
+        {globalOpenFeedbackId && (
+          <FeedbackDetailModal
+            isOpen={!!globalOpenFeedbackId}
+            onClose={() => setGlobalOpenFeedbackId(null)}
+            feedbackId={globalOpenFeedbackId}
+          />
+        )}
+        {/* Global FeedbackFormModal - works from any route */}
+        {globalOpenMyFeedback.id && (
+          <FeedbackFormModal
+            isOpen={!!globalOpenMyFeedback.id}
+            onClose={() => setGlobalOpenMyFeedback({ id: null, data: null })}
+            feedback={globalOpenMyFeedback.data}
+          />
+        )}
       </ToastProvider>
     </AuthProvider>
   );
