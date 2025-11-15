@@ -105,7 +105,19 @@ class DB:
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
-                'fields': ['name', 'date', 'url', 'representative_image', 'is_public', 'images_count', 'faces_count', 'albums_count', 'moments_count'],
+                'fields': [
+                    'name',
+                    'date',
+                    'url',
+                    'representative_image',
+                    'is_public',
+                    'images_count',
+                    'faces_count',
+                    'albums_count',
+                    'moments_count',
+                    'total_image_size',
+                    'max_image_size',
+                ],
                 'details_fields': [
                     'images_count_limit',
                     'image_size_limit_bytes',
@@ -901,6 +913,22 @@ class DB:
                         AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE 0 END
                     ) AS images_count,
                     (
+                        SELECT SUM(i.file_size)
+                        FROM images_accessibility ia
+                        INNER JOIN images i ON i.image_id = ia.image_id
+                        WHERE ia.event_id = e.event_id
+                        AND ia.profile_id = ep.profile_id
+                        AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE -1 END
+                    ) AS total_image_size,
+                    (
+                        SELECT MAX(i.file_size)
+                        FROM images_accessibility ia
+                        INNER JOIN images i ON i.image_id = ia.image_id
+                        WHERE ia.event_id = e.event_id
+                        AND ia.profile_id = ep.profile_id
+                        AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE -1 END
+                    ) AS max_image_size,
+                    (
                         SELECT COUNT(*)
                         FROM faces_accessibility fa
                         WHERE fa.event_id = e.event_id
@@ -998,9 +1026,13 @@ class DB:
                     COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
                     (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
                     CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
-                    CASE WHEN COALESCE(SUM(cpe.can_manage_event), 0) > 0 THEN 1 ELSE 0 END AS has_manageable_events,
                     CASE WHEN
                         COALESCE(SUM(cpe.can_manage_event), 0) > 0
+                        OR p.can_create_events = 1
+                    THEN 1 ELSE 0 END AS has_manageable_events,
+                    CASE WHEN
+                        COALESCE(SUM(cpe.can_manage_event), 0) > 0
+                        OR p.can_create_events = 1
                         OR p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
                     THEN 1 ELSE 0 END AS has_dashboard
                 FROM profiles p

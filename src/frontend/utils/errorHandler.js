@@ -64,7 +64,28 @@ function getErrorExplanation(error) {
   
   // Check for backend error message in response
   if (error?.response?.data?.error) {
-    return error.response.data.error;
+    let errorMsg = error.response.data.error;
+    
+    // Extract meaningful message from policy errors
+    // Pattern: "Database policy error: Policy error: Invalid images count limit"
+    // Extract: "Invalid images count limit"
+    if (errorMsg.includes('Database policy error')) {
+      const policyMatch = errorMsg.match(/Policy error:\s*(.+)$/);
+      if (policyMatch && policyMatch[1]) {
+        errorMsg = policyMatch[1].trim();
+      } else {
+        // Fallback: remove redundant prefixes
+        errorMsg = errorMsg.replace(/^Database policy error:\s*/, '').replace(/^Policy error:\s*/, '');
+      }
+    }
+    
+    // Extract meaningful message from other nested errors
+    // Pattern: "Permission denied: [message]"
+    if (errorMsg.startsWith('Permission denied:')) {
+      errorMsg = errorMsg.replace(/^Permission denied:\s*/, '');
+    }
+    
+    return errorMsg;
   }
   
   // Fallback to error message if available

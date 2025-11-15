@@ -204,6 +204,19 @@ class GeneralModels(BaseModels):
         return applicant_profile_id
 
     # Event management
+    def get_uploads_limits(self) -> dict:
+        """Get the uploads limits for an event."""
+        current_profile = self.get_current_profile()
+        if not current_profile['has_manageable_events']:
+            raise Forbidden('Permission denied: the information is not accessible')
+        
+        query = 'SELECT images_count_limit, image_size_limit_bytes FROM settings WHERE id = 1'
+        result = self.db.execute_query(query, (), return_format=ReturnFormat.DICT)
+        if not result:
+            raise Exception('Settings not found')
+
+        return result
+    
     def create_event(self, data: dict) -> str:
         """Create a new event with all necessary setup.
 

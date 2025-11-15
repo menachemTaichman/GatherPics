@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus } from 'lucide-react';
+import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus, HardDrive } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, API_BASE } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -30,14 +30,14 @@ function normalizeDateForInput(value) {
   return `${year}-${month}-${day}`;
 }
 
-function createEmptyEventDraft() {
+function createEmptyEventDraft(uploadsLimits = null) {
   return {
     name: '',
     url: '',
     date: '',
     is_public: 0,
-    images_count_limit: null,
-    image_size_limit_bytes: null,
+    images_count_limit: uploadsLimits?.images_count_limit ?? 0,
+    image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
   };
 }
 
@@ -61,6 +61,7 @@ export default function EditEventModal({
   const [checkingUrl, setCheckingUrl] = useState(false);
   const [removingRepresentative, setRemovingRepresentative] = useState(false);
   const [coverCacheBuster, setCoverCacheBuster] = useState(() => Date.now());
+  const [uploadsLimits, setUploadsLimits] = useState(null);
   const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
   const { showToast } = useToast();
@@ -105,6 +106,35 @@ export default function EditEventModal({
   }, [isOpen, registerModal, unregisterModal]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const fetchUploadsLimits = async () => {
+      try {
+        const limits = await eventsAPI.getUploadsLimits();
+        setUploadsLimits(limits);
+      } catch (error) {
+        console.error('Failed to fetch upload limits:', error);
+      }
+    };
+    fetchUploadsLimits();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!uploadsLimits) return;
+    // Update draft with default limits if they're null
+    setEventDraft((prev) => {
+      if (!prev) return prev;
+      const updates = {};
+      if (prev.images_count_limit == null && uploadsLimits.images_count_limit != null) {
+        updates.images_count_limit = uploadsLimits.images_count_limit;
+      }
+      if (prev.image_size_limit_bytes == null && uploadsLimits.image_size_limit_bytes != null) {
+        updates.image_size_limit_bytes = uploadsLimits.image_size_limit_bytes;
+      }
+      return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev;
+    });
+  }, [uploadsLimits]);
+
+  useEffect(() => {
     setCoverCacheBuster(Date.now());
   }, [baseEvent?.representative_image]);
 
@@ -125,19 +155,19 @@ export default function EditEventModal({
       images_count_limit:
         evt.images_count_limit !== null && evt.images_count_limit !== undefined
           ? Number(evt.images_count_limit)
-          : null,
+          : uploadsLimits?.images_count_limit ?? 0,
       image_size_limit_bytes:
         evt.image_size_limit_bytes !== null && evt.image_size_limit_bytes !== undefined
           ? Number(evt.image_size_limit_bytes)
-          : null,
+          : uploadsLimits?.image_size_limit_bytes ?? 0,
     };
-  }, []);
+  }, [uploadsLimits]);
 
   const handleResetEventDraft = useCallback(() => {
     if (nameCheckTimeout.current) clearTimeout(nameCheckTimeout.current);
     if (urlCheckTimeout.current) clearTimeout(urlCheckTimeout.current);
     if (isCreateMode) {
-      setEventDraft(createEmptyEventDraft());
+      setEventDraft(createEmptyEventDraft(uploadsLimits));
     } else if (baseEvent) {
       setEventDraft(buildEventDraft(baseEvent));
     } else {
@@ -146,7 +176,7 @@ export default function EditEventModal({
     setEventError('');
     setNameConflict(false);
     setUrlConflict(false);
-  }, [baseEvent, buildEventDraft, isCreateMode]);
+  }, [baseEvent, buildEventDraft, isCreateMode, uploadsLimits]);
 
   const handleRemoveRepresentative = useCallback(async () => {
     if (isCreateMode || !eventUrl || !baseEvent?.representative_image || removingRepresentative) {
@@ -174,7 +204,7 @@ export default function EditEventModal({
     } else if (isCreateMode) {
       handleResetEventDraft();
     }
-  }, [isOpen, isCreateMode, handleResetEventDraft]);
+  }, [isOpen, isCreateMode, handleResetEventDraft, uploadsLimits]);
 
   const fetchEventDetails = useCallback(async () => {
     if (!eventUrl || !isOpen || isCreateMode) return;
@@ -346,26 +376,44 @@ export default function EditEventModal({
   const handleEventLimitChange = useCallback((field, value) => {
     setEventDraft((prev) => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        [field]: value === '' || value === null ? null : Number(value),
-      };
+      const maxLimit = uploadsLimits?.images_count_limit;
+      const minLimit = !isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0;
+      const numValue = value === '' || value === null ? null : Number(value);
+      // Ensure value is not null and is within limits
+      if (numValue === null) {
+        return { ...prev, [field]: maxLimit ?? minLimit };
+      }
+      // Enforce minimum (current image count)
+      if (numValue < minLimit) {
+        return { ...prev, [field]: minLimit };
+      }
+      // Enforce maximum (system limit)
+      if (maxLimit != null && numValue > maxLimit) {
+        return { ...prev, [field]: maxLimit };
+      }
+      return { ...prev, [field]: numValue };
     });
-  }, []);
+  }, [uploadsLimits, isCreateMode, baseEvent?.images_count]);
 
   const handleEventSizeLimitMbChange = useCallback((value) => {
     setEventDraft((prev) => {
       if (!prev) return prev;
+      const maxLimitBytes = uploadsLimits?.image_size_limit_bytes;
+      const maxLimitMb = maxLimitBytes != null ? Math.round(maxLimitBytes / (1024 * 1024)) : null;
+      
       if (value === '' || value === null) {
-        return { ...prev, image_size_limit_bytes: null };
+        // Use max limit as default if available, otherwise 0
+        return { ...prev, image_size_limit_bytes: maxLimitBytes ?? 0 };
       }
       const numeric = Number(value);
       if (Number.isNaN(numeric) || numeric < 0) {
         return prev;
       }
-      return { ...prev, image_size_limit_bytes: Math.round(numeric * 1024 * 1024) };
+      // Enforce max limit
+      const finalMb = maxLimitMb != null && numeric > maxLimitMb ? maxLimitMb : numeric;
+      return { ...prev, image_size_limit_bytes: Math.round(finalMb * 1024 * 1024) };
     });
-  }, []);
+  }, [uploadsLimits]);
 
   const handleEventSave = useCallback(async (source = 'ui') => {
     if (!eventDraft) return;
@@ -386,6 +434,20 @@ export default function EditEventModal({
     if (!isCreateMode && !eventUrl) {
       setEventError('Event URL is missing');
       return;
+    }
+    if (eventDraft.images_count_limit == null) {
+      setEventError('Photo count limit is required');
+      return;
+    }
+    if (eventDraft.image_size_limit_bytes == null) {
+      setEventError('Max upload size is required');
+      return;
+    }
+    if (!isCreateMode && baseEvent?.images_count != null && eventDraft.images_count_limit != null) {
+      if (eventDraft.images_count_limit < baseEvent.images_count) {
+        setEventError(`Photo count limit cannot be less than current image count (${baseEvent.images_count.toLocaleString()})`);
+        return;
+      }
     }
     setEventSaving(true);
     setEventError('');
@@ -711,99 +773,157 @@ export default function EditEventModal({
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
                                 Photo Count Limit
+                                <span className="ml-1 text-red-500">*</span>
                               </label>
                               <input
                                 type="number"
-                                min={0}
+                                required
+                                min={!isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0}
+                                max={uploadsLimits?.images_count_limit ?? undefined}
                                 value={eventDraft.images_count_limit ?? ''}
                                 onChange={(e) => {
-                                  const value =
-                                    e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
-                                  handleEventLimitChange(
-                                    'images_count_limit',
-                                    value === '' ? null : value
-                                  );
+                                  const value = e.target.value === '' ? '' : Number(e.target.value);
+                                  const minLimit = !isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0;
+                                  const maxLimit = uploadsLimits?.images_count_limit;
+                                  let finalValue = value === '' ? (maxLimit ?? minLimit) : value;
+                                  if (finalValue !== '' && Number(finalValue) < minLimit) {
+                                    finalValue = minLimit;
+                                  }
+                                  if (maxLimit != null && finalValue !== '' && Number(finalValue) > maxLimit) {
+                                    finalValue = maxLimit;
+                                  }
+                                  handleEventLimitChange('images_count_limit', finalValue);
                                 }}
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                                placeholder="Unlimited"
+                                placeholder={uploadsLimits?.images_count_limit?.toLocaleString() ?? 'Enter limit'}
                               />
                               <p className="mt-1 text-xs text-gray-500">
-                                Leave empty for unlimited photos.
+                                {!isCreateMode && baseEvent?.images_count != null
+                                  ? `Minimum: ${baseEvent.images_count.toLocaleString()} photos (current count). ${uploadsLimits?.images_count_limit != null ? `Maximum: ${uploadsLimits.images_count_limit.toLocaleString()} photos.` : ''}`
+                                  : uploadsLimits?.images_count_limit != null
+                                  ? `Maximum allowed: ${uploadsLimits.images_count_limit.toLocaleString()} photos.`
+                                  : 'Required. Enter the maximum number of photos allowed.'}
                               </p>
                             </div>
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
                                 Max Upload Size (MB)
+                                <span className="ml-1 text-red-500">*</span>
                               </label>
                               <input
                                 type="number"
+                                required
                                 min={0}
+                                max={
+                                  uploadsLimits?.image_size_limit_bytes != null
+                                    ? Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024))
+                                    : undefined
+                                }
                                 value={
                                   eventDraft.image_size_limit_bytes != null
                                     ? Math.round(eventDraft.image_size_limit_bytes / (1024 * 1024))
                                     : ''
                                 }
-                                onChange={(e) =>
-                                  handleEventSizeLimitMbChange(
-                                    e.target.value === '' ? '' : Math.max(0, Number(e.target.value))
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const value = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                                  const maxLimitMb = uploadsLimits?.image_size_limit_bytes != null
+                                    ? Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024))
+                                    : null;
+                                  const finalValue = maxLimitMb != null && value !== '' && Number(value) > maxLimitMb
+                                    ? maxLimitMb
+                                    : value === '' ? (maxLimitMb ?? 0) : value;
+                                  handleEventSizeLimitMbChange(finalValue);
+                                }}
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                                placeholder="Unlimited"
+                                placeholder={
+                                  uploadsLimits?.image_size_limit_bytes != null
+                                    ? String(Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024)))
+                                    : 'Enter limit'
+                                }
                               />
                               <p className="mt-1 text-xs text-gray-500">
-                                Leave empty for no size limit.
+                                {uploadsLimits?.image_size_limit_bytes != null
+                                  ? `Maximum allowed: ${Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024))} MB.`
+                                  : 'Required. Enter the maximum upload size in MB.'}
                               </p>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                <ImageIcon className="h-5 w-5 text-blue-500" />
+                        {!isCreateMode && baseEvent && (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <ImageIcon className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Photos</p>
                               </div>
-                              <p className="text-sm font-medium text-gray-600">Photos</p>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent?.images_count ?? 0}
+                              </span>
                             </div>
-                            <span className="text-base font-semibold text-blue-600">
-                              {baseEvent?.images_count ?? 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                <Users className="h-5 w-5 text-blue-500" />
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <Users className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Faces</p>
                               </div>
-                              <p className="text-sm font-medium text-gray-600">Faces</p>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent?.faces_count ?? 0}
+                              </span>
                             </div>
-                            <span className="text-base font-semibold text-blue-600">
-                              {baseEvent?.faces_count ?? 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                <Layers className="h-5 w-5 text-blue-500" />
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <Layers className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Albums</p>
                               </div>
-                              <p className="text-sm font-medium text-gray-600">Albums</p>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent?.albums_count ?? 0}
+                              </span>
                             </div>
-                            <span className="text-base font-semibold text-blue-600">
-                              {baseEvent?.albums_count ?? 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-                                <Calendar className="h-5 w-5 text-blue-500" />
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <Calendar className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Moments</p>
                               </div>
-                              <p className="text-sm font-medium text-gray-600">Moments</p>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent?.moments_count ?? 0}
+                              </span>
                             </div>
-                            <span className="text-base font-semibold text-blue-600">
-                              {baseEvent?.moments_count ?? 0}
-                            </span>
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <HardDrive className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Total Size</p>
+                              </div>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent.total_image_size != null
+                                  ? `${(baseEvent.total_image_size / (1024 * 1024)).toFixed(2)} MB`
+                                  : '0 MB'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <HardDrive className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Max Size</p>
+                              </div>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent.max_image_size != null
+                                  ? `${(baseEvent.max_image_size / (1024 * 1024)).toFixed(2)} MB`
+                                  : '0 MB'}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </>
                   ) : (

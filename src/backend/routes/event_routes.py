@@ -258,4 +258,19 @@ def check_event_url():
     conflict_id = gm.is_exists('events', {'url': url}, exclude_id=exclude_event_id)
     return jsonify({'conflict': bool(conflict_id), 'conflicting_event': conflict_id})
 
+@event_bp.route('/events/uploads-limits', methods=['GET'])
+@require_auth
+def get_uploads_limits():
+    """Get the maximum upload limits for events."""
+    gm = get_general_models()
+    try:
+        limits = gm.get_uploads_limits()
+        return jsonify(limits)
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 

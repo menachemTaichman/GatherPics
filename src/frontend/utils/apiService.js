@@ -333,6 +333,11 @@ export const eventsAPI = {
     const response = await api.post(`/api/events/check-url`, payload);
     return response.data || {};
   },
+
+  getUploadsLimits: async () => {
+    const response = await api.get(`/api/events/uploads-limits`);
+    return response.data || {};
+  },
 };
 
 // Normalization helpers to provide consistent id fields and camelCase refs

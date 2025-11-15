@@ -3,7 +3,7 @@ import os
 import io
 import zipfile
 
-from src.backend.middleware.auth import require_auth
+from src.backend.middleware.auth import require_auth, optional_auth
 from src.backend.helpers import get_event, get_general_models, Event
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
@@ -90,6 +90,7 @@ def get_event_display_representative_webp(event_id):
     return resp
 
 @file_bp.route('/representative/thumb', methods=['GET', 'HEAD'])
+@optional_auth
 def get_event_thumb_representative_webp(event_id):
     general_models = get_general_models()
     event = general_models.get_entities('events', event_id)
