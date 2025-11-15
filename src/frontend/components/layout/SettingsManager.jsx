@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, RotateCcw, Link, HelpCircle, Minus, FileText, Eye, Check } from 'lucide-react';
+import { Settings, X, Archive, User, Info, MessageSquare, Edit2, Plus, LogOut, Lock, Trash2, FileText, Eye, Check } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -9,12 +9,12 @@ import { profilesAPI, requestsAPI, feedbacksAPI } from '../../utils/apiService';
 import { useParams } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
-import { useEventProfilesList, useMyRequestsList, useMyFeedbacksList, useProfilesList } from '../../utils/dataManager';
+import { useMyRequestsList, useMyFeedbacksList } from '../../utils/dataManager';
 import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils/storeUtils';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../contexts/authContext';
-import { ChangePasswordModal, EditProfileModal } from '../profiles';
+import { ChangePasswordModal } from '../profiles';
 import { ConfirmDelete } from '../modals';
 import { RequestFormModal } from '../requests';
 import { FeedbackFormModal } from '../feedbacks';
@@ -35,8 +35,6 @@ export default function SettingsManager() {
   
   // Profile management state
   const currentProfile = getCurrentProfile();
-  const allProfiles = useEventProfilesList(eventId);
-  const generalProfiles = useProfilesList();
   const pendingRequestsCount = usePendingRequestsCount(eventId);
   const pendingFeedbacksCount = Number(currentProfile?.pending_feedbacks || 0);
   const hasFeedbacks = currentProfile?.has_feedbacks === 1;
@@ -45,19 +43,10 @@ export default function SettingsManager() {
 const settingsBadgeCount = (pendingRequestsCount > 0 ? 1 : 0) + (pendingFeedbacksCount > 0 ? 1 : 0);
 const [editingCurrentProfile, setEditingCurrentProfile] = useState(false);
 const [currentProfileLabel, setCurrentProfileLabel] = useState('');
+const [profileNameConflict, setProfileNameConflict] = useState(false);
 const [editingEmail, setEditingEmail] = useState(false);
 const [currentEmail, setCurrentEmail] = useState('');
 const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-const [selectedProfile, setSelectedProfile] = useState(null);
-const [profileToDelete, setProfileToDelete] = useState(null);
-const [profileNameConflict, setProfileNameConflict] = useState(false);
-const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
-const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
-const [publicAccessCodes, setPublicAccessCodes] = useState({});
-const [publicAccessFlags, setPublicAccessFlags] = useState({});
-const publicAccessFetchesRef = useRef(new Set());
   
   // Requests state
   const [showRequestFormModal, setShowRequestFormModal] = useState(false);
@@ -123,14 +112,6 @@ useEffect(() => {
       return [];
     }
 
-    if (activeTab === 'profiles') {
-      const scopes = [{ entity: 'all', id: 'profiles', eventId: 'general' }];
-      if (eventId) {
-        scopes.push({ entity: 'all', id: 'event_profiles', eventId });
-      }
-      return scopes;
-    }
-
     if (activeTab === 'account' && profileId) {
       const scopes = [
         ...(eventId ? [{ entity: 'event_profile', id: String(profileId), eventId }] : []),
@@ -152,13 +133,6 @@ useEffect(() => {
   }, [activeTab, eventId, isOpen, isPublic, profileId]);
 
   useApplyScopes(scopeConfig);
-
-  // Fetch profiles when profiles tab is opened
-  useEffect(() => {
-    if (isOpen && isAuthenticated && activeTab === 'profiles' && eventUrl) {
-      fetchProfiles();
-    }
-  }, [isOpen, isAuthenticated, activeTab, eventUrl]);
 
   // Fetch current profile when account tab is opened
   useEffect(() => {
@@ -202,49 +176,6 @@ useEffect(() => {
     }
   };
 
-  const fetchProfiles = async () => {
-    try {
-      await profilesAPI.getAll(eventUrl);
-      // Changes are automatically applied by apiService interceptor
-    } catch (error) {
-      console.error('Failed to fetch profiles:', error);
-    }
-  };
-
-  const fetchPublicAccessCode = useCallback(async (profileId, { notifyOnError = false } = {}) => {
-    if (!profileId) return null;
-    const idStr = String(profileId);
-    if (publicAccessFetchesRef.current.has(idStr)) {
-      return publicAccessCodes[idStr] ?? null;
-    }
-    publicAccessFetchesRef.current.add(idStr);
-    try {
-      const response = await profilesAPI.getPublicAccessCode(idStr);
-      const publicCode = response?.public_code || null;
-      setPublicAccessCodes((prev) => {
-        if (prev[idStr] === publicCode) return prev;
-        return { ...prev, [idStr]: publicCode };
-      });
-      setPublicAccessFlags((prev) => {
-        const nextValue = publicCode ? 1 : 0;
-        if (prev[idStr] === nextValue) return prev;
-        return { ...prev, [idStr]: nextValue };
-      });
-      return publicCode;
-    } catch (error) {
-      console.error('Failed to fetch public access code:', error);
-      if (notifyOnError) {
-        showToast(formatErrorMessage('load public access code', error), 'error');
-      }
-      setPublicAccessFlags((prev) => {
-        if (prev[idStr] === 0) return prev;
-        return { ...prev, [idStr]: 0 };
-      });
-      return null;
-    } finally {
-      publicAccessFetchesRef.current.delete(idStr);
-    }
-  }, [publicAccessCodes, showToast]);
 
   // Email editing handlers
   const handleEmailEdit = useCallback(() => {
@@ -285,27 +216,25 @@ useEffect(() => {
     }
     
     return false; // Let default modal behavior handle it (ESC to close)
-  }, [showChangePasswordModal, showEditProfileModal, showDeleteConfirmModal]);
+  }, [showChangePasswordModal]);
 
   const { modalRef } = useModalFocus(isOpen, () => setIsOpen(false), {
     modalId: modalId,
     modalType: 'popup',
     allowOutsideScroll: true,
     // Disable focus trapping when child modal is open so child can receive focus
-    enableFocusTrapping: !showChangePasswordModal && !showEditProfileModal && !showDeleteConfirmModal,
+    enableFocusTrapping: !showChangePasswordModal,
     customKeyHandler: handleSettingsKeys
   });
 
   // Filter tabs based on permissions and authentication
   const allTabs = [
     { id: 'account', label: 'Account', icon: User },
-    { id: 'profiles', label: 'Profiles', icon: User },
     { id: 'about', label: 'About', icon: Info },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare }
   ];
   
   const tabs = allTabs.filter(tab => {
-    if (tab.id === 'profiles' && !permissions.isProfilesManager) return false;
     if (tab.id === 'feedback' && !isAuthenticated) return false;
     return true;
   });
@@ -376,58 +305,6 @@ useEffect(() => {
     }, 300);
   };
 
-  const handleEditProfile = (profile) => {
-    const mergedProfile = {
-      ...(profile.generalProfile || {}),
-      ...(profile.eventProfile || {}),
-      id: profile.id,
-      public_access_code: profile.public_access_code,
-      restricted_to_event: profile.restricted_to_event,
-    };
-    setSelectedProfile(mergedProfile);
-    setShowEditProfileModal(true);
-  };
-
-  const handleCreateProfile = () => {
-    // Create a blank profile template for the modal
-    const newProfileTemplate = {
-      id: null, // null signals creation mode
-      label: 'New Profile',
-      hierarchy_rank: 0,
-      can_upload_and_delete_images: 0,
-      can_edit: 0,
-      all_images: 0,
-      all_groups: 0,
-      all_albums: 0,
-      is_public: 0
-    };
-    
-    setSelectedProfile(newProfileTemplate);
-    setIsCreatingNewProfile(true);
-    setShowEditProfileModal(true);
-  };
-
-  const handleDeleteProfile = (profile) => {
-    setProfileToDelete(profile);
-    setShowDeleteConfirmModal(true);
-  };
-
-  const handleConfirmDeleteProfile = async () => {
-    if (!profileToDelete) return;
-
-    try {
-      await profilesAPI.delete(profileToDelete.id, eventUrl);
-      // Changes are automatically applied by apiService interceptor
-      showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
-    } catch (error) {
-      console.error('Failed to delete profile:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete profile';
-      showToast(errorMsg, 'error');
-    } finally {
-      setProfileToDelete(null);
-      setShowDeleteConfirmModal(false);
-    }
-  };
 
   const handleSignOut = async () => {
     await logout();
@@ -439,149 +316,6 @@ useEffect(() => {
     openLoginModal(); // Open login modal
   };
 
-  // Public access code management functions
-  const handleCopyPublicLink = async (profile) => {
-    try {
-      let publicCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, profile.id)
-        ? publicAccessCodes[profile.id]
-        : undefined;
-      if (publicCode === undefined) {
-        publicCode = await fetchPublicAccessCode(profile.id, { notifyOnError: true });
-      }
-      if (!publicCode) {
-        showToast('No public access code available. Generate one first.', 'error');
-        return;
-      }
-      
-      const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${publicCode}`;
-      await navigator.clipboard.writeText(publicUrl);
-      showToast('Public link copied to clipboard', 'success');
-    } catch (error) {
-      console.error('Failed to copy link:', error);
-      showToast('Failed to copy link', 'error');
-    }
-  };
-
-  const handleResetPublicCode = async (profile) => {
-    try {
-      const result = await profilesAPI.resetPublicAccessCode(profile.id);
-      showToast('Public access code reset', 'success');
-      
-      // Auto-copy the new link
-      if (result.public_code) {
-        const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${result.public_code}`;
-        try {
-          await navigator.clipboard.writeText(publicUrl);
-          showToast('Public link copied to clipboard', 'success');
-        } catch (copyError) {
-          console.error('Failed to copy link:', copyError);
-          showToast('Link created but failed to copy', 'warning');
-        }
-      }
-      
-      setPublicAccessCodes((prev) => ({
-        ...prev,
-        [profile.id]: result.public_code || null,
-      }));
-      setPublicAccessFlags((prev) => ({
-        ...prev,
-        [profile.id]: result.public_code ? 1 : 0,
-      }));
-
-    } catch (error) {
-      console.error('Failed to reset public access code:', error);
-      showToast(formatErrorMessage('reset public access code', error), 'error');
-    }
-  };
-
-  const handleRemovePublicCode = async (profile) => {
-    try {
-      await profilesAPI.removePublicAccessCode(profile.id);
-      showToast('Public access code removed', 'success');
-      setPublicAccessCodes((prev) => ({
-        ...prev,
-        [profile.id]: null,
-      }));
-      setPublicAccessFlags((prev) => ({
-        ...prev,
-        [profile.id]: 0,
-      }));
-    } catch (error) {
-      console.error('Failed to remove public access code:', error);
-      showToast(formatErrorMessage('remove public access code', error), 'error');
-    }
-  };
-
-  // Get other profiles (exclude current) and sort by rank desc, then label asc
-  const generalProfilesById = useMemo(() => {
-    const map = new Map();
-    generalProfiles.forEach((profile) => {
-      const generalId = profile?.id || profile?.profile_id;
-      if (generalId) {
-        map.set(String(generalId), profile);
-      }
-    });
-    return map;
-  }, [generalProfiles]);
-
-  const eventProfilesForDisplay = useMemo(() => {
-    return allProfiles
-      .map((eventProfile) => {
-        const baseId = eventProfile?.id || eventProfile?.profile_id;
-        if (!baseId) return null;
-        const baseIdStr = String(baseId);
-        const generalProfile = generalProfilesById.get(baseIdStr);
-        const label = generalProfile?.label ?? eventProfile?.label ?? '';
-        const hierarchyRank = Number(
-          generalProfile?.hierarchy_rank ??
-          eventProfile?.hierarchy_rank ??
-          0
-        );
-        const isPublicProfile =
-          (generalProfile?.is_public ?? eventProfile?.is_public ?? 0) === 1;
-        const hasPublicAccessSource =
-          generalProfile?.has_public_access_code ??
-          eventProfile?.has_public_access_code ??
-          0;
-        const hasPublicAccessOverride = Object.prototype.hasOwnProperty.call(publicAccessFlags, baseIdStr)
-          ? publicAccessFlags[baseIdStr]
-          : undefined;
-        const hasPublicAccessCode =
-          (hasPublicAccessOverride ?? hasPublicAccessSource) === 1;
-        const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
-          ? publicAccessCodes[baseIdStr]
-          : undefined;
-        const restrictedToEvent =
-          generalProfile?.restricted_to_event ??
-          eventProfile?.restricted_to_event ??
-          null;
-
-        return {
-          id: baseIdStr,
-          label,
-          hierarchy_rank: hierarchyRank,
-          is_public: isPublicProfile ? 1 : 0,
-          has_public_access_code: hasPublicAccessCode ? 1 : 0,
-          public_access_code: publicAccessCode,
-          restricted_to_event: restrictedToEvent,
-          eventProfile,
-          generalProfile,
-        };
-      })
-      .filter(Boolean);
-  }, [allProfiles, generalProfilesById, publicAccessCodes, publicAccessFlags]);
-
-  const otherProfiles = useMemo(() => {
-    return [...eventProfilesForDisplay].sort((a, b) => {
-      // Sort by rank descending, then by label ascending
-      const rankA = a.hierarchy_rank || 0;
-      const rankB = b.hierarchy_rank || 0;
-      if (rankA !== rankB) {
-        return rankB - rankA; // descending
-      }
-      return (a.label || '').localeCompare(b.label || ''); // ascending
-    });
-  }, [eventProfilesForDisplay]);
 
 
   // Requests handlers
@@ -720,8 +454,7 @@ useEffect(() => {
                   <div className="flex space-x-1">
                     {tabs.map((tab) => {
                       const Icon = tab.icon;
-                      const showBadge = (tab.id === 'profiles' && pendingRequestsCount > 0) || 
-                                       (tab.id === 'feedback' && pendingFeedbacksCount > 0);
+                      const showBadge = tab.id === 'feedback' && pendingFeedbacksCount > 0;
                       return (
                         <button
                           key={tab.id}
@@ -1100,162 +833,6 @@ useEffect(() => {
                     )}
 
 
-                    {activeTab === 'profiles' && (
-                      <motion.div
-                        key="profiles"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-6"
-                      >
-                        <PermissionGate requires="isProfilesManager">
-                          {/* Other Profiles Section */}
-                          <div className="bg-gray-50 rounded-lg p-4">
-                          {/* Header with explanation tooltip */}
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                              <h3 className="text-sm font-semibold text-gray-700">Profiles</h3>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="relative inline-block">
-                                <a
-                                  href={`/${eventUrl}/requests`}
-                                  className="text-blue-600 hover:text-blue-700 hover:underline transition-colors font-medium flex items-center space-x-1"
-                                >
-                                  <FileText className="w-4 h-4" />
-                                  <span>View Requests</span>
-                                </a>
-                                {pendingRequestsCount > 0 && (
-                                  <span className="absolute -top-1.5 -right-1.5 bg-primary-600 text-white text-xs leading-none px-1.5 py-0.5 rounded-full z-10">
-                                    {pendingRequestsCount}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="relative">
-                                <button
-                                  onMouseEnter={() => setShowPublicAccessTooltip(true)}
-                                  onMouseLeave={() => setShowPublicAccessTooltip(false)}
-                                  className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                  <HelpCircle className="w-5 h-5" />
-                                </button>
-                                {showPublicAccessTooltip && (
-                                  <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-                                    <p className="mb-2 font-medium">Public Access Codes</p>
-                                    <p className="mb-1">• Public profiles can be accessed via direct links</p>
-                                    <p className="mb-1">• Copy link: Share the public access URL</p>
-                                    <p className="mb-1">• Reset link: Generate a new access code</p>
-                                    <p>• Remove link: Disable public access</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Create Profile Button */}
-                          <button
-                            onClick={handleCreateProfile}
-                            className="w-full mb-4 px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors flex items-center justify-center space-x-2 text-gray-600 hover:text-green-600 font-medium"
-                          >
-                            <Plus className="w-5 h-5" />
-                            <span>Create New Profile</span>
-                          </button>
-
-                          {otherProfiles.length === 0 ? (
-                            <p className="text-gray-500 text-sm text-center py-4">No other profiles</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {otherProfiles.map((profile) => (
-                                <div
-                                  key={profile.id}
-                                  className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
-                                >
-                                  <div className="flex items-center space-x-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                      profile.is_public ? 'bg-green-100' : 'bg-purple-100'
-                                    }`}>
-                                      <User className={`w-5 h-5 ${
-                                        profile.is_public ? 'text-green-600' : 'text-purple-600'
-                                      }`} />
-                                    </div>
-                                    <div>
-                                      <div className="flex items-center space-x-2">
-                                        <p className="font-medium text-gray-900">{profile.label}</p>
-                                        {profile.is_public ? (
-                                          <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
-                                            Public
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <p className="text-xs text-gray-500">Rank {profile.hierarchy_rank || 0}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center space-x-1">
-                                    {/* Public access code buttons - only show for public profiles */}
-                                    {profile.is_public ? (
-                                      <>
-                                        {profile.has_public_access_code === 1 ? (
-                                          <>
-                                            <button
-                                              onClick={() => handleCopyPublicLink(profile)}
-                                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                              title="Copy public link"
-                                            >
-                                              <Link className="w-4 h-4 text-blue-600" />
-                                            </button>
-                                            <button
-                                              onClick={() => handleResetPublicCode(profile)}
-                                              className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
-                                              title="Reset public access code"
-                                            >
-                                              <RotateCcw className="w-4 h-4 text-yellow-600" />
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <button
-                                            onClick={() => handleResetPublicCode(profile)}
-                                            className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                                            title="Create public access code"
-                                          >
-                                            <Link className="w-4 h-4 text-green-600" />
-                                          </button>
-                                        )}
-                                        {profile.has_public_access_code === 1 ? (
-                                          <button
-                                            onClick={() => handleRemovePublicCode(profile)}
-                                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                            title="Remove public access code"
-                                          >
-                                            <Minus className="w-4 h-4 text-red-600" />
-                                          </button>
-                                        ) : null}
-                                      </>
-                                    ) : null}
-                                    <button
-                                      onClick={() => handleEditProfile(profile)}
-                                      className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                      title="Edit profile"
-                                    >
-                                      <Edit2 className="w-4 h-4 text-blue-600" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteProfile(profile)}
-                                      className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                      title="Delete profile"
-                                    >
-                                      <Trash2 className="w-4 h-4 text-red-600" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          </div>
-                        </PermissionGate>
-                      </motion.div>
-                    )}
-
                     {activeTab === 'about' && (
                       <motion.div
                         key="about"
@@ -1378,42 +955,6 @@ useEffect(() => {
           profileId={currentProfile.id || currentProfile.profile_id}
           profileLabel={currentProfile.label}
           eventUrl={eventUrl}
-        />
-      )}
-
-      {showEditProfileModal && selectedProfile && (
-        <EditProfileModal
-          isOpen={showEditProfileModal}
-          onClose={() => {
-            setShowEditProfileModal(false);
-            setSelectedProfile(null);
-            setIsCreatingNewProfile(false);
-          }}
-          profile={selectedProfile}
-          eventUrl={eventUrl}
-          urlHelpers={urlHelpers}
-          isCreating={isCreatingNewProfile}
-          onSave={() => {
-            // Changes are automatically applied by apiService interceptor
-            setIsCreatingNewProfile(false);
-          }}
-        />
-      )}
-
-      {showDeleteConfirmModal && profileToDelete && (
-        <ConfirmDelete
-          isOpen={showDeleteConfirmModal}
-          onClose={() => {
-            setShowDeleteConfirmModal(false);
-            setProfileToDelete(null);
-          }}
-          onConfirm={handleConfirmDeleteProfile}
-          title="Delete Profile"
-          message="Are you sure you want to delete profile"
-          itemName={profileToDelete.label}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
         />
       )}
 

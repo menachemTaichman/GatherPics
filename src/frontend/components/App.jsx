@@ -10,6 +10,7 @@ import { EventsGalleryPage } from '../pages/events';
 import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
 import { FeedbacksGalleryPage } from '../pages/feedbacks';
 import { DashboardPage } from '../pages/dashboard';
+import ProfilesGalleryPage from '../pages/profiles/ProfilesGalleryPage';
 import HomePage from '../pages/HomePage';
 import EventHomePage from '../pages/EventHomePage';
 import { LoadingSpinner, Toast } from './common';
@@ -491,6 +492,12 @@ function AppContent({ eventUrl }) {
               <RequestsGalleryPage eventUrl={eventUrl} urlHelpers={urlHelpers} />
             }
           />
+          <Route
+            path="profiles"
+            element={
+              <ProfilesGalleryPage />
+            }
+          />
           <Route 
             path="" 
             element={<EventHomePage eventUrl={eventUrl} eventData={eventData} />} 
@@ -603,6 +610,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/events" element={<EventsGalleryPage />} />
+              <Route path="/dashboard/profiles" element={<ProfilesGalleryPage />} />
               <Route path="/dashboard/feedbacks" element={<FeedbacksGalleryPage />} />
               <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />

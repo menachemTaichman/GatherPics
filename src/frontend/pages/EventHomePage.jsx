@@ -356,6 +356,20 @@ export default function EventHomePage({ eventUrl, eventData }) {
       requires: 'isProfilesManager'
     },
     {
+      id: 'profiles',
+      to: `/${eventUrl}/profiles`,
+      icon: Users,
+      title: 'Profiles',
+      description: 'Manage user profiles and permissions',
+      iconBg: 'from-purple-100 to-purple-50',
+      iconColor: 'text-purple-600',
+      hoverBg: 'group-hover:from-purple-500 group-hover:to-purple-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-purple-200',
+      show: Boolean(eventUrl) && permissions.isProfilesManager,
+      requires: 'isProfilesManager'
+    },
+    {
       id: 'event-settings',
       icon: Settings,
       title: 'Event Settings',

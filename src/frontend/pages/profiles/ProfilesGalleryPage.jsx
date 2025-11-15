@@ -1,0 +1,1097 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import { profilesAPI, eventsAPI } from '../../utils/apiService';
+import { formatErrorMessage } from '../../utils/errorHandler';
+import { getPreference, setPreference } from '../../utils/settings';
+import { EditProfileModal } from '../../components/profiles';
+import { ConfirmDelete } from '../../components/modals';
+import { usePermissions } from '../../hooks/usePermissions';
+import { getCurrentProfile } from '../../utils/profileService';
+import { useEventProfilesList, useProfilesList, useDataStore, useEventsGeneralList } from '../../utils/dataManager';
+import { useApplyScopes, useEventId } from '../../utils/storeUtils';
+import Header from '../../components/layout/Header';
+import { useAuth } from '../../contexts/authContext';
+import { LoginModal } from '../../components/auth';
+import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { useParams } from 'react-router-dom';
+import { useEventUrls } from '../../hooks/useEventUrls';
+import { APP_CONFIG } from '../../config/appConfig';
+
+const FILTER_ALL_EVENTS = 'dashboard';
+
+export default function ProfilesGalleryPage() {
+  const params = useParams();
+  const eventUrl = params.eventUrl || null;
+  const { urlHelpers } = eventUrl ? useEventUrls(eventUrl) : { urlHelpers: null };
+  const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const { showToast } = useToast();
+  const permissions = usePermissions(eventUrl);
+  const eventId = useEventId(eventUrl);
+
+  const [loading, setLoading] = useState(true);
+  
+  // Reset loading state when authenticated status changes
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+  const [error, setError] = useState('');
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [profileToDelete, setProfileToDelete] = useState(null);
+  const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
+  const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
+  const [publicAccessCodes, setPublicAccessCodes] = useState({});
+  const [publicAccessFlags, setPublicAccessFlags] = useState({});
+  const publicAccessFetchesRef = useRef(new Set());
+
+  const [sortBy, setSortBy] = useState(() => getPreference('ProfilesGallery.sortBy', 'hierarchy_rank'));
+  const [sortDir, setSortDir] = useState(() => getPreference('ProfilesGallery.sortDir', 'desc'));
+  // Initialize filterEventId: use eventId from URL if available, otherwise FILTER_ALL_EVENTS
+  const [filterEventId, setFilterEventId] = useState(() => {
+    return eventId || FILTER_ALL_EVENTS;
+  });
+  const [eventSearchTerm, setEventSearchTerm] = useState('');
+  const [showEventDropdown, setShowEventDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const eventInputRef = useRef(null);
+  const eventDropdownRef = useRef(null);
+
+  // Set document title
+  useEffect(() => {
+    document.title = `Profile Management | ${APP_CONFIG.name}`;
+  }, []);
+
+  // Auto-show login modal when not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      openLoginModal();
+    }
+  }, [isAuthenticated, isLoading, openLoginModal]);
+
+  useApplyScopes([
+    { entity: 'all', id: 'profiles', eventId: 'general' },
+    ...(filterEventId && filterEventId !== FILTER_ALL_EVENTS ? [{ entity: 'all', id: 'event_profiles', eventId: filterEventId }] : []),
+    ...(eventId && (!filterEventId || filterEventId === FILTER_ALL_EVENTS) ? [{ entity: 'all', id: 'event_profiles', eventId }] : [])
+  ]);
+
+  const currentProfile = getCurrentProfile();
+  const generalProfiles = useProfilesList();
+  const eventsList = useEventsGeneralList();
+  const eventProfiles = useEventProfilesList(filterEventId && filterEventId !== FILTER_ALL_EVENTS ? filterEventId : eventId);
+
+  const fetchProfiles = useCallback(async () => {
+    // Determine what we need to fetch
+    const targetEventId = filterEventId && filterEventId !== FILTER_ALL_EVENTS ? filterEventId : eventId;
+    
+    // Check store directly for the target event's profiles
+    const store = useDataStore.getState();
+    const hasGeneralProfiles = generalProfiles.length > 0;
+    const hasEventProfiles = targetEventId ? (store.entities?.[targetEventId]?.event_profiles && Object.keys(store.entities[targetEventId].event_profiles).length > 0) : true;
+    
+    // If we already have all the data we need, skip fetching (withDedupe will handle concurrent requests)
+    if (hasGeneralProfiles && hasEventProfiles) {
+      setLoading(false); // Ensure loading is false if we're skipping
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    try {
+      // If filtering by event (not 'dashboard'), use the new by-event endpoint
+      if (filterEventId && filterEventId !== FILTER_ALL_EVENTS) {
+        await profilesAPI.getByEvent(filterEventId);
+      } else {
+        // Otherwise use general profiles route
+        await profilesAPI.getAll(eventUrl || null);
+      }
+      // Changes are automatically applied by apiService interceptor
+    } catch (err) {
+      const message = formatErrorMessage('load profiles', err);
+      console.error('Failed to load profiles:', err);
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [eventUrl, filterEventId, showToast, generalProfiles.length, eventId]);
+
+  useAuthRefresh(fetchProfiles, [eventUrl, filterEventId]);
+
+  // Fetch events for dropdown
+  useEffect(() => {
+    if (isAuthenticated && eventsList.length === 0) {
+      eventsAPI.list().catch((err) => {
+        console.error('Failed to load events:', err);
+      });
+    }
+  }, [isAuthenticated, eventsList.length]);
+
+  // Create placeholder profiles when not authenticated
+  const placeholderProfiles = useMemo(() => {
+    return Array.from({ length: 5 }, (_, i) => ({
+      id: `placeholder-${i}`,
+      label: '',
+      hierarchy_rank: 0,
+      is_public: false,
+      has_public_access_code: false,
+      isPlaceholder: true
+    }));
+  }, []);
+
+  const fetchPublicAccessCode = useCallback(async (profileId, { notifyOnError = false } = {}) => {
+    if (!profileId) return null;
+    const idStr = String(profileId);
+    if (publicAccessFetchesRef.current.has(idStr)) {
+      return publicAccessCodes[idStr] ?? null;
+    }
+    publicAccessFetchesRef.current.add(idStr);
+    try {
+      const response = await profilesAPI.getPublicAccessCode(idStr);
+      const publicCode = response?.public_code || null;
+      setPublicAccessCodes((prev) => {
+        if (prev[idStr] === publicCode) return prev;
+        return { ...prev, [idStr]: publicCode };
+      });
+      setPublicAccessFlags((prev) => {
+        const nextValue = publicCode ? 1 : 0;
+        if (prev[idStr] === nextValue) return prev;
+        return { ...prev, [idStr]: nextValue };
+      });
+      return publicCode;
+    } catch (error) {
+      console.error('Failed to fetch public access code:', error);
+      if (notifyOnError) {
+        showToast(formatErrorMessage('load public access code', error), 'error');
+      }
+      setPublicAccessFlags((prev) => {
+        if (prev[idStr] === 0) return prev;
+        return { ...prev, [idStr]: 0 };
+      });
+      return null;
+    } finally {
+      publicAccessFetchesRef.current.delete(idStr);
+    }
+  }, [publicAccessCodes, showToast]);
+
+  // Get other profiles (exclude current) and sort by rank desc, then label asc
+  const generalProfilesById = useMemo(() => {
+    const map = new Map();
+    generalProfiles.forEach((profile) => {
+      const generalId = profile?.id || profile?.profile_id;
+      if (generalId) {
+        map.set(String(generalId), profile);
+      }
+    });
+    return map;
+  }, [generalProfiles]);
+
+  const eventProfilesForDisplay = useMemo(() => {
+    // If filtering by event (not 'dashboard'), only show profiles that have a relation to that event
+    if (filterEventId && filterEventId !== FILTER_ALL_EVENTS) {
+      // Create a map of event profiles by profile_id
+      const eventProfileMap = new Map();
+      eventProfiles.forEach((ep) => {
+        const epId = ep?.id || ep?.profile_id;
+        if (epId) {
+          eventProfileMap.set(String(epId), ep);
+        }
+      });
+      
+      // Only include general profiles that have an event profile relation
+      return generalProfiles
+        .filter((profile) => {
+          const baseId = profile?.id || profile?.profile_id;
+          if (!baseId) return false;
+          return eventProfileMap.has(String(baseId));
+        })
+        .map((profile) => {
+          const baseId = profile?.id || profile?.profile_id;
+          const baseIdStr = String(baseId);
+          // Get event profile data from event_profiles store
+          const eventProfile = eventProfileMap.get(baseIdStr) || null;
+          
+          const hasPublicAccessOverride = Object.prototype.hasOwnProperty.call(publicAccessFlags, baseIdStr)
+            ? publicAccessFlags[baseIdStr]
+            : undefined;
+          const hasPublicAccessCode =
+            (hasPublicAccessOverride ?? profile?.has_public_access_code ?? 0) === 1;
+          const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
+            ? publicAccessCodes[baseIdStr]
+            : undefined;
+
+          return {
+            id: baseIdStr,
+            label: profile.label || '',
+            hierarchy_rank: Number(profile.hierarchy_rank ?? 0),
+            is_public: (profile.is_public ?? 0) === 1 ? 1 : 0,
+            has_public_access_code: hasPublicAccessCode ? 1 : 0,
+            public_access_code: publicAccessCode,
+            restricted_to_event: profile.restricted_to_event ?? null,
+            restricted_to_event_name: profile.restricted_to_event_name ?? null,
+            can_create_events: (profile.can_create_events ?? 0) === 1 ? 1 : 0,
+            can_manage_event: (eventProfile?.can_manage_event ?? 0) === 1 ? 1 : 0,
+            can_delete_event: (eventProfile?.can_delete_event ?? 0) === 1 ? 1 : 0,
+            can_edit: (eventProfile?.can_edit ?? 0) === 1 ? 1 : 0,
+            eventProfile: eventProfile || null,
+            generalProfile: profile,
+          };
+        });
+    }
+    
+    // Otherwise show all general profiles
+    return generalProfiles.map((profile) => {
+      const baseId = profile?.id || profile?.profile_id;
+      if (!baseId) return null;
+      const baseIdStr = String(baseId);
+      
+      // Get event profile if available (for event-specific data)
+      const eventProfile = eventId ? eventProfiles.find(ep => {
+        const epId = ep?.id || ep?.profile_id;
+        return epId && String(epId) === baseIdStr;
+      }) : null;
+      
+      const hasPublicAccessOverride = Object.prototype.hasOwnProperty.call(publicAccessFlags, baseIdStr)
+        ? publicAccessFlags[baseIdStr]
+        : undefined;
+      const hasPublicAccessCode =
+        (hasPublicAccessOverride ?? profile?.has_public_access_code ?? 0) === 1;
+      const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
+        ? publicAccessCodes[baseIdStr]
+        : undefined;
+
+      return {
+        id: baseIdStr,
+        label: profile.label || '',
+        hierarchy_rank: Number(profile.hierarchy_rank ?? 0),
+        is_public: (profile.is_public ?? 0) === 1 ? 1 : 0,
+        has_public_access_code: hasPublicAccessCode ? 1 : 0,
+        public_access_code: publicAccessCode,
+        restricted_to_event: profile.restricted_to_event ?? null,
+        restricted_to_event_name: profile.restricted_to_event_name ?? null,
+        can_create_events: (profile.can_create_events ?? 0) === 1 ? 1 : 0,
+        can_manage_event: (eventProfile?.can_manage_event ?? 0) === 1 ? 1 : 0,
+        can_delete_event: (eventProfile?.can_delete_event ?? 0) === 1 ? 1 : 0,
+        can_edit: (eventProfile?.can_edit ?? 0) === 1 ? 1 : 0,
+        eventProfile: eventProfile || null,
+        generalProfile: profile,
+      };
+    }).filter(Boolean);
+  }, [generalProfiles, eventProfiles, publicAccessCodes, publicAccessFlags, eventId, filterEventId]);
+
+  const profilesArray = useMemo(() => {
+    return [...eventProfilesForDisplay].sort((a, b) => {
+      // Sort by rank descending, then by label ascending
+      const rankA = a.hierarchy_rank || 0;
+      const rankB = b.hierarchy_rank || 0;
+      if (rankA !== rankB) {
+        return rankB - rankA; // descending
+      }
+      return (a.label || '').localeCompare(b.label || ''); // ascending
+    });
+  }, [eventProfilesForDisplay]);
+
+  // Use profiles from store or placeholders when not authenticated
+  const currentProfiles = isAuthenticated ? profilesArray : placeholderProfiles;
+
+  const sortedProfiles = useMemo(() => {
+    if (!isAuthenticated) return currentProfiles;
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const getValue = (profile) => {
+      switch (sortBy) {
+        case 'label':
+          return (profile.label || '').toLowerCase();
+        case 'hierarchy_rank':
+          return profile.hierarchy_rank || 0;
+        case 'is_public':
+          return profile.is_public ? 1 : 0;
+        case 'can_create_events':
+          return profile.can_create_events ? 1 : 0;
+        case 'restricted_to_event_name':
+          return (profile.restricted_to_event_name || '').toLowerCase();
+        case 'can_manage_event':
+          return profile.can_manage_event ? 1 : 0;
+        case 'can_delete_event':
+          return profile.can_delete_event ? 1 : 0;
+        case 'can_edit':
+          return profile.can_edit ? 1 : 0;
+        default:
+          return profile[sortBy] ?? '';
+      }
+    };
+
+    return [...currentProfiles].sort((a, b) => {
+      const va = getValue(a);
+      const vb = getValue(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }, [currentProfiles, sortBy, sortDir, isAuthenticated]);
+
+  const handleSort = useCallback(
+    (field) => {
+      if (sortBy === field) {
+        const nextDir = sortDir === 'asc' ? 'desc' : 'asc';
+        setSortDir(nextDir);
+        setPreference('ProfilesGallery.sortDir', nextDir);
+      } else {
+        setSortBy(field);
+        setSortDir('desc');
+        setPreference('ProfilesGallery.sortBy', field);
+        setPreference('ProfilesGallery.sortDir', 'desc');
+      }
+    },
+    [sortBy, sortDir]
+  );
+
+  const getSortIcon = useCallback(
+    (field) => {
+      if (sortBy !== field) return null;
+      return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+    },
+    [sortBy, sortDir]
+  );
+
+  const handleEditProfile = (profile) => {
+    const mergedProfile = {
+      ...(profile.generalProfile || {}),
+      ...(profile.eventProfile || {}),
+      id: profile.id,
+      public_access_code: profile.public_access_code,
+      restricted_to_event: profile.restricted_to_event,
+    };
+    setSelectedProfile(mergedProfile);
+    setIsCreatingNewProfile(false);
+    setShowEditProfileModal(true);
+  };
+
+  const handleCreateProfile = () => {
+    const newProfileTemplate = {
+      id: null,
+      label: 'New Profile',
+      hierarchy_rank: 0,
+      can_upload_and_delete_images: 0,
+      can_edit: 0,
+      all_images: 0,
+      all_groups: 0,
+      all_albums: 0,
+      is_public: 0
+    };
+    
+    setSelectedProfile(newProfileTemplate);
+    setIsCreatingNewProfile(true);
+    setShowEditProfileModal(true);
+  };
+
+  const handleDeleteProfile = (profile) => {
+    setProfileToDelete(profile);
+    setShowDeleteConfirmModal(true);
+  };
+
+  const handleConfirmDeleteProfile = async () => {
+    if (!profileToDelete) return;
+
+    try {
+      await profilesAPI.delete(profileToDelete.id, eventUrl);
+      showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
+    } catch (error) {
+      console.error('Failed to delete profile:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete profile';
+      showToast(errorMsg, 'error');
+    } finally {
+      setProfileToDelete(null);
+      setShowDeleteConfirmModal(false);
+    }
+  };
+
+  const handleCopyPublicLink = async (profile) => {
+    try {
+      let publicCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, profile.id)
+        ? publicAccessCodes[profile.id]
+        : undefined;
+      if (publicCode === undefined) {
+        publicCode = await fetchPublicAccessCode(profile.id, { notifyOnError: true });
+      }
+      if (!publicCode) {
+        showToast('No public access code available. Generate one first.', 'error');
+        return;
+      }
+      
+      const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${publicCode}`;
+      await navigator.clipboard.writeText(publicUrl);
+      showToast('Public link copied to clipboard', 'success');
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      showToast('Failed to copy link', 'error');
+    }
+  };
+
+  const handleResetPublicCode = async (profile) => {
+    try {
+      const result = await profilesAPI.resetPublicAccessCode(profile.id);
+      showToast('Public access code reset', 'success');
+      
+      if (result.public_code) {
+        const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${result.public_code}`;
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          showToast('Public link copied to clipboard', 'success');
+        } catch (copyError) {
+          console.error('Failed to copy link:', copyError);
+          showToast('Link created but failed to copy', 'warning');
+        }
+      }
+      
+      setPublicAccessCodes((prev) => ({
+        ...prev,
+        [profile.id]: result.public_code || null,
+      }));
+      setPublicAccessFlags((prev) => ({
+        ...prev,
+        [profile.id]: result.public_code ? 1 : 0,
+      }));
+    } catch (error) {
+      console.error('Failed to reset public access code:', error);
+      showToast(formatErrorMessage('reset public access code', error), 'error');
+    }
+  };
+
+  const handleRemovePublicCode = async (profile) => {
+    try {
+      await profilesAPI.removePublicAccessCode(profile.id);
+      showToast('Public access code removed', 'success');
+      setPublicAccessCodes((prev) => ({
+        ...prev,
+        [profile.id]: null,
+      }));
+      setPublicAccessFlags((prev) => ({
+        ...prev,
+        [profile.id]: 0,
+      }));
+    } catch (error) {
+      console.error('Failed to remove public access code:', error);
+      showToast(formatErrorMessage('remove public access code', error), 'error');
+    }
+  };
+
+  const stats = useMemo(() => {
+    const total = profilesArray.length;
+    const publicCount = profilesArray.filter((p) => p.is_public === 1).length;
+    const privateCount = total - publicCount;
+    return { total, public: publicCount, private: privateCount };
+  }, [profilesArray]);
+
+  // Get selected event name for display
+  const selectedEventName = useMemo(() => {
+    if (!filterEventId || filterEventId === FILTER_ALL_EVENTS) return 'All Events';
+    const event = eventsList.find(e => {
+      const evtId = e.event_id || e.id;
+      return evtId && String(evtId) === String(filterEventId);
+    });
+    return event?.name || 'Untitled Event';
+  }, [filterEventId, eventsList]);
+
+  // Filter events based on search term
+  const filteredEvents = useMemo(() => {
+    if (!eventSearchTerm.trim()) return eventsList;
+    const searchLower = eventSearchTerm.toLowerCase();
+    return eventsList.filter(event => {
+      const evtName = event?.name || 'Untitled Event';
+      return evtName.toLowerCase().includes(searchLower);
+    });
+  }, [eventsList, eventSearchTerm]);
+
+  // Reset highlighted index when filtered events change
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [filteredEvents.length, eventSearchTerm]);
+
+  // Handle event selection
+  const handleEventSelect = (evtId) => {
+    const newEventId = evtId || FILTER_ALL_EVENTS;
+    setFilterEventId(newEventId);
+    setEventSearchTerm('');
+    setShowEventDropdown(false);
+    setHighlightedIndex(0);
+  };
+
+  // Get selectable options (including "All Events")
+  const selectableOptions = useMemo(() => {
+    const options = [];
+    if (!eventSearchTerm) {
+      options.push({ id: null, name: 'All Events', isPlaceholder: true });
+    }
+    filteredEvents.forEach(event => {
+      const evtId = event?.event_id || event?.id;
+      const evtName = event?.name || 'Untitled Event';
+      options.push({ id: evtId, name: evtName, isPlaceholder: false });
+    });
+    return options;
+  }, [filteredEvents, eventSearchTerm]);
+
+  // Handle keyboard navigation
+  const handleEventInputKeyDown = (e) => {
+    if (!showEventDropdown) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowEventDropdown(true);
+        return;
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightedIndex(prev => 
+          prev < selectableOptions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightedIndex(prev => prev > 0 ? prev - 1 : 0);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectableOptions.length > 0) {
+          const safeIndex = highlightedIndex >= 0 && highlightedIndex < selectableOptions.length 
+            ? highlightedIndex 
+            : 0;
+          const option = selectableOptions[safeIndex];
+          if (option) {
+            handleEventSelect(option.id);
+          }
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        setShowEventDropdown(false);
+        setEventSearchTerm(selectedEventName);
+        break;
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        eventInputRef.current &&
+        !eventInputRef.current.contains(event.target) &&
+        eventDropdownRef.current &&
+        !eventDropdownRef.current.contains(event.target)
+      ) {
+        setShowEventDropdown(false);
+        // Reset search term to selected event name when closing
+        setEventSearchTerm(selectedEventName);
+      }
+    };
+
+    if (showEventDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showEventDropdown, selectedEventName]);
+
+  // Update filterEventId when eventId becomes available (e.g., after useEventId resolves)
+  useEffect(() => {
+    if (eventId) {
+      // If we have an eventId in URL, always use it
+      if (String(filterEventId) !== String(eventId)) {
+        setFilterEventId(eventId);
+      }
+    } else {
+      // If no eventId in URL, reset to FILTER_ALL_EVENTS
+      if (filterEventId !== FILTER_ALL_EVENTS) {
+        setFilterEventId(FILTER_ALL_EVENTS);
+      }
+    }
+  }, [eventId, filterEventId]);
+
+  // Update search term when selected event changes
+  useEffect(() => {
+    if (!showEventDropdown) {
+      setEventSearchTerm(selectedEventName);
+    }
+  }, [filterEventId, selectedEventName, showEventDropdown]);
+
+  return (
+    <>
+      <div className="min-h-screen bg-gray-50">
+        {!eventUrl && <Header />}
+        <div className="bg-white border-b border-gray-200">
+          <div className="w-full px-8 py-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <User className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Profile Management</h1>
+                  <p className="text-sm text-gray-500">
+                    {isAuthenticated
+                      ? `${stats.total} profile${stats.total === 1 ? '' : 's'}`
+                      : 'Loading...'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {/* Event Filter Combobox */}
+                <div className="relative" ref={eventInputRef}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={eventSearchTerm}
+                      onChange={(e) => {
+                        setEventSearchTerm(e.target.value);
+                        setShowEventDropdown(true);
+                      }}
+                      onFocus={() => {
+                        // Clear the input if it shows the display name, so user can type freely
+                        if (eventSearchTerm === selectedEventName) {
+                          setEventSearchTerm('');
+                        }
+                        setShowEventDropdown(true);
+                      }}
+                      onKeyDown={handleEventInputKeyDown}
+                      placeholder="Search events..."
+                      className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {showEventDropdown && (
+                    <div
+                      ref={eventDropdownRef}
+                      className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
+                    >
+                      {selectableOptions.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          {eventSearchTerm ? 'No events found' : 'No events available'}
+                        </div>
+                      ) : (
+                        selectableOptions.map((option, index) => {
+                          const isSelected = option.id === null 
+                            ? filterEventId === FILTER_ALL_EVENTS 
+                            : option.id && String(option.id) === String(filterEventId);
+                          const isHighlighted = index === highlightedIndex;
+                          return (
+                            <button
+                              key={option.id || 'all-events'}
+                              type="button"
+                              onClick={() => handleEventSelect(option.id)}
+                              className={`w-full text-left px-3 py-2 text-sm ${
+                                isHighlighted 
+                                  ? 'bg-blue-100 text-blue-900' 
+                                  : isSelected 
+                                    ? 'bg-blue-50 text-blue-700' 
+                                    : 'text-gray-700 hover:bg-gray-100'
+                              }`}
+                            >
+                              {option.name}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="relative">
+                  <button
+                    onMouseEnter={() => setShowPublicAccessTooltip(true)}
+                    onMouseLeave={() => setShowPublicAccessTooltip(false)}
+                    className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <HelpCircle className="w-5 h-5" />
+                  </button>
+                  {showPublicAccessTooltip && (
+                    <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+                      <p className="mb-2 font-medium">Public Access Codes</p>
+                      <p className="mb-1">• Public profiles can be accessed via direct links</p>
+                      <p className="mb-1">• Copy link: Share the public access URL</p>
+                      <p className="mb-1">• Reset link: Generate a new access code</p>
+                      <p>• Remove link: Disable public access</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full px-8 py-8">
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
+          {loading && isAuthenticated ? (
+            <div className="flex items-center justify-center py-16 text-gray-500">
+              <div className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+              Loading profiles...
+            </div>
+          ) : sortedProfiles.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No profiles</h3>
+              <p className="text-gray-500 mb-4">Get started by creating a new profile.</p>
+              {isAuthenticated && (
+                <button
+                  onClick={handleCreateProfile}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Profile</span>
+                </button>
+              )}
+            </motion.div>
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th
+                        onClick={() => handleSort('label')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-48 min-w-[192px]"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Name</span>
+                          {getSortIcon('label')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('hierarchy_rank')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-24 min-w-[96px]"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Rank</span>
+                          {getSortIcon('hierarchy_rank')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('is_public')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-36 min-w-[144px]"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Accessibility</span>
+                          {getSortIcon('is_public')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('can_create_events')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-40 min-w-[160px]"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Can Create Events</span>
+                          {getSortIcon('can_create_events')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('restricted_to_event_name')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Restricted To Event</span>
+                          {getSortIcon('restricted_to_event_name')}
+                        </div>
+                      </th>
+                      {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
+                        <>
+                          <th
+                            onClick={() => handleSort('can_manage_event')}
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-1">
+                              <span>Can Manage</span>
+                              {getSortIcon('can_manage_event')}
+                            </div>
+                          </th>
+                          <th
+                            onClick={() => handleSort('can_delete_event')}
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-1">
+                              <span>Can Delete</span>
+                              {getSortIcon('can_delete_event')}
+                            </div>
+                          </th>
+                          <th
+                            onClick={() => handleSort('can_edit')}
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-1">
+                              <span>Can Edit</span>
+                              {getSortIcon('can_edit')}
+                            </div>
+                          </th>
+                        </>
+                      )}
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sortedProfiles.map((profile) => (
+                      <tr key={profile.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900 font-medium w-48 min-w-[192px]">
+                          {profile.isPlaceholder ? (
+                            <span className="text-gray-400 italic">—</span>
+                          ) : (
+                            profile.label || 'Untitled Profile'
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 w-24 min-w-[96px]">
+                          {profile.isPlaceholder ? (
+                            <span className="text-gray-400 italic">—</span>
+                          ) : (
+                            profile.hierarchy_rank || 0
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm w-36 min-w-[144px]">
+                          {profile.isPlaceholder ? (
+                            <span className="text-gray-400 italic">—</span>
+                          ) : (
+                            <span
+                              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                profile.is_public === 1
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}
+                            >
+                              {profile.is_public === 1 ? 'Public' : 'Private'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm w-40 min-w-[160px]">
+                          {profile.isPlaceholder ? (
+                            <span className="text-gray-400 italic">—</span>
+                          ) : (
+                            <span
+                              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                profile.can_create_events === 1
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {profile.can_create_events === 1 ? 'Yes' : 'No'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {profile.isPlaceholder ? (
+                            <span className="text-gray-400 italic">—</span>
+                          ) : (
+                            profile.restricted_to_event_name || <span className="text-gray-400 italic">—</span>
+                          )}
+                        </td>
+                        {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
+                          <>
+                            <td className="px-4 py-3 text-sm">
+                              {profile.isPlaceholder ? (
+                                <span className="text-gray-400 italic">—</span>
+                              ) : (
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    profile.can_manage_event === 1
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {profile.can_manage_event === 1 ? 'Yes' : 'No'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {profile.isPlaceholder ? (
+                                <span className="text-gray-400 italic">—</span>
+                              ) : (
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    profile.can_delete_event === 1
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {profile.can_delete_event === 1 ? 'Yes' : 'No'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {profile.isPlaceholder ? (
+                                <span className="text-gray-400 italic">—</span>
+                              ) : (
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    profile.can_edit === 1
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {profile.can_edit === 1 ? 'Yes' : 'No'}
+                                </span>
+                              )}
+                            </td>
+                          </>
+                        )}
+                        <td className="px-4 py-3 text-sm text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            {profile.isPlaceholder ? (
+                              <>
+                                <span
+                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                  title="Please log in to manage profiles"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </span>
+                                <span
+                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                  title="Please log in to manage profiles"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {profile.is_public === 1 && (
+                                  <>
+                                    {profile.has_public_access_code === 1 ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleCopyPublicLink(profile)}
+                                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                          title="Copy public link"
+                                        >
+                                          <LinkIcon className="w-4 h-4 text-blue-600" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleResetPublicCode(profile)}
+                                          className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                                          title="Reset public access code"
+                                        >
+                                          <RotateCcw className="w-4 h-4 text-yellow-600" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemovePublicCode(profile)}
+                                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                          title="Remove public access code"
+                                        >
+                                          <Minus className="w-4 h-4 text-red-600" />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleResetPublicCode(profile)}
+                                        className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                                        title="Create public access code"
+                                      >
+                                        <LinkIcon className="w-4 h-4 text-green-600" />
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleEditProfile(profile)}
+                                  className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
+                                  title="Edit profile"
+                                >
+                                  <Edit2 className="w-4 h-4 text-indigo-600" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProfile(profile)}
+                                  className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                  title="Delete profile"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showEditProfileModal && selectedProfile && (
+        <EditProfileModal
+          isOpen={showEditProfileModal}
+          onClose={() => {
+            setShowEditProfileModal(false);
+            setSelectedProfile(null);
+            setIsCreatingNewProfile(false);
+          }}
+          profile={selectedProfile}
+          eventUrl={eventUrl}
+          urlHelpers={urlHelpers}
+          isCreating={isCreatingNewProfile}
+          initialEventId={filterEventId !== FILTER_ALL_EVENTS ? filterEventId : null}
+          onSave={() => {
+            // Changes are automatically applied by apiService interceptor
+            setIsCreatingNewProfile(false);
+          }}
+        />
+      )}
+
+      {showDeleteConfirmModal && profileToDelete && (
+        <ConfirmDelete
+          isOpen={showDeleteConfirmModal}
+          onClose={() => {
+            setShowDeleteConfirmModal(false);
+            setProfileToDelete(null);
+          }}
+          onConfirm={handleConfirmDeleteProfile}
+          title="Delete Profile"
+          message="Are you sure you want to delete profile"
+          itemName={profileToDelete.label}
+          confirmText="Delete"
+          cancelText="Cancel"
+          caption="This action cannot be undone."
+        />
+      )}
+
+      {isAuthenticated && (
+        <div className="fixed bottom-8 right-8 z-40">
+          <motion.button
+            onClick={handleCreateProfile}
+            className="w-16 h-16 bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 hover:from-purple-600 hover:via-indigo-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title="Create new profile"
+          >
+            <Plus className="w-8 h-8" />
+          </motion.button>
+        </div>
+      )}
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
+    </>
+  );
+}
+

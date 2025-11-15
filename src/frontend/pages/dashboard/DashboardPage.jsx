@@ -1,18 +1,21 @@
 import { Link } from 'react-router-dom';
 import { useEffect } from 'react';
-import { MessageSquare, LayoutDashboard, Calendar } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, Calendar, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Header from '../../components/layout/Header';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
 import { getCurrentProfile } from '../../utils/profileService';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const currentProfile = getCurrentProfile();
+  const permissions = usePermissions();
   const hasManageableEvents = currentProfile?.has_manageable_events === 1;
   const hasFeedbacks = currentProfile?.has_feedbacks === 1;
+  const isProfilesManager = permissions.isProfilesManager;
 
   // Set document title
   useEffect(() => {
@@ -39,6 +42,19 @@ export default function DashboardPage() {
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-blue-200',
       show: hasManageableEvents
+    },
+    {
+      id: 'profiles',
+      title: 'Profiles',
+      description: 'Manage user profiles and permissions',
+      icon: User,
+      link: '/dashboard/profiles',
+      iconBg: 'from-purple-100 to-purple-50',
+      iconColor: 'text-purple-600',
+      hoverBg: 'group-hover:from-purple-500 group-hover:to-purple-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-purple-200',
+      show: isProfilesManager
     },
     {
       id: 'feedbacks',

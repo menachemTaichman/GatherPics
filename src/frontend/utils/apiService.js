@@ -842,8 +842,29 @@ export const downloadAPI = {
 export const profilesAPI = {
   // Get all profiles
   getAll: async (eventUrl) => {
+    // If no eventUrl, use general profiles route (for dashboard)
+    if (!eventUrl) {
+      const key = `PROFILES_GET_ALL:general`;
+      return await withDedupe(key, async () => {
+        const response = await api.get(`/api/profiles`);
+        return response.data;
+      });
+    }
+    // Otherwise use event-specific route
     const eventId = await getEventIdForApi(eventUrl);
     const key = `PROFILES_GET_ALL:${eventId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/events/${eventId}/profiles`);
+      return response.data;
+    });
+  },
+  
+  // Get profiles filtered by event_id (uses profile_routes endpoint)
+  getByEvent: async (eventId) => {
+    if (!eventId) {
+      throw new Error('event_id is required');
+    }
+    const key = `PROFILES_GET_BY_EVENT:${eventId}`;
     return await withDedupe(key, async () => {
       const response = await api.get(`/api/events/${eventId}/profiles`);
       return response.data;

@@ -236,23 +236,29 @@ def find_incomplete_images():
     
     return incomplete_images
 
-def upsert_profiles_preferences(profile_ids: list[str] | None = None, upsert: bool = True):
-    if profile_ids is None:
-        profile_ids = general_models.db.execute_query('SELECT profile_id FROM profiles;', return_format=ReturnFormat.LIST_VALUES)
-    
-    for profile_id in profile_ids:
-        if not upsert:
-            general_models.db.execute_query(f"DELETE FROM profiles_preferences WHERE profile_id = ?", [profile_id])
-
-        preferences = DB.CONSTANTS()['profiles_preferences']
-        for preference_group, keys_dict in preferences.items():
-            for preference_key, (value_type, default_value) in keys_dict.items():
-                # Serialize the default value before storing
-                serialized_value = general_models.db.serialize_value(value_type, default_value)
-                try:
-                    general_models.db.execute_query(f"INSERT INTO profiles_preferences (profile_id, preference_group, preference_key, preference_value) VALUES (?, ?, ?, ?)", [profile_id, preference_group, preference_key, serialized_value])
-                except DatabaseError as e:
-                    print(f"Error inserting profile preference {preference_group}.{preference_key}: {e}")
+def add_preference(preference_group: str, preference_key: str, value_type: str, value: any):
+    query = f"""
+        INSERT INTO default_preferences (
+            preference_group,
+            preference_key,
+            value_type,
+            value
+        ) VALUES (?, ?, ?, ?)
+    """
+    params = [preference_group, preference_key, value_type, value]
+    db.execute_query(query, params)
+    query = f"""
+        INSERT INTO profiles_preferences (
+            profile_id,
+            preference_group,
+            preference_key,
+            preference_value
+        )
+        SELECT profile_id, ?, ?, ?
+        FROM profiles
+    """
+    params = [preference_group, preference_key, value]
+    db.execute_query(query, params)
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -276,21 +282,14 @@ group_id = 'da2558fd-3e7d-405f-8875-0fb056472a01'
 access_request_id = 33
 # applicant_profile_id = general_models.toggle_access_request(event_id, access_request_id, [group_id])
 # print(applicant_profile_id)
-
+    #             'FeedbacksGallery': {
+    #                 'filterStatus': (str, 'all'),
+    #                 'sortDir': (str, 'desc'),
+    #                 'sortBy': (str, 'created_at')
+    #             }
+# remove the preference
+db.execute_query('DELETE FROM default_preferences WHERE preference_group = "ProfilesGallery" AND preference_key = "filteredEventId";')
+db.execute_query('DELETE FROM profiles_preferences WHERE preference_group = "ProfilesGallery" AND preference_key = "filteredEventId";')
+add_preference('ProfilesGallery', 'filterEventId', 'string', 'all')
 recreate_views_triggers_and_indexes(db)
 # accessible
-images_accessible = event.models.db.execute_query('SELECT * FROM images_accessibility;', return_format=ReturnFormat.LIST_DICTS)
-accessible_images = event.models.db.execute_query('SELECT * FROM accessible_images;', return_format=ReturnFormat.LIST_DICTS)
-accessible_groups = event.models.db.execute_query('SELECT * FROM accessible_groups;', return_format=ReturnFormat.LIST_DICTS)
-accessible_moments = event.models.db.execute_query('SELECT * FROM accessible_moments;', return_format=ReturnFormat.LIST_DICTS)
-accessible_albums_images = event.models.db.execute_query('SELECT * FROM accessible_albums_images;', return_format=ReturnFormat.LIST_DICTS)
-accessible_albums = event.models.db.execute_query('SELECT * FROM accessible_albums;', return_format=ReturnFormat.LIST_DICTS)
-accessible_albums_images_actual = event.models.db.execute_query('SELECT * FROM accessible_albums_images_actual;', return_format=ReturnFormat.LIST_DICTS)
-accessible_faces = event.models.db.execute_query('SELECT * FROM accessible_faces;', return_format=ReturnFormat.LIST_DICTS)
-accessible_access_requests = event.models.db.execute_query('SELECT * FROM accessible_access_requests;', return_format=ReturnFormat.LIST_DICTS)
-accessible_uploads = event.models.db.execute_query('SELECT * FROM accessible_uploads;', return_format=ReturnFormat.LIST_DICTS)
-
-
-result = general_models.get_current_profile(event_id)
-print(result)
-recreate_views_triggers_and_indexes(db)
