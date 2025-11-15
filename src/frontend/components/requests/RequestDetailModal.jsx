@@ -70,6 +70,7 @@ export default function RequestDetailModal({
   const [showNotesTooltip, setShowNotesTooltip] = useState(false);
   const [notesTooltipPos, setNotesTooltipPos] = useState({ left: 0, top: 0 });
   const notesIconRef = useRef(null);
+  const lastCheckedRequestIdRef = useRef(null);
   const allGroups = useGroupsList(eventId);
   const storeRequest = useRequestById(eventId, request?.access_request_id || request?.id);
   
@@ -167,18 +168,33 @@ export default function RequestDetailModal({
 
   // Initialize form data and check name conflict if needed
   useEffect(() => {
-    if (isOpen && requestData) {
-      setProfileName(requestData.applicant_name || '');
-      setGroupActions({});
-      setClosedDetails('');
-      setNameConflict(false);
-      
-      // Check name conflict when modal opens (if new profile request and name exists)
-      if (isNewProfileRequest && requestData.applicant_name) {
-        checkNameConflict(requestData.applicant_name);
+    if (isOpen && requestData && requestId) {
+      // Only initialize/reset form when switching to a different request
+      if (lastCheckedRequestIdRef.current !== requestId) {
+        setProfileName(requestData.applicant_name || '');
+        setGroupActions({});
+        setClosedDetails('');
+        setNameConflict(false);
+        
+        // Check name conflict when modal opens (if new profile request and name exists)
+        // Only check once per requestId to avoid duplicate API calls
+        const isNewProfile = !requestData?.applicant_profile_id || 
+                             (requestData?.applicant_profile_id && requestData?.profile_id && 
+                              requestData?.applicant_profile_id !== requestData?.profile_id);
+        if (isNewProfile && requestData.applicant_name) {
+          lastCheckedRequestIdRef.current = requestId;
+          checkNameConflict(requestData.applicant_name);
+        } else {
+          lastCheckedRequestIdRef.current = requestId;
+        }
       }
     }
-  }, [isOpen, requestData, isNewProfileRequest]);
+    
+    // Reset ref when modal closes
+    if (!isOpen) {
+      lastCheckedRequestIdRef.current = null;
+    }
+  }, [isOpen, requestId, requestData]);
 
   // Track if new profile is created based on isNewProfileRequest
   useEffect(() => {
