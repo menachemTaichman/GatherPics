@@ -51,8 +51,12 @@ export default function ProfilesGalleryPage() {
 
   const [sortBy, setSortBy] = useState(() => getPreference('ProfilesGallery.sortBy', 'hierarchy_rank'));
   const [sortDir, setSortDir] = useState(() => getPreference('ProfilesGallery.sortDir', 'desc'));
-  // Initialize filterEventId: use eventId from URL if available, otherwise FILTER_ALL_EVENTS
+  // Initialize filterEventId: use restricted event if current profile is restricted, otherwise eventId from URL or FILTER_ALL_EVENTS
   const [filterEventId, setFilterEventId] = useState(() => {
+    const currentProfile = getCurrentProfile();
+    if (currentProfile?.restricted_to_event) {
+      return currentProfile.restricted_to_event;
+    }
     return eventId || FILTER_ALL_EVENTS;
   });
   const [eventSearchTerm, setEventSearchTerm] = useState('');
@@ -80,6 +84,8 @@ export default function ProfilesGalleryPage() {
   ]);
 
   const currentProfile = getCurrentProfile();
+  const isCurrentProfileRestricted = Boolean(currentProfile?.restricted_to_event);
+  const currentProfileRestrictedEventId = currentProfile?.restricted_to_event || null;
   const generalProfiles = useProfilesList();
   const eventsList = useEventsGeneralList();
   const eventProfiles = useEventProfilesList(filterEventId && filterEventId !== FILTER_ALL_EVENTS ? filterEventId : eventId);
@@ -604,19 +610,33 @@ export default function ProfilesGalleryPage() {
   }, [showEventDropdown, selectedEventName]);
 
   // Update filterEventId when eventId becomes available (e.g., after useEventId resolves)
+  // But don't override user selections - only set initial value
+  const hasInitializedFilterRef = useRef(false);
   useEffect(() => {
-    if (eventId) {
-      // If we have an eventId in URL, always use it
-      if (String(filterEventId) !== String(eventId)) {
-        setFilterEventId(eventId);
+    // Only set initial value once, don't override user selections
+    if (hasInitializedFilterRef.current) {
+      // After initialization, only enforce restriction if current profile is restricted
+      if (isCurrentProfileRestricted) {
+        // If current profile is restricted, always use the restricted event
+        if (String(filterEventId) !== String(currentProfileRestrictedEventId)) {
+          setFilterEventId(currentProfileRestrictedEventId);
+        }
       }
-    } else {
-      // If no eventId in URL, reset to FILTER_ALL_EVENTS
-      if (filterEventId !== FILTER_ALL_EVENTS) {
-        setFilterEventId(FILTER_ALL_EVENTS);
-      }
+      return;
     }
-  }, [eventId, filterEventId]);
+    
+    // Initial setup
+    if (isCurrentProfileRestricted) {
+      setFilterEventId(currentProfileRestrictedEventId);
+      hasInitializedFilterRef.current = true;
+    } else if (eventId) {
+      setFilterEventId(eventId);
+      hasInitializedFilterRef.current = true;
+    } else {
+      setFilterEventId(FILTER_ALL_EVENTS);
+      hasInitializedFilterRef.current = true;
+    }
+  }, [eventId, isCurrentProfileRestricted, currentProfileRestrictedEventId]);
 
   // Update search term when selected event changes
   useEffect(() => {
@@ -647,6 +667,7 @@ export default function ProfilesGalleryPage() {
               </div>
               <div className="flex items-center space-x-2">
                 {/* Event Filter Combobox */}
+                {!isCurrentProfileRestricted && (
                 <div className="relative" ref={eventInputRef}>
                   <div className="relative">
                     <input
@@ -705,6 +726,7 @@ export default function ProfilesGalleryPage() {
                     </div>
                   )}
                 </div>
+                )}
                 <div className="relative">
                   <button
                     onMouseEnter={() => setShowPublicAccessTooltip(true)}

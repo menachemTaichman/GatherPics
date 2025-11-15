@@ -278,18 +278,9 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-group_id = 'da2558fd-3e7d-405f-8875-0fb056472a01'
-access_request_id = 33
-# applicant_profile_id = general_models.toggle_access_request(event_id, access_request_id, [group_id])
-# print(applicant_profile_id)
-    #             'FeedbacksGallery': {
-    #                 'filterStatus': (str, 'all'),
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'created_at')
-    #             }
-# remove the preference
-db.execute_query('DELETE FROM default_preferences WHERE preference_group = "ProfilesGallery" AND preference_key = "filteredEventId";')
-db.execute_query('DELETE FROM profiles_preferences WHERE preference_group = "ProfilesGallery" AND preference_key = "filteredEventId";')
-add_preference('ProfilesGallery', 'filterEventId', 'string', 'all')
-recreate_views_triggers_and_indexes(db)
-# accessible
+
+recreate_views_triggers_and_indexes(general_models.db)
+
+events = general_models.get_childs('profiles', '162f6184-00a8-47f7-9895-f1fd8cbc93c5', 'events', return_ids=True)
+print(events)
+retult = general_models.db.execute_query('SELECT * FROM accessible_events_profiles;', return_format=ReturnFormat.LIST_DICTS)

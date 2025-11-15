@@ -29,6 +29,8 @@ def get_profile(profile_id):
     """Get a single general profile."""
     general_models = get_general_models()
     profile = general_models.get_entities('profiles', [profile_id])
+    events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+    profile[profile_id]['events'] = events
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
@@ -70,6 +72,66 @@ def update_profile(profile_id):
     """Update a general profile."""
     data = request.json or {}
     return _update_profile(profile_id, data)
+
+@profile_bp.route("/api/profiles/<profile_id>/events/<event_id>", methods=["POST"])
+@require_auth
+def add_event_to_profile(profile_id, event_id):
+    """Add an event to a profile."""
+    general_models = get_general_models()
+    event = get_event(event_id)
+    try:
+        # Add event
+        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD)
+        
+        # Get updated profile with events
+        updated_profile = general_models.get_entities('profiles', [profile_id])
+        updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+        updated_profile[profile_id]['events'] = updated_events
+        
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': updated_profile,
+            'event_id': 'general',
+        }]
+        
+        return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@profile_bp.route("/api/profiles/<profile_id>/events/<event_id>", methods=["DELETE"])
+@require_auth
+def remove_event_from_profile(profile_id, event_id):
+    """Remove an event from a profile."""
+    event = get_event(event_id)
+    general_models = get_general_models()
+    try:
+        # Remove event
+        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+        
+        # Get updated profile with events
+        updated_profile = general_models.get_entities('profiles', [profile_id])
+        updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+        updated_profile[profile_id]['events'] = updated_events
+        
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': updated_profile,
+            'event_id': 'general',
+        }]
+        
+        return jsonify({"success": True, "changes": changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @profile_bp.route("/api/profiles/<profile_id>", methods=["DELETE"])
 @require_auth

@@ -144,7 +144,7 @@ class DB:
                 'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name'],
                 'relations': {
                     'events': {
-                        'relation_table': 'events_profiles',
+                        'relation_table': 'events_profiles2',
                         'fields_needed': ['event_id'],
                         'relation_table_fields': [
                             'can_delete_event',
@@ -442,6 +442,13 @@ class DB:
             'current_profile_events': {
                 'primary_key': ['profile_id', 'event_id'],
                 'accessible_table': 'current_profile_events',
+            },
+            # TODO: fix and remove this table
+            'events_profiles2': {
+                'original_table': 'events_profiles',
+                'primary_key': ['event_id', 'profile_id'],
+                'accessible_table': 'accessible_events_profiles',
+                'fields': [],
             },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
@@ -1674,7 +1681,7 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile to a higher or equal rank than the current profile')
-                        WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
+                        WHEN NEW.can_create_events = 1 AND OLD.can_create_events = 0 AND cur_profile('can_create_events') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile to a different event than the current profile')
@@ -1999,11 +2006,11 @@ class DB:
                             FROM accessible_events_profiles
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
-                        WHEN NEW.all_images = 1 AND cur_event_profile('all_images') = 0 THEN
+                        WHEN NEW.all_images = 1 AND OLD.all_images = 0 AND cur_event_profile('all_images') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1')
-                        WHEN NEW.all_groups = 1 AND cur_event_profile('all_groups') = 0 THEN
+                        WHEN NEW.all_groups = 1 AND OLD.all_groups = 0 AND cur_event_profile('all_groups') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
-                        WHEN NEW.all_albums = 1 AND cur_event_profile('all_albums') = 0 THEN
+                        WHEN NEW.all_albums = 1 AND OLD.all_albums = 0 AND cur_event_profile('all_albums') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
                     END;
 

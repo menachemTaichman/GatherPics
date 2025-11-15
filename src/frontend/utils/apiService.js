@@ -882,6 +882,27 @@ export const profilesAPI = {
     return result;
   },
   
+  // Get general profile by ID (without event context)
+  getGeneralById: async (profileId) => {
+    const key = `PROFILE_GET_GENERAL_BY_ID:${profileId}`;
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/profiles/${profileId}`);
+      return response.data;
+    });
+  },
+  
+  // Add event to profile
+  addEvent: async (profileId, eventId) => {
+    const response = await api.post(`/api/profiles/${profileId}/events/${eventId}`);
+    return response.data;
+  },
+  
+  // Remove event from profile
+  removeEvent: async (profileId, eventId) => {
+    const response = await api.delete(`/api/profiles/${profileId}/events/${eventId}`);
+    return response.data;
+  },
+  
   // Check if profile name exists
   checkName: async (label, excludeProfileId, restrictedToEventUrl) => {
     let restrictedToEventId = null;
