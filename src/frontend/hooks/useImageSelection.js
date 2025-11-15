@@ -48,6 +48,43 @@ export function useImageSelection({
 
   const keys = useMemo(() => (Array.isArray(items) ? items.map(getKey).filter(Boolean) : []), [items, getKey]);
 
+  // Sanitize selection: remove keys that no longer exist in current items
+  useEffect(() => {
+    if (keys.length === 0 && selectedKeys.size > 0) {
+      // If no valid keys, clear selection
+      setSelectedKeys(new Set());
+      lastSelectedKeyRef.current = null;
+      return;
+    }
+    
+    // Check if any selected keys are invalid
+    const validKeysSet = new Set(keys);
+    let hasInvalidKeys = false;
+    for (const key of selectedKeys) {
+      if (!validKeysSet.has(key)) {
+        hasInvalidKeys = true;
+        break;
+      }
+    }
+    
+    if (hasInvalidKeys) {
+      // Compute sanitized keys first
+      const sanitizedKeys = new Set();
+      for (const key of selectedKeys) {
+        if (validKeysSet.has(key)) {
+          sanitizedKeys.add(key);
+        }
+      }
+      
+      setSelectedKeys(sanitizedKeys);
+      
+      // Clear lastSelectedKeyRef if it's invalid
+      if (lastSelectedKeyRef.current && !validKeysSet.has(lastSelectedKeyRef.current)) {
+        lastSelectedKeyRef.current = sanitizedKeys.size > 0 ? Array.from(sanitizedKeys)[sanitizedKeys.size - 1] : null;
+      }
+    }
+  }, [keys, selectedKeys]);
+
   const toggleKey = useCallback((key, event) => {
     setSelectedKeys(prev => {
       const next = new Set(prev);
