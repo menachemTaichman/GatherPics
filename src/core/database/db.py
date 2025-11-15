@@ -309,7 +309,7 @@ class DB:
             'groups': {
                 'primary_key': 'group_id',
                 'accessible_table': 'accessible_groups',
-                'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image', 'is_accessible'],
+                'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image'],
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
                     'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
@@ -863,6 +863,24 @@ class DB:
                 FROM groups_accessibility_helper gah
                 JOIN events_profiles ep ON gah.event_id = ep.event_id AND gah.profile_id = ep.profile_id
             ''',
+            'groups_to_request_access': '''
+                SELECT
+                    gah.event_id,
+                    gah.profile_id,
+                    gah.group_id
+                FROM groups_accessibility_helper gah
+                WHERE gah.is_accessible_helper = 0
+                AND EXISTS (
+                    SELECT 1
+                    FROM groups_images gi
+                    INNER JOIN images_accessibility ia ON
+                        gi.image_id = ia.image_id
+                        AND ia.event_id = gah.event_id
+                        AND ia.profile_id = gah.profile_id
+                        AND ia.is_accessible = 1
+                    WHERE gi.group_id = gah.group_id
+                )
+            ''',
             'moments_accessibility': '''
                 SELECT
                     ep.event_id,
@@ -982,6 +1000,13 @@ class DB:
             """,
 
             # current profile
+            'current_groups_to_request_access': '''
+                SELECT
+                    gta.group_id
+                FROM groups_to_request_access gta
+                WHERE gta.event_id = cur_event_profile('event_id')
+                AND gta.profile_id = cur_profile('profile_id')
+            ''',
             'current_event_profile': '''
                 SELECT
                     ep.event_id,
@@ -995,18 +1020,41 @@ class DB:
                     all_albums,
                     CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
                     CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
-                    CASE WHEN COUNT(i.image_id) > 0 OR all_images = 1 THEN 1 ELSE 0 END as has_images,
-                    CASE WHEN SUM(g.is_accessible) > 0 OR all_groups = 1 THEN 1 ELSE 0 END as has_groups,
-                    CASE WHEN COUNT(a.album_id) > 0 OR all_albums = 1 THEN 1 ELSE 0 END as has_albums,
-                    CASE WHEN SUM(g.is_accessible) <> COUNT(g.group_id) THEN 1 ELSE 0 END as enable_new_requests,
+                    CASE WHEN
+                        (all_images = 1 AND can_edit = 1)
+                        OR EXISTS (
+                            SELECT 1
+                            FROM accessible_images ai
+                        )
+                    THEN 1 ELSE 0 END as has_images,
+                    CASE WHEN
+                        (all_groups = 1 AND can_edit = 1)
+                        OR EXISTS (
+                            SELECT 1
+                            FROM accessible_groups g
+                        )
+                    THEN 1 ELSE 0 END as has_groups,
+                    CASE WHEN
+                        (all_albums = 1 AND can_edit = 1)
+                        OR EXISTS (
+                            SELECT 1
+                            FROM accessible_albums aa
+                            INNER JOIN albums a ON aa.album_id = a.album_id
+                            WHERE LOWER(a.label) <> 'archive'
+                            AND LOWER(a.label) <> 'favorites'
+                        )
+                    THEN 1 ELSE 0 END as has_albums,
+                    CASE WHEN EXISTS (
+                        SELECT 1
+                        FROM current_groups_to_request_access cgtra
+                    )
+                    THEN 1 ELSE 0 END as enable_new_requests,
                     COUNT(DISTINCT aar.access_request_id) as pending_access_requests_count
                 FROM events_profiles ep
                 LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
                 LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
-                LEFT JOIN accessible_images i
-                LEFT JOIN accessible_groups g
-                LEFT JOIN accessible_albums a ON (LOWER(a.label) <> 'archive' AND LOWER(a.label) <> 'favorites')
                 LEFT JOIN accessible_access_requests aar ON aar.is_closed = 0
+                LEFT JOIN current_groups_to_request_access cgtra
                 WHERE ep.event_id = cur_event_profile('event_id')
                 AND ep.profile_id = cur_profile('profile_id')
                 GROUP BY ep.profile_id
@@ -1158,124 +1206,114 @@ class DB:
                 WHERE cur_profile('profile_id') = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
             """,
 
-            # albums
-            'accessible_albums_helper': '''
-                SELECT a.* FROM albums a
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM events_profiles ep
-                    LEFT JOIN events_profiles_albums epa
-                    ON ep.event_id = epa.event_id
-                    AND ep.profile_id = epa.profile_id
-                    AND epa.album_id = a.album_id
-                    WHERE ep.profile_id = cur_profile('profile_id') AND (
-                        (ep.all_albums = 1 AND epa.album_id IS NULL)
-                        OR (ep.all_albums = 0 AND epa.album_id IS NOT NULL)
-                    )
-                    AND ep.event_id = cur_event_profile('event_id')
-                )
-                AND a.event_id = cur_event_profile('event_id')
-            ''',
-            
             # images
-            'images_details': '''
-                SELECT images.*,
-                    CASE WHEN a1.image_id IS NOT NULL THEN 1 ELSE 0 END AS is_archived,
-                    CASE WHEN a2.image_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite_helper
-                FROM images
-                LEFT JOIN (albums_images a1 INNER JOIN albums b1 ON a1.album_id = b1.album_id)
-                ON a1.image_id = images.image_id AND LOWER(b1.label) = 'archive'
-                LEFT JOIN (albums_images a2 INNER JOIN albums b2 ON a2.album_id = b2.album_id)
-                ON a2.image_id = images.image_id AND LOWER(b2.label) = 'favorites'
-                WHERE images.event_id = cur_event_profile('event_id')
-            ''',
             'accessible_images': '''
-                SELECT i.*,
-                (a2.album_id IS NOT NULL AND i.is_favorite_helper = 1) AS is_favorite
-                FROM images_details as i
-                LEFT JOIN accessible_albums_helper as a1 on LOWER(a1.label) = 'archive'
-                LEFT JOIN accessible_albums_helper as a2 on LOWER(a2.label) = 'favorites'
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM events_profiles ep
-                    LEFT JOIN events_profiles_images epi
-                    ON ep.event_id = epi.event_id
-                    AND ep.profile_id = epi.profile_id
-                    AND i.image_id = epi.image_id
-                    WHERE
-                        ep.event_id = cur_event_profile('event_id')
-                        AND ep.profile_id = cur_profile('profile_id') AND (
-                        (ep.all_images = 1 AND epi.image_id IS NULL)
-                        OR (ep.all_images = 0 AND epi.image_id IS NOT NULL)
-                    )
-                )
-                AND (a1.album_id IS NOT NULL OR i.is_archived = 0)
+                SELECT
+                    i.*,
+                    a1.album_id IS NOT NULL AS is_archived,
+                    a2.album_id IS NOT NULL AS is_favorite
+                FROM images i
+                INNER JOIN images_accessibility ia ON i.image_id = ia.image_id
+                LEFT JOIN (
+                    albums_accessibility aa1
+                    INNER JOIN albums a1 ON aa1.album_id = a1.album_id
+                    INNER JOIN albums_images ai1 ON
+                        aa1.album_id = ai1.album_id
+                        AND LOWER(a1.label) = 'archive'
+                        AND aa1.event_id = cur_event_profile('event_id')
+                        AND aa1.profile_id = cur_profile('profile_id')
+                        AND aa1.is_accessible = 1
+                ) ON ai1.image_id = ia.image_id
+                LEFT JOIN (
+                    albums_accessibility aa2
+                    INNER JOIN albums a2 ON aa2.album_id = a2.album_id
+                    INNER JOIN albums_images ai2 ON
+                        aa2.album_id = ai2.album_id
+                        AND LOWER(a2.label) = 'favorites'
+                        AND aa2.event_id = cur_event_profile('event_id')
+                        AND aa2.profile_id = cur_profile('profile_id')
+                        AND aa2.is_accessible = 1
+                ) ON ai2.image_id = ia.image_id
+                WHERE
+                    ia.event_id = cur_event_profile('event_id')
+                    AND ia.profile_id = cur_profile('profile_id')
+                    AND ia.is_accessible = 1
             ''',
 
-            # groups & faces
-            'accessible_groups_helper': '''
-                SELECT g.*,
-                CASE WHEN
-                    (
-                        (cur_event_profile('all_groups') = 1 AND epg.group_id IS NULL)
-                        OR (cur_event_profile('all_groups') = 0 AND epg.group_id IS NOT NULL)
-                    )
-                    AND (LOWER(g.label) <> 'unassociated' OR cur_event_profile('can_edit') = 1)
-                THEN 1 ELSE 0 END AS is_accessible
-                FROM groups g
-                LEFT JOIN events_profiles_groups epg ON g.group_id = epg.group_id AND epg.profile_id = cur_profile('profile_id')
-                WHERE g.event_id = cur_event_profile('event_id')
-            ''',
+            # faces
             'accessible_faces': '''
-                SELECT f.*, i.upload_id
+                SELECT
+                    f.*,
+                    i.upload_id
                 FROM faces f 
-                INNER JOIN accessible_images i ON f.image_id = i.image_id
-                INNER JOIN accessible_groups_helper g ON f.group_id = g.group_id
-                WHERE g.is_accessible = 1
-                AND g.event_id = cur_event_profile('event_id')
+                INNER JOIN images i ON f.image_id = i.image_id
+                INNER JOIN faces_accessibility fa ON
+                    f.face_id = fa.face_id
+                    AND fa.profile_id = cur_profile('profile_id')
+                    AND fa.is_accessible = 1
+                    AND fa.event_id = cur_event_profile('event_id')
+                    AND fa.is_accessible = 1
             ''',
+
+            # groups
             'groups_images': '''
-                SELECT i.image_id as image_id, g.group_id as group_id
+                SELECT
+                    i.image_id as image_id,
+                    g.group_id as group_id
                 FROM images i
-                INNER JOIN faces ON i.image_id = faces.image_id
-                INNER JOIN groups g ON faces.group_id = g.group_id
-                WHERE g.event_id = cur_event_profile('event_id')
+                INNER JOIN faces f ON i.image_id = f.image_id
+                INNER JOIN groups g ON f.group_id = g.group_id
                 GROUP BY i.image_id, g.group_id
             ''',
             'accessible_groups_images': '''
-                SELECT ai.image_id as image_id, af.group_id as group_id
+                SELECT
+                    ai.image_id as image_id,
+                    af.group_id as group_id
                 FROM accessible_images ai
                 INNER JOIN accessible_faces af ON ai.image_id = af.image_id
-                INNER JOIN accessible_groups_helper g ON af.group_id = g.group_id
-                WHERE g.event_id = cur_event_profile('event_id')
+                INNER JOIN groups_accessibility ga ON
+                    af.group_id = ga.group_id
+                    AND ga.profile_id = cur_profile('profile_id')
+                    AND ga.is_accessible = 1
+                    AND ga.event_id = cur_event_profile('event_id')
                 GROUP BY ai.image_id, af.group_id
             ''',
             'accessible_groups': '''
                 SELECT 
-                    g.*, rf.image_id as representative_image,
-                    COUNT(DISTINCT f.face_id) AS faces_count,
+                    g.*,
+                    rf.image_id as representative_image,
+                    COUNT(DISTINCT af.face_id) AS faces_count,
                     COUNT(DISTINCT agi.image_id) AS images_count,
                     COUNT(DISTINCT CASE WHEN ai.is_archived = 0 THEN agi.image_id END) AS active_images_count
-                FROM accessible_groups_helper g
-                LEFT JOIN accessible_groups_images agi 
-                    ON g.group_id = agi.group_id
-                LEFT JOIN accessible_images ai
-                    ON agi.image_id = ai.image_id
-                LEFT JOIN faces f
-                    ON f.group_id = g.group_id
-                LEFT JOIN faces rf
-                    ON g.representative_face = rf.face_id
+                FROM (
+                    groups g
+                    LEFT JOIN faces rf ON g.representative_face = rf.face_id
+                )
+                INNER JOIN groups_accessibility ga ON
+                    g.group_id = ga.group_id
+                    AND ga.profile_id = cur_profile('profile_id')
+                    AND ga.is_accessible = 1
+                    AND ga.event_id = cur_event_profile('event_id')
+                LEFT JOIN (
+                    accessible_groups_images agi
+                    INNER JOIN accessible_images ai ON agi.image_id = ai.image_id
+                ) ON g.group_id = agi.group_id
+                LEFT JOIN accessible_faces af ON af.group_id = g.group_id
                 GROUP BY g.group_id
             ''',
 
             # moments
             'accessible_moments': '''
                 SELECT m.*,
-                COUNT(i.image_id) as images_count,
-                COUNT(i.image_id) - COALESCE(SUM(i.is_archived), 0) AS active_images_count
+                COUNT(ai.image_id) as images_count,
+                COUNT(ai.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
                 FROM moments m
-                LEFT JOIN accessible_images i ON m.moment_id = i.moment_id
-                WHERE m.event_id = cur_event_profile('event_id')
+                INNER JOIN moments_accessibility ma ON m.moment_id = ma.moment_id
+                LEFT JOIN accessible_images ai ON ma.moment_id = ai.moment_id
+                WHERE
+                    ma.event_id = cur_event_profile('event_id')
+                    AND ma.profile_id = cur_profile('profile_id')
+                    AND ma.is_accessible = 1
                 GROUP BY m.moment_id
             ''',
 
@@ -1288,24 +1326,39 @@ class DB:
                 AND albums.event_id = cur_event_profile('event_id')
             ''',
             'accessible_albums_images': '''
-                SELECT albums_images.*
-                FROM albums_images
-                INNER JOIN accessible_images ON albums_images.image_id = accessible_images.image_id
-                INNER JOIN accessible_albums_helper aa ON albums_images.album_id = aa.album_id
+                SELECT ali.*
+                FROM albums_images ali
+                INNER JOIN accessible_images ai ON ali.image_id = ai.image_id
+                INNER JOIN albums_accessibility aa ON ali.album_id = aa.album_id
+                WHERE
+                    aa.event_id = cur_event_profile('event_id')
+                    AND aa.profile_id = cur_profile('profile_id')
+                    AND aa.is_accessible = 1
             ''',
             'accessible_albums_images_actual': '''
-                SELECT albums_images_actual.*
-                FROM albums_images_actual
-                INNER JOIN accessible_images ON albums_images_actual.image_id = accessible_images.image_id
-                INNER JOIN accessible_albums_helper aa ON albums_images_actual.album_id = aa.album_id
+                SELECT aia.*
+                FROM albums_images_actual aia
+                INNER JOIN accessible_images ai ON aia.image_id = ai.image_id
+                INNER JOIN albums_accessibility aa ON aia.album_id = aa.album_id
+                WHERE
+                    aa.event_id = cur_event_profile('event_id')
+                    AND aa.profile_id = cur_profile('profile_id')
+                    AND aa.is_accessible = 1
             ''',
             'accessible_albums': '''
-                SELECT aa.*,
-                COUNT(aia.image_id) as images_count,
-                COUNT(aia.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
-                FROM accessible_albums_helper aa
-                LEFT JOIN accessible_albums_images aia ON aa.album_id = aia.album_id
-                LEFT JOIN accessible_images ai ON aia.image_id = ai.image_id
+                SELECT a.*,
+                COUNT(ai.image_id) as images_count,
+                COUNT(ai.image_id) - COALESCE(SUM(ai.is_archived), 0) AS active_images_count
+                FROM albums a
+                INNER JOIN albums_accessibility aa ON a.album_id = aa.album_id
+                LEFT JOIN (
+                    accessible_albums_images aai
+                    INNER JOIN accessible_images ai ON aai.image_id = ai.image_id
+                ) ON aa.album_id = aai.album_id
+                WHERE
+                    aa.event_id = cur_event_profile('event_id')
+                    AND aa.profile_id = cur_profile('profile_id')
+                    AND aa.is_accessible = 1
                 GROUP BY aa.album_id
             ''',
 
@@ -1379,9 +1432,12 @@ class DB:
             # access requests
             'access_requests_groups_details': '''
                 SELECT arg.*,
-                agh.is_accessible
+                ga.is_accessible
                 FROM access_requests_groups arg
-                INNER JOIN accessible_groups_helper agh ON arg.group_id = agh.group_id
+                INNER JOIN groups_accessibility ga ON
+                    arg.group_id = ga.group_id
+                    AND ga.profile_id = cur_profile('profile_id')
+                    AND ga.event_id = cur_event_profile('event_id')
             ''',
             'access_requests_details': '''
                 SELECT
@@ -1447,6 +1503,11 @@ class DB:
                 SELECT ag.*
                 FROM access_requests_groups ag
                 INNER JOIN accessible_access_requests ar ON ag.access_request_id = ar.access_request_id
+                INNER JOIN groups_accessibility ga ON
+                    ag.group_id = ga.group_id
+                    AND ga.profile_id = cur_profile('profile_id')
+                    AND ga.is_accessible = 1
+                    AND ga.event_id = cur_event_profile('event_id')
             ''',
             'ensure_access_requests_closed': '''
                 SELECT *
@@ -2089,7 +2150,6 @@ class DB:
                             SELECT 1
                             FROM accessible_groups
                             WHERE group_id = NEW.group_id
-                            AND is_accessible = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
@@ -2113,7 +2173,6 @@ class DB:
                             SELECT 1
                             FROM accessible_groups
                             WHERE group_id = OLD.group_id
-                            AND is_accessible = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
@@ -2182,9 +2241,9 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_edit') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                        WHEN NOT EXISTS (SELECT face_id FROM accessible_faces WHERE face_id = OLD.face_id) THEN
+                        WHEN face_id NOT IN (SELECT face_id FROM accessible_faces) THEN
                             RAISE(ABORT, 'Permission denied: the face is not accessible')
-                        WHEN NEW.group_ID IS NOT NULL AND (SELECT is_accessible FROM accessible_groups_helper WHERE group_id = NEW.group_ID) = 0 THEN
+                        WHEN NEW.group_ID IS NOT NULL AND NEW.group_ID NOT IN (SELECT group_id FROM accessible_groups) THEN
                             RAISE(ABORT, 'Permission denied: the target group is not accessible')
                     END;
 
@@ -2318,17 +2377,14 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_edit') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                        WHEN OLD.group_ID NOT IN (SELECT group_id FROM accessible_groups) THEN
+                            RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
 
                     UPDATE groups
                     SET label = NEW.label,
                         representative_face = NEW.representative_face
-                    WHERE group_id = OLD.group_id
-                    AND EXISTS (
-                        SELECT 1 FROM accessible_groups_helper g
-                        WHERE g.group_id = OLD.group_id
-                        AND g.is_accessible = 1
-                    );
+                    WHERE group_id = OLD.group_id;
                 END;
             """,
             'trg_delete_accessible_groups': """
@@ -2339,15 +2395,12 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_edit') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                        WHEN OLD.group_ID NOT IN (SELECT group_id FROM accessible_groups) THEN
+                            RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
 
                     DELETE FROM groups
-                    WHERE group_id = OLD.group_id
-                    AND EXISTS (
-                        SELECT 1 FROM accessible_groups_helper g
-                        WHERE g.group_id = OLD.group_id
-                        AND g.is_accessible = 1
-                    );
+                    WHERE group_id = OLD.group_id;
                 END;
             """,
             'trg_insert_accessible_groups': """
@@ -2730,11 +2783,9 @@ class DB:
 
                     INSERT INTO access_requests_groups
                     (access_request_id, group_id)
-                    SELECT NEW.access_request_id, agh.group_id
-                    FROM accessible_groups_helper agh
-                    WHERE agh.group_id = NEW.group_id
-                    AND agh.is_accessible = 0
-                    AND LOWER(agh.label) <> 'unassociated';
+                    SELECT NEW.access_request_id as access_request_id, cgtra.group_id
+                    FROM current_groups_to_request_access cgtra
+                    WHERE cgtra.group_id = NEW.group_id;
 
                     -- ensure notifications
                     INSERT INTO notifications (
@@ -2763,14 +2814,11 @@ class DB:
                         )
                         AND EXISTS (
                             SELECT 1
-                            FROM groups g
-                            LEFT JOIN events_profiles_groups epg
-                            ON epg.event_id = ep.event_id
-                            AND epg.profile_id = ep.profile_id
-                            AND epg.group_id = g.group_id
-                            AND g.group_id = NEW.group_id
-                            WHERE (ep.all_groups = 1 AND epg.group_id IS NULL)
-                            OR (ep.all_groups = 0 AND epg.group_id IS NOT NULL)
+                            FROM groups_accessibility ga
+                            WHERE ga.group_id = NEW.group_id
+                            AND ga.profile_id = p.profile_id
+                            AND ga.event_id = cur_event_profile('event_id')
+                            AND ga.is_accessible = 1
                         );
 
                 END;
@@ -2848,14 +2896,12 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the access request is not accessible')
                         WHEN (SELECT is_closed FROM access_requests WHERE access_request_id = OLD.access_request_id) = 1 THEN
                             RAISE(ABORT, 'Permission denied: the access request is closed')
-                        WHEN NEW.approved = 1 AND NOT EXISTS (
-                            SELECT 1 FROM accessible_groups_helper ag
-                            WHERE ag.group_id = OLD.group_id
-                            AND ag.is_accessible = 1
-                        ) THEN
-                            RAISE(ABORT, 'Permission denied: the group is not accessible')
                         WHEN OLD.approved IS NOT NULL THEN
                             RAISE(ABORT, 'Permission denied: the access request group is closed')
+                        WHEN NEW.approved = 1 AND OLD.group_id NOT IN (
+                            SELECT group_id FROM accessible_groups
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
 
                     -- TODO: use IF

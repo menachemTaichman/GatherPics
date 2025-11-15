@@ -124,7 +124,8 @@ def get_representative_webp(event_id, entity, parent_id):
     }
 
     if not event.models.is_accessible(entity, parent_id):
-        abort(403)
+        if entity != 'groups' or not event.models.is_group_to_request_access(parent_id):
+            abort(403)
     _, file_id = event.models.get_representative(entity, parent_id)
     
     if not file_id:

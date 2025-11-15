@@ -694,7 +694,7 @@ export default function RequestDetailModal({
               </div>
 
               {/* Profile Name for New Profiles */}
-              {!requestData?.applicant_profile_id && (
+              {!requestData?.applicant_profile_id && !requestData?.closed_at && (
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">New Profile</h3>
                   <div>

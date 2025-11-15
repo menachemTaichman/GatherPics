@@ -368,6 +368,7 @@ class BaseModels(ABC):
         id_field = self.db.get_id_field(parent)
 
         within = operation in [REMOVE, UPDATE]
+        # TODO: maybe to use it only for count, not for the list of child ids
         valid_child_ids = self.get_childs(parent, entity_id, child_table, child_ids, within=within, return_ids=True)
         if not valid_child_ids:
             return [], {}

@@ -372,6 +372,13 @@ def update_current_profile():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+@profile_bp.route("/api/events/<event_id>/profiles/current/groups-to-request-access", methods=["GET"])
+@require_auth
+def get_groups_to_request_access(event_id):
+    """Get groups to request access for the current profile."""
+    event = get_event(event_id)
+    return jsonify({"groups": event.models.get_groups_to_request_access()})
+
 # ========================================
 # CHECK ENDPOINTS
 # ========================================

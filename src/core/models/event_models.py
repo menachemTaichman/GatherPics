@@ -486,3 +486,53 @@ class EventModels(BaseModels):
             """
             closed_details = self.db.serialize_value(list, access_request['closed_details'] + [closed_details])
             self.db.execute_query(query, (closed_details, access_request_id))
+
+    # -------- Access requests helpers --------
+    def get_groups_to_request_access(self) -> list[str]:
+        """Get groups to request access.
+        Returns:
+            list of group ids
+        """
+        query = f"""
+            SELECT
+                cgta.group_id,
+                g.label,
+                g.representative_face
+            FROM current_groups_to_request_access cgta
+            INNER JOIN groups g ON cgta.group_id = g.group_id
+        """
+        return self.db.execute_query(query, return_format=ReturnFormat.LIST_DICTS)
+
+    def is_group_to_request_access(self, group_id: str) -> bool:
+        """Check if a group is to request access.
+        Args:
+            group_id: group id
+        Returns:
+            True if group is to request access, False if not
+        """
+        query = f"""
+            SELECT * FROM current_groups_to_request_access WHERE group_id = ?
+        """
+        return bool(self.db.execute_query(query, (group_id,), return_format=ReturnFormat.VALUE))
+
+    def create_access_request(self, data: dict, group_ids: list[str]) -> str:
+        """Create an access request.
+        Args:
+            data: dictionary with the access request data
+            group_ids: list of group ids
+        Returns:
+            access request id
+        """
+        request_id = self.add('my_access_requests', data)
+
+        values_clause = ','.join([f'(?, ?)' for _ in range(len(group_ids))])
+        values = ()
+        for group_id in group_ids:
+            values += (request_id, group_id)
+        query = f"""
+            INSERT INTO accessible_my_access_requests_groups
+            (access_request_id, group_id)
+            VALUES {values_clause};
+        """
+        self.db.execute_query(query, values)
+        return request_id

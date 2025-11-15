@@ -64,8 +64,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
   
-  // Apply scope for all moments
-  useApplyScopes([{ entity: 'all', id: 'moments', eventId }]);
+  // Apply scope for all moments - memoized to ensure proper cleanup
+  const momentsScopes = useMemo(() => {
+    if (!eventId) return [];
+    return [{ entity: 'all', id: 'moments', eventId }];
+  }, [eventId]);
+  useApplyScopes(momentsScopes);
   
   const storeMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId), shallow);
   

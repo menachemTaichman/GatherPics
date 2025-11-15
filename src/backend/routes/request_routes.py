@@ -112,9 +112,10 @@ def create_access_request(event_id):
         if not (group_ids and isinstance(group_ids, list)):
             return jsonify({"error": "group_ids parameter is required"}), 400
         
-        request_id = event.models.add('my_access_requests', request_data)
-        event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
+        # request_id = event.models.add('my_access_requests', request_data)
+        # event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
 
+        request_id = event.models.create_access_request(request_data, group_ids)
         created_request = event.models.get_entities('my_access_requests', [request_id])
         changes = []
         if created_request:

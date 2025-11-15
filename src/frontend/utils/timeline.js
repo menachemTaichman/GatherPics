@@ -7,7 +7,9 @@ class TimelineManager {
 		this.isProgrammaticScroll = false;
 		this.currentMomentKey = null;
 		this.momentElements = new Map();
+		this.momentIds = new Map(); // Track momentKey -> momentId mapping for cleanup
 		this.visibleMoments = new Set(); // Track which moments are currently visible
+		this.scopedMoments = new Set(); // Track which moments are currently scoped (by momentKey)
 		this.anchorOffset = 0;
 		this.basePath = '/timeline';
 		this.anchorSelector = '.sticky.top-16';
@@ -276,6 +278,12 @@ class TimelineManager {
 			element.dataset.momentKey = momentKey;
 			this.momentElements.set(momentKey, element);
 			
+			// Store momentId for cleanup purposes
+			const momentId = element.dataset.momentId;
+			if (momentId) {
+				this.momentIds.set(momentKey, momentId);
+			}
+			
 			// Add to visibility observer to detect when it becomes visible
 			if (this._visibilityIO) {
 				try { this._visibilityIO.observe(element); } catch {}
@@ -299,12 +307,14 @@ class TimelineManager {
 			try { this._visibilityIO.unobserve(el); } catch {}
 		}
 		
-		// Remove from scroll observer
+		// Remove from scroll observer (this will also remove the scope)
 		this.unregisterMomentFromScroll(momentKey);
 		
 		// Clean up
 		this.momentElements.delete(momentKey);
+		this.momentIds.delete(momentKey);
 		this.visibleMoments.delete(momentKey);
+		this.scopedMoments.delete(momentKey);
 	}
 
 	registerMomentForScroll(momentKey, element) {
@@ -312,8 +322,11 @@ class TimelineManager {
 			try { this._io.observe(element); } catch {}
 		}
 		
-		// Add to data store scope
-		this.addMomentToDataStoreScope(momentKey);
+		// Only add scope if not already scoped (prevent duplicate additions)
+		if (!this.scopedMoments.has(momentKey)) {
+			this.scopedMoments.add(momentKey);
+			this.addMomentToDataStoreScope(momentKey);
+		}
 		
 		requestAnimationFrame(() => this.syncUrlToViewport());
 	}
@@ -324,28 +337,40 @@ class TimelineManager {
 			try { this._io.unobserve(el); } catch {}
 		}
 		
-		// Remove from data store scope
-		this.removeMomentFromDataStoreScope(momentKey);
+		// Only remove scope if it was scoped (prevent duplicate removals)
+		if (this.scopedMoments.has(momentKey)) {
+			this.scopedMoments.delete(momentKey);
+			this.removeMomentFromDataStoreScope(momentKey);
+		}
 	}
 
 	addMomentToDataStoreScope(momentKey) {
 		// Find the moment ID from the momentKey (label)
-		const momentElement = this.momentElements.get(momentKey);
-		if (momentElement) {
-			const momentId = momentElement.dataset.momentId;
-			if (momentId) {
-				// Actually add to data store scope
-				try {
-					const dataStore = window.__dataStore?.getState();
-					if (dataStore?.addScope) {
-						dataStore.addScope({ entity: 'moment', id: momentId, eventId: this.eventId });
-						
-						// Trigger API call to load moment data (including images)
-						this.loadMomentData(momentId);
-					}
-				} catch (error) {
-					// Silent error handling
+		let momentId = this.momentIds.get(momentKey);
+		
+		// Fallback to element if not in map
+		if (!momentId) {
+			const momentElement = this.momentElements.get(momentKey);
+			if (momentElement) {
+				momentId = momentElement.dataset.momentId;
+				if (momentId) {
+					this.momentIds.set(momentKey, momentId);
 				}
+			}
+		}
+		
+		if (momentId) {
+			// Actually add to data store scope
+			try {
+				const dataStore = window.__dataStore?.getState();
+				if (dataStore?.addScope) {
+					dataStore.addScope({ entity: 'moment', id: momentId, eventId: this.eventId });
+					
+					// Trigger API call to load moment data (including images)
+					this.loadMomentData(momentId);
+				}
+			} catch (error) {
+				// Silent error handling
 			}
 		}
 	}
@@ -362,20 +387,26 @@ class TimelineManager {
 	}
 
 	removeMomentFromDataStoreScope(momentKey) {
-		// Find the moment ID from the momentKey (label)
-		const momentElement = this.momentElements.get(momentKey);
-		if (momentElement) {
-			const momentId = momentElement.dataset.momentId;
-			if (momentId) {
-				// Actually remove from data store scope
-				try {
-					const dataStore = window.__dataStore?.getState();
-					if (dataStore?.removeScope) {
-						dataStore.removeScope({ entity: 'moment', id: momentId, eventId: this.eventId });
-					}
-				} catch (error) {
-					// Silent error handling
+		// Find the moment ID from the stored mapping (more reliable than element)
+		let momentId = this.momentIds.get(momentKey);
+		
+		// Fallback to element if not in map
+		if (!momentId) {
+			const momentElement = this.momentElements.get(momentKey);
+			if (momentElement) {
+				momentId = momentElement.dataset.momentId;
+			}
+		}
+		
+		if (momentId) {
+			// Actually remove from data store scope
+			try {
+				const dataStore = window.__dataStore?.getState();
+				if (dataStore?.removeScope) {
+					dataStore.removeScope({ entity: 'moment', id: momentId, eventId: this.eventId });
 				}
+			} catch (error) {
+				// Silent error handling
 			}
 		}
 	}
@@ -533,6 +564,9 @@ class TimelineManager {
 	}
 
 	destroy() {
+		// Clean up all moment scopes before destroying
+		this.clearAllMomentScopes();
+		
 		if (this._io) {
 			try { this._io.disconnect(); } catch {}
 			this._io = null;
@@ -545,7 +579,9 @@ class TimelineManager {
 			window.removeEventListener('scroll', this._scrollHandler);
 		}
 		this.momentElements.clear();
+		this.momentIds.clear();
 		this.visibleMoments.clear();
+		this.scopedMoments.clear();
 		if (this._resizeHandler) {
 			window.removeEventListener('resize', this._resizeHandler);
 		}
@@ -565,7 +601,9 @@ class TimelineManager {
 	refreshElements() {
 		// Clear all existing elements and recreate observers
 		this.momentElements.clear();
+		this.momentIds.clear();
 		this.visibleMoments.clear();
+		this.scopedMoments.clear();
 		if (this._io) {
 			try { this._io.disconnect(); } catch {}
 		}

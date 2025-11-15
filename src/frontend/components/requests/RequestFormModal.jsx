@@ -4,8 +4,8 @@ import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, Ar
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { requestsAPI, groupsAPI } from '../../utils/apiService';
-import { useGroupsList, useMyRequestById } from '../../utils/dataManager';
+import { requestsAPI, profilesAPI } from '../../utils/apiService';
+import { useMyRequestById } from '../../utils/dataManager';
 import { useApplyScopes, getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { getCurrentProfile } from '../../utils/profileService';
@@ -47,7 +47,7 @@ export default function RequestFormModal({
   const currentProfile = useMemo(() => getCurrentProfile(), []);
   const currentProfileId = currentProfile?.id || currentProfile?.profile_id;
   const currentProfileHasEmail = !!(currentProfile?.email);
-  const allGroups = useGroupsList(eventId);
+  const [allGroups, setAllGroups] = useState([]);
   const currentProfileIsPublic = currentProfile?.is_public === 1;
   
   const { registerModal, unregisterModal } = useModalManager();
@@ -58,22 +58,33 @@ export default function RequestFormModal({
   const [notesTooltipPos, setNotesTooltipPos] = useState({ left: 0, top: 0 });
   const notesIconRef = useRef(null);
   
-  // Fetch groups data when modal opens
+  // Fetch groups to request access when modal opens
   useEffect(() => {
     if (isOpen) {
       const fetchGroups = async () => {
         setIsLoadingGroups(true);
         try {
-          await groupsAPI.getAll(eventUrl);
+          const response = await profilesAPI.getGroupsToRequestAccess(eventUrl);
+          const groups = (response?.groups || []).map(group => ({
+            id: group.group_id,
+            group_id: group.group_id,
+            label: group.label,
+            representative_face: group.rep_id || group.representative_face
+          }));
+          setAllGroups(groups);
         } catch (error) {
           console.error('Failed to load groups:', error);
+          showToast(formatErrorMessage('load groups', error), 'error');
         } finally {
           setIsLoadingGroups(false);
         }
       };
       fetchGroups();
+    } else {
+      // Reset groups when modal closes
+      setAllGroups([]);
     }
-  }, [isOpen, eventUrl]);
+  }, [isOpen, eventUrl, showToast]);
 
   // State for loading request data
   const [isLoadingRequest, setIsLoadingRequest] = useState(false);
@@ -104,12 +115,9 @@ export default function RequestFormModal({
   useApplyScopes(
     currentRequestId && isEditing
       ? [
-          { entity: 'all', id: 'groups', eventId },
           { entity: 'my_access_request', id: currentRequestId, eventId }
         ]
-      : [
-          { entity: 'all', id: 'groups', eventId }
-        ]
+      : []
   );
 
   // Fetch request data when editing
@@ -276,16 +284,13 @@ export default function RequestFormModal({
   const filteredAndSortedGroups = useMemo(() => {
     return allGroups
       .filter(group => {
-        // Show only groups that are not accessible (is_accessible === false/0)
-        const isNotAccessible = group.is_accessible === false || group.is_accessible === 0;
-        
         // Filter out unassociated groups
         const isUnassociated = group.label && group.label.toLowerCase() === 'unassociated';
         
         const label = group.label || `Person ${group.id}`;
         const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
         
-        return isNotAccessible && !isUnassociated && matchesSearch;
+        return !isUnassociated && matchesSearch;
       })
       .sort((a, b) => {
         // Only sort by name

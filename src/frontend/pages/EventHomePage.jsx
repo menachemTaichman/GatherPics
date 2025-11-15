@@ -7,7 +7,7 @@ import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { ImageComponent } from '../hooks/useImage.jsx';
-import { API_BASE } from '../utils/apiService';
+import { API_BASE, eventsAPI } from '../utils/apiService';
 import { useApplyScopes } from '../utils/storeUtils';
 import { useEventGeneralById } from '../utils/dataManager';
 import { usePermissions } from '../hooks/usePermissions';
@@ -31,6 +31,18 @@ export default function EventHomePage({ eventUrl, eventData }) {
 
   const storeEvent = useEventGeneralById(eventId);
   const resolvedEvent = storeEvent || eventData || null;
+
+  // Fetch full event details when authenticated to ensure we have all fields (like name)
+  useEffect(() => {
+    if (!isAuthenticated || !eventUrl || !eventId) return;
+    // Only fetch if store doesn't have the event yet (storeEvent is null/undefined)
+    // This ensures we fetch full details once when authenticated
+    if (storeEvent) return;
+    
+    eventsAPI.getById(eventUrl).catch(() => {
+      // Silently fail - eventData prop should still work
+    });
+  }, [isAuthenticated, eventUrl, eventId, storeEvent]);
 
   const eventName = resolvedEvent?.name || 'Event';
   const permissions = usePermissions();
@@ -208,8 +220,9 @@ export default function EventHomePage({ eventUrl, eventData }) {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const scrollY = window.scrollY;
-          // Once scrolled past threshold, keep it small. Only restore full height when at very top (0)
-          const scrollDownThreshold = 150;
+          // Use a lower threshold (50px) so it triggers even with minimal content
+          // This ensures the animation works even when there's only one row of buttons
+          const scrollDownThreshold = 50;
           const newIsScrolled = scrollY > scrollDownThreshold;
           
           // Clear any pending scroll timeout
@@ -220,12 +233,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
           // Small debounce to reduce rapid toggling during fast scrolling
           scrollTimeout = setTimeout(() => {
             if (newIsScrolled !== isScrolled) {
-              console.log('🔄 Scroll state change:', { 
-                scrollY: scrollY.toFixed(2), 
-                scrollDownThreshold,
-                isScrolled: newIsScrolled,
-                wasScrolled: isScrolled
-              });
               setIsScrolled(newIsScrolled);
             }
           }, 10); // 10ms debounce for smoother feel
@@ -247,7 +254,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
     // Measure natural height on mount
     if (heroInnerRef.current && !naturalHeight) {
       const height = heroInnerRef.current.offsetHeight;
-      console.log('📐 Measured natural height:', height);
       setNaturalHeight(height);
     }
   }, [naturalHeight]);
@@ -273,20 +279,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
           }
         });
       });
-      
-      // Log after transition completes
-      setTimeout(() => {
-        const computedHeight = window.getComputedStyle(innerEl).height;
-        const actualHeight = innerEl.offsetHeight;
-        console.log('📏 Hero height update:', { 
-          isScrolled, 
-          targetHeight,
-          computedHeight,
-          actualHeight,
-          naturalHeight,
-          styleHeight: innerEl.style.height
-        });
-      }, 600);
     }
   }, [isScrolled, naturalHeight]);
 

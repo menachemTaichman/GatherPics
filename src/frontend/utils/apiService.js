@@ -967,6 +967,13 @@ export const profilesAPI = {
     return response.data;
   },
   
+  // Get groups to request access for current profile
+  getGroupsToRequestAccess: async (eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/profiles/current/groups-to-request-access`);
+    return response.data;
+  },
+  
   // === Direct Child Manipulation (for EditProfileModal) ===
   // These directly add/remove from profile relations, ignoring accessibility logic
   

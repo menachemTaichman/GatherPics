@@ -272,4 +272,25 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+group_id = 'da2558fd-3e7d-405f-8875-0fb056472a01'
+access_request_id = 33
+# applicant_profile_id = general_models.toggle_access_request(event_id, access_request_id, [group_id])
+# print(applicant_profile_id)
+
+recreate_views_triggers_and_indexes(db)
+# accessible
+images_accessible = event.models.db.execute_query('SELECT * FROM images_accessibility;', return_format=ReturnFormat.LIST_DICTS)
+accessible_images = event.models.db.execute_query('SELECT * FROM accessible_images;', return_format=ReturnFormat.LIST_DICTS)
+accessible_groups = event.models.db.execute_query('SELECT * FROM accessible_groups;', return_format=ReturnFormat.LIST_DICTS)
+accessible_moments = event.models.db.execute_query('SELECT * FROM accessible_moments;', return_format=ReturnFormat.LIST_DICTS)
+accessible_albums_images = event.models.db.execute_query('SELECT * FROM accessible_albums_images;', return_format=ReturnFormat.LIST_DICTS)
+accessible_albums = event.models.db.execute_query('SELECT * FROM accessible_albums;', return_format=ReturnFormat.LIST_DICTS)
+accessible_albums_images_actual = event.models.db.execute_query('SELECT * FROM accessible_albums_images_actual;', return_format=ReturnFormat.LIST_DICTS)
+accessible_faces = event.models.db.execute_query('SELECT * FROM accessible_faces;', return_format=ReturnFormat.LIST_DICTS)
+accessible_access_requests = event.models.db.execute_query('SELECT * FROM accessible_access_requests;', return_format=ReturnFormat.LIST_DICTS)
+accessible_uploads = event.models.db.execute_query('SELECT * FROM accessible_uploads;', return_format=ReturnFormat.LIST_DICTS)
+
+
+result = general_models.get_current_profile(event_id)
+print(result)
 recreate_views_triggers_and_indexes(db)

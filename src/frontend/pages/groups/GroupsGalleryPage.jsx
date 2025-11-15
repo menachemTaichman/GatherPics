@@ -5,7 +5,7 @@ import { FaceCard } from '../../components/groups';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
-import { setPreference, getImageCount } from '../../utils/settings';
+import { setPreference } from '../../utils/settings';
 import { optimisticUpdates, handleAPIError, groupsAPI } from '../../utils/apiService';
 import { useDataStore, selectors as storeSelectors, useGroupsList } from '../../utils/dataManager';
 import { useAuth } from '../../contexts/authContext';
@@ -54,22 +54,11 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   // Use groups from store or placeholders when not authenticated
   const currentGroups = isAuthenticated ? storeGroups : placeholderGroups;
 
-  // First filter to only groups with images (baseline for counts)
-  const groupsWithImages = useMemo(() => {
-    // Show all placeholders without filtering
-    if (!isAuthenticated) return currentGroups;
-    
-    return currentGroups.filter(group => {
-      const imageCount = getImageCount(group);
-      return imageCount > 0;
-    });
-  }, [currentGroups, isAuthenticated]);
-
   const filteredAndSortedGroups = useMemo(() => {
     // Skip filtering for placeholders
-    if (!isAuthenticated) return groupsWithImages;
+    if (!isAuthenticated) return currentGroups;
     
-    let filtered = groupsWithImages.filter(group => {
+    let filtered = currentGroups.filter(group => {
       // Filter by search term
       const matchesSearch = group.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            String(group.id || '').includes(searchTerm);
@@ -79,7 +68,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
     // Sort groups using global utility
     return sortGroups(filtered, sortBy, sortOrder);
-  }, [groupsWithImages, searchTerm, sortBy, sortOrder, isAuthenticated]);
+  }, [currentGroups, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
   return (
     <div className="w-full">
@@ -91,9 +80,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
               People Gallery
             </h1>
             <p className="text-gray-600">
-              {filteredAndSortedGroups.length === groupsWithImages.length 
+              {filteredAndSortedGroups.length === currentGroups.length 
                 ? `${filteredAndSortedGroups.length} people`
-                : `${filteredAndSortedGroups.length} of ${groupsWithImages.length} people`
+                : `${filteredAndSortedGroups.length} of ${currentGroups.length} people`
               }
             </p>
           </div>
