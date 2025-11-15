@@ -487,6 +487,46 @@ class EventModels(BaseModels):
             closed_details = self.db.serialize_value(list, access_request['closed_details'] + [closed_details])
             self.db.execute_query(query, (closed_details, access_request_id))
 
+    def check_accessibility(self, profile_id: str, entity: str, ids: list[str]) -> tuple[list[str], list[str]]:
+        """Check accessibility of entities for a profile.
+        Args:
+            profile_id: profile id
+            entity: 'images', 'albums', 'groups'
+            ids: list of ids
+        Returns:
+            list of accessible ids, list of inaccessible ids
+        """
+        accessibilities = {
+            'images': 'images_accessibility',
+            'albums': 'albums_accessibility',
+            'groups': 'groups_accessibility',
+        }
+        accessibility_table = accessibilities.get(entity)
+        if not accessibility_table:
+            raise ValueError(f"Invalid entity: {entity}")
+
+        if not self.is_accessible('events_profiles', profile_id):
+            raise Forbidden("The profile is not accessible")
+
+        accessible_ids = [entity_id for entity_id in self.get_entities(entity, ids).keys()]
+        if set(accessible_ids) - set(ids):
+            raise Forbidden("Some of the entities are not accessible")
+
+        id_field = self.db.get_id_field(entity)
+        query = f"""
+            SELECT
+                {id_field},
+                is_accessible
+                FROM {accessibility_table}
+                WHERE {id_field} IN ({','.join(['?'] * len(ids))})
+                AND event_id = cur_event_profile('event_id')
+                AND profile_id = ?
+        """
+        result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
+        accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
+        inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
+        return accessible_ids, inaccessible_ids
+
     # -------- Access requests helpers --------
     def get_groups_to_request_access(self) -> list[str]:
         """Get groups to request access.

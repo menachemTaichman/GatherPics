@@ -389,7 +389,11 @@ def check_images_from_profile(event_id, profile_id):
     """Check accessible images for a profile."""
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    return _get_profile_accessibility(event_id, profile_id, 'images', image_ids)
+    event = get_event(event_id)
+    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'images', image_ids)
+    len_accessible = len(accessible_ids)
+    len_inaccessible = len(inaccessible_ids)
+    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums/check", methods=["POST"])
 @require_auth
@@ -397,7 +401,11 @@ def check_albums_from_profile(event_id, profile_id):
     """Check accessible albums for a profile."""
     data = request.json or {}
     album_ids = data.get('album_ids', [])
-    return _get_profile_accessibility(event_id, profile_id, 'albums', album_ids)
+    event = get_event(event_id)
+    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'albums', album_ids)
+    len_accessible = len(accessible_ids)
+    len_inaccessible = len(inaccessible_ids)
+    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups/check", methods=["POST"])
 @require_auth
@@ -405,7 +413,11 @@ def check_groups_from_profile(event_id, profile_id):
     """Check accessible groups for a profile."""
     data = request.json or {}
     group_ids = data.get('group_ids', [])
-    return _get_profile_accessibility(event_id, profile_id, 'groups', group_ids)
+    event = get_event(event_id)
+    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'groups', group_ids)
+    len_accessible = len(accessible_ids)
+    len_inaccessible = len(inaccessible_ids)
+    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
 
 # ========================================
 # ACCESS MANAGEMENT
@@ -677,17 +689,6 @@ def _edit_event_profile_childs(event_id: str, profile_id: str, child: str, child
         return jsonify({"error": str(e)}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
-def _get_profile_accessibility(event_id: str, profile_id: str, child: str, child_ids: list[str]):
-    """Get the accessibility of a profile for a child."""
-    general_models = get_general_models()
-    event = get_event(event_id)
-    if not (general_models.get_current_profile()['is_profiles_manager'] and general_models.is_accessible('profiles', profile_id)):
-        return jsonify({"error": "Access denied"}), 403
-    _, event_profile = general_models.get_childs('events', event_id, 'profiles', [profile_id])
-    have_all = bool(event_profile.get(profile_id, {}).get(f'all_{child}', False))
-    len_accessible = len(event.models.get_childs('events_profiles', profile_id, child, child_ids, return_ids=True, within=not have_all))
-    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len(child_ids) - len_accessible})
 
 def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child_ids: list[str], set_accessible: bool):
     """Set multiple childs as accessible or inaccessible to a profile."""
