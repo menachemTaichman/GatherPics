@@ -13,6 +13,10 @@ import { ConfirmDelete } from '../../components/modals';
 import { useEventsGeneralList, useDataStore } from '../../utils/dataManager';
 import { useApplyScopes } from '../../utils/storeUtils';
 import Header from '../../components/layout/Header';
+import { useAuth } from '../../contexts/authContext';
+import { LoginModal } from '../../components/auth';
+import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { APP_CONFIG } from '../../config/appConfig';
 
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
@@ -35,6 +39,7 @@ function toNumber(value) {
 }
 
 export default function EventsGalleryPage() {
+  const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const { showToast } = useToast();
   const { canCreateEvents } = usePermissions();
 
@@ -53,6 +58,18 @@ export default function EventsGalleryPage() {
   const [filterVisibility, setFilterVisibility] = useState(() =>
     getPreference('EventsGallery.filterVisibility', 'all')
   );
+
+  // Set document title
+  useEffect(() => {
+    document.title = `Event Management | ${APP_CONFIG.name}`;
+  }, []);
+
+  // Auto-show login modal when not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      openLoginModal();
+    }
+  }, [isAuthenticated, isLoading, openLoginModal]);
 
   useApplyScopes([{ entity: 'all', id: 'events', eventId: 'general' }]);
 
@@ -103,30 +120,44 @@ export default function EventsGalleryPage() {
     }
   }, [applyChanges, showToast]);
 
-  useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-    fetchEvents();
-  }, [fetchEvents]);
+  useAuthRefresh(fetchEvents, []);
+
+  // Create placeholder events when not authenticated
+  const placeholderEvents = useMemo(() => {
+    return Array.from({ length: 5 }, (_, i) => ({
+      event_id: `placeholder-${i}`,
+      name: '',
+      url: '',
+      date: null,
+      is_public: false,
+      images_count: 0,
+      faces_count: 0,
+      albums_count: 0,
+      moments_count: 0,
+      isPlaceholder: true
+    }));
+  }, []);
 
   const currentProfile = useMemo(() => getCurrentProfile(), [profileVersion]);
   const profileEvents = currentProfile?.events || {};
 
   const editableEventIds = useMemo(() => {
+    if (!isAuthenticated) return new Set();
     return new Set(
       Object.entries(profileEvents)
         .filter(([, perms]) => perms && (perms.can_manage_event === 1 || perms.can_manage_event === true))
         .map(([id]) => String(id))
     );
-  }, [profileEvents]);
+  }, [profileEvents, isAuthenticated]);
 
   const deletableEventIds = useMemo(() => {
+    if (!isAuthenticated) return new Set();
     return new Set(
       Object.entries(profileEvents)
         .filter(([, perms]) => perms && (perms.can_delete_event === 1 || perms.can_delete_event === true))
         .map(([id]) => String(id))
     );
-  }, [profileEvents]);
+  }, [profileEvents, isAuthenticated]);
 
   const editableEventsCount = editableEventIds.size;
   const hasEditableEvents = editableEventsCount > 0;
@@ -141,9 +172,13 @@ export default function EventsGalleryPage() {
     });
   }, [eventsFromStore]);
 
+  // Use events from store or placeholders when not authenticated
+  const currentEvents = isAuthenticated ? eventsArray : placeholderEvents;
+
   const manageableEvents = useMemo(() => {
+    if (!isAuthenticated) return placeholderEvents;
     return eventsArray.filter((evt) => editableEventIds.has(String(evt.event_id)));
-  }, [eventsArray, editableEventIds]);
+  }, [eventsArray, editableEventIds, isAuthenticated, placeholderEvents]);
 
   const filteredEvents = useMemo(() => {
     if (filterVisibility === 'public') {
@@ -163,6 +198,8 @@ export default function EventsGalleryPage() {
   }, [manageableEvents]);
 
   const sortedEvents = useMemo(() => {
+    if (!isAuthenticated) return filteredEvents;
+
     const dir = sortDir === 'asc' ? 1 : -1;
     const getValue = (evt) => {
       switch (sortBy) {
@@ -194,7 +231,7 @@ export default function EventsGalleryPage() {
       if (va > vb) return 1 * dir;
       return 0;
     });
-  }, [filteredEvents, sortBy, sortDir]);
+  }, [filteredEvents, sortBy, sortDir, isAuthenticated]);
 
   const handleSort = useCallback(
     (field) => {
@@ -301,9 +338,11 @@ export default function EventsGalleryPage() {
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Event Management</h1>
                   <p className="text-sm text-gray-500">
-                    {hasEditableEvents
-                      ? `${stats.total} manageable event${stats.total === 1 ? '' : 's'}`
-                      : 'No events with edit access yet'}
+                    {isAuthenticated
+                      ? hasEditableEvents
+                        ? `${stats.total} manageable event${stats.total === 1 ? '' : 's'}`
+                        : 'No events with edit access yet'
+                      : 'Loading...'}
                   </p>
                 </div>
               </div>
@@ -353,7 +392,7 @@ export default function EventsGalleryPage() {
             </div>
           )}
 
-          {loading ? (
+          {loading && isAuthenticated ? (
             <div className="flex items-center justify-center py-16 text-gray-500">
               <div className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
               Loading events...
@@ -496,37 +535,56 @@ export default function EventsGalleryPage() {
                         </td>
                         <td className="px-4 py-3 text-sm text-right">
                           <div className="flex items-center justify-end space-x-2">
-                            {event.url ? (
-                              <Link
-                                to={`/${event.url}`}
-                                className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                title="Open event"
-                              >
-                                <Eye className="w-4 h-4 text-blue-600" />
-                              </Link>
+                            {event.isPlaceholder ? (
+                              <>
+                                <span
+                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                  title="Please log in to view events"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </span>
+                                <span
+                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                  title="Please log in to edit events"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </span>
+                              </>
                             ) : (
-                              <span
-                                className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                title="Event URL not available"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </span>
-                            )}
-                            <button
-                              onClick={() => openEditModal(event.url)}
-                              className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                              title="Edit settings"
-                            >
-                              <Edit2 className="w-4 h-4 text-indigo-600" />
-                            </button>
-                            {deletableEventIds.has(String(event.event_id)) && (
-                              <button
-                                onClick={() => handleRequestDelete(event)}
-                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Delete event"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </button>
+                              <>
+                                {event.url ? (
+                                  <Link
+                                    to={`/${event.url}`}
+                                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                    title="Open event"
+                                  >
+                                    <Eye className="w-4 h-4 text-blue-600" />
+                                  </Link>
+                                ) : (
+                                  <span
+                                    className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                    title="Event URL not available"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => openEditModal(event.url)}
+                                  className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
+                                  title="Edit settings"
+                                >
+                                  <Edit2 className="w-4 h-4 text-indigo-600" />
+                                </button>
+                                {deletableEventIds.has(String(event.event_id)) && (
+                                  <button
+                                    onClick={() => handleRequestDelete(event)}
+                                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                    title="Delete event"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -571,7 +629,7 @@ export default function EventsGalleryPage() {
         );
       })()}
 
-      {canCreateEvents && (
+      {canCreateEvents && isAuthenticated && (
         <div className="fixed bottom-8 right-8 z-40">
           <motion.button
             onClick={openCreateModal}
@@ -584,6 +642,14 @@ export default function EventsGalleryPage() {
           </motion.button>
         </div>
       )}
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={closeLoginModal}
+        onLogin={login}
+        error={loginError}
+      />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, User, AlertCircle } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { X, Lock, User, AlertCircle, Home } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 
@@ -150,6 +150,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
     setIsLoading(false);
     onClose();
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -305,6 +306,17 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                     'Sign In'
                   )}
                 </button>
+
+                {/* Go to Home Link - shown on protected pages */}
+                {isOnProtectedPage && (
+                  <Link
+                    to="/"
+                    className="w-full py-3 px-4 bg-gray-100 text-gray-700 font-medium rounded-lg flex items-center justify-center gap-2 no-underline cursor-default"
+                  >
+                    <Home className="w-5 h-5" />
+                    Go to Home
+                  </Link>
+                )}
               </form>
             </motion.div>
           </div>
