@@ -55,6 +55,45 @@ export function useEventId(eventUrl) {
 }
 
 // ========================================
+// EVENT URL RESOLUTION
+// ========================================
+
+/**
+ * Get event URL from event ID by checking the store first, then falling back to current eventUrl if it matches
+ * This is a synchronous utility that reads from the store (doesn't make API calls)
+ * @param {string} targetEventId - The event ID to look up
+ * @param {string} currentEventId - Optional current event ID to check against
+ * @param {string} currentEventUrl - Optional current event URL to return if IDs match
+ * @returns {string|null} - The event URL or null if not found
+ */
+export function getEventUrlFromId(targetEventId, currentEventId = null, currentEventUrl = null) {
+  if (!targetEventId) return null;
+  
+  const state = useDataStore.getState();
+  const generalEventsStore = state.entities?.general?.events || {};
+  
+  // Try to find in general events store
+  const eventFromStore = generalEventsStore[targetEventId];
+  if (eventFromStore?.url) return eventFromStore.url;
+  
+  // Check all events in store (in case eventId is stored as a key in the events object)
+  for (const eventId in generalEventsStore) {
+    const event = generalEventsStore[eventId];
+    const evtId = event?.event_id || event?.id || eventId;
+    if (evtId && String(evtId) === String(targetEventId)) {
+      if (event?.url) return event.url;
+    }
+  }
+  
+  // Otherwise use the current eventUrl if it matches
+  if (currentEventId && String(targetEventId) === String(currentEventId) && currentEventUrl) {
+    return currentEventUrl;
+  }
+  
+  return null;
+}
+
+// ========================================
 // UNIVERSAL ENTITY ACCESS (mirrors backend API)
 // ========================================
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Key, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -6,7 +6,7 @@ import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI, getEventUrlById, API_BASE } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
-import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
+import { useApplyScopes, useChilds, useEventId, getEventUrlFromId as getEventUrlFromIdUtil } from '../../utils/storeUtils';
 import { useDataStore } from '../../utils/dataManager';
 import { useEventGeneralById, useProfileById, useEventProfileById } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -14,12 +14,15 @@ import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
+import ConfirmDelete from '../modals/ConfirmDelete';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false, initialEventId = null }) {
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const MODAL_ID = 'edit-profile-modal';
-  const currentProfile = getCurrentProfile();
+  
+  // Make currentProfile reactive - update when localStorage changes or selectedEventId changes
+  const [currentProfile, setCurrentProfile] = useState(() => getCurrentProfile());
   const isCurrentProfileRestricted = Boolean(currentProfile?.restricted_to_event);
   const currentProfileRestrictedEventId = currentProfile?.restricted_to_event || null;
   
@@ -28,11 +31,13 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   
   // Local editing state
   const [editingProfile, setEditingProfile] = useState(null);
+  const editingProfileRef = useRef(null); // Track latest editingProfile to avoid dependency issues
   const [initialProfileState, setInitialProfileState] = useState(null);
   const [initialSelectedEventId, setInitialSelectedEventId] = useState(null);
   const [profileEvents, setProfileEvents] = useState([]); // Track profile's events list
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [nameConflict, setNameConflict] = useState(false);
+  const [eventToRemove, setEventToRemove] = useState(null); // Event to remove (for confirmation modal)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Use initialEventId if provided, otherwise fall back to eventId from URL, or restricted event if current profile is restricted
@@ -61,6 +66,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const restrictionInputElementRef = useRef(null);
   const restrictionDropdownRef = useRef(null);
   const addEventSelectRef = useRef(null);
+  const [selectedEventToAdd, setSelectedEventToAdd] = useState('');
   
   // Get events list from profile's events field in general store
   const generalEventsStore = useDataStore((state) => state.entities?.general?.events || {});
@@ -100,6 +106,11 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
       })
       .filter(Boolean);
   }, [generalEventsStore, profileEvents]);
+  
+  // Helper to get eventUrl from eventId using store utility
+  const getEventUrlFromId = useCallback((targetEventId) => {
+    return getEventUrlFromIdUtil(targetEventId, eventId, eventUrl);
+  }, [eventId, eventUrl]);
   
   const eventProfile = useEventProfileById(selectedEventId, profile?.id);
   
@@ -142,7 +153,14 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const profileAlbums = selectedEventId ? profileAlbumsRaw : [];
   const profileGroups = selectedEventId ? profileGroupsRaw : [];
   
-const permissions = usePermissions(eventUrl);
+  // Get permissions for the selected event (not the URL event)
+  // This ensures PermissionGate checks permissions for the event being edited
+  const selectedEventUrl = useMemo(() => {
+    if (!selectedEventId) return eventUrl;
+    return getEventUrlFromId(selectedEventId) || eventUrl;
+  }, [selectedEventId, eventUrl, eventsList]);
+  
+  const permissions = usePermissions(selectedEventUrl);
 
 // Use editingProfile if it exists (even if null), otherwise fall back to generalProfile
 const restrictedToEventId = editingProfile && 'restricted_to_event' in editingProfile
@@ -400,6 +418,9 @@ const disableRankSelection = editingProfile?.is_public === 1;
       // Initialize event search term
       setEventSearchTerm('');
       setShowEventDropdown(false);
+      // Reset add event selection
+      setSelectedEventToAdd('');
+      setEventToRemove(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, profile?.id, initialEventId]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
@@ -478,6 +499,36 @@ const disableRankSelection = editingProfile?.is_public === 1;
     fetchEventProfiles();
   }, [isOpen, profile?.id, selectedEventId, isCreating]);
 
+  // Update currentProfile from localStorage when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentProfile(getCurrentProfile());
+    }
+  }, [isOpen]);
+
+  // Listen for localStorage changes (custom event for same-tab updates, storage event for cross-tab updates)
+  useEffect(() => {
+    const handleCurrentProfileUpdate = () => {
+      setCurrentProfile(getCurrentProfile());
+    };
+    
+    const handleStorageChange = (e) => {
+      if (e.key === 'currentProfile' || e.key === null) {
+        setCurrentProfile(getCurrentProfile());
+      }
+    };
+    
+    // Listen for custom event dispatched by dataManager when currentProfile is updated
+    window.addEventListener('localStorage:currentProfile', handleCurrentProfileUpdate);
+    // Listen for storage events (cross-tab updates)
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('localStorage:currentProfile', handleCurrentProfileUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // Fetch current profile with event-specific data when selectedEventId changes
   useEffect(() => {
     if (!isOpen || !selectedEventId || isCreating) {
@@ -496,6 +547,9 @@ const disableRankSelection = editingProfile?.is_public === 1;
         // Fetch current profile with event context
         if (targetEventUrl) {
           await profilesAPI.getCurrentProfile(targetEventUrl);
+          // currentProfile state will be updated via the 'localStorage:currentProfile' event listener
+          // But also update immediately in case event hasn't fired yet
+          setCurrentProfile(getCurrentProfile());
         } else {
           // If we can't get event URL, we can't fetch with event context
           // The hook will still work but might not have the latest data
@@ -518,10 +572,15 @@ const disableRankSelection = editingProfile?.is_public === 1;
     setInitialEventSpecificEventId(null);
   }, [isOpen, selectedEventId]);
 
+  // Keep ref in sync with editingProfile state
+  useEffect(() => {
+    editingProfileRef.current = editingProfile;
+  }, [editingProfile]);
+
   // Update event-specific fields when eventProfile loads for current event
   // Also track initial state for save/cancel
   useEffect(() => {
-    if (!isOpen || !editingProfile) return;
+    if (!isOpen || !editingProfileRef.current) return;
     
     if (selectedEventId && eventProfile) {
       const eventSpecificData = {
@@ -550,18 +609,22 @@ const disableRankSelection = editingProfile?.is_public === 1;
     } else if (selectedEventId && !eventProfile && !initialEventSpecificState) {
       // Fallback: Set initial state from editingProfile's current values if eventProfile not loaded yet
       // This allows change detection to work even before eventProfile loads
-      const fallbackInitialState = {
-        can_upload_and_delete_images: editingProfile.can_upload_and_delete_images ?? 0,
-        can_edit: editingProfile.can_edit ?? 0,
-        all_images: editingProfile.all_images ?? 0,
-        all_groups: editingProfile.all_groups ?? 0,
-        all_albums: editingProfile.all_albums ?? 0,
-        can_manage_event: editingProfile.can_manage_event ?? 0,
-        can_delete_event: editingProfile.can_delete_event ?? 0,
-      };
-      
-      setInitialEventSpecificState(fallbackInitialState);
-      setInitialEventSpecificEventId(selectedEventId);
+      // Use ref to read current values without adding editingProfile to dependencies
+      const currentProfile = editingProfileRef.current;
+      if (currentProfile) {
+        const fallbackInitialState = {
+          can_upload_and_delete_images: currentProfile.can_upload_and_delete_images ?? 0,
+          can_edit: currentProfile.can_edit ?? 0,
+          all_images: currentProfile.all_images ?? 0,
+          all_groups: currentProfile.all_groups ?? 0,
+          all_albums: currentProfile.all_albums ?? 0,
+          can_manage_event: currentProfile.can_manage_event ?? 0,
+          can_delete_event: currentProfile.can_delete_event ?? 0,
+        };
+        
+        setInitialEventSpecificState(fallbackInitialState);
+        setInitialEventSpecificEventId(selectedEventId);
+      }
     } else if (!selectedEventId) {
       // Reset event-specific fields when no event is selected
       const resetData = {
@@ -582,7 +645,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
       setInitialEventSpecificState(null);
       setInitialEventSpecificEventId(null);
     }
-  }, [isOpen, eventProfile, selectedEventId, initialEventSpecificState, editingProfile]);
+  }, [isOpen, eventProfile, selectedEventId, initialEventSpecificState]); // Removed editingProfile from dependencies
 
 
   const checkNameConflict = async (label) => {
@@ -691,23 +754,6 @@ const disableRankSelection = editingProfile?.is_public === 1;
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper to get eventUrl from eventId
-  const getEventUrlFromId = (targetEventId) => {
-    if (!targetEventId) return null;
-    // Try to find in eventsList first
-    const event = eventsList.find(e => {
-      const evtId = e.event_id || e.id;
-      return evtId && String(evtId) === String(targetEventId);
-    });
-    if (event?.url) return event.url;
-    // Try to find in generalEventsStore
-    const eventFromStore = generalEventsStore[targetEventId];
-    if (eventFromStore?.url) return eventFromStore.url;
-    // Otherwise use the current eventUrl if it matches
-    if (targetEventId === eventId) return eventUrl;
-    return null;
   };
 
   // Get selected event name for display
@@ -849,17 +895,33 @@ const disableRankSelection = editingProfile?.is_public === 1;
     }));
   };
 
-  // Handle removing an event from profile
-  const handleRemoveProfileEvent = async (eventIdToRemove) => {
+  // Handle removing an event from profile (shows confirmation modal)
+  const handleRemoveProfileEvent = (eventIdToRemove) => {
     if (!editingProfile?.id || !eventIdToRemove) return;
+    setEventToRemove(eventIdToRemove);
+  };
+
+  // Actually remove event after confirmation
+  const handleConfirmRemoveEvent = async () => {
+    if (!editingProfile?.id || !eventToRemove) return;
     
     try {
-      await profilesAPI.removeEvent(editingProfile.id, eventIdToRemove);
+      await profilesAPI.removeEvent(editingProfile.id, eventToRemove);
       // Changes are automatically applied by apiService interceptor
+      
+      // If the removed event is currently selected, clear the selection
+      if (selectedEventId && String(selectedEventId) === String(eventToRemove)) {
+        setSelectedEventId(null);
+        setEventSearchTerm('');
+        setShowEventDropdown(false);
+      }
+      
       showToast('Event removed from profile', 'success');
+      setEventToRemove(null);
     } catch (error) {
       console.error('Failed to remove event from profile:', error);
       showToast(formatErrorMessage('remove event', error), 'error');
+      setEventToRemove(null);
     }
   };
 
@@ -1030,10 +1092,10 @@ const disableRankSelection = editingProfile?.is_public === 1;
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeImagesFromProfile(editingProfile.id, [imageId], targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Image removed from profile', 'success');
+      showToast('Photo removed from profile', 'success');
     } catch (error) {
-      console.error('Failed to remove image:', error);
-      showToast(formatErrorMessage('remove image', error), 'error');
+      console.error('Failed to remove photo:', error);
+      showToast(formatErrorMessage('remove photo', error), 'error');
     }
   };
 
@@ -1057,10 +1119,10 @@ const disableRankSelection = editingProfile?.is_public === 1;
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeImagesFromProfile(editingProfile.id, imageIds, targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${imageIds.length} images cleared from profile`, 'success');
+      showToast(`${imageIds.length} photos cleared from profile`, 'success');
     } catch (error) {
-      console.error('Failed to clear images:', error);
-      showToast(formatErrorMessage('clear images', error), 'error');
+      console.error('Failed to clear photos:', error);
+      showToast(formatErrorMessage('clear photos', error), 'error');
     }
   };
 
@@ -1457,14 +1519,9 @@ const disableRankSelection = editingProfile?.is_public === 1;
                       <div className="flex items-center gap-2 pt-2">
                         <select
                           ref={addEventSelectRef}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              handleAddProfileEvent(e.target.value);
-                              e.target.value = ''; // Reset selection
-                            }
-                          }}
+                          value={selectedEventToAdd}
+                          onChange={(e) => setSelectedEventToAdd(e.target.value)}
                           className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          defaultValue=""
                         >
                           <option value="">Select event to add...</option>
                           {availableEventsToAdd.map((event) => {
@@ -1479,13 +1536,14 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         </select>
                         <button
                           onClick={() => {
-                            if (addEventSelectRef.current && addEventSelectRef.current.value) {
-                              handleAddProfileEvent(addEventSelectRef.current.value);
-                              addEventSelectRef.current.value = '';
+                            if (selectedEventToAdd) {
+                              handleAddProfileEvent(selectedEventToAdd);
+                              setSelectedEventToAdd('');
                             }
                           }}
-                          className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Add event"
+                          disabled={!selectedEventToAdd}
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -1610,7 +1668,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                 {selectedEventId ? (
                   <div className="space-y-3">
                     {/* Manage Event */}
-                    <PermissionGate requires="canManageEvent">
+                    <PermissionGate requires="canManageEvent" eventUrl={selectedEventUrl}>
                       <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                         <div>
                           <p className="font-medium text-gray-900">Manage Event</p>
@@ -1645,7 +1703,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                     </PermissionGate>
 
                     {/* Delete Event */}
-                    <PermissionGate requires="canManageEvent">
+                    <PermissionGate requires="canManageEvent" eventUrl={selectedEventUrl}>
                       <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                         <div>
                           <p className="font-medium text-gray-900">Delete Event</p>
@@ -1682,7 +1740,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                     {/* Upload & Delete Images */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">Upload & Delete Images</p>
+                        <p className="font-medium text-gray-900">Upload & Delete Photos</p>
                         <p className="text-sm text-gray-500">Can upload new photos and delete existing ones</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
@@ -1718,8 +1776,8 @@ const disableRankSelection = editingProfile?.is_public === 1;
                     {/* All Images */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">All Images Access</p>
-                        <p className="text-sm text-gray-500">If ON: Access all images except listed below. If OFF: Only access listed images</p>
+                        <p className="font-medium text-gray-900">All Photos Access</p>
+                        <p className="text-sm text-gray-500">If ON: Access all photos except listed below. If OFF: Only access listed photos</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                         <input
@@ -1754,7 +1812,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                     {/* All Groups */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">All Groups Access</p>
+                        <p className="font-medium text-gray-900">All People Access</p>
                         <p className="text-sm text-gray-500">If ON: Access all groups except listed below. If OFF: Only access listed groups</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
@@ -1783,7 +1841,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
                     <ImageIcon className="w-5 h-5" />
-                    <span>Specific Image Access ({profileImages.length})</span>
+                    <span>Specific Photo Access ({profileImages.length})</span>
                   </h3>
                   {profileImages.length > 0 && (
                     <button
@@ -1797,12 +1855,12 @@ const disableRankSelection = editingProfile?.is_public === 1;
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {editingProfile.all_images === 1 
-                    ? '🚫 These images are FORBIDDEN to this profile' 
-                    : '✓ These are the ONLY images accessible to this profile'}
+                    ? '🚫 These photos are FORBIDDEN to this profile' 
+                    : '✓ These are the ONLY photos accessible to this profile'}
                 </p>
                 {profileImages.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No specific images configured
+                    No specific photos configured
                   </p>
                 ) : (
                   <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
@@ -1869,7 +1927,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
                     <Users className="w-5 h-5" />
-                    <span>Specific Group Access ({profileGroups.length})</span>
+                    <span>Specific Person Access ({profileGroups.length})</span>
                   </h3>
                   {profileGroups.length > 0 && (
                     <button
@@ -1883,12 +1941,12 @@ const disableRankSelection = editingProfile?.is_public === 1;
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {editingProfile.all_groups === 1 
-                    ? '🚫 These groups are FORBIDDEN to this profile' 
-                    : '✓ These are the ONLY groups accessible to this profile'}
+                    ? '🚫 These people are FORBIDDEN to this profile' 
+                    : '✓ These are the ONLY people accessible to this profile'}
                 </p>
                 {profileGroups.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No specific groups configured
+                    No specific people configured
                   </p>
                 ) : (
                   <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
@@ -1955,6 +2013,28 @@ const disableRankSelection = editingProfile?.is_public === 1;
           eventUrl={eventUrl}
         />
       )}
+
+      {/* Remove Event Confirmation Modal */}
+      {eventToRemove && (() => {
+        const eventToRemoveObj = profileEventsList.find(e => {
+          const evtId = e.event_id || e.id;
+          return evtId && String(evtId) === String(eventToRemove);
+        });
+        const eventName = eventToRemoveObj?.name || 'this event';
+        return (
+          <ConfirmDelete
+            isOpen={!!eventToRemove}
+            onClose={() => setEventToRemove(null)}
+            onConfirm={handleConfirmRemoveEvent}
+            title="Remove Event from Profile"
+            message="Are you sure you want to remove"
+            itemName={eventName}
+            confirmText="Remove Event"
+            caption="All profile authorizations for this event will be removed."
+            simpleMessage={false}
+          />
+        );
+      })()}
     </AnimatePresence>
   );
 }

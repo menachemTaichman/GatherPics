@@ -29,8 +29,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
   const [imageClasses, setImageClasses] = useState({});
-  const { defaultAlbumIds, archiveAlbumId } = useEventDefaultAlbums(eventId, eventUrl);
-  const defaultAlbumsReady = Boolean(defaultAlbumIds);
+  const { defaultAlbumIds, archiveAlbumId, eventData } = useEventDefaultAlbums(eventId, eventUrl);
+  const defaultAlbumsReady = eventData !== null;
   
   // New album creation states
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
