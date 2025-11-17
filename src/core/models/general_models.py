@@ -50,6 +50,54 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
+    def duplicate_profile(self, profile_id: str) -> str:
+        """Duplicate a profile."""
+        profile = self.get_entities('profiles', profile_id)
+        if not profile:
+            raise Forbidden('Profile not found')
+        new_profile_label = f"Copy of {profile['label']}"
+        pattern = f"{new_profile_label} [0-9]*"
+        query = f"""
+            SELECT MAX(CAST(SUBSTR(label, LENGTH(?) + 2) AS INTEGER)) AS last_profile_num
+            FROM profiles
+            WHERE label GLOB ?
+        """
+        last_profile_num = self.db.execute_query(
+            query,
+            [new_profile_label, pattern],
+            return_format=ReturnFormat.VALUE
+        )
+        if last_profile_num:
+            new_profile_label = f"{new_profile_label} {last_profile_num + 1}"
+        new_password = secrets.token_urlsafe(6)
+        
+        incomplete_events = []
+        new_profile_id = self.add('profiles', {
+            'label': new_profile_label,
+            'password': new_password,
+            'hierarchy_rank': profile['hierarchy_rank'],
+            'can_create_events': profile['can_create_events'],
+            'restricted_to_event': profile['restricted_to_event'],
+            'is_public': profile['is_public'],
+        })
+        _, event_profiles = self.get_childs('profiles', profile_id, 'events')
+        for event_id, event_relation in event_profiles.items():
+            try:
+                event = self.get_event(event_id)
+                event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.ADD, data=event_relation)
+                childs = ['images', 'albums', 'groups']
+                for child in childs:
+                    child_ids = event.models.get_childs('events_profiles', profile_id, child, return_ids=True)
+                    event.models.edit_childs('events_profiles', new_profile_id, child, child_ids, operation=ChildOperation.ADD)
+            except Forbidden as e:
+                incomplete_events.append(event_id)
+                try:
+                    event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.REMOVE)
+                except Forbidden as e:
+                    pass
+
+        return new_profile_id, incomplete_events
+    
     def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None):
         """
         Delete a profile.

@@ -926,16 +926,28 @@ export const profilesAPI = {
   
   // Update profile
   update: async (profileId, updates, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}`, updates);
-    return response.data;
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      const response = await api.put(`/api/events/${eventId}/profiles/${profileId}`, updates);
+      return response.data;
+    } else {
+      // Update general profile (not event-specific)
+      const response = await api.put(`/api/profiles/${profileId}`, updates);
+      return response.data;
+    }
   },
   
   // Delete profile
   delete: async (profileId, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}`);
-    return response.data;
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}`);
+      return response.data;
+    } else {
+      // Delete general profile (not event-specific)
+      const response = await api.delete(`/api/profiles/${profileId}`);
+      return response.data;
+    }
   },
   
   // Get profile password
@@ -1443,6 +1455,24 @@ export const feedbacksAPI = {
   // Delete my feedback
   deleteMyFeedback: async (feedbackId) => {
     const response = await api.delete(`/api/my-feedbacks/${feedbackId}`);
+    return response.data;
+  },
+};
+
+// Settings API
+export const settingsAPI = {
+  // Get system settings
+  get: async () => {
+    const key = 'SETTINGS_GET';
+    return await withDedupe(key, async () => {
+      const response = await api.get(`/api/settings`);
+      return response.data;
+    });
+  },
+  
+  // Update system settings
+  update: async (data) => {
+    const response = await api.put(`/api/settings`, data);
     return response.data;
   },
 };

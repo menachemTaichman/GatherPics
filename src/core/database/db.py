@@ -99,8 +99,13 @@ class DB:
         return {
             'settings': {
                 'primary_key': 'id',
-                'accessible_table': 'settings',
-                'fields': ['developer_id', 'image_size_limit_bytes', 'images_count_limit'],
+                'accessible_table': 'accessible_settings',
+                'fields': [
+                    'image_size_limit_bytes',
+                    'images_count_limit',
+                    'min_rank_to_create_event',
+                    'rekognition_calls_limit',
+                ],
             },
             'events': {
                 'primary_key': 'event_id',
@@ -115,12 +120,18 @@ class DB:
                     'faces_count',
                     'albums_count',
                     'moments_count',
-                    'total_image_size',
-                    'max_image_size',
+                    'total_size',
+                    'created_at',
+                    'rekognition_calls_limit',
+                    'rekognition_calls_used',
                 ],
                 'details_fields': [
                     'images_count_limit',
                     'image_size_limit_bytes',
+                    'max_image_size',
+                    'total_original_size',
+                    'total_high_quality_size',
+                    'created_by',
                 ],
                 'relations': {
                     'profiles': {
@@ -170,10 +181,12 @@ class DB:
                     'restricted_to_event',
                     'is_public',
                     'is_profiles_manager',
+                    'can_manage_create_events',
                     'total_notifications',
                     'unread_notifications',
                     'pending_feedbacks',
                     'has_feedbacks',
+                    'has_settings',
                     'has_manageable_events',
                     'has_dashboard',
                 ],
@@ -492,6 +505,8 @@ class DB:
                 developer_id TEXT,
                 image_size_limit_bytes INTEGER DEFAULT 0,
                 images_count_limit INTEGER DEFAULT 0,
+                rekognition_calls_limit INTEGER DEFAULT 0,
+                min_rank_to_create_event INTEGER DEFAULT 0,
                 event_in_deletion TEXT DEFAULT NULL,
                 FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
                 FOREIGN KEY (event_in_deletion) REFERENCES events(event_id) ON DELETE SET NULL
@@ -503,6 +518,7 @@ class DB:
                 value TEXT NOT NULL,
                 PRIMARY KEY (preference_group, preference_key)
             ''',
+            # TODO: in postgres make create_at with default value of CURRENT_TIMESTAMP
             'events': '''
                 event_id TEXT PRIMARY KEY NOT NULL,
                 name TEXT COLLATE NOCASE UNIQUE NOT NULL,
@@ -511,8 +527,13 @@ class DB:
                 is_public INTEGER DEFAULT 0,
                 images_count_limit INTEGER NOT NULL DEFAULT 0,
                 image_size_limit_bytes INTEGER NOT NULL DEFAULT 0,
+                rekognition_calls_limit INTEGER NOT NULL DEFAULT 0,
+                rekognition_calls_used INTEGER NOT NULL DEFAULT 0,
                 representative_image TEXT,
-                FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT,
+                FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL,
+                FOREIGN KEY (created_by) REFERENCES profiles(profile_id) ON DELETE SET NULL
             ''',
             'profiles': '''
                 profile_id TEXT PRIMARY KEY NOT NULL,
@@ -600,6 +621,9 @@ class DB:
                 label TEXT,
                 date_taken TEXT,
                 file_size INTEGER,
+                high_quality_file_size INTEGER,
+                display_file_size INTEGER,
+                thumb_file_size INTEGER,
                 width INTEGER,
                 height INTEGER,
                 moment_id TEXT,
@@ -616,6 +640,7 @@ class DB:
                 height REAL,
                 left REAL,
                 top REAL,
+                file_size INTEGER,
                 group_id TEXT NOT NULL,
                 FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE SET NULL,
                 FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE RESTRICT
@@ -738,6 +763,9 @@ class DB:
             'idx_events_name': 'events(name)',
             'idx_events_url': 'events(url)',
             'idx_events_representative_image': 'events(representative_image)',
+            'idx_events_created_at': 'events(created_at)',
+            'idx_events_created_by': 'events(created_by)',
+            'idx_events_rekognition_calls_used': 'events(rekognition_calls_used)',
             'idx_profiles_label': 'profiles(label)',
             'idx_profiles_restricted_to_event': 'profiles(restricted_to_event)',
             'idx_profiles_public_access_code': 'profiles(public_access_code)',
@@ -777,6 +805,15 @@ class DB:
     @classmethod
     def VIEWS(self) -> dict:
         return {
+            # settings
+            'accessible_settings': '''
+                SELECT
+                    s.*
+                FROM settings s
+                WHERE s.id = 1
+                AND s.developer_id = cur_profile('profile_id')
+            ''',
+
             # all profiles accessibility
             'albums_accessibility_helper': '''
                 SELECT
@@ -944,7 +981,30 @@ class DB:
                         WHERE ia.event_id = e.event_id
                         AND ia.profile_id = ep.profile_id
                         AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE -1 END
-                    ) AS total_image_size,
+                    ) AS total_original_size,
+                    (
+                        SELECT SUM(i.high_quality_file_size)
+                        FROM images_accessibility ia
+                        INNER JOIN images i ON i.image_id = ia.image_id
+                        WHERE ia.event_id = e.event_id
+                        AND ia.profile_id = ep.profile_id
+                        AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE -1 END
+                    ) AS total_high_quality_size,
+                    (
+                        SELECT SUM(i.file_size + i.high_quality_file_size + i.display_file_size + i.thumb_file_size)
+                        FROM images_accessibility ia
+                        INNER JOIN images i ON i.image_id = ia.image_id
+                        WHERE ia.event_id = e.event_id
+                        AND ia.profile_id = ep.profile_id
+                        AND ia.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN ia.is_accessible ELSE -1 END
+                    ) + (
+                        SELECT SUM(f.file_size)
+                        FROM faces_accessibility fa
+                        INNER JOIN faces f ON f.face_id = fa.face_id
+                        WHERE fa.event_id = e.event_id
+                        AND fa.profile_id = ep.profile_id
+                        AND fa.is_accessible = CASE WHEN ep.can_manage_event = 1 THEN fa.is_accessible ELSE -1 END
+                    ) AS total_size,
                     (
                         SELECT MAX(i.file_size)
                         FROM images_accessibility ia
@@ -994,6 +1054,12 @@ class DB:
                 FROM profiles p
                 LEFT JOIN accessible_events ae ON p.restricted_to_event = ae.event_id
                 WHERE p.hierarchy_rank < cur_profile('hierarchy_rank')
+                AND
+                    (p.restricted_to_event IS NULL OR p.restricted_to_event IN (
+                        SELECT event_id
+                        FROM events_profiles ep
+                        WHERE ep.profile_id = cur_profile('profile_id')
+                    ))
             """,
             'my_preferences': """
                 SELECT
@@ -1077,10 +1143,14 @@ class DB:
                     p.restricted_to_event,
                     p.is_public,
                     p.hierarchy_rank > 0 AS is_profiles_manager,
+                    p.hierarchy_rank > (SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1) AS can_manage_create_events,
                     COUNT(mn.notification_id) AS total_notifications,
                     COUNT(mn.notification_id) - COALESCE(SUM(mn.read), 0) AS unread_notifications,
                     (SELECT COUNT(*) FROM accessible_feedbacks WHERE is_closed = 0) AS pending_feedbacks,
                     CASE WHEN p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN 1 ELSE 0 END AS has_feedbacks,
+                    CASE WHEN
+                        p.profile_id = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+                    THEN 1 ELSE 0 END AS has_settings,
                     CASE WHEN
                         COALESCE(SUM(cpe.can_manage_event), 0) > 0
                         OR p.can_create_events = 1
@@ -1536,6 +1606,24 @@ class DB:
     @staticmethod
     def TRIGGERS() -> dict:
         return {
+            # settings
+            'trg_accessible_settings_update': """
+                INSTEAD OF UPDATE ON accessible_settings
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Permission denied: only developer can update settings')
+                    END;
+
+                    UPDATE settings SET
+                        image_size_limit_bytes = NEW.image_size_limit_bytes,
+                        images_count_limit = NEW.images_count_limit,
+                        min_rank_to_create_event = NEW.min_rank_to_create_event,
+                        rekognition_calls_limit = NEW.rekognition_calls_limit
+                    WHERE id = 1;
+                END;
+            """,
+
             # events
             'trg_accessible_events_insert': """
                 INSTEAD OF INSERT ON accessible_events
@@ -1553,7 +1641,10 @@ class DB:
                         is_public,
                         images_count_limit,
                         image_size_limit_bytes,
-                        representative_image
+                        representative_image,
+                        created_at,
+                        created_by,
+                        rekognition_calls_limit
                     )
                     VALUES (
                         NEW.event_id,
@@ -1563,7 +1654,10 @@ class DB:
                         COALESCE(NEW.is_public, 0),
                         COALESCE(NEW.images_count_limit, 0),
                         COALESCE(NEW.image_size_limit_bytes, NULL),
-                        NEW.representative_image
+                        NEW.representative_image,
+                        COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
+                        cur_profile('profile_id'),
+                        (SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1)
                     );
 
                     INSERT OR IGNORE INTO events_profiles (
@@ -1591,6 +1685,13 @@ class DB:
                         ) = 0
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot manage event')
+                        WHEN NEW.rekognition_calls_limit <> (
+                            SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1
+                        ) AND cur_profile('profile_id') <> (
+                            SELECT developer_id FROM settings WHERE id = 1 LIMIT 1
+                        )
+                        THEN
+                            RAISE(ABORT, 'Permission denied: cannot update rekognition calls limit')
                     END;
 
                     UPDATE events SET
@@ -1600,7 +1701,8 @@ class DB:
                         is_public = NEW.is_public,
                         images_count_limit = NEW.images_count_limit,
                         image_size_limit_bytes = NEW.image_size_limit_bytes,
-                        representative_image = NEW.representative_image
+                        representative_image = NEW.representative_image,
+                        rekognition_calls_limit = NEW.rekognition_calls_limit
                     WHERE event_id = OLD.event_id;
                 END;
             """,
@@ -1648,8 +1750,10 @@ class DB:
                             RAISE(ABORT, 'Permission denied: not a profiles manager')
                         WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile with higher or equal rank')
-                        WHEN NEW.can_create_events = 1 AND cur_profile('can_create_events') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot create profile with can_create_events=1 if current profile does not have can_create_events=1')
+                        WHEN NEW.can_create_events = 1 AND cur_profile('hierarchy_rank') <= (
+                            SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the profile dose not have permission to manage create events permissions')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile to a different event than the current profile')
                         WHEN NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM accessible_events) THEN
@@ -1681,8 +1785,13 @@ class DB:
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
                         WHEN NEW.hierarchy_rank >= cur_profile('hierarchy_rank') AND NEW.profile_id <> cur_profile('profile_id') THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile to a higher or equal rank than the current profile')
-                        WHEN NEW.can_create_events = 1 AND OLD.can_create_events = 0 AND cur_profile('can_create_events') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot update profile with can_create_events=1 if current profile does not have can_create_events=1')
+                        WHEN
+                            NEW.can_create_events = 1 AND OLD.can_create_events = 0
+                            AND cur_profile('hierarchy_rank') <= (
+                                SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1
+                            )
+                        THEN
+                            RAISE(ABORT, 'Permission denied: the profile dose not have permission to manage create events permissions')
                         WHEN NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
                             RAISE(ABORT, 'Permission denied: cannot update profile to a different event than the current profile')
                         WHEN NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM accessible_events) THEN
@@ -1711,6 +1820,12 @@ class DB:
                             AND ap.is_editable = 1
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the profile is not accessible')
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM events_profiles ep
+                            WHERE ep.profile_id = OLD.profile_id
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: the profile is associated with an event. Please remove the profile from all events first.')
                     END;
 
                     DELETE FROM profiles

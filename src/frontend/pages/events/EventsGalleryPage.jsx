@@ -219,8 +219,8 @@ export default function EventsGalleryPage() {
           return toNumber(evt.albums_count);
         case 'moments_count':
           return toNumber(evt.moments_count);
-        case 'total_image_size':
-          return toNumber(evt.total_image_size);
+        case 'total_size':
+          return toNumber(evt.total_size);
         default:
           return evt[sortBy] ?? '';
       }
@@ -492,12 +492,12 @@ export default function EventsGalleryPage() {
                         </div>
                       </th>
                       <th
-                        onClick={() => handleSort('total_image_size')}
+                        onClick={() => handleSort('total_size')}
                         className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
                       >
                         <div className="flex items-center justify-center space-x-1">
                           <span>Total Size</span>
-                          {getSortIcon('total_image_size')}
+                          {getSortIcon('total_size')}
                         </div>
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">
@@ -545,8 +545,8 @@ export default function EventsGalleryPage() {
                           {toNumber(event.moments_count)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {event.total_image_size != null
-                            ? `${(event.total_image_size / (1024 * 1024)).toFixed(2)} MB`
+                          {event.total_size != null
+                            ? `${(event.total_size / (1024 * 1024)).toFixed(2)} MB`
                             : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-right">

@@ -19,6 +19,7 @@ import { useEventId } from '../utils/storeUtils';
  * @property {boolean} has_albums - Has access to albums
  * @property {boolean} has_images - Has access to images/timeline
  * @property {boolean} enable_new_requests - Can manage access requests
+ * @property {boolean} has_settings - Can access app settings
  */
 export function usePermissions(eventUrl = null) {
   const params = useParams();
@@ -41,6 +42,7 @@ export function usePermissions(eventUrl = null) {
         has_albums: false,
         has_images: false,
         enable_new_requests: false,
+        has_settings: false,
       };
     }
 
@@ -70,6 +72,9 @@ export function usePermissions(eventUrl = null) {
       
       // Enable requests flag
       enable_new_requests: Boolean(eventPermissions.enable_new_requests),
+      
+      // From general_db - calculated in current_profile view
+      has_settings: Boolean(profile.has_settings),
     };
   }, [profile, eventId]);
 

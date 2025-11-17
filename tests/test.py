@@ -278,9 +278,10 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+# recreate_views_triggers_and_indexes(general_models.db)
 
-recreate_views_triggers_and_indexes(general_models.db)
-
-events = general_models.get_childs('profiles', '162f6184-00a8-47f7-9895-f1fd8cbc93c5', 'events', return_ids=True)
-print(events)
-retult = general_models.db.execute_query('SELECT * FROM accessible_events_profiles;', return_format=ReturnFormat.LIST_DICTS)
+profiles = general_models.db.execute_query('SELECT profile_id, label, restricted_to_event FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
+other_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
+new_profile_id, incomplete_events = general_models.duplicate_profile(other_profile_id)
+print(new_profile_id)
+print(incomplete_events)

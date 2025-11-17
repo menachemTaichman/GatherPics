@@ -10,6 +10,7 @@ from src.backend.routes.request_routes import request_bp
 from src.backend.routes.notification_routes import notification_bp
 from src.backend.routes.event_routes import event_bp
 from src.backend.routes.feedback_routes import feedback_bp
+from src.backend.routes.settings_routes import settings_bp
 
 __all__ = [
     'auth_bp',
@@ -24,5 +25,6 @@ __all__ = [
     'notification_bp',
     'event_bp',
     'feedback_bp',
+    'settings_bp',
 ]
 

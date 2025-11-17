@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Key, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus } from 'lucide-react';
+import { X, User, Key, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI, getEventUrlById, API_BASE } from '../../utils/apiService';
@@ -67,6 +67,14 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const restrictionDropdownRef = useRef(null);
   const addEventSelectRef = useRef(null);
   const [selectedEventToAdd, setSelectedEventToAdd] = useState('');
+  
+  // Tooltip states for help icons
+  const [showRankTooltip, setShowRankTooltip] = useState(false);
+  const [showPublicTooltip, setShowPublicTooltip] = useState(false);
+  const [showManageEventTooltip, setShowManageEventTooltip] = useState(false);
+  const [showImagesTooltip, setShowImagesTooltip] = useState(false);
+  const [showAlbumsTooltip, setShowAlbumsTooltip] = useState(false);
+  const [showGroupsTooltip, setShowGroupsTooltip] = useState(false);
   
   // Get events list from profile's events field in general store
   const generalEventsStore = useDataStore((state) => state.entities?.general?.events || {});
@@ -1405,9 +1413,23 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
                   {/* Hierarchy Rank */}
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">Rank</p>
-                      <p className="text-sm text-gray-500">Hierarchy rank for this profile</p>
+                    <div className="flex-1 relative">
+                      <div className="flex items-center gap-1">
+                        <p className="font-medium text-gray-900">Rank</p>
+                        <div className="relative">
+                          <HelpCircle 
+                            className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                            onMouseEnter={() => setShowRankTooltip(true)}
+                            onMouseLeave={() => setShowRankTooltip(false)}
+                          />
+                          {showRankTooltip && (
+                            <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                              Can create and manage profiles with lower rank. Rank 0 has no managing authority.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">Can manage profiles with lower rank</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {disableRankSelection ? (
@@ -1434,27 +1456,43 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   </div>
 
                   {/* Can Create Events */}
-                  <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Can Create Events</p>
-                      <p className="text-sm text-gray-500">Can create new events</p>
+                  {currentProfile?.can_manage_create_events === 1 && (
+                    <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">Can Create Events</p>
+                        <p className="text-sm text-gray-500">Can create new events</p>
+                      </div>
+                      <label className={`relative inline-flex items-center ${canGrantCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={editingProfile.can_create_events === 1}
+                          onChange={(e) => handleFieldChange('can_create_events', e.target.checked ? 1 : 0)}
+                          disabled={!canGrantCanCreateEvents}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
+                      </label>
                     </div>
-                    <label className={`relative inline-flex items-center ${canGrantCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                      <input
-                        type="checkbox"
-                        checked={editingProfile.can_create_events === 1}
-                        onChange={(e) => handleFieldChange('can_create_events', e.target.checked ? 1 : 0)}
-                        disabled={!canGrantCanCreateEvents}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                    </label>
-                  </div>
+                  )}
 
                   {/* Public Profile */}
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Public Profile</p>
+                    <div className="relative">
+                      <div className="flex items-center gap-1">
+                        <p className="font-medium text-gray-900">Public Profile</p>
+                        <div className="relative">
+                          <HelpCircle 
+                            className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                            onMouseEnter={() => setShowPublicTooltip(true)}
+                            onMouseLeave={() => setShowPublicTooltip(false)}
+                          />
+                          {showPublicTooltip && (
+                            <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                              Accessible via link. Cannot edit own label/password. No email. Preferences not saved.
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-sm text-gray-500">Accessible via link, managed by admins only</p>
                     </div>
                     <div className="flex flex-col items-end">
@@ -1670,9 +1708,23 @@ const disableRankSelection = editingProfile?.is_public === 1;
                     {/* Manage Event */}
                     <PermissionGate requires="canManageEvent" eventUrl={selectedEventUrl}>
                       <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">Manage Event</p>
-                          <p className="text-sm text-gray-500">Can update event settings, permissions, and approvals</p>
+                        <div className="relative">
+                          <div className="flex items-center gap-1">
+                            <p className="font-medium text-gray-900">Manage Event</p>
+                            <div className="relative">
+                              <HelpCircle 
+                                className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                                onMouseEnter={() => setShowManageEventTooltip(true)}
+                                onMouseLeave={() => setShowManageEventTooltip(false)}
+                              />
+                              {showManageEventTooltip && (
+                                <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                                  Can edit event name, URL, upload limits, and cover photo
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-500">Can update event settings</p>
                         </div>
                         <div className="flex flex-col items-end">
                           <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanManageEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
@@ -1775,8 +1827,23 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
                     {/* All Images */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">All Photos Access</p>
+                      <div className="relative">
+                        <div className="flex items-center gap-1">
+                          <p className="font-medium text-gray-900">All Photos Access</p>
+                          <div className="relative">
+                            <HelpCircle 
+                              className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                              onMouseEnter={() => setShowImagesTooltip(true)}
+                              onMouseLeave={() => setShowImagesTooltip(false)}
+                            />
+                            {showImagesTooltip && (
+                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                                <div>Determines which photos are accessible.</div>
+                                <div className="mt-1">Archived photos require archive album access.</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         <p className="text-sm text-gray-500">If ON: Access all photos except listed below. If OFF: Only access listed photos</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
@@ -1793,8 +1860,25 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
                     {/* All Albums */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">All Albums Access</p>
+                      <div className="relative">
+                        <div className="flex items-center gap-1">
+                          <p className="font-medium text-gray-900">All Albums Access</p>
+                          <div className="relative">
+                            <HelpCircle 
+                              className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                              onMouseEnter={() => setShowAlbumsTooltip(true)}
+                              onMouseLeave={() => setShowAlbumsTooltip(false)}
+                            />
+                            {showAlbumsTooltip && (
+                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                                <div>Controls which albums are visible in collection.</div>
+                                <div className="mt-1">Photo access follows the photos rule.</div>
+                                <div className="mt-1">Archived photos require archive album access.</div>
+                                <div className="mt-1">Without edit permission, empty albums are hidden.</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         <p className="text-sm text-gray-500">If ON: Access all albums except listed below. If OFF: Only access listed albums</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllAlbums ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
@@ -1811,8 +1895,25 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
                     {/* All Groups */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">All People Access</p>
+                      <div className="relative">
+                        <div className="flex items-center gap-1">
+                          <p className="font-medium text-gray-900">All People Access</p>
+                          <div className="relative">
+                            <HelpCircle 
+                              className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                              onMouseEnter={() => setShowGroupsTooltip(true)}
+                              onMouseLeave={() => setShowGroupsTooltip(false)}
+                            />
+                            {showGroupsTooltip && (
+                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
+                                <div>Controls which people are visible in collection.</div>
+                                <div className="mt-1">Inaccessible: no face rectangles, hidden from collection.</div>
+                                <div className="mt-1">Without edit permission, empty people are hidden.</div>
+                                <div className="mt-1">Unassociated faces are only accessible with edit permission.</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         <p className="text-sm text-gray-500">If ON: Access all groups except listed below. If OFF: Only access listed groups</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>

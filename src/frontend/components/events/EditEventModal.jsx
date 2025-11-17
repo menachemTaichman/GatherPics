@@ -904,8 +904,34 @@ export default function EditEventModal({
                                 <p className="text-sm font-medium text-gray-600">Total Size</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent.total_image_size != null
-                                  ? `${(baseEvent.total_image_size / (1024 * 1024)).toFixed(2)} MB`
+                                {baseEvent.total_size != null
+                                  ? `${(baseEvent.total_size / (1024 * 1024)).toFixed(2)} MB`
+                                  : '0 MB'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <HardDrive className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">Original Size</p>
+                              </div>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent.total_original_size != null
+                                  ? `${(baseEvent.total_original_size / (1024 * 1024)).toFixed(2)} MB`
+                                  : '0 MB'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <HardDrive className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">High Quality Size</p>
+                              </div>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent.total_high_quality_size != null
+                                  ? `${(baseEvent.total_high_quality_size / (1024 * 1024)).toFixed(2)} MB`
                                   : '0 MB'}
                               </span>
                             </div>

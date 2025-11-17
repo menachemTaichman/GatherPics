@@ -19,6 +19,7 @@ from src.backend.routes import (
     notification_bp,
     event_bp,
     feedback_bp,
+    settings_bp,
 )
 
 app = Flask(__name__)
@@ -47,6 +48,7 @@ app.register_blueprint(request_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(event_bp)
 app.register_blueprint(feedback_bp)
+app.register_blueprint(settings_bp)
 
 # Error Handlers
 @app.errorhandler(400)

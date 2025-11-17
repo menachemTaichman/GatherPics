@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI } from '../../utils/apiService';
-import { formatErrorMessage } from '../../utils/errorHandler';
+import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
 import { getPreference, setPreference } from '../../utils/settings';
 import { EditProfileModal } from '../../components/profiles';
 import { ConfirmDelete } from '../../components/modals';
@@ -408,7 +408,8 @@ export default function ProfilesGalleryPage() {
       showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
     } catch (error) {
       console.error('Failed to delete profile:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete profile';
+      // Get user-friendly error message (already includes context, no need for "Failed to..." prefix)
+      const errorMsg = getErrorExplanation(error);
       showToast(errorMsg, 'error');
     } finally {
       setProfileToDelete(null);
@@ -814,15 +815,17 @@ export default function ProfilesGalleryPage() {
                           {getSortIcon('is_public')}
                         </div>
                       </th>
-                      <th
-                        onClick={() => handleSort('can_create_events')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-40 min-w-[160px]"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Can Create Events</span>
-                          {getSortIcon('can_create_events')}
-                        </div>
-                      </th>
+                      {currentProfile?.can_manage_create_events === 1 && (
+                        <th
+                          onClick={() => handleSort('can_create_events')}
+                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-40 min-w-[160px]"
+                        >
+                          <div className="flex items-center space-x-1">
+                            <span>Can Create Events</span>
+                            {getSortIcon('can_create_events')}
+                          </div>
+                        </th>
+                      )}
                       <th
                         onClick={() => handleSort('restricted_to_event_name')}
                         className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
@@ -900,21 +903,23 @@ export default function ProfilesGalleryPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm w-40 min-w-[160px]">
-                          {profile.isPlaceholder ? (
-                            <span className="text-gray-400 italic">—</span>
-                          ) : (
-                            <span
-                              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                profile.can_create_events === 1
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {profile.can_create_events === 1 ? 'Yes' : 'No'}
-                            </span>
-                          )}
-                        </td>
+                        {currentProfile?.can_manage_create_events === 1 && (
+                          <td className="px-4 py-3 text-sm w-40 min-w-[160px]">
+                            {profile.isPlaceholder ? (
+                              <span className="text-gray-400 italic">—</span>
+                            ) : (
+                              <span
+                                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                  profile.can_create_events === 1
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {profile.can_create_events === 1 ? 'Yes' : 'No'}
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {profile.isPlaceholder ? (
                             <span className="text-gray-400 italic">—</span>

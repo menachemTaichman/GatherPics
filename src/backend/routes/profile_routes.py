@@ -665,7 +665,7 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
             'password',
             'email',
             'is_public',
-            'restricted_to_event_id',
+            'restricted_to_event',
             'can_create_events',
         ]
         general_data = {k: v for k, v in data.items() if k in general_fields}

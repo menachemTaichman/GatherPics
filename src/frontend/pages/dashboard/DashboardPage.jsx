@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useEffect } from 'react';
-import { MessageSquare, LayoutDashboard, Calendar, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { MessageSquare, LayoutDashboard, Calendar, User, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Header from '../../components/layout/Header';
 import { useAuth } from '../../contexts/authContext';
@@ -8,6 +8,7 @@ import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
 import { getCurrentProfile } from '../../utils/profileService';
 import { usePermissions } from '../../hooks/usePermissions';
+import SettingsModal from '../../components/settings/SettingsModal';
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
@@ -16,6 +17,8 @@ export default function DashboardPage() {
   const hasManageableEvents = currentProfile?.has_manageable_events === 1;
   const hasFeedbacks = currentProfile?.has_feedbacks === 1;
   const isProfilesManager = permissions.isProfilesManager;
+  const hasSettings = permissions.has_settings;
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Set document title
   useEffect(() => {
@@ -68,6 +71,20 @@ export default function DashboardPage() {
       hoverIcon: 'group-hover:text-white',
       borderHover: 'hover:border-primary-200',
       show: hasFeedbacks
+    },
+    {
+      id: 'settings',
+      title: 'App Settings',
+      description: 'Manage system-wide configuration',
+      icon: Settings,
+      link: null,
+      onClick: () => setShowSettingsModal(true),
+      iconBg: 'from-gray-100 to-gray-50',
+      iconColor: 'text-gray-600',
+      hoverBg: 'group-hover:from-gray-500 group-hover:to-gray-600',
+      hoverIcon: 'group-hover:text-white',
+      borderHover: 'hover:border-gray-200',
+      show: hasSettings
     }
   ];
 
@@ -81,6 +98,22 @@ export default function DashboardPage() {
 
   const renderCard = (section, index, wrapperClassName = '') => {
     const Icon = section.icon;
+    const CardWrapper = section.onClick ? 'div' : Link;
+    const cardProps = section.onClick
+      ? {
+          onClick: section.onClick,
+          className: `block h-full group cursor-pointer ${!isAuthenticated ? 'pointer-events-none' : ''}`,
+          tabIndex: isAuthenticated ? 0 : -1,
+          role: 'button',
+          'aria-disabled': !isAuthenticated,
+        }
+      : {
+          to: section.link,
+          className: `block h-full group ${!isAuthenticated ? 'pointer-events-none' : ''}`,
+          tabIndex: isAuthenticated ? 0 : -1,
+          'aria-disabled': !isAuthenticated,
+        };
+
     return (
       <motion.div
         key={section.id}
@@ -89,12 +122,7 @@ export default function DashboardPage() {
         transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
         className={['h-full', wrapperClassName].filter(Boolean).join(' ')}
       >
-        <Link
-          to={section.link}
-          className={`block h-full group ${!isAuthenticated ? 'pointer-events-none' : ''}`}
-          tabIndex={isAuthenticated ? 0 : -1}
-          aria-disabled={!isAuthenticated}
-        >
+        <CardWrapper {...cardProps}>
           <motion.div
             className={`relative h-full overflow-hidden rounded-lg border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-lg ${section.borderHover} ${
               !isAuthenticated ? 'opacity-60' : ''
@@ -120,7 +148,7 @@ export default function DashboardPage() {
               )}
             </div>
           </motion.div>
-        </Link>
+        </CardWrapper>
       </motion.div>
     );
   };
@@ -221,6 +249,12 @@ export default function DashboardPage() {
         onClose={closeLoginModal}
         onLogin={login}
         error={loginError}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
       />
     </div>
   );
