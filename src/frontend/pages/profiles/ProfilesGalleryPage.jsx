@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
+import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, HelpCircle, ChevronDown, Calendar, Copy } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
@@ -48,6 +48,7 @@ export default function ProfilesGalleryPage() {
   const [publicAccessCodes, setPublicAccessCodes] = useState({});
   const [publicAccessFlags, setPublicAccessFlags] = useState({});
   const publicAccessFetchesRef = useRef(new Set());
+  const [duplicatingProfileId, setDuplicatingProfileId] = useState(null);
 
   const [sortBy, setSortBy] = useState(() => getPreference('ProfilesGallery.sortBy', 'hierarchy_rank'));
   const [sortDir, setSortDir] = useState(() => getPreference('ProfilesGallery.sortDir', 'desc'));
@@ -393,6 +394,57 @@ export default function ProfilesGalleryPage() {
     setSelectedProfile(newProfileTemplate);
     setIsCreatingNewProfile(true);
     setShowEditProfileModal(true);
+  };
+
+  const handleDuplicateProfile = async (profile) => {
+    if (!profile || !profile.id) return;
+    
+    setDuplicatingProfileId(profile.id);
+    try {
+      const result = await profilesAPI.duplicate(profile.id);
+      
+      // Show success toast
+      const incompleteCount = result.incomplete_events?.length || 0;
+      if (incompleteCount > 0) {
+        showToast(
+          `Profile duplicated successfully. Note: ${incompleteCount} event${incompleteCount === 1 ? '' : 's'} could not be fully duplicated due to permissions.`,
+          'warning'
+        );
+      } else {
+        showToast(`Profile "${profile.label}" duplicated successfully`, 'success');
+      }
+      
+      // Fetch the new profile and open it in the modal
+      // The API response includes changes that update the store automatically
+      if (result.new_profile_id) {
+        try {
+          // Wait a bit for store to update from the changes in the response
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          const newProfile = await profilesAPI.getGeneralById(result.new_profile_id);
+          
+          // The profile data from the store should be up to date
+          // The modal will handle fetching event-specific data if needed
+          setSelectedProfile({
+            ...newProfile,
+            id: result.new_profile_id,
+          });
+          setIsCreatingNewProfile(false);
+          setShowEditProfileModal(true);
+        } catch (err) {
+          console.error('Failed to fetch duplicated profile:', err);
+          // Still show success, but don't open modal
+          showToast('Profile duplicated, but could not open it for editing', 'warning');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to duplicate profile:', error);
+      // Use errorHandler to get user-friendly error message
+      const errorMsg = getErrorExplanation(error);
+      showToast(errorMsg, 'error');
+    } finally {
+      setDuplicatingProfileId(null);
+    }
   };
 
   const handleDeleteProfile = (profile) => {
@@ -1038,6 +1090,18 @@ export default function ProfilesGalleryPage() {
                                   title="Edit profile"
                                 >
                                   <Edit2 className="w-4 h-4 text-indigo-600" />
+                                </button>
+                                <button
+                                  onClick={() => handleDuplicateProfile(profile)}
+                                  disabled={duplicatingProfileId === profile.id}
+                                  className="p-2 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Duplicate profile"
+                                >
+                                  {duplicatingProfileId === profile.id ? (
+                                    <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Copy className="w-4 h-4 text-green-600" />
+                                  )}
                                 </button>
                                 <button
                                   onClick={() => handleDeleteProfile(profile)}

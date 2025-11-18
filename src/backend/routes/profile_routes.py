@@ -66,6 +66,28 @@ def create_profile():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+@profile_bp.route("/api/profiles/<profile_id>/duplicate", methods=["POST"])
+@require_auth
+def duplicate_profile(profile_id):
+    """Duplicate a general profile."""
+    general_models = get_general_models()
+    try:
+        new_profile_id, incomplete_events = general_models.duplicate_profile(profile_id)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [new_profile_id]),
+        }]
+        return jsonify({"success": True, "new_profile_id": new_profile_id, "incomplete_events": incomplete_events, "changes": changes})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DBPolicyError as e:
+        return jsonify({"error": str(e)}), 400
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @profile_bp.route("/api/profiles/<profile_id>", methods=["PUT"])
 @require_auth
 def update_profile(profile_id):

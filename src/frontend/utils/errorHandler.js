@@ -15,6 +15,10 @@ function mapDatabaseErrorToUserMessage(errorMsg) {
   const errorMappings = {
     'the profile is associated with an event. Please remove the profile from all events first.': 
       'Cannot delete profile: This profile is associated with one or more events. Please remove it from all events first.',
+    'profile not found': 
+      'Cannot duplicate profile: Profile not found.',
+    'event not found': 
+      'Cannot duplicate profile: One or more associated events could not be accessed.',
   };
   
   // Normalize the error message by removing common prefixes

@@ -950,6 +950,12 @@ export const profilesAPI = {
     }
   },
   
+  // Duplicate profile
+  duplicate: async (profileId) => {
+    const response = await api.post(`/api/profiles/${profileId}/duplicate`);
+    return response.data;
+  },
+  
   // Get profile password
   getPassword: async (profileId) => {
     const response = await api.get(`/api/profiles/${profileId}/password`);
