@@ -3,7 +3,6 @@ import shutil
 from datetime import datetime
 from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
-from src.core.database.db import DB
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core.config import DATA_ROOT
 
@@ -44,7 +43,8 @@ class Event():
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
-        if not self.models.db.profile_context['can_upload_and_delete_images']:
+        # TODO: dont access db
+        if not self.models.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
         for image_id in image_ids:
@@ -112,8 +112,6 @@ class Event():
         verbose: bool = True,
         assign_moments: bool = False,
         progress_callback=None,
-        images_count_limit: int = 0,
-        image_size_limit_bytes: int = 0
     ) -> dict:
         """
         Process images from to_process folder.
@@ -127,8 +125,6 @@ class Event():
             verbose: Whether to print progress messages
             assign_moments: Whether to assign images to moments by time
             progress_callback: Optional callback function to report progress (receives dict with step info)
-            images_count_limit: Limit of the event images count
-            image_size_limit_bytes: Limit of the event image size
         Returns:
             dict: Summary of processing results
         """
@@ -180,6 +176,7 @@ class Event():
 
         def _cluster_and_group_faces(face_ids, minimal_group_size, unassociated_group_id):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
+            print(f"Clusters: {clusters}")
             groups_created = 0
             
             for new_faces, similar_faces in clusters:
@@ -260,9 +257,6 @@ class Event():
             except Exception as e:
                 return None, None, [], e
 
-        if not self.models.db.profile_context['can_upload_and_delete_images']:
-            raise Forbidden("Profile not allowed to process new images")
-
         # Check limitations before starting
         _send_progress('validation', 0, 1, 'Checking upload limits...')
         
@@ -271,7 +265,9 @@ class Event():
         
         # Get current image count
         current_count = self.models.get_images_count()
-        event_data = self.models.get_entities('events', self.event_id)
+        event_data = self.models.get_entities('events', self.event_id, include_details=True)
+        images_count_limit = event_data['images_count_limit']
+        image_size_limit_bytes = event_data['image_size_limit_bytes']
         calls_limit = event_data['rekognition_calls_limit']
         calls_used = event_data['rekognition_calls_used']
         
@@ -288,20 +284,14 @@ class Event():
             }
         
         # Check count limit
-        if current_count + len(image_files) > images_count_limit:
+        print(int(current_count) + len(image_files) > int(images_count_limit))
+        if int(current_count) + len(image_files) > int(images_count_limit):
             error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {images_count_limit}, Attempting to add: {len(image_files)}"
             if verbose:
                 print(error_msg)
             _send_progress('error', 0, 0, error_msg)
             raise DBPolicyError(error_msg)
 
-        if calls_used + len(image_files) > calls_limit:
-            error_msg = f"Upload would exceed rekognition calls limit. Current: {calls_used}, Limit: {calls_limit}, Attempting to add: {len(image_files)}"
-            if verbose:
-                print(error_msg)
-            _send_progress('error', 0, 0, error_msg)
-            raise DBPolicyError(error_msg)
-        
         # Check size limits
         total_size = 0
         files_exceeding_limit = []
@@ -317,7 +307,14 @@ class Event():
             if verbose:
                 print(error_msg)
             _send_progress('error', 0, 0, error_msg)
-            raise ValueError(error_msg)
+            raise DBPolicyError(error_msg)
+        
+        if int(calls_used) + len(image_files) > int(calls_limit):
+            error_msg = f"Upload would exceed rekognition calls limit. Current: {calls_used}, Limit: {calls_limit}, Attempting to add: {len(image_files)}"
+            if verbose:
+                print(error_msg)
+            _send_progress('error', 0, 0, error_msg)
+            raise DBPolicyError(error_msg)
         
         if verbose:
             print(f"Found {len(image_files)} images to process")

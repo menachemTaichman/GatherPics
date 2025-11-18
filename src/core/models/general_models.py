@@ -319,11 +319,11 @@ class GeneralModels(BaseModels):
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process images for an event."""
         event = self.get_event(event_id)
-        event_details = self.get_entities('events', event_id)
+        if self.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', 0) == 0:
+            raise Forbidden('Permission denied: cannot upload and delete images')
+        
         return event.process_new_images(
             file_names=file_names,
-            images_count_limit=event_details.get('images_count_limit', 0),
-            image_size_limit_bytes=event_details.get('image_size_limit_bytes', 0),
             assign_moments=assign_moments,
             progress_callback=progress_callback
         )

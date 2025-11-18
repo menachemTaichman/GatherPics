@@ -150,8 +150,6 @@ def upload_files_only(event_id):
     """Upload files to to_process directory without processing."""
     event = get_event(event_id)
     general_models = get_general_models()
-    if not general_models.get_current_profile().get('can_upload_and_delete_images', False):
-        raise Forbidden("You are not allowed to upload and delete images")
     
     if 'files' not in request.files:
         return jsonify({"error": "No files provided"}), 400
@@ -161,8 +159,11 @@ def upload_files_only(event_id):
     if not files:
         return jsonify({"error": "No files provided"}), 400
     
+    saved_files = []
     try:
-        saved_files = []
+        if general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', 0) == 0:
+            raise Forbidden("Permission denied: cannot upload and delete images")
+        
         for file in files:
             if file and file.filename:
                 if not file.filename.lower().endswith(('.jpg', '.jpeg')):
@@ -190,7 +191,35 @@ def upload_files_only(event_id):
             "filenames": saved_files
         })
         
+    except Forbidden as e:
+        # Cleanup any files that were saved before the error
+        for filename in saved_files:
+            try:
+                filepath = os.path.join(event.to_process_dir, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        # Cleanup any files that were saved before the error
+        for filename in saved_files:
+            try:
+                filepath = os.path.join(event.to_process_dir, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
+        # Cleanup any files that were saved before the error
+        for filename in saved_files:
+            try:
+                filepath = os.path.join(event.to_process_dir, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass
         return jsonify({"error": str(e)}), 400
 
 @upload_bp.route("/images/process-stream", methods=["GET"])

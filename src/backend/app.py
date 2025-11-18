@@ -6,6 +6,7 @@ import traceback
 import os
 
 from src.core.config import DIST_DIR
+from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 from src.backend.routes import (
     auth_bp,
     image_bp,
@@ -66,6 +67,19 @@ def internal_error(error):
 @app.errorhandler(403)
 def forbidden(error):
     return jsonify({"error": "Forbidden", "message": str(error)}), 403
+
+# Exception handlers for custom exceptions
+@app.errorhandler(Forbidden)
+def handle_forbidden(error):
+    return jsonify({"error": str(error)}), 403
+
+@app.errorhandler(DatabaseError)
+def handle_database_error(error):
+    return jsonify({"error": str(error)}), 500
+
+@app.errorhandler(DBPolicyError)
+def handle_db_policy_error(error):
+    return jsonify({"error": str(error)}), 400
 
 # Production build serving
 @app.route('/assets/<path:filename>')

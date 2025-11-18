@@ -203,7 +203,7 @@ def delete_request(event_id, request_id):
             'type': 'UPSERT',
             'entity': 'localStorage',
             'items': {
-                'currentProfile': general_models.get_current_profile()
+                'currentProfile': general_models.get_current_profile(event_id)
             }
         }
         ]
@@ -231,7 +231,7 @@ def delete_all_requests(event_id):
             'type': 'UPSERT',
             'entity': 'localStorage',
             'items': {
-                'currentProfile': general_models.get_current_profile()
+                'currentProfile': general_models.get_current_profile(event_id)
             }
         }]
         return jsonify({'success': True, 'changes': changes, 'deleted_ids': deleted_ids})
@@ -308,7 +308,7 @@ def toggle_request(event_id, request_id):
             'type': 'UPSERT',
             'entity': 'localStorage',
             'items': {
-                'currentProfile': general_models.get_current_profile()
+                'currentProfile': general_models.get_current_profile(event_id)
             }
         })
         

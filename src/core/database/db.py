@@ -122,10 +122,10 @@ class DB:
                     'moments_count',
                     'total_size',
                     'created_at',
-                    'rekognition_calls_limit',
-                    'rekognition_calls_used',
                 ],
                 'details_fields': [
+                    'rekognition_calls_limit',
+                    'rekognition_calls_used',
                     'images_count_limit',
                     'image_size_limit_bytes',
                     'max_image_size',
@@ -2066,6 +2066,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1')
                         WHEN NEW.all_albums = 1 and cur_event_profile('all_albums') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot create profile with can_upload_and_delete_images=1 and can_edit=0')
                     END;
 
                     INSERT INTO events_profiles (
@@ -2136,6 +2138,8 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
                         WHEN NEW.all_albums = 1 AND OLD.all_albums = 0 AND cur_event_profile('all_albums') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot update profile with can_upload_and_delete_images=1 and can_edit=0')
                     END;
 
                     UPDATE events_profiles
@@ -2379,7 +2383,7 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_edit') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
-                        WHEN face_id NOT IN (SELECT face_id FROM accessible_faces) THEN
+                        WHEN OLD.face_id NOT IN (SELECT face_id FROM accessible_faces) THEN
                             RAISE(ABORT, 'Permission denied: the face is not accessible')
                         WHEN NEW.group_ID IS NOT NULL AND NEW.group_ID NOT IN (SELECT group_id FROM accessible_groups) THEN
                             RAISE(ABORT, 'Permission denied: the target group is not accessible')
@@ -2398,14 +2402,15 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_upload_and_delete_images') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to edit entities')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_faces
+                            WHERE face_id = OLD.face_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the face is not accessible')
                     END;
 
                     DELETE FROM faces
-                    WHERE face_id = OLD.face_id
-                    AND EXISTS (
-                        SELECT 1 FROM accessible_faces f
-                        WHERE f.face_id = OLD.face_id
-                    );
+                    WHERE face_id = OLD.face_id;
                 END;
             """,
             'trg_insert_accessible_faces': """
@@ -2416,10 +2421,19 @@ class DB:
                             RAISE(ABORT, 'Permission denied: event not found')
                         WHEN cur_event_profile('can_upload_and_delete_images') = 0 THEN
                             RAISE(ABORT, 'Permission denied: the profile does not have permission to upload images')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_images
+                            WHERE image_id = NEW.image_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the image is not accessible')
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM accessible_groups
+                            WHERE group_id = NEW.group_id
+                        ) THEN
+                            RAISE(ABORT, 'Permission denied: the group is not accessible')
                     END;
 
                     INSERT INTO faces (
-                        event_id,
                         face_id,
                         image_id,
                         group_id,
@@ -2429,7 +2443,6 @@ class DB:
                         top
                     )
                     VALUES (
-                        cur_event_profile('event_id'),
                         NEW.face_id,
                         NEW.image_id,
                         NEW.group_id,
@@ -2503,6 +2516,14 @@ class DB:
                         NEW.moment_id,
                         NEW.upload_id
                     );
+
+                    -- TODO: use IF
+                    INSERT OR IGNORE INTO events_profiles_images (event_id, profile_id, image_id)
+                    SELECT cur_event_profile('event_id'), profile_id, NEW.image_id
+                    FROM current_event_profile
+                    WHERE event_id = cur_event_profile('event_id')
+                    AND profile_id = cur_profile('profile_id')
+                    AND all_images = 0;
                 END;
             """,
 
@@ -2791,19 +2812,15 @@ class DB:
                     SELECT CASE
                         WHEN cur_event_profile('event_id') IS NULL THEN
                             RAISE(ABORT, 'Permission denied: event not found')
-                        WHEN cur_event_profile('can_upload_and_delete_images') = 0 THEN
-                            RAISE(ABORT, 'Permission denied: cannot upload and delete images')
+                        WHEN OLD.profile_id <> cur_profile('profile_id') THEN
+                            RAISE(ABORT, 'Permission denied: the upload is not editable')
                         WHEN NOT EXISTS (
                             SELECT 1 FROM accessible_uploads
                             WHERE accessible_uploads.upload_id = OLD.upload_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the upload is not accessible')
-                        WHEN OLD.profile_id NOT IN (
-                            SELECT profile_id FROM accessible_events_profiles
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND profile_id = OLD.profile_id
-                        ) THEN
-                            RAISE(ABORT, 'Permission denied: the profile is not accessible')
+                        WHEN cur_event_profile('can_upload_and_delete_images') = 0 THEN
+                            RAISE(ABORT, 'Permission denied: cannot upload and delete images')
                     END;
 
                     UPDATE uploads

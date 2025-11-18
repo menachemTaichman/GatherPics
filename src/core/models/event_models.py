@@ -104,16 +104,21 @@ class EventModels(BaseModels):
         Args:
             count: number of rekognition calls to add
         """
-        if not self.db.profile_context['can_upload_and_delete_images']:
+        if not self.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Permission denied: cannot upload and delete images")
         
-        event_data = self.get_entities('events', self.event_id)
+        event_data = self.get_entities('events', self.db.event_id, include_details=True)
         calls_limit = event_data['rekognition_calls_limit']
         calls_used = event_data['rekognition_calls_used']
         if calls_used + count > calls_limit:
             raise DBPolicyError("Policy error: cannot add more rekognition calls than the limit")
-        
-        self.edit('events', self.event_id, {'rekognition_calls_used': calls_used + count})
+
+        query = f"""
+            UPDATE events
+            SET rekognition_calls_used = rekognition_calls_used + ?
+            WHERE event_id = ?
+        """
+        self.db.execute_query(query, (count, self.db.event_id))
 
     # -------- Moments helpers --------
     def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:
@@ -275,7 +280,7 @@ class EventModels(BaseModels):
     # -------- Images helpers --------
     def get_images_count(self) -> int:
         """Get the number of images in the event."""
-        return self.db.execute_query('SELECT COUNT(*) FROM images', return_format=ReturnFormat.VALUE)
+        return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = ?', (self.db.event_id,), return_format=ReturnFormat.VALUE)
 
     def is_image_deletable(self, image_id: str) -> bool:
         """Check if an image is deletable.
