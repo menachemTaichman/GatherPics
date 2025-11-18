@@ -278,11 +278,13 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes(general_models.db)
+# recreate_views_triggers_and_indexes(general_models.db)
 
 album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
 other_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
+other_profile_id = '162f6184-00a8-47f7-9895-f1fd8cbc93c5'
 
-result = event.models.check_accessibility(other_profile_id, 'albums', [album_id])
-print(result)
+other_event = Event(event_id, profile_id=other_profile_id)
+other_event.models.edit('events', event_id, {'rekognition_calls_limit': 100})
+print(other_event.models.get_entities('events', event_id))
 print('--------------------------------')

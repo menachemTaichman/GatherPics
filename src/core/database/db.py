@@ -1685,6 +1685,15 @@ class DB:
                         ) = 0
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot manage event')
+                        WHEN NEW.rekognition_calls_limit <> OLD.rekognition_calls_limit AND (
+                            SELECT can_upload_and_delete_images
+                            FROM events_profiles
+                            WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id
+                        ) = 0
+                        THEN
+                            RAISE(ABORT, 'Permission denied: cannot update rekognition calls limit if cannot upload and delete images')
+                        WHEN NEW.rekognition_calls_used <> OLD.rekognition_calls_used THEN
+                            RAISE(ABORT, 'Policy error: cannot update rekognition calls used')
                         WHEN NEW.rekognition_calls_limit <> (
                             SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1
                         ) AND cur_profile('profile_id') <> (

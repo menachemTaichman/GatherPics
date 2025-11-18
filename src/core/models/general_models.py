@@ -266,7 +266,7 @@ class GeneralModels(BaseModels):
         if not current_profile['has_manageable_events']:
             raise Forbidden('Permission denied: the information is not accessible')
         
-        query = 'SELECT images_count_limit, image_size_limit_bytes FROM settings WHERE id = 1'
+        query = 'SELECT images_count_limit, image_size_limit_bytes, rekognition_calls_limit FROM settings WHERE id = 1'
         result = self.db.execute_query(query, (), return_format=ReturnFormat.DICT)
         if not result:
             raise Exception('Settings not found')

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus, HardDrive } from 'lucide-react';
+import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus, HardDrive, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, API_BASE } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -10,6 +10,7 @@ import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useEventId, useApplyScopes } from '../../utils/storeUtils';
 import { useModalManager } from '../../utils/modalManager';
 import { useModalFocus } from '../../hooks/useModalFocus';
+import { usePermissions } from '../../hooks/usePermissions';
 
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
 
@@ -38,6 +39,7 @@ function createEmptyEventDraft(uploadsLimits = null) {
     is_public: 0,
     images_count_limit: uploadsLimits?.images_count_limit ?? 0,
     image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
+    rekognition_calls_limit: uploadsLimits?.rekognition_calls_limit ?? 0,
   };
 }
 
@@ -64,6 +66,7 @@ export default function EditEventModal({
   const [uploadsLimits, setUploadsLimits] = useState(null);
   const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
+  const permissions = usePermissions(isCreateMode ? null : eventUrl);
   const { showToast } = useToast();
   const emitToast = useCallback(
     (message, type) => {
@@ -160,6 +163,10 @@ export default function EditEventModal({
         evt.image_size_limit_bytes !== null && evt.image_size_limit_bytes !== undefined
           ? Number(evt.image_size_limit_bytes)
           : uploadsLimits?.image_size_limit_bytes ?? 0,
+      rekognition_calls_limit:
+        evt.rekognition_calls_limit !== null && evt.rekognition_calls_limit !== undefined
+          ? Number(evt.rekognition_calls_limit)
+          : uploadsLimits?.rekognition_calls_limit ?? 0,
     };
   }, [uploadsLimits]);
 
@@ -271,13 +278,16 @@ export default function EditEventModal({
     const originalImagesLimit = baseEvent.images_count_limit ?? null;
     const draftSizeLimit = eventDraft.image_size_limit_bytes ?? null;
     const originalSizeLimit = baseEvent.image_size_limit_bytes ?? null;
+    const draftCallsLimit = eventDraft.rekognition_calls_limit ?? null;
+    const originalCallsLimit = baseEvent.rekognition_calls_limit ?? null;
     return (
       draftName !== originalName ||
       draftUrl !== originalUrl ||
       draftDate !== originalDate ||
       draftPublic !== originalPublic ||
       draftImagesLimit !== originalImagesLimit ||
-      draftSizeLimit !== originalSizeLimit
+      draftSizeLimit !== originalSizeLimit ||
+      draftCallsLimit !== originalCallsLimit
     );
   }, [eventDraft, baseEvent, isCreateMode]);
 
@@ -415,6 +425,28 @@ export default function EditEventModal({
     });
   }, [uploadsLimits]);
 
+  const handleEventCallsLimitChange = useCallback((value) => {
+    setEventDraft((prev) => {
+      if (!prev) return prev;
+      const maxLimit = uploadsLimits?.rekognition_calls_limit;
+      const minLimit = !isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0;
+      const numValue = value === '' || value === null ? null : Number(value);
+      // Ensure value is not null and is within limits
+      if (numValue === null) {
+        return { ...prev, rekognition_calls_limit: maxLimit ?? minLimit };
+      }
+      // Enforce minimum (current calls used)
+      if (numValue < minLimit) {
+        return { ...prev, rekognition_calls_limit: minLimit };
+      }
+      // Enforce maximum (system limit)
+      if (maxLimit != null && numValue > maxLimit) {
+        return { ...prev, rekognition_calls_limit: maxLimit };
+      }
+      return { ...prev, rekognition_calls_limit: numValue };
+    });
+  }, [uploadsLimits, isCreateMode, baseEvent?.rekognition_calls_used]);
+
   const handleEventSave = useCallback(async (source = 'ui') => {
     if (!eventDraft) return;
     const trimmedName = (eventDraft.name || '').trim();
@@ -460,6 +492,10 @@ export default function EditEventModal({
       images_count_limit: eventDraft.images_count_limit,
       image_size_limit_bytes: eventDraft.image_size_limit_bytes,
     };
+    // Only include rekognition_calls_limit if user has settings permission
+    if (permissions.has_settings && eventDraft.rekognition_calls_limit != null) {
+      payload.rekognition_calls_limit = eventDraft.rekognition_calls_limit;
+    }
     try {
       let response;
       if (isCreateMode) {
@@ -502,6 +538,7 @@ export default function EditEventModal({
     emitToast,
     onClose,
     onSuccess,
+    permissions.has_settings,
   ]);
 
   const canSaveEvent = useMemo(
@@ -847,6 +884,42 @@ export default function EditEventModal({
                                   : 'Required. Enter the maximum upload size in MB.'}
                               </p>
                             </div>
+                            {permissions.has_settings && (
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-gray-600">
+                                  Calls Limit
+                                  <span className="ml-1 text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  min={!isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0}
+                                  max={uploadsLimits?.rekognition_calls_limit ?? undefined}
+                                  value={eventDraft.rekognition_calls_limit ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value === '' ? '' : Number(e.target.value);
+                                    const minLimit = !isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0;
+                                    const maxLimit = uploadsLimits?.rekognition_calls_limit;
+                                    let finalValue = value === '' ? (maxLimit ?? minLimit) : value;
+                                    if (finalValue !== '' && Number(finalValue) < minLimit) {
+                                      finalValue = minLimit;
+                                    }
+                                    if (maxLimit != null && finalValue !== '' && Number(finalValue) > maxLimit) {
+                                      finalValue = maxLimit;
+                                    }
+                                    handleEventCallsLimitChange(finalValue);
+                                  }}
+                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                  placeholder={uploadsLimits?.rekognition_calls_limit?.toLocaleString() ?? 'Enter limit'}
+                                />
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {!isCreateMode && baseEvent?.rekognition_calls_used != null
+                                    ? `Minimum: ${baseEvent.rekognition_calls_used.toLocaleString()} calls (current used). ${uploadsLimits?.rekognition_calls_limit != null ? `Maximum: ${uploadsLimits.rekognition_calls_limit.toLocaleString()} calls.` : ''}`
+                                    : uploadsLimits?.rekognition_calls_limit != null
+                                    ? `Maximum allowed: ${uploadsLimits.rekognition_calls_limit.toLocaleString()} calls.`
+                                    : 'Enter the maximum number of recognition calls allowed.'}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -946,6 +1019,24 @@ export default function EditEventModal({
                                 {baseEvent.max_image_size != null
                                   ? `${(baseEvent.max_image_size / (1024 * 1024)).toFixed(2)} MB`
                                   : '0 MB'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                                  <Activity className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-600">Rekognition Calls Used</p>
+                                  {baseEvent?.rekognition_calls_limit != null && (
+                                    <p className="text-xs text-gray-500">
+                                      Max: {baseEvent.rekognition_calls_limit.toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-base font-semibold text-blue-600">
+                                {baseEvent?.rekognition_calls_used ?? 0}
                               </span>
                             </div>
                           </div>

@@ -98,6 +98,23 @@ class EventModels(BaseModels):
 
         return valid_child_ids, detached_parents
 
+    # -------- events helpers --------
+    def add_rekognition_calls(self, count: int):
+        """Add rekognition calls to the event.
+        Args:
+            count: number of rekognition calls to add
+        """
+        if not self.db.profile_context['can_upload_and_delete_images']:
+            raise Forbidden("Permission denied: cannot upload and delete images")
+        
+        event_data = self.get_entities('events', self.event_id)
+        calls_limit = event_data['rekognition_calls_limit']
+        calls_used = event_data['rekognition_calls_used']
+        if calls_used + count > calls_limit:
+            raise DBPolicyError("Policy error: cannot add more rekognition calls than the limit")
+        
+        self.edit('events', self.event_id, {'rekognition_calls_used': calls_used + count})
+
     # -------- Moments helpers --------
     def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:
         """Return images to moments.

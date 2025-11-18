@@ -69,6 +69,7 @@ def update_event(event_id):
         'is_public',
         'images_count_limit',
         'image_size_limit_bytes',
+        'rekognition_calls_limit',
         'representative_image',
     }
 

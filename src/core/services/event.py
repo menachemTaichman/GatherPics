@@ -271,6 +271,9 @@ class Event():
         
         # Get current image count
         current_count = self.models.get_images_count()
+        event_data = self.models.get_entities('events', self.event_id)
+        calls_limit = event_data['rekognition_calls_limit']
+        calls_used = event_data['rekognition_calls_used']
         
         image_files = _get_images_to_process()
         if not image_files:
@@ -290,7 +293,14 @@ class Event():
             if verbose:
                 print(error_msg)
             _send_progress('error', 0, 0, error_msg)
-            raise ValueError(error_msg)
+            raise DBPolicyError(error_msg)
+
+        if calls_used + len(image_files) > calls_limit:
+            error_msg = f"Upload would exceed rekognition calls limit. Current: {calls_used}, Limit: {calls_limit}, Attempting to add: {len(image_files)}"
+            if verbose:
+                print(error_msg)
+            _send_progress('error', 0, 0, error_msg)
+            raise DBPolicyError(error_msg)
         
         # Check size limits
         total_size = 0
@@ -334,6 +344,8 @@ class Event():
                 _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
                 if verbose:
                     print(f"Processing image {i}/{len(image_files)}: {image_file}")
+                
+                self.models.add_rekognition_calls(1)
                 display_img, image_id, image_faces, error = _process_image(image_file, unassociated_group_id, upload_id)
                 if error is not None or display_img is None or image_id is None:
                     error_msg = f"Error processing {image_file}: {str(error) if error else 'Invalid image or id'}"
@@ -358,6 +370,8 @@ class Event():
                 _send_progress('clustering', 0, 1, 'Clustering faces...')
                 if verbose:
                     print("Clustering faces...")
+
+                self.models.add_rekognition_calls(len(all_faces_values))
                 groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values], minimal_group_size, unassociated_group_id)
             else:
                 groups_created = 0
