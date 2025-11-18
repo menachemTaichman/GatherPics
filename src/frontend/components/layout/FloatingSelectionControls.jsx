@@ -50,7 +50,8 @@ export default function FloatingSelectionControls({
   selectionMode = false,
   entity = null,
   entityId = null,
-  isFacesMode = false
+  isFacesMode = false,
+  isUnassociatedGroup = false
 }) {  
   const eventId = useEventId(eventUrl);
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
@@ -95,11 +96,11 @@ export default function FloatingSelectionControls({
   );
 
   // Check if we can set representative in faces mode
-  const canSetRepInFacesMode = isFacesMode && selectedCount === 1 && permissions.canEdit;
+  const canSetRepInFacesMode = isFacesMode && selectedCount === 1 && permissions.canEdit && !isUnassociatedGroup;
   
   // Check if advanced buttons group has any visible buttons
   const hasAdvancedButtons = (
-    (showSetRepresentative && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && permissions.canEdit) ||
+    (showSetRepresentative && !isUnassociatedGroup && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && permissions.canEdit) ||
     (showTransferFaces && permissions.canEdit) ||
     (showRemoveFromMoment && permissions.canEdit) ||
     (showMoveToMoment && permissions.canEdit) ||
@@ -241,7 +242,7 @@ export default function FloatingSelectionControls({
           {hasManagementButtons && hasAdvancedButtons && <span className="text-gray-300">|</span>}
 
           {/* Set as representative - for single image/face selection */}
-          {showSetRepresentative && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && (
+          {showSetRepresentative && !isUnassociatedGroup && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && (
             <PermissionGate requires="canEdit">
               <button
                 onClick={() => {

@@ -471,37 +471,53 @@ def get_groups_to_request_access(event_id):
 @require_auth
 def check_images_from_profile(event_id, profile_id):
     """Check accessible images for a profile."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    event = get_event(event_id)
-    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'images', image_ids)
-    len_accessible = len(accessible_ids)
-    len_inaccessible = len(inaccessible_ids)
-    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
+    try:
+        data = request.json or {}
+        image_ids = data.get('image_ids', [])
+        event = get_event(event_id)
+        specify, actual = event.models.check_accessibility_status(profile_id, 'images', image_ids)
+
+        return jsonify({"specify": specify, "actual": actual})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums/check", methods=["POST"])
 @require_auth
 def check_albums_from_profile(event_id, profile_id):
     """Check accessible albums for a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
-    event = get_event(event_id)
-    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'albums', album_ids)
-    len_accessible = len(accessible_ids)
-    len_inaccessible = len(inaccessible_ids)
-    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
+    try:
+        data = request.json or {}
+        album_ids = data.get('album_ids', [])
+        event = get_event(event_id)
+        specify, actual = event.models.check_accessibility_status(profile_id, 'albums', album_ids)
+        return jsonify({"specify": specify, "actual": actual})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups/check", methods=["POST"])
 @require_auth
 def check_groups_from_profile(event_id, profile_id):
     """Check accessible groups for a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
-    event = get_event(event_id)
-    accessible_ids, inaccessible_ids = event.models.check_accessibility(profile_id, 'groups', group_ids)
-    len_accessible = len(accessible_ids)
-    len_inaccessible = len(inaccessible_ids)
-    return jsonify({"success": True, "len_accessible": len_accessible, "len_inaccessible": len_inaccessible})
+    try:
+        data = request.json or {}
+        group_ids = data.get('group_ids', [])
+        event = get_event(event_id)
+        specify, actual = event.models.check_accessibility_status(profile_id, 'groups', group_ids)
+        return jsonify({"specify": specify, "actual": actual})
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 # ========================================
 # ACCESS MANAGEMENT

@@ -496,23 +496,42 @@ class EventModels(BaseModels):
         Returns:
             list of accessible ids, list of inaccessible ids
         """
-        accessibilities = {
-            'images': 'images_accessibility',
-            'albums': 'albums_accessibility',
-            'groups': 'groups_accessibility',
+        permissions = {
+            'images': ('events_profiles_images', 'all_images', 'images_accessibility'),
+            'albums': ('events_profiles_albums', 'all_albums', 'albums_accessibility'),
+            'groups': ('events_profiles_groups', 'all_groups', 'groups_accessibility'),
         }
-        accessibility_table = accessibilities.get(entity)
-        if not accessibility_table:
+        
+        permission_table, all_field, accessibility_table = permissions.get(entity)
+        if not permission_table:
             raise ValueError(f"Invalid entity: {entity}")
 
         if not self.is_accessible('events_profiles', profile_id):
             raise Forbidden("The profile is not accessible")
 
-        accessible_ids = [entity_id for entity_id in self.get_entities(entity, ids).keys()]
-        if set(accessible_ids) - set(ids):
+        id_field = self.db.get_id_field(entity)
+        accessible_event_profiles = self.db.STRUCTURE()['events_profiles']['accessible_table']
+        accessible_permission_table = self.db.STRUCTURE()[permission_table]['accessible_table']
+        accessible_table = self.db.STRUCTURE()[entity]['accessible_table']
+        query = f"""
+            SELECT
+                at.{id_field},
+                CASE WHEN
+                    (ayt.{id_field} IS NULL AND aep.{all_field} = 1)
+                    OR (ayt.{id_field} IS NOT NULL AND aep.{all_field} = 0)
+                THEN 1 ELSE 0 END AS is_accessible
+                FROM {accessible_table} at
+                JOIN {accessible_event_profiles} aep ON aep.profile_id = ?
+                LEFT JOIN {accessible_permission_table} ayt ON at.{id_field} = ayt.{id_field} AND ayt.profile_id = aep.profile_id
+                WHERE at.{id_field} IN ({','.join(['?'] * len(ids))})
+        """
+        result = self.db.execute_query(query, [profile_id] + ids, return_format=ReturnFormat.LIST_TUPLES)
+        if len(result) != len(ids):
             raise Forbidden("Some of the entities are not accessible")
 
-        id_field = self.db.get_id_field(entity)
+        specify_accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
+        specify_inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
+
         query = f"""
             SELECT
                 {id_field},
@@ -523,9 +542,40 @@ class EventModels(BaseModels):
                 AND profile_id = ?
         """
         result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
-        accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
-        inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
-        return accessible_ids, inaccessible_ids
+
+        actual_accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
+        actual_inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
+
+        return specify_accessible_ids, specify_inaccessible_ids, actual_accessible_ids, actual_inaccessible_ids
+
+    def check_accessibility_status(self, profile_id: str, entity: str, ids: list[str]) -> tuple[int, int]:
+        """Check accessibility status of entities for a profile.
+        Args:
+            profile_id: profile id
+            entity: 'images', 'albums', 'groups'
+            ids: list of ids
+        Returns:
+            specify status and actual status
+            1 if all entities are accessible
+            -1 if all entities are inaccessible
+            0 if some entities are accessible and some are inaccessible
+        """
+        specify_accessible_ids, specify_inaccessible_ids, actual_accessible_ids, actual_inaccessible_ids = self.check_accessibility(profile_id, entity, ids)
+        specify = 0
+        if len(specify_accessible_ids) == len(ids):
+            specify = 1
+        elif len(specify_inaccessible_ids) == len(ids):
+            specify = -1
+        else:
+            specify = 0
+        actual = 0
+        if len(actual_accessible_ids) == len(ids):
+            actual = 1
+        elif len(actual_inaccessible_ids) == len(ids):
+            actual = -1
+        else:
+            actual = 0
+        return specify, actual
 
     # -------- Access requests helpers --------
     def get_groups_to_request_access(self) -> list[str]:

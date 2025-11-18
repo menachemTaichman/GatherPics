@@ -50,7 +50,8 @@ function ImageViewerActions({
   entity,
   entityId,
   eventId,
-  imageActions
+  imageActions,
+  isUnassociatedGroup = false
 }) {
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [settingEventRepresentative, setSettingEventRepresentative] = useState(false);
@@ -136,12 +137,12 @@ function ImageViewerActions({
         </PermissionGate>
 
         {/* Separator before representative button - only if management buttons exist AND can set representative */}
-        {hasManagementButtons && imageActions.canSetRepresentative && permissions.canEdit && (
+        {hasManagementButtons && imageActions.canSetRepresentative && !isUnassociatedGroup && permissions.canEdit && (
           <span className="text-gray-300">|</span>
         )}
 
         {/* Set as representative */}
-        {imageActions.canSetRepresentative && (
+        {imageActions.canSetRepresentative && !isUnassociatedGroup && (
           <PermissionGate requires="canEdit">
             <button
               onClick={() => imageActions.setRepresentative()}
@@ -217,7 +218,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false }) {
   const permissions = usePermissions(); // <-- add this near the top of the component
   const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
@@ -1492,6 +1493,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   entityId={parent}
                   eventId={eventId}
                   imageActions={imageActions}
+                  isUnassociatedGroup={isUnassociatedGroup}
                 />
 
                 {/* Details Section */}
@@ -1755,6 +1757,7 @@ function arePropsEqual(prev, next) {
   if (prev.sortOrder !== next.sortOrder) { return false; }
   if (prev.image !== next.image) { return false; }
   if (prev.urlHelpers !== next.urlHelpers) { return false; }
+  if (prev.isUnassociatedGroup !== next.isUnassociatedGroup) { return false; }
   const prevFilteredLen = Array.isArray(prev.filteredIds) ? prev.filteredIds.length : prev.filteredIds;
   const nextFilteredLen = Array.isArray(next.filteredIds) ? next.filteredIds.length : next.filteredIds;
   if (prevFilteredLen !== nextFilteredLen) { return false; }

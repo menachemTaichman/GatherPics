@@ -280,8 +280,9 @@ ids = {
 
 recreate_views_triggers_and_indexes(general_models.db)
 
-profiles = general_models.db.execute_query('SELECT profile_id, label, restricted_to_event FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
+album_id = '0aeef84e-0a30-4193-b555-55c5ae672765'
 other_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-new_profile_id, incomplete_events = general_models.duplicate_profile(other_profile_id)
-print(new_profile_id)
-print(incomplete_events)
+
+result = event.models.check_accessibility(other_profile_id, 'albums', [album_id])
+print(result)
+print('--------------------------------')

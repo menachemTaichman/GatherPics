@@ -2274,6 +2274,13 @@ class DB:
                             WHERE group_id = NEW.group_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
+                        WHEN NEW.group_id = (
+                            SELECT group_id
+                            FROM groups
+                            WHERE event_id = cur_event_profile('event_id')
+                            AND LOWER(label) = 'unassociated'
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: cannot edit unassociated group permissions')
                     END;
 
                     INSERT OR IGNORE INTO events_profiles_groups (event_id, profile_id, group_id)

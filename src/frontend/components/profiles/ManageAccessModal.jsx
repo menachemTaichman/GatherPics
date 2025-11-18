@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Key, Check, Minus, Info, Loader2 } from 'lucide-react';
+import { X, Key, Check, Minus, Info, Loader2, HelpCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -15,7 +15,9 @@ import { useApplyScopes, useEventId } from '../../utils/storeUtils';
  */
 function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast }) {
   const [loading, setLoading] = useState({});
-  const [status, setStatus] = useState('unknown');
+  const [specifyStatus, setSpecifyStatus] = useState(null); // 1 = all accessible, -1 = all inaccessible, 0 = mixed, null = unknown
+  const [actualStatus, setActualStatus] = useState(null); // 1 = all accessible, -1 = all inaccessible, 0 = mixed, null = unknown
+  const [showActualTooltip, setShowActualTooltip] = useState(false);
 
   // Stabilize entityIds to prevent unnecessary re-renders
   const entityIdsKey = useMemo(() => entityIds.join(','), [entityIds]);
@@ -24,7 +26,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
   useEffect(() => {
     const checkAccess = async () => {
       if (!profile || !entityIds || entityIds.length === 0) {
-        setStatus('unknown');
+        setSpecifyStatus(null);
+        setActualStatus(null);
         return;
       }
 
@@ -39,19 +42,14 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         }
 
         if (result) {
-          const { len_accessible, len_inaccessible } = result;
-          
-          if (len_accessible === entityIds.length) {
-            setStatus('allowed');
-          } else if (len_inaccessible === entityIds.length) {
-            setStatus('denied');
-          } else {
-            setStatus('mixed');
-          }
+          const { specify, actual } = result;
+          setSpecifyStatus(specify);
+          setActualStatus(actual);
         }
       } catch (err) {
         console.error('Failed to check access:', err);
-        setStatus('unknown');
+        setSpecifyStatus(null);
+        setActualStatus(null);
       }
     };
 
@@ -87,14 +85,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         }
         
         if (result) {
-          const { len_accessible, len_inaccessible } = result;
-          if (len_accessible === entityIds.length) {
-            setStatus('allowed');
-          } else if (len_inaccessible === entityIds.length) {
-            setStatus('denied');
-          } else {
-            setStatus('mixed');
-          }
+          const { specify, actual } = result;
+          setSpecifyStatus(specify);
+          setActualStatus(actual);
         }
       } catch (refreshErr) {
         console.error('Failed to refresh status:', refreshErr);
@@ -137,14 +130,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         }
         
         if (result) {
-          const { len_accessible, len_inaccessible } = result;
-          if (len_accessible === entityIds.length) {
-            setStatus('allowed');
-          } else if (len_inaccessible === entityIds.length) {
-            setStatus('denied');
-          } else {
-            setStatus('mixed');
-          }
+          const { specify, actual } = result;
+          setSpecifyStatus(specify);
+          setActualStatus(actual);
         }
       } catch (refreshErr) {
         console.error('Failed to refresh status:', refreshErr);
@@ -164,31 +152,77 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
   const isLoadingDeny = loading[denyKey];
   const isLoadingAny = isLoadingAllow || isLoadingDeny;
 
+  // Determine button states based on specifyStatus
+  const isSpecifyAllowed = specifyStatus === 1;
+  const isSpecifyDenied = specifyStatus === -1;
+  const isSpecifyMixed = specifyStatus === 0;
+
+  // Determine actual status for tooltip
+  const entityLabel = entityType === 'image' ? 'photos' : entityType === 'album' ? 'albums' : 'people';
+  const getActualTooltipText = () => {
+    if (actualStatus === 1) {
+      return `All ${entityLabel} are effectively accessible to this profile`;
+    } else if (actualStatus === -1) {
+      return `All ${entityLabel} are effectively not accessible to this profile`;
+    } else if (actualStatus === 0) {
+      return `Some ${entityLabel} are effectively not accessible to this profile`;
+    }
+    return 'Checking effective accessibility...';
+  };
+
+  // Get color for actual status indicator
+  const getActualStatusColor = () => {
+    if (actualStatus === 1) return 'text-green-600';
+    if (actualStatus === -1) return 'text-red-600';
+    if (actualStatus === 0) return 'text-yellow-600';
+    return 'text-gray-400';
+  };
+
   return (
     <div
       className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
     >
       <div className="flex items-center space-x-3">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-          status === 'allowed' ? 'bg-green-100' :
-          status === 'denied' ? 'bg-red-100' :
-          'bg-yellow-100'
+          isSpecifyAllowed ? 'bg-green-100' :
+          isSpecifyDenied ? 'bg-red-100' :
+          isSpecifyMixed ? 'bg-yellow-100' :
+          'bg-gray-100'
         }`}>
-          {status === 'allowed' ? (
+          {isSpecifyAllowed ? (
             <Check className="w-5 h-5 text-green-600" />
-          ) : status === 'denied' ? (
+          ) : isSpecifyDenied ? (
             <Minus className="w-5 h-5 text-red-600" />
-          ) : (
+          ) : isSpecifyMixed ? (
             <Key className="w-5 h-5 text-yellow-600" />
+          ) : (
+            <Key className="w-5 h-5 text-gray-400" />
           )}
         </div>
-        <div>
-          <p className="font-medium text-gray-900">{profile.label}</p>
+        <div className="flex-1">
+          <div className="flex items-center space-x-2">
+            <p className="font-medium text-gray-900">{profile.label}</p>
+            {actualStatus !== null && (
+              <div className="relative">
+                <HelpCircle 
+                  className={`w-3.5 h-3.5 ${getActualStatusColor()} cursor-help`}
+                  onMouseEnter={() => setShowActualTooltip(true)}
+                  onMouseLeave={() => setShowActualTooltip(false)}
+                />
+                {showActualTooltip && (
+                  <div className="absolute left-0 top-5 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-normal">
+                    {getActualTooltipText()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <p className="text-xs text-gray-500">
             Rank {profile.hierarchy_rank} • 
-            {status === 'allowed' ? ' Has access' :
-             status === 'denied' ? ' No access' :
-             ' Mixed access'}
+            {isSpecifyAllowed ? ' Has access' :
+             isSpecifyDenied ? ' No access' :
+             isSpecifyMixed ? ' Mixed access' :
+             ' Unknown'}
           </p>
         </div>
       </div>
@@ -196,9 +230,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
       <div className="flex items-center space-x-2">
         <button
           onClick={handleAllow}
-          disabled={isLoadingAny || status === 'allowed'}
+          disabled={isLoadingAny || isSpecifyAllowed}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
-            status === 'allowed'
+            isSpecifyAllowed
               ? 'bg-green-100 text-green-700 hover:bg-green-200'
               : 'bg-green-600 text-white hover:bg-green-700'
           } disabled:opacity-50`}
@@ -212,9 +246,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         </button>
         <button
           onClick={handleDeny}
-          disabled={isLoadingAny || status === 'denied'}
+          disabled={isLoadingAny || isSpecifyDenied}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
-            status === 'denied'
+            isSpecifyDenied
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-red-600 text-white hover:bg-red-700'
           } disabled:opacity-50`}
@@ -408,17 +442,37 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
                 <p className="text-gray-500">No other profiles available</p>
               </div>
             ) : profilesLoaded ? (
-              <div className="space-y-3">
-                {otherProfiles.map(profile => (
-                  <ProfileAccessRow
-                    key={profile.id}
-                    profile={profile}
-                    entityType={entityType}
-                    entityIds={entityIds}
-                    eventUrl={eventUrl}
-                    showToast={showToast}
-                  />
-                ))}
+              <div className="space-y-4">
+                {/* Note about other permissions */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm text-blue-900 font-medium mb-1">
+                        Note: Other permissions may override these settings
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        {entityType === 'image' && 'Archived photos may be inaccessible if the profile doesn\'t have access to archived albums.'}
+                        {entityType === 'album' && 'Albums may be inaccessible if there are no accessible photos inside and the profile cannot edit.'}
+                        {entityType === 'group' && 'People may be inaccessible if there are no accessible photos inside and the profile cannot edit.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profile list */}
+                <div className="space-y-3">
+                  {otherProfiles.map(profile => (
+                    <ProfileAccessRow
+                      key={profile.id}
+                      profile={profile}
+                      entityType={entityType}
+                      entityIds={entityIds}
+                      eventUrl={eventUrl}
+                      showToast={showToast}
+                    />
+                  ))}
+                </div>
               </div>
             ) : null}
 

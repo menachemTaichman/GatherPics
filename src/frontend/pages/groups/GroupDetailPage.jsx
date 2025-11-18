@@ -58,9 +58,9 @@ import useImageSelection from '../../hooks/useImageSelection';
 import { useGroupNameConflict } from '../../hooks/useGroupNameConflict';
 import { useDataStore, selectors } from '../../utils/dataManager';
 import { shallow } from 'zustand/shallow';
-import { selectors as storeSelectors, useGroupsList, useGroupById } from '../../utils/dataManager';
+import { selectors as storeSelectors, useGroupsList, useGroupById, useEventGeneralById } from '../../utils/dataManager';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
-import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI } from '../../utils/apiService';
+import { groupsAPI, handleAPIError, optimisticUpdates, API_BASE, albumsAPI, eventsAPI } from '../../utils/apiService';
 import useImageActions from '../../components/images/ImageActions';
 import { clearTransferredImagesFromCache } from '../../utils/selection';
 import timelineManager from '../../utils/timeline';
@@ -109,6 +109,27 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const [group, setGroup] = useState(null);
   const permissions = usePermissions();
   const { isAuthenticated } = useAuth();
+  
+  // Get event data to check for unassociated group
+  const eventData = useEventGeneralById(eventId);
+  
+  // Fetch event data if not already loaded (to get unassociated_group_id)
+  useEffect(() => {
+    if (!eventUrl || !eventId) return;
+    if (eventData && eventData.unassociated_group_id) return;
+    
+    eventsAPI.getById(eventUrl).catch(() => {
+      // Silently fail - event data will be loaded eventually
+    });
+  }, [eventUrl, eventId, eventData]);
+  
+  // Check if current group is the unassociated group
+  const unassociatedGroupId = eventData?.unassociated_group_id ? String(eventData.unassociated_group_id) : null;
+  const groupIdentifier = group?.id || group?.group_id || null;
+  const isUnassociatedGroup = useMemo(() => {
+    if (!unassociatedGroupId || !groupIdentifier) return false;
+    return String(groupIdentifier) === unassociatedGroupId;
+  }, [unassociatedGroupId, groupIdentifier]);
   
   // Use the hook at component level to avoid conditional hook calls
   const groupRepresentativeComponent = useImageComponent(
@@ -1441,9 +1462,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   <div className="flex items-center space-x-2">
                     <h1 
                       className={`text-3xl font-bold text-gray-900 w-[200px] ${
-                        permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
+                        (isUnassociatedGroup || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
-                      onClick={permissions.canEdit ? handleTitleEdit : undefined}
+                      onClick={(isUnassociatedGroup || !permissions.canEdit) ? undefined : handleTitleEdit}
                     >
                       {group.label || `Person ${group.id}`}
                     </h1>
@@ -1615,17 +1636,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             )}
 
             {/* Group 4: Manage Access */}
-            <div className="flex items-center space-x-3 px-4">
-              <PermissionGate requires="isProfilesManager">
-                <button
-                  onClick={() => setShowManageAccessModal(true)}
-                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
-                  title="Manage profile access"
-                >
-                  <Key className="w-4 h-4" />
-                </button>
-              </PermissionGate>
-            </div>
+            {!isUnassociatedGroup && (
+              <div className="flex items-center space-x-3 px-4">
+                <PermissionGate requires="isProfilesManager">
+                  <button
+                    onClick={() => setShowManageAccessModal(true)}
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
+                    title="Manage profile access"
+                  >
+                    <Key className="w-4 h-4" />
+                  </button>
+                </PermissionGate>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1821,11 +1844,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         entity="group"
         entityId={group?.id}
         isFacesMode={showCrops}
+        isUnassociatedGroup={isUnassociatedGroup}
       />
 
       {/* Modals */}
       {viewerOpen && (
-        <ImageViewer {...viewerProps} />
+        <ImageViewer {...viewerProps} isUnassociatedGroup={isUnassociatedGroup} />
       )}
 
       {/* Merge Conflict Modal */}
