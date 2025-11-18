@@ -919,9 +919,15 @@ export const profilesAPI = {
   
   // Create profile
   create: async (profileData, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/profiles`, profileData);
-    return response.data;
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      const response = await api.post(`/api/events/${eventId}/profiles`, profileData);
+      return response.data;
+    } else {
+      // Create general profile (not event-specific)
+      const response = await api.post(`/api/profiles`, profileData);
+      return response.data;
+    }
   },
   
   // Update profile

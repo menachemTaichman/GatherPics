@@ -3,7 +3,7 @@ import secrets
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
-from src.core.errors import DBPolicyError, Forbidden
+from src.core.errors import DBPolicyError, Forbidden, DatabaseError
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -212,6 +212,14 @@ class GeneralModels(BaseModels):
             label = profile_name or access_request['applicant_name']
             email = access_request['applicant_email']
             password = secrets.token_urlsafe(6)
+            attemp = 0
+            max_attemp = 10
+            while self.is_exists('profiles', {'password': password, 'label': label}) and attemp < max_attemp:
+                attemp += 1
+                password = secrets.token_urlsafe(6)
+            if attemp == max_attemp:
+                raise DatabaseError('Failed to generate a unique password. Please try again with a different name')
+            
             data = {
                 'label': label,
                 'password': password,

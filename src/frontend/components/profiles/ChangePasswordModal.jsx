@@ -84,7 +84,13 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
   };
 
   const handleSave = async () => {
-    // Allow empty password
+    // Validate password is not empty
+    if (!password || !password.trim()) {
+      setError('Password is required');
+      showToast('Password is required', 'error');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     
@@ -100,8 +106,15 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
     } catch (error) {
       console.error('Failed to update password:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Failed to update password';
-      setError(errorMsg);
-      showToast(errorMsg, 'error');
+      
+      // Check if this is the "Label with this password already exists" error
+      if (errorMsg.includes('Label with this password already exists')) {
+        setError('Name and password combination already exists');
+        // Don't show toast for this error, show error message instead
+      } else {
+        setError(errorMsg);
+        showToast(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -162,7 +175,7 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Password
+                    Password <span className="text-red-500">*</span>
                   </label>
                   <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} autoComplete="off">
                     <input type="text" name="username" autoComplete="username" value={profileLabel || ''} readOnly style={{ display: 'none' }} />
@@ -171,17 +184,21 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
                         type={showPassword ? 'text' : 'password'}
                         name="password"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setError(''); // Clear error when password changes
+                        }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !loading && !loadingPassword) {
+                          if (e.key === 'Enter' && !loading && !loadingPassword && password?.trim()) {
                             e.preventDefault();
                             handleSave();
                           }
                         }}
                         className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Enter password (leave empty for no password)"
+                        placeholder="Enter password (required)"
                         autoFocus
                         autoComplete="new-password"
+                        required
                       />
                       <button
                         type="button"
@@ -216,7 +233,7 @@ export default function ChangePasswordModal({ isOpen, onClose, profileId, profil
             </button>
             <button
               onClick={handleSave}
-              disabled={loading || loadingPassword}
+              disabled={loading || loadingPassword || !password?.trim()}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

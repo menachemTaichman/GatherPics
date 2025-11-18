@@ -278,7 +278,7 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# recreate_views_triggers_and_indexes(general_models.db)
+recreate_views_triggers_and_indexes(general_models.db)
 
 profiles = general_models.db.execute_query('SELECT profile_id, label, restricted_to_event FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
 other_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'

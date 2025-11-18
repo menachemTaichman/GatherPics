@@ -8,7 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useApplyScopes, useChilds, useEventId, getEventUrlFromId as getEventUrlFromIdUtil } from '../../utils/storeUtils';
 import { useDataStore } from '../../utils/dataManager';
-import { useEventGeneralById, useProfileById, useEventProfileById } from '../../utils/dataManager';
+import { useEventGeneralById, useProfileById, useEventProfileById, useEventsGeneralList } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
@@ -78,6 +78,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   
   // Get events list from profile's events field in general store
   const generalEventsStore = useDataStore((state) => state.entities?.general?.events || {});
+  const allEventsList = useEventsGeneralList(); // Get all events for lookup
   const eventsList = useMemo(() => {
     if (!generalProfile?.events || !Array.isArray(generalProfile.events)) {
       return [];
@@ -179,17 +180,13 @@ const restrictedEventName = editingProfile && 'restricted_to_event_name' in edit
   ? (editingProfile.restricted_to_event_name || null)
   : (generalProfile?.restricted_to_event_name ?? restrictedEvent?.name ?? null);
 
-const matchesCurrentEvent =
-  !!restrictedToEventId && !!eventId
-    ? String(restrictedToEventId) === String(eventId)
-    : false;
-const publicToggleRestrictedByEvent = !isCreating && !!generalProfile && !matchesCurrentEvent;
+const publicToggleRestrictedByEvent = !restrictedToEventId;
 const publicToggleRestrictedByRank = (editingProfile?.hierarchy_rank ?? 0) > 0;
 const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank;
 const publicToggleTooltip = publicToggleRestrictedByRank
   ? 'Public profiles must use rank 0.'
   : publicToggleRestrictedByEvent
-    ? 'Public access is only available for profiles restricted to this event.'
+    ? 'Public access is only available for profiles restricted to an event.'
     : undefined;
 const disableRestrictionToggle = Boolean(currentProfile?.restricted_to_event);
 const restrictionTooltip = disableRestrictionToggle
@@ -231,7 +228,10 @@ const disableRankSelection = editingProfile?.is_public === 1;
   // Check if profile has been modified (defined early so it can be used in handlers)
   const hasChanges = useMemo(() => {
     if (isCreating) {
-      return true; // Always allow save when creating
+      // When creating, require both label and password to be filled
+      const hasLabel = editingProfile?.label?.trim();
+      const hasPassword = editingProfile?.password?.trim();
+      return hasLabel && hasPassword;
     }
     
     // Don't enable save until both editingProfile and initialProfileState are set
@@ -329,7 +329,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
     const targetTagName = e.target.tagName?.toLowerCase();
     if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
       // For Enter key, save the profile (only if there are changes)
-      if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && hasChanges) {
+      if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && (!isCreating || editingProfile?.password?.trim()) && hasChanges) {
         e.preventDefault();
         handleSave();
         return true;
@@ -389,7 +389,58 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
   // Initialize editing state from merged profile data (only once when modal opens)
   useEffect(() => {
-    if (isOpen && profile) {
+    // When creating, profile is a template object, so check isCreating first
+    if (isOpen && isCreating) {
+      // Initialize for creating new profile
+      // If initialEventId is set (filter is active), use it as default restriction
+      const defaultRestrictedEventId = initialEventId || null;
+      let defaultRestrictedEventName = null;
+      if (defaultRestrictedEventId) {
+        // Find event from all events list
+        const foundEvent = allEventsList.find(e => {
+          const evtId = e.event_id || e.id;
+          return evtId && (String(evtId) === String(defaultRestrictedEventId));
+        });
+        defaultRestrictedEventName = foundEvent?.name || null;
+      }
+      
+      const initialEditingState = {
+        label: profile?.label || '',
+        email: '',
+        password: '',
+        hierarchy_rank: profile?.hierarchy_rank || 0,
+        can_create_events: 0,
+        can_upload_and_delete_images: profile?.can_upload_and_delete_images || 0,
+        can_edit: profile?.can_edit || 0,
+        all_images: profile?.all_images || 0,
+        all_groups: profile?.all_groups || 0,
+        all_albums: profile?.all_albums || 0,
+        is_public: profile?.is_public || 0,
+        can_manage_event: 0,
+        can_delete_event: 0,
+        restricted_to_event: defaultRestrictedEventId,
+        restricted_to_event_name: defaultRestrictedEventName
+      };
+      setEditingProfile(initialEditingState);
+      setInitialProfileState(initialEditingState);
+      setNameConflict(false);
+      setProfileEvents([]);
+      const targetEventId = isCurrentProfileRestricted 
+        ? currentProfileRestrictedEventId 
+        : (initialEventId || eventId || null);
+      setSelectedEventId(targetEventId);
+      setInitialSelectedEventId(targetEventId);
+      setEventSearchTerm('');
+      setShowEventDropdown(false);
+      setSelectedEventToAdd('');
+      setEventToRemove(null);
+      // Set restriction search term if restriction is set
+      if (defaultRestrictedEventName) {
+        setRestrictionSearchTerm(defaultRestrictedEventName);
+      } else {
+        setRestrictionSearchTerm('');
+      }
+    } else if (isOpen && profile && !isCreating) {
       // Use the merged profile for initial data, but only set it once
       const initialProfile = generalProfile ? { ...profile, ...generalProfile } : profile;
       // Get event-specific data from eventProfile if available
@@ -398,6 +449,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
         id: initialProfile.id || initialProfile.profile_id,
         label: initialProfile.label || '',
         email: initialProfile.email || '',
+        password: undefined, // Don't include password when editing
         hierarchy_rank: initialProfile.hierarchy_rank || 0,
         can_create_events: initialProfile.can_create_events || 0,
         can_upload_and_delete_images: eventProfileData.can_upload_and_delete_images ?? initialProfile.can_upload_and_delete_images ?? 0,
@@ -431,7 +483,47 @@ const disableRankSelection = editingProfile?.is_public === 1;
       setEventToRemove(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, profile?.id, initialEventId]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
+  }, [isOpen, profile?.id, initialEventId, isCreating]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
+
+  // Update restriction name when events load (for creating new profiles)
+  useEffect(() => {
+    if (isOpen && isCreating && initialEventId && editingProfile && 
+        String(editingProfile.restricted_to_event || '') === String(initialEventId) && 
+        !editingProfile.restricted_to_event_name) {
+      // Find event from all events list
+      const foundEvent = allEventsList.find(e => {
+        const evtId = e.event_id || e.id;
+        return evtId && (String(evtId) === String(initialEventId));
+      });
+      
+      if (foundEvent?.name) {
+        setEditingProfile(prev => ({
+          ...prev,
+          restricted_to_event_name: foundEvent.name
+        }));
+        setRestrictionSearchTerm(foundEvent.name);
+      }
+    }
+  }, [isOpen, isCreating, initialEventId, allEventsList, editingProfile?.restricted_to_event, editingProfile?.restricted_to_event_name]);
+
+  // Check name conflict when restricted event changes
+  useEffect(() => {
+    if (isOpen && editingProfile?.label?.trim()) {
+      // Debounce the check to avoid too many API calls
+      const timeoutId = setTimeout(() => {
+        checkNameConflict(editingProfile.label);
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isOpen, editingProfile?.restricted_to_event, editingProfile?.label]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check name conflict when modal opens for creating (if editingProfile has a label)
+  useEffect(() => {
+    if (isOpen && isCreating && editingProfile?.label?.trim()) {
+      checkNameConflict(editingProfile.label);
+    }
+  }, [isOpen, isCreating, editingProfile?.label]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update profileEvents when generalProfile.events changes
   useEffect(() => {
@@ -659,26 +751,66 @@ const disableRankSelection = editingProfile?.is_public === 1;
   const checkNameConflict = async (label) => {
     if (!label || !label.trim()) {
       setNameConflict(false);
+      setError(''); // Clear "label with password" error when label is empty
       return;
     }
 
     try {
-      const result = await profilesAPI.checkName(label.trim(), editingProfile.id);
-      setNameConflict(result.conflict || false);
+      // When creating, pass null/undefined for excludeProfileId; when editing, pass the profile ID
+      const excludeProfileId = isCreating ? null : editingProfile?.id;
+      
+      // Get restricted event URL if restriction is set
+      let restrictedToEventUrl = null;
+      const restrictedEventId = editingProfile?.restricted_to_event;
+      if (restrictedEventId) {
+        restrictedToEventUrl = getEventUrlFromId(restrictedEventId);
+        // If not found in store, try to fetch it
+        if (!restrictedToEventUrl) {
+          restrictedToEventUrl = await getEventUrlById(restrictedEventId);
+        }
+      }
+      
+      const result = await profilesAPI.checkName(label.trim(), excludeProfileId, restrictedToEventUrl);
+      const hasConflict = result.conflict || false;
+      setNameConflict(hasConflict);
+      // Clear "label with password" error if check-name returns false (no conflict)
+      if (!hasConflict) {
+        setError('');
+      }
     } catch (error) {
       console.error('Error checking name conflict:', error);
       setNameConflict(false);
+      setError(''); // Clear error on check failure
     }
   };
 
   const handleFieldChange = (field, value) => {
-    setEditingProfile(prev => ({ ...prev, [field]: value }));
+    setEditingProfile(prev => {
+      const updated = { ...prev, [field]: value };
+      // Update ref immediately so it's available in timeouts
+      editingProfileRef.current = updated;
+      return updated;
+    });
     
-    // Debounce name conflict check
-    if (field === 'label') {
+    // Clear "label with password" error only when password changes
+    if (field === 'password') {
+      // Clear the "label with password" error when password changes
+      // Also clear nameConflict since the combination error doesn't mean the label alone exists
+      if (error === 'Name and password combination already exists') {
+        setError('');
+        setNameConflict(false);
+      }
+    }
+    
+    // Check name conflict after changing label or restricted_to_event
+    if (field === 'label' || field === 'restricted_to_event') {
       if (handleFieldChange._timeout) clearTimeout(handleFieldChange._timeout);
       handleFieldChange._timeout = setTimeout(() => {
-        checkNameConflict(value);
+        // For label changes, use the new value; for restricted changes, use current label from ref (latest state)
+        const labelToCheck = field === 'label' ? value : editingProfileRef.current?.label;
+        if (labelToCheck?.trim()) {
+          checkNameConflict(labelToCheck);
+        }
       }, 300);
     }
   };
@@ -694,6 +826,22 @@ const disableRankSelection = editingProfile?.is_public === 1;
       return;
     }
 
+    // Validate password is not null or empty (required when creating)
+    if (isCreating) {
+      const passwordValue = editingProfile.password?.trim();
+      if (!passwordValue || passwordValue.length === 0) {
+        showToast('Password is required', 'error');
+        return;
+      }
+    } else {
+      // When editing, ensure password is not null/empty if it exists in editingProfile
+      // (password field is not shown when editing, so this is a safety check)
+      if (editingProfile.password !== undefined && (!editingProfile.password || !editingProfile.password.trim())) {
+        showToast('Password cannot be empty', 'error');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
 
@@ -707,6 +855,11 @@ const disableRankSelection = editingProfile?.is_public === 1;
         is_public: editingProfile.is_public,
         restricted_to_event: editingProfile.restricted_to_event || null
       };
+      
+      // Include password when creating/editing (required, already validated above)
+      if (editingProfile.password) {
+        generalProfileData.password = editingProfile.password.trim();
+      }
 
       // Event-specific profile data (only if selectedEventId is set)
       // Send all fields - backend will handle permission validation
@@ -757,8 +910,23 @@ const disableRankSelection = editingProfile?.is_public === 1;
     } catch (error) {
       console.error(`Failed to ${isCreating ? 'create' : 'update'} profile:`, error);
       const errorMsg = error.response?.data?.error || error.message || `Failed to ${isCreating ? 'create' : 'update'} profile`;
-      setError(errorMsg);
-      showToast(errorMsg, 'error');
+      
+      // Check for specific database policy errors
+      if (errorMsg.includes('Label with this password already exists')) {
+        // Label AND password combination already exists
+        // Don't set nameConflict=true because this is about the combination, not just the label
+        setNameConflict(false);
+        setError('Name and password combination already exists');
+        // Don't show toast for this error, show error message near the name field instead
+      } else if (errorMsg.includes('Profile label already exists') && !errorMsg.includes('Label with this password')) {
+        // Only label exists (not the combination)
+        setNameConflict(true);
+        setError('');
+        // Don't show toast for this error, show "Name exists" near the name field instead
+      } else {
+        setError(errorMsg);
+        showToast(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -1234,7 +1402,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   {/* Label */}
                   <div className="w-full md:w-full">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Profile Name
+                      Profile Name <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <input
@@ -1242,14 +1410,18 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         value={editingProfile.label}
                         onChange={(e) => handleFieldChange('label', e.target.value)}
                       className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          nameConflict ? 'border-red-500' : 'border-gray-300'
+                          (nameConflict || error === 'Name and password combination already exists') ? 'border-red-500' : 'border-gray-300'
                         }`}
                         placeholder="Enter profile name"
                       />
-                      {nameConflict && (
-                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs whitespace-nowrap">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>Name exists</span>
+                      {(nameConflict || error === 'Name and password combination already exists') && (
+                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                          <span>
+                            {error === 'Name and password combination already exists' 
+                              ? 'Name and password combination already exists'
+                              : 'Name exists'}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1265,6 +1437,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         type="email"
                         value={editingProfile.email || ''}
                         onChange={(e) => handleFieldChange('email', e.target.value)}
+                        autoComplete={isCreating ? "off" : "email"}
                         className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus;border-transparent"
                         placeholder="Enter email (optional)"
                       />
@@ -1272,18 +1445,38 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   )}
 
                   {/* Password */}
-                  <div className="flex flex-col gap-1 md:justify-self-center">
+                  <div className={`flex flex-col gap-1 ${isCreating ? 'w-full md:w-full' : 'md:justify-self-center'}`}>
                     <label className="block text-xs font-medium text-gray-600">
-                      Password
+                      Password {isCreating && <span className="text-red-500">*</span>}
                     </label>
-                    <button
-                      onClick={() => setShowPasswordModal(true)}
-                      disabled={isCreating}
-                      className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={isCreating ? 'Save profile first to set password' : 'Change password'}
-                    >
-                      <Key className="w-4 h-4" />
-                    </button>
+                    {isCreating ? (
+                      <form onSubmit={(e) => e.preventDefault()} autoComplete="off">
+                        <input
+                          type="text"
+                          name="username"
+                          autoComplete="username"
+                          value={editingProfile.label || ''}
+                          readOnly
+                          style={{ display: 'none' }}
+                        />
+                        <input
+                          type="password"
+                          value={editingProfile.password || ''}
+                          onChange={(e) => handleFieldChange('password', e.target.value)}
+                          autoComplete="new-password"
+                          className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter password (required)"
+                        />
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => setShowPasswordModal(true)}
+                        className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                        title="Change password"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1344,16 +1537,40 @@ const disableRankSelection = editingProfile?.is_public === 1;
                               if (currentRestrictionId) {
                                 restrictionOptions.push({ id: null, name: 'Clear Selection', isClear: true });
                               }
-                              // Filter events
+                              // Get all events from allEventsList (more reliable than generalEventsStore)
+                              const allEvents = allEventsList.map(event => {
+                                const eventId = event.event_id || event.id;
+                                if (!eventId) return null;
+                                return { ...event, event_id: eventId };
+                              }).filter(Boolean);
+                              
+                              // Sort: profile events first, then others
+                              const profileEventIds = new Set(profileEvents.map(id => String(id)));
+                              const sortedEvents = allEvents.sort((a, b) => {
+                                const aId = String(a.event_id || a.id);
+                                const bId = String(b.event_id || b.id);
+                                const aIsProfileEvent = profileEventIds.has(aId);
+                                const bIsProfileEvent = profileEventIds.has(bId);
+                                
+                                if (aIsProfileEvent && !bIsProfileEvent) return -1;
+                                if (!aIsProfileEvent && bIsProfileEvent) return 1;
+                                // If both are profile events or both are not, sort by name
+                                const aName = (a?.name || 'Untitled Event').toLowerCase();
+                                const bName = (b?.name || 'Untitled Event').toLowerCase();
+                                return aName.localeCompare(bName);
+                              });
+                              
+                              // Filter events based on search term
                               const filtered = restrictionSearchTerm.trim()
-                                ? eventsList.filter(e => 
+                                ? sortedEvents.filter(e => 
                                     (e?.name || 'Untitled Event').toLowerCase().includes(restrictionSearchTerm.toLowerCase())
                                   )
-                                : eventsList;
+                                : sortedEvents;
+                              
                               filtered.forEach(event => {
                                 const evtId = event?.event_id || event?.id;
                                 const evtName = event?.name || 'Untitled Event';
-                                restrictionOptions.push({ id: evtId, name: evtName });
+                                restrictionOptions.push({ id: evtId, name: evtName, event: event });
                               });
                               
                               return restrictionOptions.length === 0 ? (
@@ -1376,16 +1593,19 @@ const disableRankSelection = editingProfile?.is_public === 1;
                                           // Clear restriction
                                           handleFieldChange('restricted_to_event', null);
                                           handleFieldChange('restricted_to_event_name', null);
+                                          setRestrictionSearchTerm('');
                                         } else {
                                           // Set restriction to selected event
-                                          const selectedEvent = eventsList.find(e => {
+                                          // Use the event object stored in the option, or find it in allEventsList
+                                          const selectedEvent = option.event || allEventsList.find(e => {
                                             const evtId = e?.event_id || e?.id;
                                             return evtId && String(evtId) === String(option.id);
                                           });
+                                          const eventName = selectedEvent?.name || option.name;
                                           handleFieldChange('restricted_to_event', option.id);
-                                          handleFieldChange('restricted_to_event_name', selectedEvent?.name || null);
+                                          handleFieldChange('restricted_to_event_name', eventName);
+                                          setRestrictionSearchTerm(eventName);
                                         }
-                                        setRestrictionSearchTerm('');
                                         setShowRestrictionDropdown(false);
                                         setRestrictionHighlightedIndex(0);
                                       }}
@@ -2085,7 +2305,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
             </button>
             <button
               onClick={handleSave}
-              disabled={loading || nameConflict || !editingProfile.label.trim() || (!hasChanges && !hasEventSpecificChanges)}
+              disabled={loading || nameConflict || !editingProfile.label.trim() || (isCreating && !editingProfile.password?.trim()) || (!hasChanges && !hasEventSpecificChanges)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

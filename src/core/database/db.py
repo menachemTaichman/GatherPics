@@ -539,7 +539,7 @@ class DB:
                 profile_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT COLLATE NOCASE NOT NULL,
                 email TEXT,
-                password TEXT DEFAULT '',
+                password TEXT NOT NULL,
                 hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
                 can_create_events INTEGER DEFAULT 0,
                 restricted_to_event TEXT DEFAULT NULL,
@@ -3177,6 +3177,12 @@ class DB:
                                 )
                         ) THEN
                             RAISE(ABORT, 'Policy error: Profile label already exists')
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM profiles
+                            WHERE password = NEW.password AND label = NEW.label
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: Label with this password already exists')
                     END;
                 END;
             """,
@@ -3196,6 +3202,27 @@ class DB:
                                 AND p.profile_id <> OLD.profile_id
                         ) THEN
                             RAISE(ABORT, 'Policy error: Profile label already exists')
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM profiles
+                            WHERE password = NEW.password AND label = NEW.label AND profile_id <> OLD.profile_id
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: Label with this password already exists')
+                    END;
+                END;
+            """,
+
+            # ensure_profiles_restricted_to_event_validity
+            'trg_ensure_profiles_restricted_to_event_validity_update': """
+                BEFORE UPDATE ON profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.restricted_to_event IS NOT NULL AND EXISTS (
+                            SELECT 1 FROM events_profiles
+                            WHERE profile_id = OLD.profile_id
+                            AND event_id <> NEW.restricted_to_event
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: the profile is already associated with another event')
                     END;
                 END;
             """,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, HelpCircle, ChevronDown, Calendar, Copy } from 'lucide-react';
+import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, ChevronDown, Calendar, Copy } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
@@ -44,7 +44,6 @@ export default function ProfilesGalleryPage() {
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profileToDelete, setProfileToDelete] = useState(null);
   const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
-  const [showPublicAccessTooltip, setShowPublicAccessTooltip] = useState(false);
   const [publicAccessCodes, setPublicAccessCodes] = useState({});
   const [publicAccessFlags, setPublicAccessFlags] = useState({});
   const publicAccessFetchesRef = useRef(new Set());
@@ -780,24 +779,6 @@ export default function ProfilesGalleryPage() {
                   )}
                 </div>
                 )}
-                <div className="relative">
-                  <button
-                    onMouseEnter={() => setShowPublicAccessTooltip(true)}
-                    onMouseLeave={() => setShowPublicAccessTooltip(false)}
-                    className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <HelpCircle className="w-5 h-5" />
-                  </button>
-                  {showPublicAccessTooltip && (
-                    <div className="absolute right-0 top-6 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-                      <p className="mb-2 font-medium">Public Access Codes</p>
-                      <p className="mb-1">• Public profiles can be accessed via direct links</p>
-                      <p className="mb-1">• Copy link: Share the public access URL</p>
-                      <p className="mb-1">• Reset link: Generate a new access code</p>
-                      <p>• Remove link: Disable public access</p>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
