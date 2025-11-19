@@ -139,7 +139,7 @@ class FaceUtils:
             if reduce_calls is True, the complete transitivity may be compromised.
 
         Returns:
-            List of tuples: (new_faces_list, similar_faces_list)
+            List of clusters found, each cluster is a tuple: (new_faces_list, similar_faces_list)
             - new_faces_list: faces from the input face_ids that are in this cluster
             - similar_faces_list: existing faces (not in face_ids) that are similar to this cluster
         """

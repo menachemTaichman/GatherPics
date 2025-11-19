@@ -2784,7 +2784,7 @@ class DB:
                             WHERE accessible_uploads.upload_id = OLD.upload_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the upload is not accessible')
-                        WHEN OLD.profile_id NOT IN (
+                        WHEN OLD.profile_id <> cur_profile('profile_id') AND OLD.profile_id NOT IN (
                             SELECT profile_id FROM accessible_events_profiles
                             WHERE event_id = cur_event_profile('event_id')
                             AND profile_id = OLD.profile_id

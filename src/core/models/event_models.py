@@ -317,7 +317,11 @@ class EventModels(BaseModels):
 
     def get_unassociated_group(self) -> str | None:
         """Get the unassociated group id."""
-        return self.db.execute_query('SELECT group_id FROM accessible_groups WHERE LOWER(label) = "unassociated"', return_format=ReturnFormat.VALUE)
+        result = self.db.execute_query('SELECT group_id FROM groups WHERE LOWER(label) = ? AND event_id = ?', ('unassociated', self.db.event_id), return_format=ReturnFormat.VALUE)
+        if not result:
+            raise DBPolicyError("Policy error: unassociated group not found")
+        
+        return result
 
     def get_faces_group_in_image(self, group_id: str, image_ids: str | list[str]) -> list[str] | None:
         """Return the faces in image(s) from a group.
@@ -448,11 +452,19 @@ class EventModels(BaseModels):
     # -------- Albums helpers --------
     def get_archive_album(self) -> str | None:
         """Get the archive album id."""
-        return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "archive"', return_format=ReturnFormat.VALUE)
+        result = self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = ? AND event_id = ?', ('archive', self.db.event_id), return_format=ReturnFormat.VALUE)
+        if not result:
+            raise DBPolicyError("Policy error: archive album not found")
+        
+        return result
 
     def get_favorites_album(self) -> str | None:
         """Get the favorites album id."""
-        return self.db.execute_query('SELECT album_id FROM accessible_albums WHERE LOWER(label) = "favorites"', return_format=ReturnFormat.VALUE)
+        result = self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = ? AND event_id = ?', ('favorites', self.db.event_id), return_format=ReturnFormat.VALUE)
+        if not result:
+            raise DBPolicyError("Policy error: favorites album not found")
+        
+        return result
 
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:

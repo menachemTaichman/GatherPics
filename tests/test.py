@@ -278,7 +278,19 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-recreate_views_triggers_and_indexes(general_models.db)
+
+test_event_id = '3ff77fb3-0205-4507-9da8-783f3e6c2394'
+
+test_event = Event(test_event_id, profile_id=profile_id)
+
+images = test_event.models.db.execute_query('SELECT * FROM images WHERE event_id = ?;', (test_event_id,), return_format=ReturnFormat.LIST_DICTS)
+print(images)
+
+
+result = general_models.process_new_images(test_event_id)
+print(result)
+
+# recreate_views_triggers_and_indexes(general_models.db)
 
 guest_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
 # db.execute_query(f"""

@@ -174,32 +174,32 @@ class Event():
                 "group_id": unassociated_group_id
             }
 
-        def _cluster_and_group_faces(face_ids, minimal_group_size, unassociated_group_id):
+        def _cluster_and_group_faces(face_ids: list[str], minimal_group_size: int, unassociated_group_id: str):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
             print(f"Clusters: {clusters}")
             groups_created = 0
             
-            for new_faces, similar_faces in clusters:
-                if len(new_faces) + len(similar_faces) < minimal_group_size:
+            for new_faces, existing_faces in clusters:
+                if len(new_faces) + len(existing_faces) < minimal_group_size:
                     continue
 
                 partition = {}
-                for similar_face_id in similar_faces:
-                    group_id = self.models.get_entities('faces', similar_face_id).get('group_id')
-                    partition.setdefault(group_id, []).append(similar_face_id)
+                for existing_face_id in existing_faces:
+                    group_id = self.models.get_entities('faces', existing_face_id).get('group_id')
+                    partition.setdefault(group_id, []).append(existing_face_id)
 
                 # Find the largest non-unassociated group to assign faces to
-                group_id = max((group_id for group_id in partition if group_id != unassociated_group_id), key=lambda x: len(partition[x]), default=None)
-                group_faces = partition.get(group_id, [])
-                add_faces = new_faces + group_faces + partition.get(unassociated_group_id, [])
+                largest_group_id = max((group_id for group_id in partition.keys() if group_id != unassociated_group_id), key=lambda x: len(partition[x]), default=None)
+                largest_group_faces = partition.get(largest_group_id, [])
+                add_faces = new_faces + largest_group_faces + partition.get(unassociated_group_id, [])
 
                 if len(add_faces) >= minimal_group_size:
-                    if len(group_faces) == 0:
+                    if largest_group_id is None or largest_group_id == unassociated_group_id:
                         group_num = self.models.get_last_group_num() + 1
-                        group_id = self.models.add('groups', {'label': f"Person {group_num}"})
+                        largest_group_id = self.models.add('groups', {'label': f"Person {group_num}"})
                         groups_created += 1
                     
-                    self.models.edit_childs('groups', group_id, 'faces', add_faces, operation=ChildOperation.ADD)
+                    self.models.edit_childs('groups', largest_group_id, 'faces', add_faces, operation=ChildOperation.ADD)
 
             return groups_created
 
@@ -213,10 +213,16 @@ class Event():
                 metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
+                label = image_file
+                i = 2
+                while self.models.is_exists('images', {'label': label}):
+                    label = f"{label} ({i})"
+                    i += 1
+
                 image_id = self.models.add(
                     'images',
                     {
-                        'label': image_file,
+                        'label': label,
                         'date_taken': date_taken,
                         'file_size': file_size,
                         'width': width,
