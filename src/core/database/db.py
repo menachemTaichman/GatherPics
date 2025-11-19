@@ -2066,8 +2066,6 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1')
                         WHEN NEW.all_albums = 1 and cur_event_profile('all_albums') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1')
-                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
-                            RAISE(ABORT, 'Policy error: cannot create profile with can_upload_and_delete_images=1 and can_edit=0')
                     END;
 
                     INSERT INTO events_profiles (
@@ -2138,8 +2136,6 @@ class DB:
                             RAISE(ABORT, 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1')
                         WHEN NEW.all_albums = 1 AND OLD.all_albums = 0 AND cur_event_profile('all_albums') = 0 THEN
                             RAISE(ABORT, 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1')
-                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
-                            RAISE(ABORT, 'Policy error: cannot update profile with can_upload_and_delete_images=1 and can_edit=0')
                     END;
 
                     UPDATE events_profiles
@@ -2287,13 +2283,6 @@ class DB:
                             WHERE group_id = NEW.group_id
                         ) THEN
                             RAISE(ABORT, 'Permission denied: the group is not accessible')
-                        WHEN NEW.group_id = (
-                            SELECT group_id
-                            FROM groups
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND LOWER(label) = 'unassociated'
-                        ) THEN
-                            RAISE(ABORT, 'Policy error: cannot edit unassociated group permissions')
                     END;
 
                     INSERT OR IGNORE INTO events_profiles_groups (event_id, profile_id, group_id)
@@ -3099,6 +3088,10 @@ class DB:
                 END;
             """,
 
+            #########################################################
+            #         Ensuring db policies triggers                 #
+            #########################################################
+
             # prevent_reserved_event_urls
             'trg_prevent_reserved_event_urls_insert': """
                 BEFORE INSERT ON events
@@ -3154,43 +3147,6 @@ class DB:
                         WHEN NEW.image_size_limit_bytes < 0 OR NEW.image_size_limit_bytes > (SELECT image_size_limit_bytes FROM settings WHERE id = 1 LIMIT 1) THEN
                             RAISE(ABORT, 'Policy error: Invalid image size limit')
                     END;
-                END;
-            """,
-
-            # ensure_defaults_in_event
-            'trg_ensure_defaults_in_event_insert': """
-                AFTER INSERT ON events
-                BEGIN
-                    INSERT OR IGNORE INTO events_profiles (
-                        event_id,
-                        profile_id,
-                        can_manage_event,
-                        can_delete_event,
-                        can_upload_and_delete_images,
-                        can_edit,
-                        all_images,
-                        all_groups,
-                        all_albums
-                    )
-                    SELECT
-                        NEW.event_id, developer_id, 1, 1, 1, 1, 1, 1, 1
-                    FROM settings
-                    WHERE settings.id = 1;
-
-                    INSERT INTO albums (event_id, album_id, label)
-                    SELECT NEW.event_id, uuid, 'Archive'
-                    FROM uuid
-                    LIMIT 1;
-
-                    INSERT INTO albums (event_id, album_id, label)
-                    SELECT NEW.event_id, uuid, 'Favorites'
-                    FROM uuid
-                    LIMIT 1;
-
-                    INSERT INTO groups (event_id, group_id, label)
-                    SELECT NEW.event_id, uuid, 'Unassociated'
-                    FROM uuid
-                    LIMIT 1;
                 END;
             """,
 
@@ -3256,6 +3212,8 @@ class DB:
                             AND event_id <> NEW.restricted_to_event
                         ) THEN
                             RAISE(ABORT, 'Policy error: the profile is already associated with another event')
+                        WHEN NEW.restricted_to_event IS NOT NULL AND NEW.can_create_events = 1 THEN
+                            RAISE(ABORT, 'Policy error: restricted profiles cannot have create events permission')
                     END;
                 END;
             """,
@@ -3285,9 +3243,11 @@ class DB:
                 BEGIN
                     SELECT CASE
                         WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
-                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                            RAISE(ABORT, 'Policy error: public profiles cannot be managers')
                         WHEN NEW.is_public = 1 AND NEW.restricted_to_event IS NULL THEN
-                            RAISE(ABORT, 'Policy error: cannot set profile to public if it is not restricted to an event')
+                            RAISE(ABORT, 'Policy error: public profiles must be restricted to an event')
+                        WHEN NEW.is_public = 1 AND NEW.can_create_events = 1 THEN
+                            RAISE(ABORT, 'Policy error: public profiles cannot have create events permission')
                     END;
                 END;
             """,
@@ -3296,9 +3256,58 @@ class DB:
                 BEGIN
                     SELECT CASE
                         WHEN NEW.is_public = 1 AND NEW.hierarchy_rank > 0 THEN
-                            RAISE(ABORT, 'Policy error: cannot set manager profile to public')
+                            RAISE(ABORT, 'Policy error: public profiles cannot be managers')
                         WHEN NEW.is_public = 1 AND NEW.restricted_to_event IS NULL THEN
-                            RAISE(ABORT, 'Policy error: cannot set profile to public if it is not restricted to an event')
+                            RAISE(ABORT, 'Policy error: public profiles must be restricted to an event')
+                        WHEN NEW.is_public = 1 AND NEW.can_create_events = 1 THEN
+                            RAISE(ABORT, 'Policy error: public profiles cannot have create events permission')
+                        WHEN
+                            NEW.is_public = 1
+                            AND EXISTS (
+                                SELECT 1 FROM events_profiles ep
+                                WHERE ep.profile_id = OLD.profile_id
+                                AND (
+                                    ep.can_manage_event = 1
+                                    OR ep.can_delete_event = 1
+                                    OR ep.can_upload_and_delete_images = 1
+                                    OR ep.can_edit = 1
+                                )
+                            )
+                        THEN
+                            RAISE(ABORT, 'Policy error: public profiles cannot have event managing or editing permissions')
+                    END;
+                END;
+            """,
+            'trg_insert_events_profiles_ensure_profiles_publicity': """
+                BEFORE INSERT ON events_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN
+                            (SELECT is_public FROM profiles WHERE profile_id = NEW.profile_id) = 1
+                            AND (
+                                NEW.can_manage_event = 1
+                                OR NEW.can_delete_event = 1
+                                OR NEW.can_upload_and_delete_images = 1
+                                OR NEW.can_edit = 1
+                            )
+                        THEN
+                            RAISE(ABORT, 'Policy error: public profiles cannot have event managing or editing permissions')
+                    END;
+                END;
+            """,
+            'trg_update_events_profiles_ensure_profiles_publicity': """
+                BEFORE UPDATE ON events_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN (SELECT is_public FROM profiles WHERE profile_id = OLD.profile_id) = 1
+                        AND (
+                            NEW.can_manage_event = 1
+                            OR NEW.can_delete_event = 1
+                            OR NEW.can_upload_and_delete_images = 1
+                            OR NEW.can_edit = 1
+                        )
+                        THEN
+                            RAISE(ABORT, 'Policy error: public profiles cannot have event managing or editing permissions')
                     END;
                 END;
             """,
@@ -3322,6 +3331,54 @@ class DB:
                 END;
             """,
 
+            # ensure_profiles_can_upload_validity
+            'trg_insert_ensure_profiles_can_upload_validity': """
+                BEFORE INSERT ON events_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot update profile with can_upload_and_delete_images=1 and can_edit=0')
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.all_groups = 0 THEN
+                            RAISE(ABORT, 'Policy error: profile with upload permissions cannot be restricted to groups')
+                    END;
+                END;
+            """,
+            'trg_update_ensure_profiles_can_upload_validity': """
+                BEFORE UPDATE ON events_profiles
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.can_edit = 0 THEN
+                            RAISE(ABORT, 'Policy error: cannot update profile with can_upload_and_delete_images=1 and can_edit=0')
+                        WHEN NEW.can_upload_and_delete_images = 1 AND NEW.all_groups = 0 THEN
+                            RAISE(ABORT, 'Policy error: profile with upload permissions cannot be restricted to groups')
+                        WHEN
+                            NEW.can_upload_and_delete_images = 1
+                            AND EXISTS (
+                                SELECT 1
+                                FROM events_profiles_groups
+                                WHERE event_id = cur_event_profile('event_id')
+                                AND profile_id = NEW.profile_id
+                            )
+                        THEN
+                            RAISE(ABORT, 'Policy error: profile with upload permissions cannot be restricted to groups')
+                    END;
+                END;
+            """,
+            'trg_ensure_profiles_can_upload_validity_profile_groups_insert': """
+                BEFORE INSERT ON events_profiles_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN (
+                            SELECT 1 FROM events_profiles
+                            WHERE event_id = cur_event_profile('event_id')
+                            AND profile_id = NEW.profile_id
+                            AND can_upload_and_delete_images = 1
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: profile with upload permissions cannot be restricted to groups')
+                    END;
+                END;
+            """,
+
             # revoke refresh tokens when profile password is updated
             'trg_revoke_refresh_tokens_when_profile_password_updated': """
                 AFTER UPDATE ON profiles
@@ -3334,6 +3391,22 @@ class DB:
                     AND revoked = 0
                     AND NEW.password <> OLD.password
                     AND (NEW.password IS NOT NULL OR NEW.password <> '' OR OLD.password IS NOT NULL OR OLD.password <> '');
+                END;
+            """,
+
+            # ensure_groups_unassociated_permissions
+            'trg_insert_ensure_groups_unassociated_permissions': """
+                BEFORE INSERT ON events_profiles_groups
+                BEGIN
+                    SELECT CASE
+                        WHEN NEW.group_id = (
+                            SELECT group_id
+                            FROM groups
+                            WHERE event_id = cur_event_profile('event_id')
+                            AND LOWER(label) = 'unassociated'
+                        ) THEN
+                            RAISE(ABORT, 'Policy error: cannot edit unassociated group permissions')
+                    END;
                 END;
             """,
 
@@ -3416,6 +3489,44 @@ class DB:
                     VALUES (NULL, NULL);
                 END;
             """,
+
+            # ensure_defaults_in_event
+            'trg_ensure_defaults_in_event_insert': """
+                AFTER INSERT ON events
+                BEGIN
+                    INSERT OR IGNORE INTO events_profiles (
+                        event_id,
+                        profile_id,
+                        can_manage_event,
+                        can_delete_event,
+                        can_upload_and_delete_images,
+                        can_edit,
+                        all_images,
+                        all_groups,
+                        all_albums
+                    )
+                    SELECT
+                        NEW.event_id, developer_id, 1, 1, 1, 1, 1, 1, 1
+                    FROM settings
+                    WHERE settings.id = 1;
+
+                    INSERT INTO albums (event_id, album_id, label)
+                    SELECT NEW.event_id, uuid, 'Archive'
+                    FROM uuid
+                    LIMIT 1;
+
+                    INSERT INTO albums (event_id, album_id, label)
+                    SELECT NEW.event_id, uuid, 'Favorites'
+                    FROM uuid
+                    LIMIT 1;
+
+                    INSERT INTO groups (event_id, group_id, label)
+                    SELECT NEW.event_id, uuid, 'Unassociated'
+                    FROM uuid
+                    LIMIT 1;
+                END;
+            """,
+
 
             # ensure_default_albums
             'trg_update_ensure_default_albums': """

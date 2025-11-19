@@ -19,6 +19,14 @@ function mapDatabaseErrorToUserMessage(errorMsg) {
       'Cannot duplicate profile: Profile not found.',
     'event not found': 
       'Cannot duplicate profile: One or more associated events could not be accessed.',
+    'profile with upload permissions cannot be restricted to groups': 
+      'Cannot restrict groups: Profiles with upload permissions must have access to all groups. Enable "All People Access" and remove any forbidden groups first.',
+    'cannot update profile with can_upload_and_delete_images=1 and can_edit=0': 
+      'Cannot disable edit permission: Profiles with upload permissions must have edit permission enabled.',
+    'cannot create profile with can_upload_and_delete_images=1 and all_groups=0': 
+      'Cannot create profile: Profiles with upload permissions must have access to all groups. Enable "All People Access" first.',
+    'public profiles cannot have event managing or editing permissions': 
+      'Cannot make profile public: This profile has event managing or editing permissions. Please remove these permissions from all events first.',
   };
   
   // Normalize the error message by removing common prefixes

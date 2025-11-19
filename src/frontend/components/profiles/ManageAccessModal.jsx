@@ -8,6 +8,7 @@ import { useEventProfilesList, useProfilesList } from '../../utils/dataManager';
 import { profilesAPI } from '../../utils/apiService';
 import { getCurrentProfileId } from '../../utils/profileService';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
+import { getErrorExplanation, formatErrorMessage } from '../../utils/errorHandler';
 
 /**
  * Profile Access Row Component
@@ -94,8 +95,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
       }
     } catch (err) {
       console.error('Failed to grant access:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Failed to grant access';
-      showToast(errorMsg, 'error');
+      // Use error handler for friendly messages, especially for db.py constraint errors
+      const errorMsg = getErrorExplanation(err);
+      showToast(entityType === 'group' ? formatErrorMessage('grant group access', err) : errorMsg, 'error');
     } finally {
       setLoading(prev => ({ ...prev, [key]: false }));
     }
@@ -139,8 +141,10 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
       }
     } catch (err) {
       console.error('Failed to deny access:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Failed to deny access';
-      showToast(errorMsg, 'error');
+      // Use error handler for friendly messages, especially for db.py constraint errors (3354-3355)
+      // When denying group access for profiles with upload permissions, the db constraint will raise an error
+      const errorMsg = getErrorExplanation(err);
+      showToast(entityType === 'group' ? formatErrorMessage('deny group access', err) : errorMsg, 'error');
     } finally {
       setLoading(prev => ({ ...prev, [key]: false }));
     }

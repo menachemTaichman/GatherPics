@@ -52,12 +52,18 @@ export default function ProfilesGalleryPage() {
   const [sortBy, setSortBy] = useState(() => getPreference('ProfilesGallery.sortBy', 'hierarchy_rank'));
   const [sortDir, setSortDir] = useState(() => getPreference('ProfilesGallery.sortDir', 'desc'));
   // Initialize filterEventId: use restricted event if current profile is restricted, otherwise eventId from URL or FILTER_ALL_EVENTS
+  // Note: If eventUrl exists but eventId is not yet available, useEffect will update this when eventId resolves
   const [filterEventId, setFilterEventId] = useState(() => {
     const currentProfile = getCurrentProfile();
     if (currentProfile?.restricted_to_event) {
       return currentProfile.restricted_to_event;
     }
-    return eventId || FILTER_ALL_EVENTS;
+    // If eventUrl exists but eventId is not available yet, use FILTER_ALL_EVENTS as placeholder
+    // The useEffect will update it when eventId becomes available
+    if (eventUrl && eventId) {
+      return eventId;
+    }
+    return FILTER_ALL_EVENTS;
   });
   const [eventSearchTerm, setEventSearchTerm] = useState('');
   const [showEventDropdown, setShowEventDropdown] = useState(false);
@@ -681,14 +687,20 @@ export default function ProfilesGalleryPage() {
     if (isCurrentProfileRestricted) {
       setFilterEventId(currentProfileRestrictedEventId);
       hasInitializedFilterRef.current = true;
-    } else if (eventId) {
+    } else if (eventUrl && eventId) {
+      // If we have an eventUrl and eventId is available, use that event
       setFilterEventId(eventId);
       hasInitializedFilterRef.current = true;
+    } else if (eventUrl && !eventId) {
+      // If we have eventUrl but eventId is not yet available, wait for it
+      // Don't mark as initialized yet
+      return;
     } else {
+      // No eventUrl, default to all events
       setFilterEventId(FILTER_ALL_EVENTS);
       hasInitializedFilterRef.current = true;
     }
-  }, [eventId, isCurrentProfileRestricted, currentProfileRestrictedEventId]);
+  }, [eventId, eventUrl, filterEventId, isCurrentProfileRestricted, currentProfileRestrictedEventId]);
 
   // Update search term when selected event changes
   useEffect(() => {
@@ -699,9 +711,9 @@ export default function ProfilesGalleryPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-50">
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`}>
         {!eventUrl && <Header />}
-        <div className="bg-white border-b border-gray-200">
+        <div className="sticky top-16 z-30 bg-white border-b border-gray-200 shadow-sm">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -719,7 +731,7 @@ export default function ProfilesGalleryPage() {
               </div>
               <div className="flex items-center space-x-2">
                 {/* Event Filter Combobox */}
-                {!isCurrentProfileRestricted && (
+                {!isCurrentProfileRestricted && !eventUrl && (
                 <div className="relative" ref={eventInputRef}>
                   <div className="relative">
                     <input

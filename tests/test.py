@@ -278,8 +278,17 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-# recreate_views_triggers_and_indexes(general_models.db)
+recreate_views_triggers_and_indexes(general_models.db)
 
+guest_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
+# db.execute_query(f"""
+#     UPDATE events_profiles SET can_manage_event = 0, can_delete_event = 0, can_upload_and_delete_images = 0, can_edit = 0
+#     WHERE profile_id = ?
+# """, (guest_profile_id,))
+
+db.execute_query(f"""
+    UPDATE profiles SET can_create_events = 0 WHERE profile_id = ?
+""", (guest_profile_id,))
 test_event = '3ff77fb3-0205-4507-9da8-783f3e6c2394'
 result = general_models.process_new_images(test_event)
 print(result)

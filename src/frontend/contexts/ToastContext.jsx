@@ -7,9 +7,11 @@ export function ToastProvider({ children }) {
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ show: true, message, type });
+    // Error toasts stay longer so users have time to read the message
+    const duration = type === 'error' ? 8000 : 3000;
     setTimeout(() => {
       setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
+    }, duration);
   }, []);
 
   const hideToast = useCallback(() => {

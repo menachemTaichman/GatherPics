@@ -246,7 +246,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-50">
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`}>
         {/* Header */}
         <div className="sticky top-16 z-30 bg-white border-b border-gray-200 shadow-sm">
           <div className="w-full px-8 py-6">

@@ -162,6 +162,37 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const profileAlbums = selectedEventId ? profileAlbumsRaw : [];
   const profileGroups = selectedEventId ? profileGroupsRaw : [];
   
+  // Compute when fields should be disabled based on database constraints
+  // Constraint: can_upload_and_delete_images = 1 requires all_groups = 1 and can_edit = 1, and no forbidden groups
+  // all_groups should be disabled when can_upload_and_delete_images = 1 (cannot restrict groups if upload is enabled)
+  const disableAllGroups = editingProfile?.can_upload_and_delete_images === 1;
+  const allGroupsDisabledReason = disableAllGroups 
+    ? 'Cannot restrict groups when Upload & Delete Photos is enabled' 
+    : null;
+  
+  // can_upload_and_delete_images should be disabled when:
+  // - is_public = 1 (public profiles cannot have upload permissions), OR
+  // - all_groups = 0 (groups are restricted), OR
+  // - can_edit = 0 (edit permission required), OR
+  // - there are forbidden groups (when all_groups = 1 and profileGroups.length > 0)
+  const hasForbiddenGroups = editingProfile?.all_groups === 1 && profileGroups.length > 0;
+  const disableCanUploadAndDeleteImages = editingProfile?.is_public === 1 || editingProfile?.all_groups === 0 || editingProfile?.can_edit === 0 || hasForbiddenGroups;
+  const canUploadAndDeleteImagesDisabledReason = disableCanUploadAndDeleteImages
+    ? editingProfile?.is_public === 1
+      ? 'Public profiles cannot have upload permissions'
+      : editingProfile?.all_groups === 0
+        ? 'All People Access must be enabled'
+        : editingProfile?.can_edit === 0
+          ? 'Can Edit permission must be enabled'
+          : 'Remove forbidden groups first'
+    : null;
+  
+  // can_edit should be enabled/required when can_upload_and_delete_images = 1
+  // Note: This is more of a constraint than a disable - if can_upload_and_delete_images is 1, can_edit must also be 1
+  // Also disabled when is_public = 1 (public profiles cannot have edit permissions)
+  const requiresCanEdit = editingProfile?.can_upload_and_delete_images === 1;
+  const disableCanEdit = editingProfile?.is_public === 1;
+  
   // Get permissions for the selected event (not the URL event)
   // This ensures PermissionGate checks permissions for the event being edited
   const selectedEventUrl = useMemo(() => {
@@ -182,17 +213,26 @@ const restrictedEventName = editingProfile && 'restricted_to_event_name' in edit
 
 const publicToggleRestrictedByEvent = !restrictedToEventId;
 const publicToggleRestrictedByRank = (editingProfile?.hierarchy_rank ?? 0) > 0;
-const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank;
-const publicToggleTooltip = publicToggleRestrictedByRank
-  ? 'Public profiles must use rank 0.'
-  : publicToggleRestrictedByEvent
-    ? 'Public access is only available for profiles restricted to an event.'
-    : undefined;
-const disableRestrictionToggle = Boolean(currentProfile?.restricted_to_event);
-const restrictionTooltip = disableRestrictionToggle
+const publicToggleRestrictedByCanCreateEvents = editingProfile?.can_create_events === 1;
+const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank || publicToggleRestrictedByCanCreateEvents;
+const publicToggleTooltip = publicToggleRestrictedByCanCreateEvents
+  ? 'Profiles with event creation permissions cannot be public.'
+  : publicToggleRestrictedByRank
+    ? 'Public profiles must use rank 0.'
+    : publicToggleRestrictedByEvent
+      ? 'Public access is only available for profiles restricted to an event.'
+      : undefined;
+const isRestricted = Boolean(editingProfile?.restricted_to_event || currentProfile?.restricted_to_event);
+const disableRestrictionToggle = isCurrentProfileRestricted || editingProfile?.is_public === 1 || editingProfile?.can_create_events === 1;
+const restrictionTooltip = isCurrentProfileRestricted
   ? 'You are restricted to an event and cannot change restrictions'
-  : `Manage restrictions`
+  : editingProfile?.is_public === 1
+    ? 'Public profiles must be restricted to their own event'
+    : editingProfile?.can_create_events === 1
+      ? 'Profiles with event creation permissions cannot be restricted to an event'
+      : `Manage restrictions`
 const disableEventManagementToggles = editingProfile?.is_public === 1;
+const disableCanCreateEvents = disableEventManagementToggles || isRestricted;
 const disableRankSelection = editingProfile?.is_public === 1;
 
   // Check if event-specific fields have been modified
@@ -505,18 +545,6 @@ const disableRankSelection = editingProfile?.is_public === 1;
       }
     }
   }, [isOpen, isCreating, initialEventId, allEventsList, editingProfile?.restricted_to_event, editingProfile?.restricted_to_event_name]);
-
-  // Check name conflict when restricted event changes
-  useEffect(() => {
-    if (isOpen && editingProfile?.label?.trim()) {
-      // Debounce the check to avoid too many API calls
-      const timeoutId = setTimeout(() => {
-        checkNameConflict(editingProfile.label);
-      }, 300);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isOpen, editingProfile?.restricted_to_event, editingProfile?.label]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check name conflict when modal opens for creating (if editingProfile has a label)
   useEffect(() => {
@@ -909,21 +937,23 @@ const disableRankSelection = editingProfile?.is_public === 1;
       onClose();
     } catch (error) {
       console.error(`Failed to ${isCreating ? 'create' : 'update'} profile:`, error);
-      const errorMsg = error.response?.data?.error || error.message || `Failed to ${isCreating ? 'create' : 'update'} profile`;
+      const rawErrorMsg = error.response?.data?.error || error.message || '';
       
-      // Check for specific database policy errors
-      if (errorMsg.includes('Label with this password already exists')) {
+      // Check for specific database policy errors that need special handling
+      if (rawErrorMsg.includes('Label with this password already exists')) {
         // Label AND password combination already exists
         // Don't set nameConflict=true because this is about the combination, not just the label
         setNameConflict(false);
         setError('Name and password combination already exists');
         // Don't show toast for this error, show error message near the name field instead
-      } else if (errorMsg.includes('Profile label already exists') && !errorMsg.includes('Label with this password')) {
+      } else if (rawErrorMsg.includes('Profile label already exists') && !rawErrorMsg.includes('Label with this password')) {
         // Only label exists (not the combination)
         setNameConflict(true);
         setError('');
         // Don't show toast for this error, show "Name exists" near the name field instead
       } else {
+        // Use the error handler for user-friendly messages
+        const errorMsg = formatErrorMessage(isCreating ? 'create' : 'update profile', error);
         setError(errorMsg);
         showToast(errorMsg, 'error');
       }
@@ -1496,7 +1526,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                       <p className="font-medium text-gray-900">Restricted to Event</p>
                       <p className="text-sm text-gray-500">Profile is restricted to a specific event</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-end gap-2">
                       <div className="relative" ref={restrictionInputRef}>
                         <div className="relative">
                           <input
@@ -1519,8 +1549,9 @@ const disableRankSelection = editingProfile?.is_public === 1;
                               setShowRestrictionDropdown(true);
                             }}
                             placeholder="Select event or clear"
-                            className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                            className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 disabled:opacity-60 disabled:cursor-not-allowed"
                             disabled={disableRestrictionToggle}
+                            title={disableRestrictionToggle ? restrictionTooltip : undefined}
                           />
                           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                         </div>
@@ -1537,35 +1568,57 @@ const disableRankSelection = editingProfile?.is_public === 1;
                               if (currentRestrictionId) {
                                 restrictionOptions.push({ id: null, name: 'Clear Selection', isClear: true });
                               }
-                              // Get all events from allEventsList (more reliable than generalEventsStore)
-                              const allEvents = allEventsList.map(event => {
-                                const eventId = event.event_id || event.id;
-                                if (!eventId) return null;
-                                return { ...event, event_id: eventId };
-                              }).filter(Boolean);
                               
-                              // Sort: profile events first, then others
-                              const profileEventIds = new Set(profileEvents.map(id => String(id)));
-                              const sortedEvents = allEvents.sort((a, b) => {
-                                const aId = String(a.event_id || a.id);
-                                const bId = String(b.event_id || b.id);
-                                const aIsProfileEvent = profileEventIds.has(aId);
-                                const bIsProfileEvent = profileEventIds.has(bId);
+                              // When editing existing profile: only show profile events
+                              // When creating new profile: show all events (prioritize initialEventId if filtered)
+                              let eventsToShow;
+                              if (isCreating) {
+                                // Creating: show all events, prioritize initialEventId
+                                const allEvents = allEventsList.map(event => {
+                                  const eventId = event.event_id || event.id;
+                                  if (!eventId) return null;
+                                  return { ...event, event_id: eventId };
+                                }).filter(Boolean);
                                 
-                                if (aIsProfileEvent && !bIsProfileEvent) return -1;
-                                if (!aIsProfileEvent && bIsProfileEvent) return 1;
-                                // If both are profile events or both are not, sort by name
-                                const aName = (a?.name || 'Untitled Event').toLowerCase();
-                                const bName = (b?.name || 'Untitled Event').toLowerCase();
-                                return aName.localeCompare(bName);
-                              });
+                                // Sort: initialEventId first (if exists), then by name
+                                const sortedEvents = allEvents.sort((a, b) => {
+                                  const aId = String(a.event_id || a.id);
+                                  const bId = String(b.event_id || b.id);
+                                  const initialIdStr = initialEventId ? String(initialEventId) : null;
+                                  
+                                  if (initialIdStr) {
+                                    if (aId === initialIdStr && bId !== initialIdStr) return -1;
+                                    if (aId !== initialIdStr && bId === initialIdStr) return 1;
+                                  }
+                                  // If both are initial or both are not, sort by name
+                                  const aName = (a?.name || 'Untitled Event').toLowerCase();
+                                  const bName = (b?.name || 'Untitled Event').toLowerCase();
+                                  return aName.localeCompare(bName);
+                                });
+                                
+                                eventsToShow = sortedEvents;
+                              } else {
+                                // Editing: only show profile events
+                                eventsToShow = profileEventsList.map(event => {
+                                  const eventId = event.event_id || event.id;
+                                  if (!eventId) return null;
+                                  return { ...event, event_id: eventId };
+                                }).filter(Boolean);
+                                
+                                // Sort by name
+                                eventsToShow.sort((a, b) => {
+                                  const aName = (a?.name || 'Untitled Event').toLowerCase();
+                                  const bName = (b?.name || 'Untitled Event').toLowerCase();
+                                  return aName.localeCompare(bName);
+                                });
+                              }
                               
                               // Filter events based on search term
                               const filtered = restrictionSearchTerm.trim()
-                                ? sortedEvents.filter(e => 
+                                ? eventsToShow.filter(e => 
                                     (e?.name || 'Untitled Event').toLowerCase().includes(restrictionSearchTerm.toLowerCase())
                                   )
-                                : sortedEvents;
+                                : eventsToShow;
                               
                               filtered.forEach(event => {
                                 const evtId = event?.event_id || event?.id;
@@ -1628,6 +1681,11 @@ const disableRankSelection = editingProfile?.is_public === 1;
                           </div>
                         )}
                       </div>
+                      {disableRestrictionToggle && (
+                        <p className="text-xs text-gray-500 text-right">
+                          {restrictionTooltip}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1682,16 +1740,30 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         <p className="font-medium text-gray-900">Can Create Events</p>
                         <p className="text-sm text-gray-500">Can create new events</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={editingProfile.can_create_events === 1}
-                          onChange={(e) => handleFieldChange('can_create_events', e.target.checked ? 1 : 0)}
-                          disabled={!canGrantCanCreateEvents}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                      </label>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (editingProfile?.is_public === 1 ? 'Public profiles cannot create events' : 'Restricted profiles cannot create events') : undefined}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.can_create_events === 1}
+                            onChange={(e) => handleFieldChange('can_create_events', e.target.checked ? 1 : 0)}
+                            disabled={!canGrantCanCreateEvents || disableCanCreateEvents}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                        {disableCanCreateEvents && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            {editingProfile?.is_public === 1 
+                              ? 'Public profiles cannot create events.'
+                              : 'Restricted profiles cannot create events.'}
+                          </p>
+                        )}
+                        {!canGrantCanCreateEvents && !disableCanCreateEvents && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            You do not have permission to grant this.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1956,7 +2028,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                               disabled={disableEventManagementToggles || !canGrantCanManageEvent}
                             />
                             <div
-                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${disableEventManagementToggles || !canGrantCanManageEvent ? '' : 'peer-checked:bg-blue-600'} peer-disabled:opacity-50`}
+                              className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
                               title={disableEventManagementToggles ? 'Public profiles cannot manage events' : !canGrantCanManageEvent ? 'You do not have permission to grant this' : undefined}
                             ></div>
                           </label>
@@ -1991,7 +2063,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                               disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
                             />
                             <div
-                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${disableEventManagementToggles || !canGrantCanDeleteEvent ? '' : 'peer-checked:bg-blue-600'} peer-disabled:opacity-50`}
+                              className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
                               title={disableEventManagementToggles ? 'Public profiles cannot delete events' : !canGrantCanDeleteEvent ? 'You do not have permission to grant this' : undefined}
                             ></div>
                           </label>
@@ -2011,20 +2083,37 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
                     {/* Upload & Delete Images */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">Upload & Delete Photos</p>
+                      <div className="relative">
+                        <div className="flex items-center gap-1">
+                          <p className="font-medium text-gray-900">Upload & Delete Photos</p>
+                        </div>
                         <p className="text-sm text-gray-500">Can upload new photos and delete existing ones</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={editingProfile.can_upload_and_delete_images === 1}
-                          onChange={(e) => handleFieldChange('can_upload_and_delete_images', e.target.checked ? 1 : 0)}
-                          disabled={!canGrantCanUploadAndDeleteImages}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                      </label>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages && !disableCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanUploadAndDeleteImages ? canUploadAndDeleteImagesDisabledReason : undefined}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.can_upload_and_delete_images === 1}
+                          onChange={(e) => {
+                            const newValue = e.target.checked ? 1 : 0;
+                            handleFieldChange('can_upload_and_delete_images', newValue);
+                            // If enabling upload, also enable can_edit and all_groups (constraint)
+                            if (newValue === 1) {
+                              handleFieldChange('can_edit', 1);
+                              handleFieldChange('all_groups', 1);
+                            }
+                          }}
+                            disabled={!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                        {disableCanUploadAndDeleteImages && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            {canUploadAndDeleteImagesDisabledReason}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Can Edit */}
@@ -2033,16 +2122,35 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         <p className="font-medium text-gray-900">Can Edit</p>
                         <p className="text-sm text-gray-500">Can edit albums, groups, moments, and transfer faces</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={editingProfile.can_edit === 1}
-                          onChange={(e) => handleFieldChange('can_edit', e.target.checked ? 1 : 0)}
-                          disabled={!canGrantCanEdit}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                      </label>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${canGrantCanEdit && !requiresCanEdit && !disableCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanEdit ? 'Public profiles cannot have edit permissions' : requiresCanEdit ? 'Required when Upload & Delete Photos is enabled' : undefined}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.can_edit === 1}
+                            onChange={(e) => {
+                              const newValue = e.target.checked ? 1 : 0;
+                              // If disabling can_edit while can_upload_and_delete_images is enabled, also disable upload
+                              if (newValue === 0 && editingProfile.can_upload_and_delete_images === 1) {
+                                handleFieldChange('can_upload_and_delete_images', 0);
+                              }
+                              handleFieldChange('can_edit', newValue);
+                            }}
+                            disabled={!canGrantCanEdit || requiresCanEdit || disableCanEdit}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                        {disableCanEdit && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            Public profiles cannot have edit permissions.
+                          </p>
+                        )}
+                        {requiresCanEdit && !disableCanEdit && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            Required when Upload & Delete Photos is enabled
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* All Images */}
@@ -2120,7 +2228,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                           <p className="font-medium text-gray-900">All People Access</p>
                           <div className="relative">
                             <HelpCircle 
-                              className="w-3.5 h-3.5 text-gray-400 cursor-help" 
+                              className="w-3.5 h-3.5 text-gray-400 cursor-help"
                               onMouseEnter={() => setShowGroupsTooltip(true)}
                               onMouseLeave={() => setShowGroupsTooltip(false)}
                             />
@@ -2136,16 +2244,30 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         </div>
                         <p className="text-sm text-gray-500">If ON: Access all groups except listed below. If OFF: Only access listed groups</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={editingProfile.all_groups === 1}
-                          onChange={(e) => handleFieldChange('all_groups', e.target.checked ? 1 : 0)}
-                          disabled={!canGrantAllGroups}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                      </label>
+                      <div className="flex flex-col items-end">
+                        <label className={`relative inline-flex items-center ${canGrantAllGroups && !disableAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableAllGroups ? allGroupsDisabledReason : undefined}>
+                          <input
+                            type="checkbox"
+                            checked={editingProfile.all_groups === 1}
+                          onChange={(e) => {
+                            const newValue = e.target.checked ? 1 : 0;
+                            // If disabling all_groups (restricting groups) while can_upload_and_delete_images is enabled, also disable upload
+                            if (newValue === 0 && editingProfile.can_upload_and_delete_images === 1) {
+                              handleFieldChange('can_upload_and_delete_images', 0);
+                            }
+                            handleFieldChange('all_groups', newValue);
+                          }}
+                            disabled={!canGrantAllGroups || disableAllGroups}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                        {disableAllGroups && (
+                          <p className="mt-1 text-xs text-gray-500 text-right">
+                            {allGroupsDisabledReason}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
