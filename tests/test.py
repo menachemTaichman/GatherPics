@@ -279,7 +279,7 @@ ids = {
 }
 
 
-recreate_views_triggers_and_indexes(db)
+# recreate_views_triggers_and_indexes(db)
 settings = general_models.db.execute_query('SELECT * FROM settings WHERE id = 1;', return_format=ReturnFormat.DICT)
 print(settings)
 print('--------------------------------')

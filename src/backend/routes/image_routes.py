@@ -26,7 +26,7 @@ def get_image(event_id, image_id):
     if not event.models.is_accessible('images', image_id):
         return jsonify({"error": f"Image {image_id} not found or not accessible"}), 404
 
-    image = event.models.get_entities('images', [image_id])
+    image = event.models.get_entities('images', [image_id], include_details=True)
     albums = event.models.get_childs('images', image_id, 'albums')
     faces = event.models.get_childs('images', image_id, 'faces')
     groups = event.models.get_childs('images', image_id, 'groups')
@@ -63,6 +63,34 @@ def get_image(event_id, image_id):
             'entities': moments
         })
     return jsonify({ 'changes': changes })
+
+@image_bp.route("/images/<image_id>", methods=["PATCH"])
+@require_auth
+def update_image(event_id, image_id):
+    """Update an image's description."""
+    event = get_event(event_id)
+    data = request.json or {}
+    try:
+        allowed_fields = {'description'}
+        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+        if sanitized:
+            event.models.edit('images', image_id, sanitized)
+            updated_image = event.models.get_entities('images', [image_id], include_details=True)
+            changes = [{
+                'type': 'UPDATE',
+                'entity': 'image',
+                'items': updated_image
+            }]
+            response = {"success": True, "changes": changes}
+        else:
+            response = {"success": False}
+        return jsonify(response)
+    except Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except DatabaseError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @image_bp.route("/images", methods=["DELETE"])
 @require_auth

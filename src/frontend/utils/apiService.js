@@ -621,6 +621,12 @@ export const imagesAPI = {
     });
   },
 
+  update: async (imageId, updates, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.patch(`/api/events/${eventId}/images/${imageId}`, updates);
+    return response.data;
+  },
+
   delete: async (imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/images`, { 

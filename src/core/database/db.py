@@ -310,7 +310,20 @@ class DB:
             'images': {
                 'primary_key': 'image_id',
                 'accessible_table': 'accessible_images',
-                'fields': ['date_taken', 'is_archived', 'is_favorite', 'label', 'file_size', 'width', 'height', 'moment_id'],
+                'fields': [
+                    'date_taken',
+                    'is_archived',
+                    'is_favorite',
+                    'label',
+                    'moment_id',
+                ],
+                'details_fields': [
+                    'label',
+                    'file_size',
+                    'width',
+                    'height',
+                    'description',
+                ],
                 'relations': {
                     'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},
                     'faces': {'relation_table': 'faces', 'fields_needed': ['group_id', 'width', 'height', 'left', 'top']},
@@ -635,6 +648,7 @@ class DB:
                 width INTEGER,
                 height INTEGER,
                 moment_id TEXT,
+                description TEXT,
                 upload_id INTEGER,
                 UNIQUE (event_id, label),
                 FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
@@ -2480,7 +2494,9 @@ class DB:
                     END;
 
                     UPDATE images
-                    SET moment_id = NEW.moment_id
+                    SET
+                        description = NEW.description,
+                        moment_id = NEW.moment_id
                     WHERE image_id = OLD.image_id;
                 END;
             """,
@@ -2516,6 +2532,7 @@ class DB:
                         file_size,
                         width,
                         height,
+                        description,
                         moment_id,
                         upload_id
                     )
@@ -2527,6 +2544,7 @@ class DB:
                         COALESCE(NEW.file_size, 0),
                         COALESCE(NEW.width, 0),
                         COALESCE(NEW.height, 0),
+                        NEW.description,
                         NEW.moment_id,
                         NEW.upload_id
                     );

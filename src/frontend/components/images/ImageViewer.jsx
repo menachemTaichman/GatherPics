@@ -428,6 +428,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState('');
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
   const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
@@ -699,6 +702,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
+
+  // Update description value when image changes
+  useEffect(() => {
+    if (storeImageInfo) {
+      setDescriptionValue(storeImageInfo.description || '');
+      setIsEditingDescription(false);
+    }
+  }, [storeImageInfo?.description, imageId]);
 
   // Fetch image info when image changes
   useEffect(() => {
@@ -980,6 +991,51 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const handleMoveToMomentComplete = async (result) => {
     // Handle move completion - toast already shown by modal
     setShowMoveToMomentModal(false);
+  };
+
+  const handleDescriptionClick = () => {
+    if (permissions.canEdit && !isEditingDescription) {
+      setIsEditingDescription(true);
+    }
+  };
+
+  const handleDescriptionSave = async () => {
+    if (!imageId || !permissions.canEdit || isSavingDescription) return;
+    
+    try {
+      setIsSavingDescription(true);
+      const currentDescription = storeImageInfo?.description || '';
+      const newDescription = descriptionValue.trim();
+      
+      // Only save if changed
+      if (newDescription !== currentDescription) {
+        await imagesAPI.update(imageId, { description: newDescription }, eventUrl);
+        // Changes are automatically applied by apiService interceptor
+        showToast('Description updated', 'success');
+      }
+      
+      setIsEditingDescription(false);
+    } catch (error) {
+      showToast(formatErrorMessage('update description', error), 'error');
+      // Reset to original value on error
+      setDescriptionValue(storeImageInfo?.description || '');
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
+
+  const handleDescriptionCancel = () => {
+    setDescriptionValue(storeImageInfo?.description || '');
+    setIsEditingDescription(false);
+  };
+
+  const handleDescriptionKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleDescriptionSave();
+    } else if (e.key === 'Escape') {
+      handleDescriptionCancel();
+    }
   };
 
 
@@ -1510,6 +1566,54 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       return (size / 1024).toFixed(1) + ' KB';
                     })()}</div>
                     <div><span className="font-semibold">Original resolution:</span> {storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : 'Unknown'}</div>
+                    <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
+                      <div className="flex items-start">
+                        <span className="font-semibold mr-2 flex-shrink-0">Description:</span>
+                        {isEditingDescription && permissions.canEdit ? (
+                          <div className="flex-1 min-w-0">
+                            <textarea
+                              value={descriptionValue}
+                              onChange={(e) => setDescriptionValue(e.target.value)}
+                              onBlur={handleDescriptionSave}
+                              onKeyDown={handleDescriptionKeyDown}
+                              className="w-full text-sm text-gray-700 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-sm"
+                              rows={4}
+                              autoFocus
+                              disabled={isSavingDescription}
+                              style={{ minHeight: '4rem' }}
+                            />
+                            <div className="flex items-center justify-end space-x-2 mt-2">
+                              <button
+                                onClick={handleDescriptionCancel}
+                                className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                disabled={isSavingDescription}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={handleDescriptionSave}
+                                className="text-xs text-primary-600 hover:text-primary-800 px-2 py-1 rounded hover:bg-primary-50 transition-colors"
+                                disabled={isSavingDescription}
+                              >
+                                {isSavingDescription ? 'Saving...' : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={handleDescriptionClick}
+                            className={`flex-1 min-w-0 text-gray-500 ${permissions.canEdit ? 'cursor-text hover:text-gray-700' : ''} transition-colors`}
+                            title={permissions.canEdit ? 'Click to edit description' : ''}
+                          >
+                            {storeImageInfo?.description ? (
+                              <span className="whitespace-pre-wrap break-words">{storeImageInfo.description}</span>
+                            ) : (
+                              <span className="text-gray-400 italic">{permissions.canEdit ? 'Click to add description...' : 'No description'}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Moment Information */}
