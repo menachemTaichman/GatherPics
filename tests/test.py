@@ -279,13 +279,51 @@ ids = {
 }
 
 
-# recreate_views_triggers_and_indexes(db)
-
+recreate_views_triggers_and_indexes(db)
+settings = general_models.db.execute_query('SELECT * FROM settings WHERE id = 1;', return_format=ReturnFormat.DICT)
+print(settings)
+print('--------------------------------')
 test_event_id = '11abc257-f714-4667-be15-068f7df50b8c'
+query1 = f"""
+    UPDATE settings SET
+        event_in_deletion = ?
+    WHERE id = 1;
+"""
+params1 = [test_event_id]
+query2 = f"""
+    DELETE FROM profiles
+    WHERE restricted_to_event = ?;
+"""
+params2 = [test_event_id]
+query3 = f"""
+    DELETE FROM events
+    WHERE event_id = ?;
+"""
+params3 = [test_event_id]
+query4 = f"""
+    UPDATE settings SET
+        event_in_deletion = NULL
+    WHERE id = 1;
+"""
+params4 = []
+
+tables = ['images', 'faces', 'groups', 'moments', 'albums', 'albums_images', 'uploads', 'access_requests', 'access_requests_groups', 'events_profiles', 'events_profiles_images', 'events_profiles_albums', 'events_profiles_groups']
+for table in tables:
+    keys = db.execute_query(f'PRAGMA foreign_key_list({table});', (), return_format=ReturnFormat.LIST_DICTS)
+    print(table)
+    for key in keys:
+        print(f'    table: {key["table"]}, column: {key["from"]}, on delete: {key["on_delete"]}')
+    print('--------------------------------')
+
+general_models.db.execute_query(query1, params1)
+general_models.db.execute_query(query2, params2)
+general_models.db.execute_query(query3, params3)
+general_models.db.execute_query(query4, params4)
+
 unassociated_group_id = '31bbbe03-1bad-a823-e96c-c671c0a00d9a'
 test_event = Event(test_event_id, profile_id=profile_id)
 
-result = general_models.process_new_images(test_event_id)
+result = general_models.delete_event(test_event_id)
 print(result)
 
 # recreate_views_triggers_and_indexes(general_models.db)

@@ -650,8 +650,8 @@ class DB:
                 top REAL,
                 file_size INTEGER,
                 group_id TEXT NOT NULL,
-                FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE SET NULL,
-                FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE RESTRICT
+                FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
+                FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
             ''',
             'groups': '''
                 event_id TEXT NOT NULL,
@@ -3516,6 +3516,35 @@ class DB:
                 END;
             """,
 
+            # ensure_complete_deletion
+            'trg_ensure_complete_deletion_faces_in_group': """
+                BEFORE DELETE ON groups
+                BEGIN
+                    SELECT CASE
+                        WHEN 
+                            EXISTS (
+                                SELECT 1 FROM faces f
+                                WHERE f.group_id = OLD.group_id
+                            )
+                            AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id
+                        THEN
+                            RAISE(ABORT, 'Policy error: cannot delete group with faces')
+                    END;
+                END;
+            """,
+            'trg_ensure_complete_deletion_access_requests': """
+                AFTER DELETE ON profiles
+                BEGIN
+                    DELETE FROM access_requests
+                    WHERE applicant_profile_id = OLD.profile_id;
+
+                    DELETE FROM access_requests
+                    WHERE
+                        profile_id = OLD.profile_id
+                        AND applicant_profile_id IS NULL;
+                END;
+            """,
+
             # ensure_defaults_in_event
             'trg_ensure_defaults_in_event_insert': """
                 -- TODO: use variables
@@ -3566,7 +3595,6 @@ class DB:
 
                 END;
             """,
-
 
             # ensure_default_albums
             'trg_update_ensure_default_albums': """

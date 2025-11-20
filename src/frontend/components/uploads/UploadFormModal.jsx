@@ -216,13 +216,13 @@ export default function UploadFormModal({
   const calculateOverallProgress = (progress) => {
     // Define weight for each step (total = 100%)
     const stepWeights = {
-      'uploading': 10,      // 0-10%
-      'validation': 5,      // 10-15%
-      'processing': 15,     // 15-30% 
-      'faces': 30,           // 30-60%
-      'clustering': 35,     // 60-95%
-      'moments': 3,         // 95-98%
-      'finalizing': 2,      // 98-100%
+      'uploading': 1,       // 0-1% (variable, will be tested in staging)
+      'validation': 1,      // 1-2%
+      'processing': 87,     // 2-89% (face detection takes most time)
+      'faces': 0.5,         // 89-89.5% (adding faces to DB)
+      'clustering': 9,      // 89.5-98.5%
+      'moments': 0.5,       // 98.5-99%
+      'finalizing': 1,      // 99-100%
       'complete': 0         // 100%
     };
     
