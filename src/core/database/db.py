@@ -124,6 +124,9 @@ class DB:
                     'created_at',
                 ],
                 'details_fields': [
+                    'archive_album_id',
+                    'favorites_album_id',
+                    'unassociated_group_id',
                     'rekognition_calls_limit',
                     'rekognition_calls_used',
                     'images_count_limit',
@@ -518,7 +521,6 @@ class DB:
                 value TEXT NOT NULL,
                 PRIMARY KEY (preference_group, preference_key)
             ''',
-            # TODO: in postgres make create_at with default value of CURRENT_TIMESTAMP
             'events': '''
                 event_id TEXT PRIMARY KEY NOT NULL,
                 name TEXT COLLATE NOCASE UNIQUE NOT NULL,
@@ -529,9 +531,15 @@ class DB:
                 image_size_limit_bytes INTEGER NOT NULL DEFAULT 0,
                 rekognition_calls_limit INTEGER NOT NULL DEFAULT 0,
                 rekognition_calls_used INTEGER NOT NULL DEFAULT 0,
+                archive_album_id TEXT,
+                favorites_album_id TEXT,
+                unassociated_group_id TEXT,
                 representative_image TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 created_by TEXT,
+                FOREIGN KEY (archive_album_id) REFERENCES albums(album_id) ON DELETE SET NULL,
+                FOREIGN KEY (favorites_album_id) REFERENCES albums(album_id) ON DELETE SET NULL,
+                FOREIGN KEY (unassociated_group_id) REFERENCES groups(group_id) ON DELETE SET NULL,
                 FOREIGN KEY (representative_image) REFERENCES images(image_id) ON DELETE SET NULL,
                 FOREIGN KEY (created_by) REFERENCES profiles(profile_id) ON DELETE SET NULL
             ''',
@@ -849,9 +857,10 @@ class DB:
                     AND i.image_id = epi.image_id
                 LEFT JOIN (
                     albums_images ai
-                    INNER JOIN albums a ON
-                        ai.album_id = a.album_id
-                        AND LOWER(a.label) = 'archive'
+                    INNER JOIN albums a ON ai.album_id = a.album_id
+                    INNER JOIN events e ON
+                        e.event_id = a.event_id
+                        AND a.album_id = e.archive_album_id
                     INNER JOIN albums_accessibility_helper aah ON aah.album_id = ai.album_id
                 ) ON i.image_id = ai.image_id AND aah.profile_id = ep.profile_id
             ''',
@@ -863,9 +872,10 @@ class DB:
                     CASE WHEN
                         ((ep.all_groups = 1 AND epg.group_id IS NULL)
                         OR (ep.all_groups = 0 AND epg.group_id IS NOT NULL))
-                        AND (ep.can_edit = 1 OR LOWER(g.label) <> 'unassociated')
+                        AND (ep.can_edit = 1 OR g.group_id <> e.unassociated_group_id)
                     THEN 1 ELSE 0 END AS is_accessible_helper
                 FROM groups g
+                INNER JOIN events e ON g.event_id = e.event_id
                 JOIN events_profiles ep ON g.event_id = ep.event_id
                 LEFT JOIN events_profiles_groups epg ON
                     g.group_id = epg.group_id
@@ -1094,27 +1104,26 @@ class DB:
                     CASE WHEN a1.album_id IS NOT NULL THEN 1 ELSE 0 END as has_archive_album,
                     CASE WHEN a2.album_id IS NOT NULL THEN 1 ELSE 0 END as has_favorites_album,
                     CASE WHEN
-                        (all_images = 1 AND can_edit = 1)
+                        can_edit = 1
                         OR EXISTS (
                             SELECT 1
                             FROM accessible_images ai
                         )
                     THEN 1 ELSE 0 END as has_images,
                     CASE WHEN
-                        (all_groups = 1 AND can_edit = 1)
+                        can_edit = 1
                         OR EXISTS (
                             SELECT 1
                             FROM accessible_groups g
                         )
                     THEN 1 ELSE 0 END as has_groups,
                     CASE WHEN
-                        (all_albums = 1 AND can_edit = 1)
+                        can_edit = 1
                         OR EXISTS (
                             SELECT 1
                             FROM accessible_albums aa
-                            INNER JOIN albums a ON aa.album_id = a.album_id
-                            WHERE LOWER(a.label) <> 'archive'
-                            AND LOWER(a.label) <> 'favorites'
+                            WHERE aa.album_id <> e.archive_album_id
+                            AND aa.album_id <> e.favorites_album_id
                         )
                     THEN 1 ELSE 0 END as has_albums,
                     CASE WHEN EXISTS (
@@ -1124,8 +1133,9 @@ class DB:
                     THEN 1 ELSE 0 END as enable_new_requests,
                     COUNT(DISTINCT aar.access_request_id) as pending_access_requests_count
                 FROM events_profiles ep
-                LEFT JOIN accessible_albums a1 ON LOWER(a1.label) = 'archive'
-                LEFT JOIN accessible_albums a2 ON LOWER(a2.label) = 'favorites'
+                INNER JOIN events e ON e.event_id = ep.event_id
+                LEFT JOIN accessible_albums a1 ON e.archive_album_id = a1.album_id
+                LEFT JOIN accessible_albums a2 ON e.favorites_album_id = a2.album_id
                 LEFT JOIN accessible_access_requests aar ON aar.is_closed = 0
                 LEFT JOIN current_groups_to_request_access cgtra
                 WHERE ep.event_id = cur_event_profile('event_id')
@@ -1287,30 +1297,29 @@ class DB:
             'accessible_images': '''
                 SELECT
                     i.*,
-                    a1.album_id IS NOT NULL AS is_archived,
-                    a2.album_id IS NOT NULL AS is_favorite
+                    ai1.image_id IS NOT NULL AS is_archived,
+                    ai2.image_id IS NOT NULL AS is_favorite
                 FROM images i
                 INNER JOIN images_accessibility ia ON i.image_id = ia.image_id
+                INNER JOIN events e ON e.event_id = ia.event_id
                 LEFT JOIN (
-                    albums_accessibility aa1
-                    INNER JOIN albums a1 ON aa1.album_id = a1.album_id
+                    albums_accessibility_helper aa1
                     INNER JOIN albums_images ai1 ON
                         aa1.album_id = ai1.album_id
-                        AND LOWER(a1.label) = 'archive'
-                        AND aa1.event_id = cur_event_profile('event_id')
-                        AND aa1.profile_id = cur_profile('profile_id')
                         AND aa1.is_accessible = 1
-                ) ON ai1.image_id = ia.image_id
+                ) ON
+                    ai1.image_id = ia.image_id
+                    AND aa1.profile_id = ia.profile_id
+                    AND aa1.album_id = e.archive_album_id
                 LEFT JOIN (
-                    albums_accessibility aa2
-                    INNER JOIN albums a2 ON aa2.album_id = a2.album_id
+                    albums_accessibility_helper aa2
                     INNER JOIN albums_images ai2 ON
                         aa2.album_id = ai2.album_id
-                        AND LOWER(a2.label) = 'favorites'
-                        AND aa2.event_id = cur_event_profile('event_id')
-                        AND aa2.profile_id = cur_profile('profile_id')
                         AND aa2.is_accessible = 1
-                ) ON ai2.image_id = ia.image_id
+                ) ON
+                    ai2.image_id = ia.image_id
+                    AND aa2.profile_id = ia.profile_id
+                    AND aa2.album_id = e.favorites_album_id
                 WHERE
                     ia.event_id = cur_event_profile('event_id')
                     AND ia.profile_id = cur_profile('profile_id')
@@ -1399,7 +1408,8 @@ class DB:
                 SELECT albums_images.*
                 FROM albums_images
                 INNER JOIN albums ON albums_images.album_id = albums.album_id
-                WHERE LOWER(albums.label) != 'archive' and LOWER(albums.label) != 'favorites'
+                INNER JOIN events e ON albums.event_id = e.event_id
+                WHERE albums.album_id <> e.archive_album_id AND albums.album_id <> e.favorites_album_id
                 AND albums.event_id = cur_event_profile('event_id')
             ''',
             'accessible_albums_images': '''
@@ -1726,10 +1736,25 @@ class DB:
                         ) = 0
                         THEN
                             RAISE(ABORT, 'Permission denied: cannot delete event')
+                        WHEN (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS NOT NULL THEN
+                            RAISE(ABORT, 'Policy error: other event is in deletion. Try again later')
                     END;
+
+                    -- TODO: use transaction
+                    UPDATE settings SET
+                        event_in_deletion = OLD.event_id
+                    WHERE id = 1;
+                    
+                    DELETE FROM profiles
+                    WHERE restricted_to_event = OLD.event_id;
 
                     DELETE FROM events
                     WHERE event_id = OLD.event_id;
+
+                    UPDATE settings SET
+                        event_in_deletion = NULL
+                    WHERE id = 1;
+
                 END;
             """,
 
@@ -3400,10 +3425,11 @@ class DB:
                 BEGIN
                     SELECT CASE
                         WHEN NEW.group_id = (
-                            SELECT group_id
-                            FROM groups
-                            WHERE event_id = cur_event_profile('event_id')
-                            AND LOWER(label) = 'unassociated'
+                            SELECT g.group_id
+                            FROM groups g
+                            INNER JOIN events e ON g.event_id = e.event_id
+                            WHERE g.event_id = cur_event_profile('event_id')
+                            AND g.group_id = e.unassociated_group_id
                         ) THEN
                             RAISE(ABORT, 'Policy error: cannot edit unassociated group permissions')
                     END;
@@ -3492,6 +3518,7 @@ class DB:
 
             # ensure_defaults_in_event
             'trg_ensure_defaults_in_event_insert': """
+                -- TODO: use variables
                 AFTER INSERT ON events
                 BEGIN
                     INSERT OR IGNORE INTO events_profiles (
@@ -3524,6 +3551,19 @@ class DB:
                     SELECT NEW.event_id, uuid, 'Unassociated'
                     FROM uuid
                     LIMIT 1;
+
+                    UPDATE events SET
+                        archive_album_id = (
+                            SELECT album_id FROM albums WHERE event_id = NEW.event_id AND label = 'Archive'
+                        ),
+                        favorites_album_id = (
+                            SELECT album_id FROM albums WHERE event_id = NEW.event_id AND label = 'Favorites'
+                        ),
+                        unassociated_group_id = (
+                            SELECT group_id FROM groups WHERE event_id = NEW.event_id AND label = 'Unassociated'
+                        )
+                    WHERE event_id = NEW.event_id;
+
                 END;
             """,
 
@@ -3533,7 +3573,11 @@ class DB:
                 BEFORE UPDATE ON albums
                 BEGIN
                     SELECT CASE
-                        WHEN (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites') AND LOWER(NEW.label) <> LOWER(OLD.label) THEN
+                        WHEN
+                            OLD.album_id = (SELECT archive_album_id FROM events WHERE event_id = OLD.event_id)
+                            OR OLD.album_id = (SELECT favorites_album_id FROM events WHERE event_id = OLD.event_id)
+                            AND (NEW.album_id <> OLD.album_id OR NEW.label <> OLD.label)
+                        THEN
                             RAISE(ABORT, 'Policy error: cannot update default albums')
                     END;
                 END;
@@ -3543,8 +3587,11 @@ class DB:
                 BEGIN
                     SELECT CASE
                         WHEN
-                            (LOWER(OLD.label) = 'archive' OR LOWER(OLD.label) = 'favorites')
-                            AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) <> OLD.event_id
+                            (
+                                OLD.album_id = (SELECT archive_album_id FROM events WHERE event_id = OLD.event_id)
+                                OR OLD.album_id = (SELECT favorites_album_id FROM events WHERE event_id = OLD.event_id)
+                            )
+                            AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id
                         THEN
                             RAISE(ABORT, 'Policy error: cannot delete default albums')
                     END;
@@ -3556,10 +3603,11 @@ class DB:
                 BEFORE UPDATE ON groups
                 BEGIN
                     SELECT CASE
-                        WHEN LOWER(OLD.label) = 'unassociated' AND COALESCE(OLD.label, '') <> COALESCE(NEW.label, '') THEN
-                            RAISE(ABORT, 'Policy error: cannot update default group label')
-                        WHEN LOWER(NEW.label) = 'unassociated' AND COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '') THEN
-                            RAISE(ABORT, 'Policy error: cannot update default group representative face')
+                        WHEN
+                            OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
+                            AND (OLD.group_id <> NEW.group_id OR OLD.label <> NEW.label OR OLD.representative_face <> NEW.representative_face)
+                        THEN
+                            RAISE(ABORT, 'Policy error: cannot update default group')
                     END;
                 END;
             """,
@@ -3568,8 +3616,8 @@ class DB:
                 BEGIN
                     SELECT CASE
                         WHEN
-                            LOWER(OLD.label) = 'unassociated'
-                            AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) <> OLD.event_id
+                            OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
+                            AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id
                         THEN
                             RAISE(ABORT, 'Policy error: cannot delete default group')
                     END;
@@ -3847,14 +3895,18 @@ class DB:
         
         except sqlite3.IntegrityError as e:
             if "Policy error" in str(e):
-                raise DBPolicyError(f"Database policy error: {str(e)}") from e
+                error_message = str(e).replace("Policy error: ", "")
+                raise DBPolicyError(f"Policy error: {error_message}") from e
             elif "Permission denied" in str(e):
-                raise Forbidden(f"Permission denied: {e}") from e
+                error_message = str(e).replace("Permission denied: ", "")
+                raise Forbidden(f"Permission denied: {error_message}") from e
             else:
-                raise DatabaseError(f"Integrity error: {str(e)}") from e
+                error_message = str(e).replace("Integrity error: ", "")
+                raise DatabaseError(f"Integrity error: {error_message}") from e
 
         except sqlite3.Error as e:
-            raise DatabaseError(f"Database error: {str(e)}") from e
+            error_message = str(e).replace("Database error: ", "")
+            raise DatabaseError(f"Internal error: {error_message}") from e
         
         if has_resultset:
             columns = [desc[0] for desc in cursor.description]

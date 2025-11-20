@@ -342,7 +342,7 @@ class Event():
         errors = []
         
         try:
-            unassociated_group_id = self.models.get_unassociated_group()
+            unassociated_group_id = self.models.get_entities('events', self.event_id, include_details=True)['unassociated_group_id']
             for i, image_file in enumerate(image_files, 1):
                 _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
                 if verbose:

@@ -300,7 +300,12 @@ class GeneralModels(BaseModels):
             raise Forbidden('Profile does not have permission to delete this event')
 
         Event.delete_event(event_id)
-        self.delete('events', event_id)
+        # TODO: use transaction
+        try:
+            self.delete('events', event_id)
+        except Exception as e:
+            self.db.execute_query('UPDATE settings SET event_in_deletion = NULL WHERE id = 1')
+            raise e
     
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""

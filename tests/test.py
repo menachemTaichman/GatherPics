@@ -279,10 +279,12 @@ ids = {
 }
 
 
-test_event_id = '3ff77fb3-0205-4507-9da8-783f3e6c2394'
+recreate_views_triggers_and_indexes(db)
 
+test_event_id = '11abc257-f714-4667-be15-068f7df50b8c'
+unassociated_group_id = '31bbbe03-1bad-a823-e96c-c671c0a00d9a'
 test_event = Event(test_event_id, profile_id=profile_id)
-
+test_event.models.db.execute_query('DELETE FROM groups WHERE event_id = ? AND group_id = ?;', (test_event_id, unassociated_group_id))
 images = test_event.models.db.execute_query('SELECT * FROM images WHERE event_id = ?;', (test_event_id,), return_format=ReturnFormat.LIST_DICTS)
 print(images)
 

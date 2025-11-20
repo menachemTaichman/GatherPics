@@ -315,14 +315,6 @@ class EventModels(BaseModels):
 
         return self.db.execute_query(query, return_format=ReturnFormat.VALUE)
 
-    def get_unassociated_group(self) -> str | None:
-        """Get the unassociated group id."""
-        result = self.db.execute_query('SELECT group_id FROM groups WHERE LOWER(label) = ? AND event_id = ?', ('unassociated', self.db.event_id), return_format=ReturnFormat.VALUE)
-        if not result:
-            raise DBPolicyError("Policy error: unassociated group not found")
-        
-        return result
-
     def get_faces_group_in_image(self, group_id: str, image_ids: str | list[str]) -> list[str] | None:
         """Return the faces in image(s) from a group.
         Args:
@@ -407,8 +399,9 @@ class EventModels(BaseModels):
 
         # Track which groups were deleted based on accessibility
         deleted_group_ids = []
+        unassociated_group_id = self.get_entities('events', self.db.event_id, include_details=True)['unassociated_group_id']
         for group_id, detached_faces in detached_groups_faces.items():
-            if self.is_empty('groups', group_id, child='faces') and group_id != self.get_unassociated_group():
+            if self.is_empty('groups', group_id, child='faces') and group_id != unassociated_group_id:
                 self.delete('groups', group_id)
                 deleted_group_ids.append(group_id)
 
@@ -447,23 +440,6 @@ class EventModels(BaseModels):
             'removed_groups_uploads': removed_uploads_to_groups,
         }
 
-        return result
-
-    # -------- Albums helpers --------
-    def get_archive_album(self) -> str | None:
-        """Get the archive album id."""
-        result = self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = ? AND event_id = ?', ('archive', self.db.event_id), return_format=ReturnFormat.VALUE)
-        if not result:
-            raise DBPolicyError("Policy error: archive album not found")
-        
-        return result
-
-    def get_favorites_album(self) -> str | None:
-        """Get the favorites album id."""
-        result = self.db.execute_query('SELECT album_id FROM albums WHERE LOWER(label) = ? AND event_id = ?', ('favorites', self.db.event_id), return_format=ReturnFormat.VALUE)
-        if not result:
-            raise DBPolicyError("Policy error: favorites album not found")
-        
         return result
 
     # -------- Profiles helpers --------

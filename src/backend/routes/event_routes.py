@@ -37,10 +37,6 @@ def get_event(event_id):
         if not event_items:
             return jsonify({"error": "Event not found"}), 404
 
-        event_items[event_id]['archive_album_id'] = event_instance.models.get_archive_album()
-        event_items[event_id]['favorites_album_id'] = event_instance.models.get_favorites_album()
-        event_items[event_id]['unassociated_group_id'] = event_instance.models.get_unassociated_group()
-
         changes = [{
             'type': 'UPSERT',
             'entity': 'event',

@@ -152,7 +152,8 @@ def delete_album(event_id, album_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-def _edit_album_images(event: Event, album_id: str, image_ids: list[str], add: bool):
+def _edit_album_images(event_id: str, album_id: str, image_ids: list[str], add: bool):
+    event = get_event(event_id)
     """Helper: Add or remove images from an album, return response with changes."""
     operation = ChildOperation.ADD if add else ChildOperation.REMOVE
     updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=operation)
@@ -179,9 +180,10 @@ def _edit_album_images(event: Event, album_id: str, image_ids: list[str], add: b
                 'ids': updated_image_ids
             })
 
+        event_data = event.models.get_entities('events', event_id, include_details=True)
         is_default_album = album_id in [
-            event.models.get_favorites_album(),
-            event.models.get_archive_album()
+            event_data['favorites_album_id'],
+            event_data['archive_album_id']
         ]
         if is_default_album:
             changes.append({
@@ -189,7 +191,7 @@ def _edit_album_images(event: Event, album_id: str, image_ids: list[str], add: b
                 'entity': 'image',
                 'items': event.models.get_entities('images', updated_image_ids)
             })
-            if album_id == event.models.get_archive_album():
+            if album_id == event_data['archive_album_id']:
                 all_parents = event.models.get_parents('images', updated_image_ids)
                 for entity, parent_to_images in all_parents.items():
                     parent_ids = list(parent_to_images.keys())
@@ -225,11 +227,10 @@ def _edit_album_images(event: Event, album_id: str, image_ids: list[str], add: b
 @require_auth
 def add_images_to_album(event_id, album_id):
     """Add images to an album."""
-    event = get_event(event_id)
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        response = _edit_album_images(event, album_id, image_ids, add=True)
+        response = _edit_album_images(event_id, album_id, image_ids, add=True)
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
@@ -242,11 +243,10 @@ def add_images_to_album(event_id, album_id):
 @require_auth
 def remove_images_from_album(event_id, album_id):
     """Remove images from an album."""
-    event = get_event(event_id)
     data = request.json or {}
     image_ids = data.get('image_ids', [])
     try:
-        response = _edit_album_images(event, album_id, image_ids, add=False)
+        response = _edit_album_images(event_id, album_id, image_ids, add=False)
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
@@ -259,7 +259,6 @@ def remove_images_from_album(event_id, album_id):
 @require_auth
 def toggle_favorites_images(event_id):
     """Add or remove multiple images from favorites album."""
-    event = get_event(event_id)
     
     data = request.json or {}
     image_ids = data.get('image_ids', [])
@@ -269,8 +268,10 @@ def toggle_favorites_images(event_id):
         return jsonify({"error": "No image IDs provided"}), 400
     
     try:
-        favorites_album_id = event.models.get_favorites_album()
-        response = _edit_album_images(event, favorites_album_id, image_ids, add=is_favorite)
+        event = get_event(event_id)
+        event_data = event.models.get_entities('events', event_id, include_details=True)
+        favorites_album_id = event_data['favorites_album_id']
+        response = _edit_album_images(event_id, favorites_album_id, image_ids, add=is_favorite)
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
@@ -283,7 +284,6 @@ def toggle_favorites_images(event_id):
 @require_auth
 def toggle_archive_images(event_id):
     """Add or remove multiple images from archive album."""
-    event = get_event(event_id)
     
     data = request.json or {}
     image_ids = data.get('image_ids', [])
@@ -293,8 +293,10 @@ def toggle_archive_images(event_id):
         return jsonify({"error": "No image IDs provided"}), 400
     
     try:
-        archive_album_id = event.models.get_archive_album()
-        response = _edit_album_images(event, archive_album_id, image_ids, add=is_archived)
+        event = get_event(event_id)
+        event_data = event.models.get_entities('events', event_id, include_details=True)
+        archive_album_id = event_data['archive_album_id']
+        response = _edit_album_images(event_id, archive_album_id, image_ids, add=is_archived)
         return jsonify(response)
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403

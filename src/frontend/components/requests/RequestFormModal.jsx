@@ -280,17 +280,14 @@ export default function RequestFormModal({
     }));
   };
 
-  // Filter and sort groups (filter out unassociated groups)
+  // Filter and sort groups
   const filteredAndSortedGroups = useMemo(() => {
     return allGroups
       .filter(group => {
-        // Filter out unassociated groups
-        const isUnassociated = group.label && group.label.toLowerCase() === 'unassociated';
-        
         const label = group.label || `Person ${group.id}`;
         const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
         
-        return !isUnassociated && matchesSearch;
+        return matchesSearch;
       })
       .sort((a, b) => {
         // Only sort by name
