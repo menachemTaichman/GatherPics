@@ -252,8 +252,8 @@ export default function FeedbackFormModal({
   // Show email field only for public profiles (and only when creating)
   const shouldShowEmailField = currentProfileIsPublic && !isEditing;
   
-  // Show communication consent when there's an email to send (and not viewing)
-  const shouldShowCommunicationConsent = !isViewOnly && (currentProfileHasEmail || (currentProfileIsPublic && !!formData.sender_email.trim()));
+  // Show communication consent when there's an email to send (and not viewing), but hide for public profiles
+  const shouldShowCommunicationConsent = !isViewOnly && !currentProfileIsPublic && currentProfileHasEmail;
 
   if (!isOpen) return null;
 
@@ -265,7 +265,7 @@ export default function FeedbackFormModal({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -360,7 +360,7 @@ export default function FeedbackFormModal({
                         Provide your email if you'd like us to follow up
                       </p>
                       
-                      {/* Communication Consent - shown when email is provided */}
+                      {/* Communication Consent - shown when email is provided (not for public profiles) */}
                       {shouldShowCommunicationConsent && formData.sender_email.trim() && (
                         <div className="mt-2">
                           <label className={`relative inline-flex items-center ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
@@ -373,7 +373,7 @@ export default function FeedbackFormModal({
                             />
                             <div className={`w-10 h-5 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
                             <span className={`ml-3 text-sm ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
-                              I agree to be contacted via email
+                              I would like to receive email updates
                             </span>
                           </label>
                         </div>
@@ -490,7 +490,7 @@ export default function FeedbackFormModal({
                     />
                     <div className={`w-10 h-5 ${(loading || isViewOnly) ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
                     <span className={`ml-3 text-sm font-medium ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
-                      I agree to be contacted via email regarding this feedback
+                      I would like to receive email updates regarding this feedback
                     </span>
                   </label>
                 </div>

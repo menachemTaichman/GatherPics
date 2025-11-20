@@ -1021,8 +1021,8 @@ export default function RequestFormModal({
                   />
                 </div>
                 
-                {/* Communication Consent - Show if new profile or current profile has email */}
-                {(formData.requestType === 'new' || currentProfileHasEmail) && (
+                {/* Communication Consent - Show if new profile or current profile has email, but hide for public profiles */}
+                {(formData.requestType === 'new' || currentProfileHasEmail) && !currentProfileIsPublic && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <label className="flex items-start space-x-2 cursor-pointer group">
                       <div className="flex items-center h-5">
@@ -1036,7 +1036,7 @@ export default function RequestFormModal({
                       </div>
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          I consent to receive communications about this request {formData.requestType === 'new' ? '*' : ''}
+                          I would like to receive email updates about this request {formData.requestType === 'new' ? '*' : ''}
                         </span>
                         <p className="text-xs text-gray-600 mt-0.5">
                           You'll receive email notifications about your request status.

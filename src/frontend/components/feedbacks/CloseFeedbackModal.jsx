@@ -211,7 +211,7 @@ export default function CloseFeedbackModal({
               </label>
               {!feedback.communication_consent && (
                 <p className="text-xs text-amber-600 mt-1 ml-14">
-                  Sender has not consented to email communications
+                  Sender does not want to receive email updates
                 </p>
               )}
             </div>

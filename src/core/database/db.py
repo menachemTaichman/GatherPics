@@ -1952,7 +1952,7 @@ class DB:
                         NEW.profile_id,
                         NEW.sender_name,
                         NEW.sender_email,
-                        COALESCE(NEW.communication_consent, 0),
+                        COALESCE(CASE WHEN NEW.sender_email IS NOT NULL THEN 1 ELSE NEW.communication_consent END, 0),
                         NEW.title,
                         COALESCE(NEW.type, 0),
                         NEW.message,
@@ -1997,7 +1997,7 @@ class DB:
                         title = NEW.title,
                         type = NEW.type,
                         message = NEW.message,
-                        communication_consent = NEW.communication_consent
+                        communication_consent = COALESCE(CASE WHEN NEW.sender_email IS NOT NULL THEN 1 ELSE NEW.communication_consent END, 0)
                     WHERE feedback_id = OLD.feedback_id;
                 END;
             """,
@@ -2881,7 +2881,8 @@ class DB:
                         applicant_phone,
                         details,
                         applicant_profile_id,
-                        communication_consent)
+                        communication_consent
+                    )
                     VALUES (
                         cur_event_profile('event_id'),
                         NEW.profile_id,
@@ -2891,7 +2892,7 @@ class DB:
                         CASE WHEN cur_profile('is_public') = 1 THEN NEW.applicant_phone ELSE NULL END,
                         NEW.details,
                         CASE WHEN cur_profile('is_public') = 0 THEN NEW.applicant_profile_id ELSE NULL END,
-                        COALESCE(NEW.communication_consent, 0)
+                        COALESCE(CASE WHEN cur_profile('is_public') = 1 THEN 1 ELSE NEW.communication_consent END, 0)
                     );
                 END;
             """,
@@ -2911,7 +2912,7 @@ class DB:
 
                     UPDATE access_requests SET
                         details = NEW.details,
-                        communication_consent = COALESCE(NEW.communication_consent, 0)
+                        communication_consent = COALESCE(CASE WHEN cur_profile('is_public') = 1 THEN 1 ELSE NEW.communication_consent END, 0)
                     WHERE access_request_id = OLD.access_request_id;
                 END;
             """,

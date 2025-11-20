@@ -1046,7 +1046,7 @@ export default function RequestDetailModal({
               </label>
               {!requestData.communication_consent && (
                 <p className="text-xs text-amber-600 mt-1 ml-14">
-                  Requester has not consented to email communications
+                  Requester does not want to receive email updates
                 </p>
               )}
             </div>
