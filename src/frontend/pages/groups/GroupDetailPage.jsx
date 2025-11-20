@@ -260,6 +260,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   // Image highlight hook for navigation
   const { isHighlighted, registerImageRef } = useImageHighlight();
   const skipNextAnimation = useRef(false);
+  
+  // Refs for arrow key navigation
+  const imageTileRefs = useRef([]);
 
   // Subscribe to normalized groups list
   const currentGroups = useGroupsList(eventId);
@@ -658,6 +661,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     return out;
   }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected, includeArchived]);
+
+  // Update refs array when sortedImages changes
+  useEffect(() => {
+    imageTileRefs.current = imageTileRefs.current.slice(0, sortedImages.length);
+  }, [sortedImages.length]);
 
   // Memoize filtered imageIds to prevent infinite re-renders in GroupsFilter
   // Use the already filtered images from sortedImages instead of all images from main group
@@ -1213,11 +1221,54 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   // selectAllImages and clearSelection provided by useImageSelection
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and arrow key navigation
   useEffect(() => {
     const handleKeyDown = (event) => {
       // Don't handle shortcuts if user is typing in an input field
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Arrow key navigation for images
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        const currentElement = document.activeElement;
+        const currentIndex = imageTileRefs.current.findIndex(ref => ref === currentElement);
+        
+        if (currentIndex === -1) return;
+        
+        // Calculate grid dimensions (approximate based on viewport)
+        const gridContainer = currentElement.closest('.photo-gallery-grid');
+        if (!gridContainer) return;
+        
+        const containerRect = gridContainer.getBoundingClientRect();
+        const itemRect = currentElement.getBoundingClientRect();
+        
+        // Estimate columns based on container width and item width
+        const itemWidth = itemRect.width;
+        const containerWidth = containerRect.width;
+        const estimatedCols = Math.floor(containerWidth / itemWidth) || 1;
+        
+        let nextIndex = currentIndex;
+        
+        switch (event.key) {
+          case 'ArrowRight':
+            nextIndex = Math.min(currentIndex + 1, sortedImages.length - 1);
+            break;
+          case 'ArrowLeft':
+            nextIndex = Math.max(currentIndex - 1, 0);
+            break;
+          case 'ArrowDown':
+            nextIndex = Math.min(currentIndex + estimatedCols, sortedImages.length - 1);
+            break;
+          case 'ArrowUp':
+            nextIndex = Math.max(currentIndex - estimatedCols, 0);
+            break;
+        }
+        
+        if (nextIndex !== currentIndex && imageTileRefs.current[nextIndex]) {
+          event.preventDefault();
+          imageTileRefs.current[nextIndex].focus();
+        }
         return;
       }
       
@@ -1236,7 +1287,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedImages]);
+  }, [sortedImages, selectAllImages, clearSelection]);
 
   const openImageViewer = (itemId, index) => {
     let imageIndex = index;
@@ -1756,7 +1807,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     className={`photo-card ${(showCrops ? 'square' : (imageClasses[imageId] || 'square'))} relative`}
                   >
                     <SingleImageTile
-                      ref={(el) => registerImageRef(itemId, el)}
+                      ref={(el) => {
+                        registerImageRef(itemId, el);
+                        // Store ref for arrow key navigation
+                        if (el && imageTileRefs.current[index] !== el) {
+                          imageTileRefs.current[index] = el;
+                        }
+                      }}
                       image={image || item}
                       aspectClass={showCrops ? 'square' : (imageClasses[imageId] || 'square')}
                       imageFit={'cover'}
@@ -1774,6 +1831,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       showArchiveButton={!isFacesMode}
                       showRepresentativeButton={isFacesMode}
                       isRepresentative={isRep}
+                      photoIndex={index}
+                      contextType="Person"
+                      contextLabel={group?.label}
                       onSetRepresentative={isFacesMode ? (async () => {
                         try {
                           await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);

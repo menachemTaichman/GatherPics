@@ -140,6 +140,11 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     return sortImages(relatedImages, 'date', sortOrder);
   }, [album?.id, album?.isPlaceholder, relatedImages, sortOrder, placeholderImages]);
 
+  // Update refs array when sortedImages changes
+  useEffect(() => {
+    imageTileRefs.current = imageTileRefs.current.slice(0, sortedImages.length);
+  }, [sortedImages.length]);
+
   const {
     selectedKeys: selectedImages,
     toggleKey: toggleSelectedImageKey,
@@ -164,6 +169,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   
   // Image highlight hook for navigation
   const { isHighlighted, registerImageRef } = useImageHighlight();
+  
+  // Refs for arrow key navigation
+  const imageTileRefs = useRef([]);
 
   // Find album by label
   useEffect(() => {
@@ -349,10 +357,53 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     toggleSelectedImageKey(imageId, event);
   };
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and arrow key navigation
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Arrow key navigation for images
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        const currentElement = document.activeElement;
+        const currentIndex = imageTileRefs.current.findIndex(ref => ref === currentElement);
+        
+        if (currentIndex === -1) return;
+        
+        // Calculate grid dimensions (approximate based on viewport)
+        const gridContainer = currentElement.closest('.photo-gallery-grid');
+        if (!gridContainer) return;
+        
+        const containerRect = gridContainer.getBoundingClientRect();
+        const itemRect = currentElement.getBoundingClientRect();
+        
+        // Estimate columns based on container width and item width
+        const itemWidth = itemRect.width;
+        const containerWidth = containerRect.width;
+        const estimatedCols = Math.floor(containerWidth / itemWidth) || 1;
+        
+        let nextIndex = currentIndex;
+        
+        switch (event.key) {
+          case 'ArrowRight':
+            nextIndex = Math.min(currentIndex + 1, sortedImages.length - 1);
+            break;
+          case 'ArrowLeft':
+            nextIndex = Math.max(currentIndex - 1, 0);
+            break;
+          case 'ArrowDown':
+            nextIndex = Math.min(currentIndex + estimatedCols, sortedImages.length - 1);
+            break;
+          case 'ArrowUp':
+            nextIndex = Math.max(currentIndex - estimatedCols, 0);
+            break;
+        }
+        
+        if (nextIndex !== currentIndex && imageTileRefs.current[nextIndex]) {
+          event.preventDefault();
+          imageTileRefs.current[nextIndex].focus();
+        }
         return;
       }
       
@@ -369,7 +420,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedImages]);
+  }, [sortedImages, selectAllImages, clearSelection]);
 
   const openImageViewer = (imageId, index) => {
     openViewer({ index, parent: album.id, entity: 'album', sortBy: 'date', sortOrder, filteredIds: null });
@@ -763,7 +814,13 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 className={`photo-card ${imageClasses[image.id] || 'square'}`}
               >
                 <SingleImageTile
-                  ref={(el) => registerImageRef(image.id, el)}
+                  ref={(el) => {
+                    registerImageRef(image.id, el);
+                    // Store ref for arrow key navigation
+                    if (el && imageTileRefs.current[index] !== el) {
+                      imageTileRefs.current[index] = el;
+                    }
+                  }}
                   image={image}
                   aspectClass={imageClasses[image.id] || 'square'}
                   imageFit={'cover'}
@@ -777,6 +834,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   eventUrl={eventUrl}
                   urlHelpers={urlHelpers}
                   isHighlighted={isHighlighted(image.id)}
+                  photoIndex={index}
+                  contextType="Album"
+                  contextLabel={album?.label}
                 />
               </motion.div>
             ))}

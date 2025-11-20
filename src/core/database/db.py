@@ -315,6 +315,7 @@ class DB:
                     'is_archived',
                     'is_favorite',
                     'label',
+                    'description',
                     'moment_id',
                 ],
                 'details_fields': [
@@ -322,7 +323,6 @@ class DB:
                     'file_size',
                     'width',
                     'height',
-                    'description',
                 ],
                 'relations': {
                     'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},

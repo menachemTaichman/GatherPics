@@ -703,6 +703,41 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
 
+  // Generate alt text for the main image
+  const imageAltText = useMemo(() => {
+    if (!entity || !parent) {
+      return storeImageInfo?.label || imageId || 'Photo';
+    }
+    
+    // Get context type and label
+    let contextType = '';
+    let contextLabel = '';
+    
+    const store = useDataStore.getState();
+    const entities = store.entities?.[eventId] || {};
+    
+    if (entity === 'group') {
+      contextType = 'Person';
+      contextLabel = entities.groups?.[parent]?.label || '';
+    } else if (entity === 'moment') {
+      contextType = 'Moment';
+      contextLabel = entities.moments?.[parent]?.label || '';
+    } else if (entity === 'album') {
+      contextType = 'Album';
+      contextLabel = entities.albums?.[parent]?.label || '';
+    } else if (entity === 'upload') {
+      contextType = 'Upload';
+      contextLabel = entities.uploads?.[parent]?.profile_label || parent;
+    }
+    
+    const photoNumber = effectiveIndex + 1;
+    const contextPart = contextLabel ? `${contextType} ${contextLabel}` : contextType;
+    const baseText = `Display size of Photo #${photoNumber} in ${contextPart}`;
+    const description = storeImageInfo?.description?.trim();
+    
+    return description ? `${baseText}: ${description}` : baseText;
+  }, [entity, parent, effectiveIndex, storeImageInfo?.description, eventId, imageId]);
+
   // Update description value when image changes
   useEffect(() => {
     if (storeImageInfo) {
@@ -1212,7 +1247,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       <img
                         ref={imageRef}
                         src={mainImageSrc}
-                        alt={imageId}
+                        alt={imageAltText}
                         className="max-w-full max-h-full object-contain select-none"
                         width={1050}
                         height={700}
@@ -1238,7 +1273,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         width: 200,
                         height: 200,
                         className: 'w-full h-full object-contain select-none',
-                        alt: imageId
+                        alt: imageAltText
                       })
                     )}
                     {/* Overlays: show unarchive when archived */}

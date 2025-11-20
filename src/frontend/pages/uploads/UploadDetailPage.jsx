@@ -75,6 +75,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   
   useEffect(() => { imageClassesRef.current = imageClasses; }, [imageClasses]);
 
+  // Refs for arrow key navigation (separate for each mode)
+  const imageTileRefs = useRef([]);
+  const groupFaceTileRefs = useRef({}); // Map of groupId -> ref array
+  const momentImageTileRefs = useRef({}); // Map of momentId -> ref array
+
   // Base scopes: upload and its related entities
   const baseScopes = useMemo(() => [
     { entity: 'upload', id: String(uploadId), eventId },
@@ -488,30 +493,12 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     return selectedFaces;
   };
   
-  // Handle keyboard shortcuts
+  // Update refs array when uploadImages changes (for images mode)
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      // Don't handle shortcuts if user is typing in an input field
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-        return;
-      }
-      
-      // Ctrl+A or Cmd+A for select all
-      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
-        event.preventDefault();
-        if (uploadImages.length > 0) {
-          selectAllCurrent();
-        }
-      }
-      // Escape to clear selection
-      if (event.key === 'Escape') {
-        clearCurrentSelection();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [uploadImages, selectAllCurrent, clearCurrentSelection]);
+    if (mode === 'images') {
+      imageTileRefs.current = imageTileRefs.current.slice(0, uploadImages.length);
+    }
+  }, [uploadImages.length, mode]);
 
   // Subscribe to entities to make component reactive
   const entities = useDataStore((state) => state.entities, shallow);
@@ -534,7 +521,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         const image = imagesMap[face.image_id];
         return image && String(image.upload_id) === String(uploadId);
       });
-  }, [entities, uploadId]);
+  }, [entities, uploadId, eventId]);
 
   // Helper to get images of a moment filtered by this upload
   const getMomentImagesInUpload = useCallback((momentId) => {
@@ -550,7 +537,106 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       .map(imageId => imagesMap[imageId])
       .filter(image => image && String(image.upload_id) === String(uploadId))
       .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
-  }, [entities, uploadId]);
+  }, [entities, uploadId, eventId]);
+
+  // Handle keyboard shortcuts and arrow key navigation
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Don't handle shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Arrow key navigation for images
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        const currentElement = document.activeElement;
+        let currentIndex = -1;
+        let refsArray = [];
+        let itemsArray = [];
+        
+        // Determine which refs array to use based on mode
+        if (mode === 'images') {
+          currentIndex = imageTileRefs.current.findIndex(ref => ref === currentElement);
+          refsArray = imageTileRefs.current;
+          itemsArray = uploadImages;
+        } else if (mode === 'groups') {
+          // Find which group the current element belongs to
+          const groupContainer = currentElement.closest('[data-group-id]');
+          if (groupContainer) {
+            const groupId = groupContainer.getAttribute('data-group-id');
+            const groupFaces = getGroupFacesInUpload(groupId);
+            const groupRefs = groupFaceTileRefs.current[groupId] || [];
+            currentIndex = groupRefs.findIndex(ref => ref === currentElement);
+            refsArray = groupRefs;
+            itemsArray = groupFaces;
+          }
+        } else if (mode === 'moments') {
+          // Find which moment the current element belongs to
+          const momentContainer = currentElement.closest('[data-moment-id]');
+          if (momentContainer) {
+            const momentId = momentContainer.getAttribute('data-moment-id');
+            const momentImages = getMomentImagesInUpload(momentId);
+            const momentRefs = momentImageTileRefs.current[momentId] || [];
+            currentIndex = momentRefs.findIndex(ref => ref === currentElement);
+            refsArray = momentRefs;
+            itemsArray = momentImages;
+          }
+        }
+        
+        if (currentIndex === -1 || refsArray.length === 0) return;
+        
+        // Calculate grid dimensions (approximate based on viewport)
+        const gridContainer = currentElement.closest('.photo-gallery-grid');
+        if (!gridContainer) return;
+        
+        const containerRect = gridContainer.getBoundingClientRect();
+        const itemRect = currentElement.getBoundingClientRect();
+        
+        // Estimate columns based on container width and item width
+        const itemWidth = itemRect.width;
+        const containerWidth = containerRect.width;
+        const estimatedCols = Math.floor(containerWidth / itemWidth) || 1;
+        
+        let nextIndex = currentIndex;
+        
+        switch (event.key) {
+          case 'ArrowRight':
+            nextIndex = Math.min(currentIndex + 1, itemsArray.length - 1);
+            break;
+          case 'ArrowLeft':
+            nextIndex = Math.max(currentIndex - 1, 0);
+            break;
+          case 'ArrowDown':
+            nextIndex = Math.min(currentIndex + estimatedCols, itemsArray.length - 1);
+            break;
+          case 'ArrowUp':
+            nextIndex = Math.max(currentIndex - estimatedCols, 0);
+            break;
+        }
+        
+        if (nextIndex !== currentIndex && refsArray[nextIndex]) {
+          event.preventDefault();
+          refsArray[nextIndex].focus();
+        }
+        return;
+      }
+      
+      // Ctrl+A or Cmd+A for select all
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        if (uploadImages.length > 0) {
+          selectAllCurrent();
+        }
+      }
+      // Escape to clear selection
+      if (event.key === 'Escape') {
+        clearCurrentSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [uploadImages, mode, selectAllCurrent, clearCurrentSelection, getGroupFacesInUpload, getMomentImagesInUpload]);
 
   const getGroupRepUrl = (groupId) => {
     const group = useDataStore.getState().entities?.[eventId]?.groups?.[groupId];
@@ -849,6 +935,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       className={`photo-card ${imageClasses[img.id] || 'square'}`}
                     >
                                       <SingleImageTile
+                                        ref={(el) => {
+                                          if (el && imageTileRefs.current[index] !== el) {
+                                            imageTileRefs.current[index] = el;
+                                          }
+                                        }}
                                         image={img}
                                         aspectClass={imageClasses[img.id] || 'square'}
                                         imageFit="cover"
@@ -862,6 +953,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         urlHelpers={urlHelpers}
                                         showFavoriteButton={false}
                                         showArchiveButton={false}
+                                        photoIndex={index}
+                                        contextType="Upload"
+                                        contextLabel={upload?.profile_label || uploadId}
                                       />
                     </motion.div>
                   ))}
@@ -896,7 +990,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const uploadFacesCount = uploadGroupRelation?.group_upload_faces_count || 0;
 
                     return (
-                      <div key={group.id} className="border rounded-lg overflow-hidden">
+                      <div key={group.id} className="border rounded-lg overflow-hidden" data-group-id={group.id}>
                         <div
                           className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
                           onClick={() => {
@@ -1011,7 +1105,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                     gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
                                   }}
                                 >
-                                  {groupFaces.map((face) => {
+                                  {groupFaces.map((face, faceIndex) => {
                                     const img = entities?.[eventId]?.images?.[face.image_id];
                                     if (!img) return null;
                                     const isRep = isRepresentative(face.id);
@@ -1021,6 +1115,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
                                       >
                                         <SingleImageTile
+                                          ref={(el) => {
+                                            if (!groupFaceTileRefs.current[group.id]) {
+                                              groupFaceTileRefs.current[group.id] = [];
+                                            }
+                                            if (el && groupFaceTileRefs.current[group.id][faceIndex] !== el) {
+                                              groupFaceTileRefs.current[group.id][faceIndex] = el;
+                                            }
+                                          }}
                                           image={img}
                                           aspectClass={imageClasses[img.id] || 'square'}
                                           imageFit="cover"
@@ -1037,6 +1139,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                           showCropBadge={false}
                                           showRepresentativeButton={true}
                                           isRepresentative={isRep}
+                                          photoIndex={faceIndex}
+                                          contextType="Person"
+                                          contextLabel={groupEntity?.label || group.label}
                                           onSetRepresentative={() => handleSetFaceAsRep(group.id, face.id)}
                                         />
                                       </div>
@@ -1081,7 +1186,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const uploadImagesCount = uploadMomentRelation?.moment_upload_images_count || 0;
 
                     return (
-                      <div key={moment.id} className="border rounded-lg overflow-hidden">
+                      <div key={moment.id} className="border rounded-lg overflow-hidden" data-moment-id={moment.id}>
                         <div
                           onClick={() => {
                             toggleMoment(moment.id);
@@ -1143,7 +1248,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                     gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
                                   }}
                                 >
-                                  {momentImages.map((img) => {
+                                  {momentImages.map((img, imgIndex) => {
                                     const isRep = isRepresentative(img.id);
                                     return (
                                       <div
@@ -1151,6 +1256,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         className={`photo-card ${imageClasses[img.id] || 'square'}`}
                                       >
                                         <SingleImageTile
+                                          ref={(el) => {
+                                            if (!momentImageTileRefs.current[moment.id]) {
+                                              momentImageTileRefs.current[moment.id] = [];
+                                            }
+                                            if (el && momentImageTileRefs.current[moment.id][imgIndex] !== el) {
+                                              momentImageTileRefs.current[moment.id][imgIndex] = el;
+                                            }
+                                          }}
                                           image={img}
                                           aspectClass={imageClasses[img.id] || 'square'}
                                           imageFit="cover"
@@ -1164,6 +1277,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                           urlHelpers={urlHelpers}
                                           showFavoriteButton={false}
                                           showArchiveButton={false}
+                                          photoIndex={imgIndex}
+                                          contextType="Moment"
+                                          contextLabel={moment?.label || moment?.name}
                                           showRepresentativeButton={true}
                                           isRepresentative={isRep}
                                           onSetRepresentative={() => handleSetMomentImageAsRep(moment.id, img.id)}

@@ -3,6 +3,7 @@ import useImageActions from './ImageActions';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
+import { generateImageAltText } from '../../utils/accessibility';
 
 function formatTime(dateString) {
   if (!dateString) return '';
@@ -41,7 +42,11 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   showCheckbox = true, // Control checkbox visibility
   showRepresentativeButton = false, // Control representative star button visibility
   isRepresentative = false, // Whether this is the current representative
-  onSetRepresentative = null // Callback to set as representative
+  onSetRepresentative = null, // Callback to set as representative
+  altText = null, // Optional alt text override (format: "Photo #{idx} in {context}{: description}")
+  photoIndex = null, // Photo index for alt text generation
+  contextType = null, // Context type for alt text (Person, Moment, Album, Upload, etc.)
+  contextLabel = null // Label for the context (e.g., group name, album name, etc.)
 }, ref) {
   // Use the centralized ImageActions hook
   const imageActions = useImageActions({
@@ -66,16 +71,48 @@ const SingleImageTile = forwardRef(function SingleImageTile({
     borderRadius: '0.5rem'
   } : {};
   
+  // Generate alt text if not provided
+  const generatedAltText = altText || (() => {
+    if (photoIndex !== null && contextType) {
+      const generated = generateImageAltText({
+        photoIndex,
+        contextType,
+        contextLabel,
+        description: image?.description
+      });
+      if (generated) return generated;
+    }
+    return image?.label || image?.id || 'Photo';
+  })();
+  
+  // Handle keyboard events for accessibility
+  const handleKeyDown = (e) => {
+    // Allow checkbox to handle its own keyboard events
+    if (e.target.closest('input[type="checkbox"]')) {
+      return;
+    }
+    
+    // Enter or Space to open image viewer
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onOpen && onOpen();
+    }
+  };
+  
   return (
     <div 
       ref={ref}
-      className={`relative group cursor-pointer h-full photo-card ${aspectClass}`} 
+      className={`relative group cursor-pointer h-full photo-card ${aspectClass} focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:border-2 focus-visible:border-primary-500 focus-visible:z-20`} 
       style={highlightStyle}
       onClick={(e) => {
         if (!e.target.closest('input[type="checkbox"]')) {
           onOpen && onOpen();
         }
       }}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`View ${generatedAltText}`}
     >
       {showCheckbox && (
         <input
@@ -98,7 +135,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           width: 200,
           height: 200,
           className: `w-full h-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`,
-          alt: image.label || image.id,
+          alt: generatedAltText,
           onLoad: onImageLoad,
           onError: onImageError
         })}

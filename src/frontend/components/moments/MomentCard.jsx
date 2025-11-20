@@ -65,6 +65,70 @@ const MomentCard = forwardRef(({
   const pendingClassUpdatesRef = useRef({});
   const flushClassesRafRef = useRef(null);
   
+  // Refs for arrow key navigation
+  const imageTileRefs = useRef([]);
+  
+  // Update refs array when images change
+  useEffect(() => {
+    imageTileRefs.current = imageTileRefs.current.slice(0, images.length);
+  }, [images.length]);
+
+  // Handle arrow key navigation
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Don't handle shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Arrow key navigation for images
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        const currentElement = document.activeElement;
+        const currentIndex = imageTileRefs.current.findIndex(ref => ref === currentElement);
+        
+        if (currentIndex === -1) return;
+        
+        // Calculate grid dimensions (approximate based on viewport)
+        const gridContainer = currentElement.closest('.photo-gallery-grid');
+        if (!gridContainer) return;
+        
+        const containerRect = gridContainer.getBoundingClientRect();
+        const itemRect = currentElement.getBoundingClientRect();
+        
+        // Estimate columns based on container width and item width
+        const itemWidth = itemRect.width;
+        const containerWidth = containerRect.width;
+        const estimatedCols = Math.floor(containerWidth / itemWidth) || 1;
+        
+        let nextIndex = currentIndex;
+        
+        switch (event.key) {
+          case 'ArrowRight':
+            nextIndex = Math.min(currentIndex + 1, images.length - 1);
+            break;
+          case 'ArrowLeft':
+            nextIndex = Math.max(currentIndex - 1, 0);
+            break;
+          case 'ArrowDown':
+            nextIndex = Math.min(currentIndex + estimatedCols, images.length - 1);
+            break;
+          case 'ArrowUp':
+            nextIndex = Math.max(currentIndex - estimatedCols, 0);
+            break;
+        }
+        
+        if (nextIndex !== currentIndex && imageTileRefs.current[nextIndex]) {
+          event.preventDefault();
+          imageTileRefs.current[nextIndex].focus();
+        }
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [images.length]);
+  
   // Note: Individual moment data (including images) is loaded on-demand by TimelineManager
   // when moments become visible. The 'all:moments' scope only loads moment summaries.
   // Calculate selection stats for this moment
@@ -239,7 +303,13 @@ const MomentCard = forwardRef(({
                     className={`photo-card ${imageClasses[image.id] || 'square'}`}
                   >
                     <SingleImageTile
-                      ref={(el) => registerImageRef?.(image.id, el)}
+                      ref={(el) => {
+                        registerImageRef?.(image.id, el);
+                        // Store ref for arrow key navigation
+                        if (el && imageTileRefs.current[index] !== el) {
+                          imageTileRefs.current[index] = el;
+                        }
+                      }}
                       image={image}
                       aspectClass={imageClasses[image.id] || 'square'}
                       thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
@@ -251,6 +321,9 @@ const MomentCard = forwardRef(({
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
                       isHighlighted={highlightedIds?.has(image.id)}
+                      photoIndex={index}
+                      contextType="Moment"
+                      contextLabel={moment?.label || moment?.name}
                     />
                   </motion.div>
                 );
