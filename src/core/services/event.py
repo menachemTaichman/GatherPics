@@ -1,6 +1,7 @@
 import os
 import shutil
 from datetime import datetime
+
 from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
@@ -132,6 +133,10 @@ class Event():
         import os
         import shutil
         from PIL import Image as PILImage
+
+        def _log(message: str):
+            if verbose:
+                print(f"{datetime.now().isoformat()}: {message}")
 
         def _send_progress(step: str, current: int = 0, total: int = 0, message: str = ''):
             """Send progress update to callback if provided."""
@@ -266,8 +271,7 @@ class Event():
         # Check limitations before starting
         _send_progress('validation', 0, 1, 'Checking upload limits...')
         
-        if verbose:
-            print(f"Starting image processing")
+        _log("Starting image processing")
         
         # Get current image count
         current_count = self.models.get_images_count()
@@ -279,8 +283,7 @@ class Event():
         
         image_files = _get_images_to_process()
         if not image_files:
-            if verbose:
-                print("No images found in to_process folder")
+            _log("No images found in to_process folder")
             _send_progress('complete', 0, 0, 'No images to process')
             return {
                 'images_processed': 0,
@@ -293,8 +296,7 @@ class Event():
         print(int(current_count) + len(image_files) > int(images_count_limit))
         if int(current_count) + len(image_files) > int(images_count_limit):
             error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {images_count_limit}, Attempting to add: {len(image_files)}"
-            if verbose:
-                print(error_msg)
+            _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
             raise DBPolicyError(error_msg)
 
@@ -310,20 +312,17 @@ class Event():
         
         if files_exceeding_limit:
             error_msg = f"{len(files_exceeding_limit)} file(s) exceed size limit of {image_size_limit_bytes} bytes: " + ", ".join([f"{name} ({size} bytes)" for name, size in files_exceeding_limit[:3]])
-            if verbose:
-                print(error_msg)
+            _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
             raise DBPolicyError(error_msg)
         
         if int(calls_used) + len(image_files) > int(calls_limit):
             error_msg = f"Upload would exceed rekognition calls limit. Current: {calls_used}, Limit: {calls_limit}, Attempting to add: {len(image_files)}"
-            if verbose:
-                print(error_msg)
+            _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
             raise DBPolicyError(error_msg)
         
-        if verbose:
-            print(f"Found {len(image_files)} images to process")
+        _log(f"Found {len(image_files)} images to process")
         
         _send_progress('validation', 1, 1, f'Validation complete. Processing {len(image_files)} images...')
 
@@ -345,34 +344,28 @@ class Event():
             unassociated_group_id = self.models.get_entities('events', self.event_id, include_details=True)['unassociated_group_id']
             for i, image_file in enumerate(image_files, 1):
                 _send_progress('processing', i, len(image_files), f'Processing image {i}/{len(image_files)}: {image_file}')
-                if verbose:
-                    print(f"Processing image {i}/{len(image_files)}: {image_file}")
+                _log(f"Processing image {i}/{len(image_files)}: {image_file}")
                 
                 self.models.add_rekognition_calls(1)
                 display_img, image_id, image_faces, error = _process_image(image_file, unassociated_group_id, upload_id)
                 if error is not None or display_img is None or image_id is None:
                     error_msg = f"Error processing {image_file}: {str(error) if error else 'Invalid image or id'}"
-                    if verbose:
-                        print(f"  {error_msg}")
+                    _log(f"  {error_msg}")
                     errors.append(error_msg)
                     continue
-                if verbose:
-                    print(f"  Detected {len(image_faces)} faces")
+                _log(f"  Detected {len(image_faces)} faces")
                 all_faces.extend(image_faces)
                 processed_images.append(image_id)
 
-            if verbose:
-                print(f"Completed image processing. Detected {len(all_faces)} total faces")
+            _log(f"Completed image processing. Detected {len(all_faces)} total faces")
             
             _send_progress('faces', 0, 1, 'Adding faces to database...')
             if all_faces:
-                if verbose:
-                    print("Adding faces to database...")
+                _log("Adding faces to database...")
                 all_faces_values = [[face['face_id'], face['image_id'], face['width'], face['height'], face['left'], face['top'], face['group_id']] for face in all_faces]
                 self.models.add_many('faces', ['face_id', 'image_id', 'width', 'height', 'left', 'top', 'group_id'], all_faces_values)
                 _send_progress('clustering', 0, 1, 'Clustering faces...')
-                if verbose:
-                    print("Clustering faces...")
+                _log("Clustering faces...")
 
                 self.models.add_rekognition_calls(len(all_faces_values))
                 groups_created = _cluster_and_group_faces([face[0] for face in all_faces_values], minimal_group_size, unassociated_group_id)
@@ -383,11 +376,9 @@ class Event():
             assigned_moments = {}
             if assign_moments and processed_images:
                 _send_progress('moments', 0, 1, 'Assigning images to moments by time...')
-                if verbose:
-                    print("Assigning images to moments by time...")
+                _log("Assigning images to moments by time...")
                 assigned_moments = self.models.assign_moments_by_time(processed_images)
-                if verbose:
-                    print(f"  Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments")
+                _log(f"  Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments")
             
             self.models.edit('uploads', upload_id, {
                 'completed_at': datetime.now().isoformat(),
@@ -410,13 +401,12 @@ class Event():
             
             _send_progress('finalizing', 1, 1, f'Processing complete! Processed {len(processed_images)} images.')
             
-            if verbose:
-                print(f"Processing complete!")
-                print(f"  - Images processed: {summary['images_processed']}")
-                print(f"  - Faces detected: {summary['faces_detected']}")
-                print(f"  - Groups created: {summary['groups_created']}")
-                if assign_moments:
-                    print(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
+            _log("Processing complete!")
+            _log(f"  - Images processed: {summary['images_processed']}")
+            _log(f"  - Faces detected: {summary['faces_detected']}")
+            _log(f"  - Groups created: {summary['groups_created']}")
+            if assign_moments:
+                _log(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
             return summary
         
         except Exception as e:
@@ -428,7 +418,6 @@ class Event():
                 'status': 'failed',
                 'errors': errors,
             })
-            if verbose:
-                print(f"Processing failed: {error_msg}")
+            _log(f"Processing failed: {error_msg}")
             _send_progress('error', 0, 0, error_msg)
             raise

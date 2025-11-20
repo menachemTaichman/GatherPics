@@ -3605,7 +3605,11 @@ class DB:
                     SELECT CASE
                         WHEN
                             OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
-                            AND (OLD.group_id <> NEW.group_id OR OLD.label <> NEW.label OR OLD.representative_face <> NEW.representative_face)
+                            AND (
+                                OLD.group_id <> NEW.group_id
+                                OR OLD.label <> NEW.label
+                                OR COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '')
+                            )
                         THEN
                             RAISE(ABORT, 'Policy error: cannot update default group')
                     END;

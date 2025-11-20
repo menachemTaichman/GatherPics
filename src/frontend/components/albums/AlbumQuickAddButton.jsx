@@ -181,7 +181,7 @@ export default function AlbumQuickAddButton({
     setIsCreatingAlbum(true);
     try {
       // Check if album name already exists using API
-      const nameCheck = await albumsAPI.checkName(trimmedName, eventUrl);
+      const nameCheck = await albumsAPI.checkName(trimmedName, '', eventUrl);
       if (nameCheck.conflict) {
         showToast('Album with this name already exists', 'error');
         return;
@@ -274,31 +274,35 @@ export default function AlbumQuickAddButton({
     <div className="w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg">
       {loading || !defaultAlbumsReady ? (
         <div className="p-3 text-sm text-gray-500">Loading albums...</div>
-      ) : (albums.length === 0 ? (
-        <div className="p-3 text-sm text-gray-500">No albums</div>
       ) : (
         <ul className="divide-y divide-gray-100">
-          {albums.map((album, idx) => (
-            <li key={album.id || album.album_id || `${album.label || 'album'}-${idx}`}>
-              <button
-                className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
-                onClick={() => handleAddToAlbum(album)}
-              >
-                {ImageComponent(
-                  urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
-                  {
-                    width: 32,
-                    height: 32,
-                    className: 'w-8 h-8 rounded object-cover',
-                    alt: album.label
-                  }
-                )}
-                <span className="text-sm text-gray-700 truncate">{album.label}</span>
-              </button>
+          {albums.length === 0 ? (
+            <li>
+              <div className="p-3 text-sm text-gray-500">No albums</div>
             </li>
-          ))}
+          ) : (
+            albums.map((album, idx) => (
+              <li key={album.id || album.album_id || `${album.label || 'album'}-${idx}`}>
+                <button
+                  className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
+                  onClick={() => handleAddToAlbum(album)}
+                >
+                  {ImageComponent(
+                    urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
+                    {
+                      width: 32,
+                      height: 32,
+                      className: 'w-8 h-8 rounded object-cover',
+                      alt: album.label
+                    }
+                  )}
+                  <span className="text-sm text-gray-700 truncate">{album.label}</span>
+                </button>
+              </li>
+            ))
+          )}
           
-          {/* Create new album section */}
+          {/* Create new album section - always shown when not loading */}
           <li>
             <div className="p-2">
               {isEditingName ? (
@@ -347,7 +351,7 @@ export default function AlbumQuickAddButton({
             </div>
           </li>
         </ul>
-      ))}
+      )}
     </div>
   );
 
