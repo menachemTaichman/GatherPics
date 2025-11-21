@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText } from 'lucide-react';
+import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText, Bell, ShoppingBag } from 'lucide-react';
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
@@ -12,22 +12,31 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventGeneralById } from '../utils/dataManager';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../contexts/authContext';
+import HamburgerMenu from '../components/layout/HamburgerMenu.jsx';
+import NotificationsDropdown from '../components/notifications/NotificationsDropdown.jsx';
+import { BucketDrawer, AccountModal } from '../components/layout';
+import useBucketStore from '../utils/bucketStore';
+import { getCurrentProfile } from '../utils/profileService';
+import { profilesAPI } from '../utils/apiService';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const [showEventSettings, setShowEventSettings] = useState(false);
   const { showToast } = useToast();
   const { isAuthenticated } = useAuth();
-  const [headerVisible, setHeaderVisible] = useState(false);
-  const hideTimeoutRef = useRef(null);
-  const headerOriginalStylesRef = useRef(null);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const heroRef = useRef(null);
-  const heroHeightRef = useRef(null);
-  const heroInnerRef = useRef(null);
-  const [naturalHeight, setNaturalHeight] = useState(null);
+  const { toggle, lastPulseTs, queue, isOpen } = useBucketStore();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifButtonRef, setNotifButtonRef] = useState(null);
+  const [notifCounts, setNotifCounts] = useState({ unreadCount: 0, totalCount: 0 });
+  const heroContainerRef = useRef(null);
+  const textOverlayRef = useRef(null);
+  const imageSectionRef = useRef(null);
+  const [textOverlayHeight, setTextOverlayHeight] = useState(0);
+  const [imageSectionHeight, setImageSectionHeight] = useState(0);
+  const [stickyTop, setStickyTop] = useState(0);
 
   const eventId = eventData?.id || eventData?.event_id || null;
   useApplyScopes(eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
+
 
   const storeEvent = useEventGeneralById(eventId);
   const resolvedEvent = storeEvent || eventData || null;
@@ -47,6 +56,41 @@ export default function EventHomePage({ eventUrl, eventData }) {
   const eventName = resolvedEvent?.name || 'Event';
   const permissions = usePermissions();
   const canSeeAlbums = Boolean(eventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit);
+
+  // Notification counts
+  const cachedProfile = getCurrentProfile() || {};
+  const effectiveCounts = {
+    totalCount: Number(notifCounts?.totalCount || cachedProfile?.total_notifications || 0),
+    unreadCount: Number(notifCounts?.unreadCount || cachedProfile?.unread_notifications || 0),
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    (async () => {
+      try {
+        await profilesAPI.getCurrentProfile(eventUrl);
+        const p = getCurrentProfile() || {};
+        const totalNum = Number(p.total_notifications || 0);
+        const unreadNum = Number(p.unread_notifications || 0);
+        setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+      } catch (e) {
+        const p = getCurrentProfile() || {};
+        const totalNum = Number(p.total_notifications || 0);
+        const unreadNum = Number(p.unread_notifications || 0);
+        setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
+      }
+    })();
+  }, [eventUrl, isAuthenticated]);
+
+  useEffect(() => {
+    const closeOnOutside = (e) => {
+      if (notifOpen) setNotifOpen(false);
+    };
+    if (notifOpen) {
+      document.addEventListener('click', closeOnOutside);
+      return () => document.removeEventListener('click', closeOnOutside);
+    }
+  }, [notifOpen]);
 
   // Track previous representative_image value to detect actual changes
   const prevRepresentativeImageRef = useRef(undefined);
@@ -132,155 +176,38 @@ export default function EventHomePage({ eventUrl, eventData }) {
     }
   }, [primaryDate]);
 
-  const applyHeaderVisibility = useCallback((visible) => {
-    const headerEl = document.querySelector('[data-main-header]');
-    if (!headerEl) return;
-    if (!headerOriginalStylesRef.current) {
-      headerOriginalStylesRef.current = {
-        position: headerEl.style.position,
-        width: headerEl.style.width,
-        left: headerEl.style.left,
-        right: headerEl.style.right,
-        top: headerEl.style.top,
-        opacity: headerEl.style.opacity,
-        pointerEvents: headerEl.style.pointerEvents,
-        transform: headerEl.style.transform,
-        transition: headerEl.style.transition,
-      };
-    }
-    headerEl.style.position = 'fixed';
-    headerEl.style.left = '0';
-    headerEl.style.right = '0';
-    headerEl.style.top = '0';
-    headerEl.style.width = '100%';
-    headerEl.style.opacity = visible ? '1' : '0';
-    headerEl.style.pointerEvents = visible ? 'auto' : 'none';
-    headerEl.style.transform = visible ? 'translateY(0)' : 'translateY(-120%)';
-    headerEl.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-  }, []);
-
-  const clearHideTimeout = useCallback(() => {
-    if (hideTimeoutRef.current) {
-      window.clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-  }, []);
-
-  const AUTO_HIDE_DELAY_MS = 500;
-
-  const scheduleHide = useCallback(() => {
-    clearHideTimeout();
-    hideTimeoutRef.current = window.setTimeout(() => {
-      hideTimeoutRef.current = null;
-      setHeaderVisible(false);
-    }, AUTO_HIDE_DELAY_MS);
-  }, [AUTO_HIDE_DELAY_MS, clearHideTimeout]);
-
-  const handleInteraction = useCallback(() => {
-    setHeaderVisible(true);
-    scheduleHide();
-  }, [scheduleHide]);
-
-  const restoreHeaderStyles = useCallback(() => {
-    const headerEl = document.querySelector('[data-main-header]');
-    if (!headerEl || !headerOriginalStylesRef.current) return;
-    const original = headerOriginalStylesRef.current;
-    headerEl.style.position = original.position || '';
-    headerEl.style.width = original.width || '';
-    headerEl.style.left = original.left || '';
-    headerEl.style.right = original.right || '';
-    headerEl.style.top = original.top || '';
-    headerEl.style.opacity = original.opacity || '';
-    headerEl.style.pointerEvents = original.pointerEvents || '';
-    headerEl.style.transform = original.transform || '';
-    headerEl.style.transition = original.transition || '';
-  }, []);
-
+  // Measure text overlay and image section heights for sticky positioning
   useEffect(() => {
-    applyHeaderVisibility(headerVisible);
-  }, [applyHeaderVisibility, headerVisible]);
+    if (!textOverlayRef.current || !imageSectionRef.current) return;
 
-  useEffect(() => {
-    applyHeaderVisibility(false);
-    const events = ['pointermove', 'wheel', 'keydown', 'touchstart', 'scroll'];
-    events.forEach((event) => window.addEventListener(event, handleInteraction, { passive: true }));
-    return () => {
-      events.forEach((event) => window.removeEventListener(event, handleInteraction));
-      clearHideTimeout();
-      applyHeaderVisibility(true);
-      restoreHeaderStyles();
+    const measureHeights = () => {
+      if (!textOverlayRef.current || !imageSectionRef.current) return;
+
+      const textHeight = textOverlayRef.current.offsetHeight;
+      const imageHeight = imageSectionRef.current.offsetHeight;
+      
+      setTextOverlayHeight(textHeight);
+      setImageSectionHeight(imageHeight);
+      
+      // Calculate sticky top so image bottom roughly aligns with text overlay bottom
+      // Using a smaller offset (5%) to freeze later than 15% but still keep some center bias
+      setStickyTop((textHeight - imageHeight) + (imageHeight * 0.05));
     };
-  }, [applyHeaderVisibility, clearHideTimeout, handleInteraction, restoreHeaderStyles]);
 
-  useEffect(() => {
-    let ticking = false;
-    let scrollTimeout = null;
+    measureHeights();
+
+    const resizeObserver = new ResizeObserver(() => {
+      measureHeights();
+    });
     
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const scrollY = window.scrollY;
-          // Use a lower threshold (50px) so it triggers even with minimal content
-          // This ensures the animation works even when there's only one row of buttons
-          const scrollDownThreshold = 50;
-          const newIsScrolled = scrollY > scrollDownThreshold;
-          
-          // Clear any pending scroll timeout
-          if (scrollTimeout) {
-            clearTimeout(scrollTimeout);
-          }
-          
-          // Small debounce to reduce rapid toggling during fast scrolling
-          scrollTimeout = setTimeout(() => {
-            if (newIsScrolled !== isScrolled) {
-              setIsScrolled(newIsScrolled);
-            }
-          }, 10); // 10ms debounce for smoother feel
-          
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    if (textOverlayRef.current) resizeObserver.observe(textOverlayRef.current);
+    if (imageSectionRef.current) resizeObserver.observe(imageSectionRef.current);
+    
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      resizeObserver.disconnect();
     };
-  }, [isScrolled]);
+  }, [eventName, formattedDate, resolvedEvent, heroImageUrl]);
 
-  useEffect(() => {
-    // Measure natural height on mount
-    if (heroInnerRef.current && !naturalHeight) {
-      const height = heroInnerRef.current.offsetHeight;
-      setNaturalHeight(height);
-    }
-  }, [naturalHeight]);
-
-  useEffect(() => {
-    if (heroInnerRef.current && naturalHeight) {
-      const innerEl = heroInnerRef.current;
-      const targetHeight = isScrolled ? 150 : naturalHeight;
-      
-      // Ensure transition is set first - longer duration and smoother easing for less bounce
-      const transitionValue = 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), min-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), max-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-      innerEl.style.transition = transitionValue;
-      
-      // Use double requestAnimationFrame to ensure browser has applied transition before changing height
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          innerEl.style.height = `${targetHeight}px`;
-          innerEl.style.minHeight = `${targetHeight}px`;
-          if (isScrolled) {
-            innerEl.style.maxHeight = '150px';
-          } else {
-            innerEl.style.removeProperty('max-height');
-          }
-        });
-      });
-    }
-  }, [isScrolled, naturalHeight]);
 
   // Define navigation cards
   const navCards = [
@@ -453,7 +380,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden"
+      className="bg-gradient-to-b from-gray-50 to-white relative"
       style={{ minHeight: 'calc(100vh - 4rem)' }}
     >
       {/* Subtle animated background accent */}
@@ -484,136 +411,134 @@ export default function EventHomePage({ eventUrl, eventData }) {
         />
       </div>
 
-      <div
-        className="container mx-auto px-4 pt-0 pb-20 relative z-10 mt-[-4.5rem]"
-        style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
+      {/* Top Navigation Bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 px-8 sm:px-10 md:px-12 py-3 flex items-center justify-start pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Hamburger Menu */}
+          <HamburgerMenu eventName={eventName} eventUrl={eventUrl} />
+          {/* Bucket */}
+          {eventUrl && (
+            <motion.button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
+              className="w-12 h-12 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0"
+              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}
+              title="Bucket"
+              animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
+              transition={{ duration: 0.4 }}
+              key={lastPulseTs}
+              data-bucket-toggle="true"
+            >
+              <div className="relative">
+                <ShoppingBag className="w-6 h-6" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
+                {queue.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                    {queue.length}
+                  </span>
+                )}
+              </div>
+            </motion.button>
+          )}
+          {/* Notifications */}
+          {(effectiveCounts?.totalCount || 0) > 0 && (
+            <button
+              ref={setNotifButtonRef}
+              onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
+              className="w-12 h-12 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0"
+              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}
+              title="Notifications"
+            >
+              <div className="relative">
+                <Bell className="w-6 h-6" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
+                {(effectiveCounts?.unreadCount || 0) > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                    {effectiveCounts.unreadCount}
+                  </span>
+                )}
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Sticky Text Overlay */}
+      <div 
+        ref={textOverlayRef}
+        className="fixed top-0 left-0 right-0 z-50 px-8 sm:px-10 md:px-12 pt-10 sm:pt-14 md:pt-20 pb-4 pointer-events-none"
       >
-        {/* Header */}
+        <div className="relative z-10 pointer-events-auto">
+          <Link to="/" className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur hover:bg-white/25 transition-colors w-fit">
+            {APP_CONFIG.name}
+          </Link>
+          <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+            {eventName}
+          </h1>
+          <div className="mt-6 flex flex-wrap gap-3 text-xs font-medium text-white/80 sm:text-sm">
+            {formattedDate && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                <Calendar className="h-4 w-4" />
+                {formattedDate}
+              </span>
+            )}
+            {resolvedEvent?.location && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                {resolvedEvent.location}
+              </span>
+            )}
+            {resolvedEvent?.images_count ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
+                {resolvedEvent.images_count} photos
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div
+        ref={heroContainerRef}
+        className="container mx-auto px-4 pt-0 pb-4 relative z-10"
+        style={{ minHeight: 'max(calc(100vh - 10rem), 0px)' }}
+      >
+        {/* Hero Section */}
         <div 
-          ref={heroHeightRef}
-          className="mb-16 relative min-h-[380px] sm:min-h-[460px] md:min-h-[560px]"
-          style={{ 
-            marginTop: '-4.5rem'
+          ref={imageSectionRef}
+          className="mb-16 relative min-h-[380px] sm:min-h-[460px] md:min-h-[560px] sticky"
+          style={{
+            position: 'sticky',
+            top: `${stickyTop}px`,
+            zIndex: 40
           }}
         >
-          {/* Spacer to maintain space when hero shrinks */}
-          {naturalHeight && (
-            <div 
-              style={{ 
-                height: isScrolled ? `${naturalHeight - 150}px` : '0px',
-                transition: 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                overflow: 'hidden'
-              }}
-            />
-          )}
           <motion.div
-            ref={heroRef}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className={`transition-all duration-700 ease-out ${isScrolled ? 'fixed top-0 left-0 right-0 z-50' : 'relative'}`}
-            style={isScrolled ? { 
-              marginTop: 0,
-              marginLeft: 0,
-              marginRight: 0
-            } : {}}
+            className="relative -mx-4 sm:-mx-8 md:-mx-12 lg:-mx-16 xl:-mx-24"
           >
-            <div className={`relative ${isScrolled ? 'w-full' : '-mx-4 sm:-mx-8 md:-mx-12 lg:-mx-16 xl:-mx-24'}`}>
-              <div 
-                ref={heroInnerRef}
-                className={`relative isolate overflow-hidden bg-gray-900 shadow-2xl w-full ${!naturalHeight ? 'min-h-[380px] sm:min-h-[460px] md:min-h-[560px]' : ''}`}
-                style={{
-                  transition: 'height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), min-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94), max-height 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                  willChange: 'height, min-height, max-height',
-                  transform: 'translateZ(0)',
-                  backfaceVisibility: 'hidden',
-                  WebkitBackfaceVisibility: 'hidden'
-                }}
-              >
-                <div className="absolute inset-0">
-                  {ImageComponent(
-                    heroImageUrl,
-                    {
-                      width: 1600,
-                      height: 640,
-                      className: 'h-full w-full object-cover',
-                      alt: eventName ? `${eventName} highlight` : 'Event highlight',
-                      loading: 'eager',
-                    }
-                  )}
-                </div>
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/70 via-black/40 to-black/35" />
-                {!isScrolled && (
-                  <>
-                    <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary-500/40 blur-3xl" />
-                    <div className="pointer-events-none absolute -left-16 bottom-0 h-64 w-64 rounded-full bg-purple-500/30 blur-3xl" />
-                  </>
+            <div className="relative isolate overflow-hidden bg-gray-900 shadow-2xl w-full min-h-[380px] sm:min-h-[460px] md:min-h-[560px]">
+              <div className="absolute inset-0">
+                {ImageComponent(
+                  heroImageUrl,
+                  {
+                    width: 1600,
+                    height: 640,
+                    className: 'h-full w-full object-cover',
+                    alt: eventName ? `${eventName} highlight` : 'Event highlight',
+                    loading: 'eager',
+                  }
                 )}
-                <div className={`relative z-10 flex h-full flex-col ${isScrolled ? 'justify-start px-4 sm:px-6 py-3 sm:py-4' : 'justify-start px-8 pb-8 pt-28 sm:px-10 sm:pb-10 sm:pt-36 md:px-12 md:pb-12 md:pt-40'} transition-all duration-500 ease-in-out`}>
-                  {isScrolled ? (
-                    <div className="flex flex-col gap-2.5 sm:gap-3">
-                      <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-white/80 backdrop-blur whitespace-nowrap w-fit">
-                        {APP_CONFIG.name}
-                      </span>
-                      <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-white">
-                        {eventName}
-                      </h1>
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs font-medium text-white/80">
-                        {formattedDate && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
-                            <Calendar className="h-4 w-4 shrink-0" />
-                            <span className="hidden sm:inline">{formattedDate}</span>
-                            {shortFormattedDate && <span className="sm:hidden">{shortFormattedDate}</span>}
-                          </span>
-                        )}
-                        {resolvedEvent?.location && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
-                            {resolvedEvent.location}
-                          </span>
-                        )}
-                        {resolvedEvent?.images_count ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 backdrop-blur whitespace-nowrap">
-                            {resolvedEvent.images_count} photos
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <span className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur">
-                        {APP_CONFIG.name}
-                      </span>
-                      <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-                        {eventName}
-                      </h1>
-                      <div className="mt-6 flex flex-wrap gap-3 text-xs font-medium text-white/80 sm:text-sm">
-                        {formattedDate && (
-                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                            <Calendar className="h-4 w-4" />
-                            {formattedDate}
-                          </span>
-                        )}
-                        {resolvedEvent?.location && (
-                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                            {resolvedEvent.location}
-                          </span>
-                        )}
-                        {resolvedEvent?.images_count ? (
-                          <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                            {resolvedEvent.images_count} photos
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/70 via-black/40 to-black/35" />
+              <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary-500/40 blur-3xl" />
+              <div className="pointer-events-none absolute -left-16 bottom-0 h-64 w-64 rounded-full bg-purple-500/30 blur-3xl" />
             </div>
           </motion.div>
         </div>
 
         {/* Navigation Cards */}
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl mx-auto relative" style={{ zIndex: 30 }}>
           <div className={`grid grid-cols-1 ${columnsPerRow >= 3 ? 'md:grid-cols-3' : columnsPerRow === 2 ? 'md:grid-cols-2' : ''} gap-5`}>
             {visibleCards.map((card, index) => {
               const isInLastCustomRow = columnsPerRow === 3 && index >= lastRowStartIndex;
@@ -655,7 +580,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.5 }}
-          className="text-center mt-20 pb-8"
+          className="text-center mt-20 pb-4"
         >
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600">
             <Link
@@ -686,6 +611,12 @@ export default function EventHomePage({ eventUrl, eventData }) {
           onToast={showToast}
         />
       </PermissionGate>
+
+      <BucketDrawer />
+      <AccountModal hideButton={true} />
+      {notifOpen && notifButtonRef && (
+        <NotificationsDropdown buttonRef={notifButtonRef} isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+      )}
     </motion.div>
   );
 }

@@ -117,9 +117,8 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     const rect = buttonRef.getBoundingClientRect();
     return {
       position: 'fixed',
-      left: `${rect.right}px`,
+      left: `${rect.left}px`,
       top: `${rect.bottom}px`,
-      transform: 'translate(-100%, 0)',
       zIndex: 10000,
     };
   };

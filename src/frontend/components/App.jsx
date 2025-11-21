@@ -391,9 +391,12 @@ function AppContent({ eventUrl }) {
     );
   }
 
+  // Check if we're on the event home page (empty path)
+  const isEventHomePage = location.pathname === `/${eventUrl}` || location.pathname === `/${eventUrl}/`;
+
   return (
     <>
-      <Header />
+      {!isEventHomePage && <Header />}
       <AnimatePresence mode="wait">
         <Routes>
           <Route 

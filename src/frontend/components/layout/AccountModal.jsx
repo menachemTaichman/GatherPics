@@ -21,7 +21,7 @@ import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 
-export default function AccountModal() {
+export default function AccountModal({ hideButton = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
   const { eventUrl } = useParams();
@@ -776,13 +776,15 @@ export default function AccountModal() {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
-        title="Account"
-      >
-        <UserCircle className="w-4 h-4" />
-      </button>
+      {!hideButton && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
+          title="Account"
+        >
+          <UserCircle className="w-4 h-4" />
+        </button>
+      )}
 
       {isClient && createPortal(
         <>
