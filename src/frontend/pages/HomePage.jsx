@@ -241,7 +241,7 @@ export default function HomePage() {
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
                   >
                     <LayoutDashboard className="w-5 h-5 mr-2" />
-                    Go to Dashboard
+                    Dashboard
                   </Link>
                 )}
                 {!isAuthenticated && (
@@ -335,6 +335,33 @@ export default function HomePage() {
             </motion.div>
           )}
         </div>
+
+        {/* Footer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="text-center mt-20 pb-8"
+        >
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600">
+            <Link
+              to="/about"
+              className="hover:text-primary-600 transition-colors duration-200"
+            >
+              About
+            </Link>
+            <span className="text-gray-400">•</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('feedback:open-form'))}
+              className="hover:text-primary-600 transition-colors duration-200"
+            >
+              Send Feedback
+            </button>
+          </div>
+          <p className="text-gray-400 text-xs mt-4">
+            {APP_CONFIG.name}
+          </p>
+        </motion.div>
       </div>
 
       {/* Login Modal */}

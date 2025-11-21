@@ -1,0 +1,735 @@
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { FileText, Shield, Accessibility, Info, MessageSquare, Languages } from 'lucide-react';
+import { Header } from '../components/layout';
+import { FeedbackFormModal } from '../components/feedbacks';
+import { APP_CONFIG } from '../config/appConfig';
+
+function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
+  const h2Refs = useRef({});
+  const [stickyH2, setStickyH2] = useState(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // Find the current h2 that should be sticky
+      const h2Elements = Object.values(h2Refs.current).filter(Boolean);
+      
+      if (h2Elements.length === 0) {
+        setStickyH2(null);
+        return;
+      }
+
+      let currentSticky = null;
+      const stickyThreshold = 80; // Position where header should become sticky (accounting for main header ~64px)
+
+      // Find the last h2 that has scrolled past the threshold
+      for (let i = h2Elements.length - 1; i >= 0; i--) {
+        const h2 = h2Elements[i];
+        if (!h2) continue;
+        
+        const rect = h2.getBoundingClientRect();
+        
+        // If h2 is at or above the sticky position, make it sticky
+        // Also check that the next h2 hasn't pushed it out
+        if (rect.top <= stickyThreshold) {
+          // Check if there's a next h2 that would replace this one
+          let shouldBeSticky = true;
+          if (i < h2Elements.length - 1) {
+            const nextH2 = h2Elements[i + 1];
+            if (nextH2) {
+              const nextRect = nextH2.getBoundingClientRect();
+              // If next h2 is also past threshold, use that one instead
+              if (nextRect.top <= stickyThreshold) {
+                shouldBeSticky = false;
+              }
+            }
+          }
+          
+          if (shouldBeSticky) {
+            currentSticky = h2;
+            break;
+          }
+        }
+      }
+
+      setStickyH2(currentSticky);
+      // Notify parent of sticky h2 change
+      if (onStickyH2Change) {
+        const stickyKey = currentSticky ? Object.keys(h2Refs.current).find(key => h2Refs.current[key] === currentSticky) : null;
+        const stickyText = currentSticky ? currentSticky.textContent : null;
+        onStickyH2Change({ element: currentSticky, key: stickyKey, text: stickyText });
+      }
+    };
+
+    // Add a small delay to ensure refs are set
+    const timeoutId = setTimeout(() => {
+      handleScroll();
+    }, 100);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Check initial state
+    
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [content]);
+
+  if (!content || content.trim() === '') {
+    return (
+      <div className="prose prose-gray max-w-none">
+        <p className="text-gray-500 italic">Content coming soon...</p>
+      </div>
+    );
+  }
+
+  // Simple markdown rendering (basic support for headers, paragraphs, lists, bold, italic, links, horizontal rules)
+  const renderMarkdown = (text) => {
+    const lines = text.split('\n');
+    const elements = [];
+    let currentParagraph = [];
+    let inList = false;
+    let listItems = [];
+    let h2Index = 0;
+
+    // Helper function to process inline markdown (bold, italic, links, etc.)
+    const processInlineMarkdown = (text) => {
+      const parts = [];
+      let processedText = text;
+      let key = 0;
+
+      // Process in order: bold first, then links, then italic
+      // This ensures nested formatting works correctly
+
+      // Step 1: Process bold text (**text**) - must come before italic
+      const boldMatches = [];
+      const boldRegex = /\*\*(.+?)\*\*/g;
+      let match;
+      while ((match = boldRegex.exec(text)) !== null) {
+        boldMatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          content: match[1],
+          type: 'bold'
+        });
+      }
+
+      // Step 2: Process links [text](/url)
+      const linkMatches = [];
+      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      while ((match = linkRegex.exec(text)) !== null) {
+        linkMatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          text: match[1],
+          url: match[2],
+          type: 'link'
+        });
+      }
+
+      // Step 3: Process italic text (*text*) - but not if it's part of bold or link
+      const italicMatches = [];
+      // Find all potential italic matches (single asterisks)
+      const italicRegex = /\*([^*]+?)\*/g;
+      while ((match = italicRegex.exec(text)) !== null) {
+        // Check if this match overlaps with any bold or link match
+        const overlaps = boldMatches.some(b => 
+          match.index >= b.start && match.index < b.end
+        ) || linkMatches.some(l => 
+          match.index >= l.start && match.index < l.end
+        );
+        
+        // Also check if it's actually part of a bold (double asterisk)
+        const isPartOfBold = text[match.index - 1] === '*' || text[match.index + match[0].length] === '*';
+        
+        if (!overlaps && !isPartOfBold) {
+          italicMatches.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            content: match[1],
+            type: 'italic'
+          });
+        }
+      }
+
+      // Combine all matches and sort by position
+      const allMatches = [...boldMatches, ...linkMatches, ...italicMatches].sort((a, b) => a.start - b.start);
+
+      // Build the parts array
+      let lastIndex = 0;
+      for (const match of allMatches) {
+        // Add text before the match
+        if (match.start > lastIndex) {
+          const beforeText = text.substring(lastIndex, match.start);
+          if (beforeText) {
+            parts.push(beforeText);
+          }
+        }
+
+        // Add the matched element
+        if (match.type === 'bold') {
+          // For bold content, process italic if present, otherwise just render text
+          const boldContent = match.content;
+          // Simple check for italic within bold (single asterisk not part of double)
+          const italicMatch = boldContent.match(/\*([^*]+?)\*/);
+          if (italicMatch && !boldContent.includes('**')) {
+            const beforeItalic = boldContent.substring(0, italicMatch.index);
+            const afterItalic = boldContent.substring(italicMatch.index + italicMatch[0].length);
+            parts.push(
+              <strong key={`inline-${key++}`} className="font-semibold text-gray-900">
+                {beforeItalic}
+                <em className="italic">{italicMatch[1]}</em>
+                {afterItalic}
+              </strong>
+            );
+          } else {
+            parts.push(
+              <strong key={`inline-${key++}`} className="font-semibold text-gray-900">
+                {boldContent}
+              </strong>
+            );
+          }
+        } else if (match.type === 'link') {
+          // Handle internal hash links to sections
+          const handleLinkClick = (e) => {
+            if (match.url.startsWith('/about#')) {
+              e.preventDefault();
+              const hash = match.url.replace('/about#', '');
+              navigate(`/about#${hash}`, { replace: false });
+            } else if (match.url.startsWith('#')) {
+              e.preventDefault();
+              const hash = match.url.slice(1);
+              navigate(`/about#${hash}`, { replace: false });
+            }
+          };
+          parts.push(
+            <a 
+              key={`inline-${key++}`} 
+              href={match.url}
+              onClick={handleLinkClick}
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              {match.text}
+            </a>
+          );
+        } else if (match.type === 'italic') {
+          parts.push(
+            <em key={`inline-${key++}`} className="italic">
+              {match.content}
+            </em>
+          );
+        }
+
+        lastIndex = match.end;
+      }
+
+      // Add remaining text
+      if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+      }
+
+      return parts.length > 0 ? parts : [text];
+    };
+
+    const flushParagraph = () => {
+      if (currentParagraph.length > 0) {
+        const paragraphText = currentParagraph.join(' ');
+        elements.push(
+          <p key={`p-${elements.length}`} className="mb-4 text-gray-700 leading-relaxed">
+            {processInlineMarkdown(paragraphText)}
+          </p>
+        );
+        currentParagraph = [];
+      }
+    };
+
+    const flushList = () => {
+      if (listItems.length > 0) {
+        elements.push(
+          <ul key={`ul-${elements.length}`} className="list-disc list-inside mb-4 space-y-2 text-gray-700">
+            {listItems.map((item, idx) => (
+              <li key={idx}>{processInlineMarkdown(item)}</li>
+            ))}
+          </ul>
+        );
+        listItems = [];
+      }
+      inList = false;
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      
+      // Horizontal rule (---)
+      if (trimmed === '---' || trimmed.match(/^-{3,}$/)) {
+        flushList();
+        flushParagraph();
+        elements.push(
+          <hr key={`hr-${elements.length}`} className="my-6 border-gray-300" />
+        );
+      }
+      // Headers
+      else if (trimmed.startsWith('# ')) {
+        flushList();
+        flushParagraph();
+        const headerText = trimmed.substring(2);
+        elements.push(
+          <h2 key={`h2-${elements.length}`} className="text-2xl font-semibold text-gray-900 mt-8 mb-4">
+            {processInlineMarkdown(headerText)}
+          </h2>
+        );
+      } else if (trimmed.startsWith('## ')) {
+        flushList();
+        flushParagraph();
+        const headerText = trimmed.substring(3);
+        const h2Key = `h2-${h2Index++}`;
+        const h2Ref = (el) => {
+          if (el) {
+            h2Refs.current[h2Key] = el;
+          } else {
+            delete h2Refs.current[h2Key];
+          }
+        };
+        elements.push(
+          <div key={h2Key} className="relative">
+            <h3 
+              ref={h2Ref}
+              className="text-xl font-semibold text-gray-900 mt-6 mb-3"
+              data-h2-key={h2Key}
+            >
+              {processInlineMarkdown(headerText)}
+            </h3>
+          </div>
+        );
+      } else if (trimmed.startsWith('### ')) {
+        flushList();
+        flushParagraph();
+        const headerText = trimmed.substring(4);
+        elements.push(
+          <h4 key={`h4-${elements.length}`} className="text-lg font-semibold text-gray-900 mt-4 mb-2">
+            {processInlineMarkdown(headerText)}
+          </h4>
+        );
+      }
+      // List items
+      else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        flushParagraph();
+        if (!inList) {
+          inList = true;
+        }
+        listItems.push(trimmed.substring(2));
+      }
+      // Empty line
+      else if (trimmed === '') {
+        flushList();
+        flushParagraph();
+      }
+      // Regular paragraph text
+      else {
+        flushList();
+        if (trimmed) {
+          currentParagraph.push(trimmed);
+        }
+      }
+    });
+
+    flushList();
+    flushParagraph();
+
+    return elements;
+  };
+
+  return (
+    <div className="prose prose-gray max-w-none">
+      {renderMarkdown(content)}
+    </div>
+  );
+}
+
+export default function AboutPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeSection, setActiveSection] = useState('about');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
+  const contentHeaderRef = useRef(null);
+  const sectionRefs = useRef({});
+  const sidebarRef = useRef(null);
+  const sidebarContainerRef = useRef(null);
+  const [stickyH2Info, setStickyH2Info] = useState(null);
+  const [language, setLanguage] = useState('en');
+  const [sidebarStyle, setSidebarStyle] = useState({});
+  const [markdownContent, setMarkdownContent] = useState({
+    about: '',
+    terms: '',
+    privacy: '',
+    accessibility: ''
+  });
+
+  // Prevent default hash scroll behavior
+  useEffect(() => {
+    if (location.hash) {
+      // Prevent browser's default scroll to hash
+      const hash = location.hash.slice(1);
+      const validSections = ['about', 'terms', 'privacy', 'accessibility'];
+      if (validSections.includes(hash)) {
+        setActiveSection(hash);
+        // Prevent default scroll
+        window.history.scrollRestoration = 'manual';
+        if (window.scrollY === 0) {
+          window.scrollTo(0, 0);
+        }
+      }
+    }
+  }, [location.hash]);
+
+  // Update URL hash when section changes
+  useEffect(() => {
+    if (activeSection) {
+      navigate(`/about#${activeSection}`, { replace: true });
+    }
+  }, [activeSection, navigate]);
+
+  // Prevent scroll on mount if hash is present
+  useEffect(() => {
+    if (location.hash) {
+      window.scrollTo(0, 0);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    document.title = `About - ${APP_CONFIG.name}`;
+    
+    // Load markdown files based on selected language
+    const loadMarkdown = async () => {
+      try {
+        const lang = language || 'en';
+        const [aboutRes, termsRes, privacyRes, accessibilityRes] = await Promise.all([
+          fetch(`/content/about.${lang}.md`).catch(() => null),
+          fetch(`/content/terms.${lang}.md`).catch(() => null),
+          fetch(`/content/privacy.${lang}.md`).catch(() => null),
+          fetch(`/content/accessibility.${lang}.md`).catch(() => null)
+        ]);
+
+        const content = {
+          about: aboutRes ? await aboutRes.text() : '',
+          terms: termsRes ? await termsRes.text() : '',
+          privacy: privacyRes ? await privacyRes.text() : '',
+          accessibility: accessibilityRes ? await accessibilityRes.text() : ''
+        };
+
+        setMarkdownContent(content);
+      } catch (error) {
+        console.error('Error loading markdown files:', error);
+      }
+    };
+
+    loadMarkdown();
+  }, [language]);
+
+  // Manual sticky implementation for sidebar (CSS Grid interferes with native sticky)
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    const container = sidebarContainerRef.current;
+    
+    if (!sidebar || !container) return;
+    
+    let isSticky = false;
+    let initialLeft = 0;
+    let initialWidth = 0;
+    let initialTop = 0;
+    
+    const handleScroll = () => {
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const headerHeight = 64; // Header height
+      const containerPadding = 24; // pt-6 = 24px
+      const stickyTop = headerHeight + containerPadding; // 88px
+      
+      // Check if sidebar's top is at or just above sticky position
+      // Switch when sidebar reaches the sticky position to prevent jump
+      const shouldBeSticky = sidebarRect.top <= stickyTop;
+      
+      if (shouldBeSticky && !isSticky) {
+        // Just became sticky - use sidebar's current position to prevent jump
+        // Start with current top position, then smoothly transition to target
+        initialLeft = sidebarRect.left;
+        initialWidth = sidebarRect.width;
+        initialTop = sidebarRect.top;
+        isSticky = true;
+        
+        // Use current top position to prevent jump, will be corrected on next frame
+        setSidebarStyle({
+          position: 'fixed',
+          top: `${initialTop}px`,
+          left: `${initialLeft}px`,
+          width: `${initialWidth}px`,
+          zIndex: 10
+        });
+        
+        // Immediately correct to target position on next frame for smooth transition
+        requestAnimationFrame(() => {
+          setSidebarStyle({
+            position: 'fixed',
+            top: `${stickyTop}px`,
+            left: `${initialLeft}px`,
+            width: `${initialWidth}px`,
+            zIndex: 10
+          });
+        });
+      } else if (shouldBeSticky && isSticky) {
+        // Already sticky - update position if container moved (e.g., on resize)
+        const currentLeft = containerRect.left;
+        const currentWidth = containerRect.width;
+        
+        // Only update if position/width changed significantly (e.g., window resize)
+        if (Math.abs(currentLeft - initialLeft) > 1 || Math.abs(currentWidth - initialWidth) > 1) {
+          initialLeft = currentLeft;
+          initialWidth = currentWidth;
+          setSidebarStyle({
+            position: 'fixed',
+            top: `${stickyTop}px`,
+            left: `${initialLeft}px`,
+            width: `${initialWidth}px`,
+            zIndex: 10
+          });
+        }
+      } else if (!shouldBeSticky && isSticky) {
+        // No longer sticky - return to normal flow
+        // Only switch back if we're well above the sticky position to prevent rapid toggling
+        if (sidebarRect.top > stickyTop + 10) {
+          isSticky = false;
+          setSidebarStyle({
+            position: 'relative',
+            top: 'auto',
+            left: 'auto',
+            width: 'auto',
+            zIndex: 'auto'
+          });
+        }
+      }
+    };
+    
+    // Initial check
+    handleScroll();
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [activeSection, language]);
+
+  // Reset sticky header when section changes
+  useEffect(() => {
+    setShowStickyHeader(false);
+    setStickyH2Info(null);
+  }, [activeSection]);
+
+  // Handle sticky header visibility on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!contentHeaderRef.current) return;
+      
+      const headerRect = contentHeaderRef.current.getBoundingClientRect();
+      // Show sticky header when the original header is scrolled past the top (accounting for main header)
+      setShowStickyHeader(headerRect.top < 64);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Check initial state
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [activeSection]);
+
+  const sections = [
+    {
+      id: 'about',
+      title: 'About',
+      icon: Info,
+      content: markdownContent.about,
+      activeClasses: 'bg-blue-50 border-2 border-blue-200 text-blue-700 font-medium',
+      iconActiveClasses: 'text-blue-600',
+      iconInactiveClasses: 'text-gray-500',
+      headerIconClasses: 'text-blue-600'
+    },
+    {
+      id: 'terms',
+      title: 'Terms & Conditions',
+      icon: FileText,
+      content: markdownContent.terms,
+      activeClasses: 'bg-slate-50 border-2 border-slate-300 text-slate-800 font-medium',
+      iconActiveClasses: 'text-slate-700',
+      iconInactiveClasses: 'text-gray-500',
+      headerIconClasses: 'text-slate-700'
+    },
+    {
+      id: 'privacy',
+      title: 'Privacy Policy',
+      icon: Shield,
+      content: markdownContent.privacy,
+      activeClasses: 'bg-green-50 border-2 border-green-200 text-green-700 font-medium',
+      iconActiveClasses: 'text-green-600',
+      iconInactiveClasses: 'text-gray-500',
+      headerIconClasses: 'text-green-600'
+    },
+    {
+      id: 'accessibility',
+      title: 'Accessibility Policy',
+      icon: Accessibility,
+      content: markdownContent.accessibility,
+      activeClasses: 'bg-purple-50 border-2 border-purple-200 text-purple-700 font-medium',
+      iconActiveClasses: 'text-purple-600',
+      iconInactiveClasses: 'text-gray-500',
+      headerIconClasses: 'text-purple-600'
+    }
+  ];
+
+  const activeSectionData = sections.find(s => s.id === activeSection) || sections[0];
+
+  return (
+    <>
+      <Header />
+      <div className="bg-gradient-to-b from-gray-50 to-white">
+        <div className="container mx-auto px-4 pt-6 pb-4 max-w-6xl">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start" style={{ overflow: 'visible' }}>
+            {/* Sidebar Navigation */}
+            <aside ref={sidebarContainerRef} className="lg:col-span-1" style={{ alignSelf: 'start', height: 'fit-content' }}>
+              <nav 
+                ref={sidebarRef}
+                className="space-y-2" 
+                style={sidebarStyle}
+                data-sidebar-sticky
+              >
+                {/* Language Selector */}
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Languages className="w-4 h-4 text-gray-500" />
+                    <span className="text-xs font-medium text-gray-600">Language</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setLanguage('en')}
+                      className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                        language === 'en'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      English
+                    </button>
+                    <button
+                      onClick={() => setLanguage('he')}
+                      className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                        language === 'he'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      עברית
+                    </button>
+                  </div>
+                </div>
+
+                {sections.map((section) => {
+                  const Icon = section.icon;
+                  const isActive = activeSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => setActiveSection(section.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${
+                        isActive
+                          ? section.activeClasses
+                          : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? section.iconActiveClasses : section.iconInactiveClasses}`} />
+                      <span className="text-sm">{section.title}</span>
+                    </button>
+                  );
+                })}
+                
+                {/* Feedback Button */}
+                <button
+                  onClick={() => setShowFeedbackModal(true)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left bg-white border-2 border-gray-200 text-gray-700 hover:border-primary-300 hover:bg-primary-50 mt-4"
+                >
+                  <MessageSquare className="w-5 h-5 flex-shrink-0 text-gray-500" />
+                  <span className="text-sm">Send Feedback</span>
+                </button>
+              </nav>
+            </aside>
+
+            {/* Main Content */}
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="lg:col-span-3"
+            >
+              <div 
+                ref={(el) => {
+                  if (el) sectionRefs.current[activeSection] = el;
+                }}
+                data-content-box
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 md:p-10 relative overflow-visible"
+              >
+                {/* Sticky Header */}
+                {showStickyHeader && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="sticky top-16 z-40 bg-white border-b border-gray-200 shadow-sm py-4 -mt-8 md:-mt-10 mb-6 -mx-8 md:-mx-10 px-8 md:px-10"
+                  >
+                    <div className="flex items-center gap-3 max-w-full">
+                      <activeSectionData.icon className={`w-5 h-5 flex-shrink-0 ${activeSectionData.headerIconClasses}`} />
+                      <h2 className="text-xl font-semibold text-gray-900 truncate">
+                        {activeSectionData.title}
+                      </h2>
+                    </div>
+                    {stickyH2Info && stickyH2Info.text && (
+                      <div className="mt-2">
+                        <h3 className="text-lg font-semibold text-gray-900 truncate">
+                          {stickyH2Info.text}
+                        </h3>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+                <div 
+                  ref={contentHeaderRef}
+                  className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200"
+                >
+                  <activeSectionData.icon className={`w-6 h-6 ${activeSectionData.headerIconClasses}`} />
+                  <h2 className="text-3xl font-semibold text-gray-900">
+                    {activeSectionData.title}
+                  </h2>
+                </div>
+                <MarkdownSection 
+                  content={activeSectionData.content} 
+                  title={activeSectionData.title}
+                  navigate={navigate}
+                  onStickyH2Change={setStickyH2Info}
+                />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      {/* Feedback Modal */}
+      <FeedbackFormModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        feedback={null}
+      />
+    </>
+  );
+}
+

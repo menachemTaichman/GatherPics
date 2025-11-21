@@ -650,14 +650,29 @@ export default function EventHomePage({ eventUrl, eventData }) {
           </div>
         </div>
 
-        {/* Footer Info */}
+        {/* Footer */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.5 }}
-          className="text-center mt-20"
+          className="text-center mt-20 pb-8"
         >
-          <p className="text-gray-400 text-sm font-medium">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600">
+            <Link
+              to="/about"
+              className="hover:text-primary-600 transition-colors duration-200"
+            >
+              About
+            </Link>
+            <span className="text-gray-400">•</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('feedback:open-form'))}
+              className="hover:text-primary-600 transition-colors duration-200"
+            >
+              Send Feedback
+            </button>
+          </div>
+          <p className="text-gray-400 text-xs mt-4">
             {APP_CONFIG.name}
           </p>
         </motion.div>

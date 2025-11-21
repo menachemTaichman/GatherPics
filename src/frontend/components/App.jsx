@@ -13,6 +13,7 @@ import { DashboardPage } from '../pages/dashboard';
 import ProfilesGalleryPage from '../pages/profiles/ProfilesGalleryPage';
 import HomePage from '../pages/HomePage';
 import EventHomePage from '../pages/EventHomePage';
+import AboutPage from '../pages/AboutPage';
 import { LoadingSpinner, Toast } from './common';
 import { LoginModal } from './auth';
 import { useDataStore } from '../utils/dataManager';
@@ -600,6 +601,17 @@ export default function App() {
     };
   }, []);
 
+  // Listen for feedback:open-form globally (works from any route) - opens new feedback form
+  useEffect(() => {
+    const handler = () => {
+      setGlobalOpenMyFeedback({ id: 'new', data: null });
+    };
+    window.addEventListener('feedback:open-form', handler, true);
+    return () => {
+      window.removeEventListener('feedback:open-form', handler, true);
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <ToastProvider>
@@ -608,6 +620,7 @@ export default function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/events" element={<EventsGalleryPage />} />
               <Route path="/dashboard/profiles" element={<ProfilesGalleryPage />} />
@@ -630,7 +643,7 @@ export default function App() {
           <FeedbackFormModal
             isOpen={!!globalOpenMyFeedback.id}
             onClose={() => setGlobalOpenMyFeedback({ id: null, data: null })}
-            feedback={globalOpenMyFeedback.data}
+            feedback={globalOpenMyFeedback.id === 'new' ? null : globalOpenMyFeedback.data}
           />
         )}
       </ToastProvider>
