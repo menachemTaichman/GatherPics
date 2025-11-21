@@ -1,4 +1,5 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { PermissionGate } from '../common';
@@ -64,6 +65,22 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   // Get permissions
   const permissions = usePermissions();
   
+  // RTL support
+  const { i18n } = useTranslation();
+  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
+  
+  // Update RTL state when language changes
+  useEffect(() => {
+    const updateDirection = () => {
+      setIsRTL(document.documentElement.dir === 'rtl');
+    };
+    updateDirection();
+    i18n.on('languageChanged', updateDirection);
+    return () => {
+      i18n.off('languageChanged', updateDirection);
+    };
+  }, [i18n]);
+  
   // Apply highlight styles
   const highlightStyle = isHighlighted ? {
     animation: 'pulse-glow 1.5s ease-in-out infinite',
@@ -125,7 +142,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
             e.stopPropagation();
             onToggleSelect && onToggleSelect(e);
           }}
-          className={`absolute top-2 left-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+          className={`absolute top-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
+            isRTL ? 'right-2' : 'left-2'
+          } ${
             selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           }`}
         />
@@ -140,14 +159,16 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           onError: onImageError
         })}
 
-        {/* Action buttons - bottom-left */}
+        {/* Action buttons - bottom-right in LTR, bottom-left in RTL */}
         {showArchiveButton && isArchived ? (
           <PermissionGate requires={["hasArchiveAlbum", "canEdit"]}>
             <button
               type="button"
               aria-label="Remove from archive"
               aria-pressed={isArchived}
-              className="absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100"
+              className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100 ${
+                isRTL ? 'left-2' : 'right-2'
+              }`}
               title="Remove from Archive"
               onClick={(e) => {
                 e.stopPropagation();
@@ -175,7 +196,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
                 type="button"
                 aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 aria-pressed={isFavorite}
-                className={`absolute bottom-2 left-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                  isRTL ? 'left-2' : 'right-2'
+                } ${
                   selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                 }`}
                 title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
@@ -210,7 +233,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
               type="button"
               aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               aria-pressed={isFavorite}
-              className={`absolute bottom-2 left-10 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+              className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                isRTL ? 'left-10' : 'right-10'
+              } ${
                 selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
@@ -246,16 +271,20 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         </div>
       </div>
 
-      {/* Date overlay */}
+      {/* Date overlay - bottom-left in LTR, bottom-right in RTL */}
       {showDate && (dateLabel || image?.date_taken) && (
-        <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+        <div className={`absolute bottom-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded ${
+          isRTL ? 'right-2' : 'left-2'
+        }`}>
           {dateLabel || formatTime(image?.date_taken)}
         </div>
       )}
 
-      {/* Crop indicator */}
+      {/* Crop indicator - top-right in LTR, top-left in RTL */}
       {showCropBadge && (
-        <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded">
+        <div className={`absolute top-2 bg-primary-600 text-white text-xs px-2 py-1 rounded ${
+          isRTL ? 'left-2' : 'right-2'
+        }`}>
           Crop
         </div>
       )}
@@ -268,10 +297,10 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           aria-pressed={isRepresentative}
           className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
             (showArchiveButton && isArchived) || (showFavoriteButton && isFavorite)
-              ? 'left-20' // Third position if archive or favorite is shown
+              ? (isRTL ? 'left-20' : 'right-20') // Third position if archive or favorite is shown
               : (showArchiveButton || showFavoriteButton)
-              ? 'left-10' // Second position if one button shown
-              : 'left-2' // First position if no other buttons
+              ? (isRTL ? 'left-10' : 'right-10') // Second position if one button shown
+              : (isRTL ? 'left-2' : 'right-2') // First position if no other buttons
           } ${
             isRepresentative ? 'opacity-100' : (selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
           }`}

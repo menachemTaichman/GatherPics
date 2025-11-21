@@ -309,7 +309,7 @@ export function getRepresentativeUrl(urlHelpers, entity, id) {
   return url;
 }
 
-// Stable pending requests count from frw_currentProfile for a specific event
+// Stable pending requests count from gather_pics_currentProfile for a specific event
 export function usePendingRequestsCount(eventId) {
   const readCount = () => {
     try {

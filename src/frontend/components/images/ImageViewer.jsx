@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2, Key } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TransferFacesModal, SelectFaceForRepModal } from '../groups';
@@ -21,6 +22,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../../contexts/authContext';
+import { useRTL } from '../../hooks/useRTL';
 
 function formatDateTime(value) {
   if (!value) return 'Unknown';
@@ -220,6 +222,7 @@ function ImageViewerActions({
 
 function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false }) {
   const permissions = usePermissions(); // <-- add this near the top of the component
+  const { isRTL, ms, me } = useRTL();
   const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
@@ -1216,7 +1219,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         >
 
           {/* Content */}
-          <div className="flex h-full overflow-hidden min-h-0">
+          <div className={`flex h-full overflow-hidden min-h-0 ${isRTL ? '' : 'flex-row-reverse'}`}>
             {/* Image Viewer */}
             <div 
               ref={containerRef}
@@ -1310,7 +1313,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             handleFaceClick(index);
                           }}
                         >
-                          <div className={`absolute -top-6 left-0 ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
+                          <div className={`absolute -top-6 ${isRTL ? 'right-0' : 'left-0'} ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
                             {getGroupLabel(face)}
                           </div>
                           <PermissionGate requires="canEdit">
@@ -1319,7 +1322,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 e.stopPropagation();
                                 handleTransferFace(face);
                               }}
-                              className={`absolute -bottom-4 -left-1 ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                              className={`absolute -bottom-4 ${isRTL ? '-right-1' : '-left-1'} ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
                               title="Transfer face to another group"
                             >
                               <Edit className="w-2.5 h-2.5" />
@@ -1349,17 +1352,21 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                        setControlsVisible(false);
                      }}
                 >
-                  {/* Close button - top-left */}
+                  {/* Close button - top-right in LTR, top-left in RTL */}
                   <button
                     onClick={onClose}
-                    className="absolute top-4 left-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${
+                      isRTL ? 'left-4' : 'right-4'
+                    }`}
                     title="Close"
                   >
                     <X className="w-5 h-5" />
                   </button>
 
-                  {/* Favorites / Archive controls - bottom-left */}
-                  <div className="absolute bottom-5 left-4 pointer-events-auto flex items-center space-x-4">
+                  {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
+                  <div className={`absolute bottom-5 pointer-events-auto flex items-center space-x-4 ${
+                    isRTL ? 'left-4' : 'right-4'
+                  }`}>
                     {(() => {
                       const favoriteTooltip = imageActions.isFavorite
                         ? (permissions.canEdit ? 'Remove from Favorites' : 'In Favorites')
@@ -1555,13 +1562,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   </div>
 
 
-                  {/* Sidebar toggle - top-right */}
+                  {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
-                    className="absolute top-4 right-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${
+                      isRTL ? 'right-4' : 'left-4'
+                    }`}
                     title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
                   >
-                    {sidebarVisible ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                    {sidebarVisible ? (
+                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
+                    ) : (
+                      isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               )}
@@ -1570,7 +1583,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
                     {/* Sidebar */}
         {sidebarVisible && (
-        <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0 image-viewer-sidebar">
+        <div className={`w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
+          isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'
+        }`}>
           {/* Controls */}
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
                 <ImageViewerActions
@@ -1603,7 +1618,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     <div><span className="font-semibold">Original resolution:</span> {storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : 'Unknown'}</div>
                     <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
                       <div className="flex items-start">
-                        <span className="font-semibold mr-2 flex-shrink-0">Description:</span>
+                        <span className={`font-semibold flex-shrink-0 ${me('2')}`}>Description:</span>
                         {isEditingDescription && permissions.canEdit ? (
                           <div className="flex-1 min-w-0">
                             <textarea
@@ -1660,19 +1675,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <a
                             href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
                             onClick={handleMomentLinkClick}
-                            className="ml-1 text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
+                            className={`${ms('1')} text-primary-600 hover:text-primary-700 hover:underline cursor-pointer`}
                             title="Jump to moment"
                           >
                             {momentInfo.label}
                           </a>
                         ) : (
-                          <span className="ml-1 text-gray-400">None</span>
+                          <span className={ms('1')}>None</span>
                         )}
                       </div>
                       <PermissionGate requires="canEdit">
                         <button
                           onClick={() => setShowMoveToMomentModal(true)}
-                          className="w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ml-2"
+                          className={`w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ${ms('2')}`}
                           title="Edit moment"
                         >
                           <Edit2 className="w-3 h-3 text-gray-600" />
@@ -1710,7 +1725,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                               className={`flex items-center p-2 rounded-lg bg-gray-50 ${album.isPlaceholder ? '' : 'hover:bg-gray-100'} transition-colors mb-1 last:mb-0`}
                             >
                               {album.isPlaceholder ? (
-                                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
                                   {ImageComponent(null, {
                                     width: 40,
                                     height: 40,
@@ -1724,7 +1739,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                   <a
                                     href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
                                     onClick={(e) => handleAlbumLinkClick(e, album)}
-                                    className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    className="flex items-center gap-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     title={album.label}
                                   >
                                     {ImageComponent(
@@ -1741,7 +1756,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                   <PermissionGate requires="canEdit">
                                     <button
                                       onClick={() => handleRemoveFromAlbum(album)}
-                                      className="ml-3 p-1.5 hover:bg-red-100 rounded-lg transition-colors"
+                                      className={`${ms('3')} p-1.5 hover:bg-red-100 rounded-lg transition-colors`}
                                       title={`Remove from ${album.label}`}
                                     >
                                       <Minus className="w-4 h-4 text-red-600" />
@@ -1803,7 +1818,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                               {facesList.map((face, index) => (
                                 <div
                                   key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
-                                  className={`flex items-center space-x-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                  className={`flex items-center gap-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
                                   onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
                                 >
                                   {ImageComponent(

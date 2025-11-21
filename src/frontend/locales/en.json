@@ -1,0 +1,48 @@
+{
+  "homePage": {
+    "description": "Effortlessly organize, share, and discover photos from your events",
+    "subtitle": "Create event collections, organize photos by moments, discover people with smart face recognition, and share memories effortlessly with friends and family.",
+    "exploreEvents": "Explore Events",
+    "exploreEventsSubtitle": "Select an event to view its photos and memories",
+    "dashboard": "Dashboard",
+    "logIn": "Log In",
+    "about": "About",
+    "sendFeedback": "Send Feedback",
+    "error": "Error",
+    "failedToLoadEvents": "Failed to load events"
+  },
+  "menu": {
+    "myAccount": "My Account",
+    "eventPage": "Event Page",
+    "dashboard": "Dashboard",
+    "sendFeedback": "Send Feedback",
+    "about": "About",
+    "language": "Language",
+    "english": "English",
+    "hebrew": "עברית",
+    "menu": "Menu"
+  },
+  "navigation": {
+    "bucket": "Bucket",
+    "notifications": "Notifications",
+    "timeline": "Timeline",
+    "people": "People",
+    "albums": "Albums"
+  },
+  "notifications": {
+    "notifications": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "deleteAll": "Delete all",
+    "refresh": "Refresh",
+    "noNotifications": "No notifications",
+    "markAsRead": "Mark as read",
+    "markAsUnread": "Mark as unread",
+    "delete": "Delete",
+    "failedToMarkAllAsRead": "Failed to mark all as read",
+    "allNotificationsDeleted": "All notifications deleted",
+    "failedToDeleteAll": "Failed to delete all notifications",
+    "failedToUpdate": "Failed to update notification",
+    "failedToDelete": "Failed to delete notification"
+  }
+}
+

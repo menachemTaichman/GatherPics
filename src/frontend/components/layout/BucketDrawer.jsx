@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Check, Upload, Download, Image as ImageIcon } from 'lucide-react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import useBucketStore from '../../utils/bucketStore';
 import { urlHelpers, downloadAPI, imagesAPI } from '../../utils/apiService';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -10,6 +11,21 @@ import { RemovableThumbnail } from '../common';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
+  const { i18n } = useTranslation();
+  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
+  
+  // Update RTL state when language changes
+  useEffect(() => {
+    const updateDirection = () => {
+      setIsRTL(document.documentElement.dir === 'rtl');
+    };
+    updateDirection();
+    i18n.on('languageChanged', updateDirection);
+    return () => {
+      i18n.off('languageChanged', updateDirection);
+    };
+  }, [i18n]);
+  
   useEffect(() => {
     if (!note) return;
     const t = setTimeout(() => setNote(''), 2500);
@@ -120,11 +136,15 @@ export default function BucketDrawer() {
         <motion.aside
           ref={modalRef}
           key="bucket-drawer"
-          initial={{ x: '-100%' }}
+          initial={{ x: isRTL ? '100%' : '-100%' }}
           animate={{ x: 0 }}
-          exit={{ x: '-100%' }}
+          exit={{ x: isRTL ? '100%' : '-100%' }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          className="fixed top-16 left-0 h-[calc(100vh-4rem)] w-[360px] bg-white border-r border-gray-200 shadow-xl z-[100] flex flex-col"
+          className={`fixed top-16 h-[calc(100vh-4rem)] w-[360px] bg-white shadow-xl z-[100] flex flex-col ${
+            isRTL 
+              ? 'right-0 border-l border-gray-200' 
+              : 'left-0 border-r border-gray-200'
+          }`}
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">

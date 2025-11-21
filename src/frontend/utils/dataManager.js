@@ -759,7 +759,7 @@ export const useDataStore = create((set, get) => {
             ids.forEach((storageKey) => {
               if (!storageKey) return;
               try {
-                // Map to frw_ prefixed keys
+                // Map to gather_pics_ prefixed keys
                 const mappedKey = storageKey === 'currentProfile' ? STORAGE_KEYS.CURRENT_PROFILE :
                                   storageKey === 'preferences' ? STORAGE_KEYS.PREFERENCES :
                                   storageKey;
@@ -780,7 +780,7 @@ export const useDataStore = create((set, get) => {
               if (!it || !it.id) return;
               const storageKey = it.id;
               
-              // Map to frw_ prefixed keys
+              // Map to gather_pics_ prefixed keys
               const mappedKey = storageKey === 'currentProfile' ? STORAGE_KEYS.CURRENT_PROFILE :
                                 storageKey === 'preferences' ? STORAGE_KEYS.PREFERENCES :
                                 storageKey;

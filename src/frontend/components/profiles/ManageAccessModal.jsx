@@ -338,8 +338,10 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
   // Register modal (scopes managed by useApplyScopes above)
   useEffect(() => {
     if (isOpen) {
-      registerModal(MODAL_ID, { 
-        priority: 60
+      registerModal({ 
+        id: MODAL_ID, 
+        type: 'popup', 
+        allowOutsideScroll: true 
       });
       
       // Listen for logout to auto-close modal

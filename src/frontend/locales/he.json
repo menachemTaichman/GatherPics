@@ -1,0 +1,48 @@
+{
+  "homePage": {
+    "description": "ארגן, שתף וגלה תמונות מאירועים שלך ללא מאמץ",
+    "subtitle": "צור אוספי אירועים, ארגן תמונות לפי רגעים, גלה אנשים עם זיהוי פנים חכם, ושתף זיכרונות ללא מאמץ עם חברים ומשפחה.",
+    "exploreEvents": "גלה אירועים",
+    "exploreEventsSubtitle": "בחר אירוע כדי לצפות בתמונות והזיכרונות שלו",
+    "dashboard": "לוח בקרה",
+    "logIn": "התחבר",
+    "about": "אודות",
+    "sendFeedback": "שלח משוב",
+    "error": "שגיאה",
+    "failedToLoadEvents": "נכשל בטעינת אירועים"
+  },
+  "menu": {
+    "myAccount": "החשבון שלי",
+    "eventPage": "דף האירוע",
+    "dashboard": "לוח בקרה",
+    "sendFeedback": "שלח משוב",
+    "about": "אודות",
+    "language": "שפה",
+    "english": "English",
+    "hebrew": "עברית",
+    "menu": "תפריט"
+  },
+  "navigation": {
+    "bucket": "סל התמונות",
+    "notifications": "התראות",
+    "timeline": "ציר זמן",
+    "people": "אנשים",
+    "albums": "אלבומים"
+  },
+  "notifications": {
+    "notifications": "התראות",
+    "markAllAsRead": "סמן הכל כנקרא",
+    "deleteAll": "מחק הכל",
+    "refresh": "רענן",
+    "noNotifications": "אין התראות",
+    "markAsRead": "סמן כנקרא",
+    "markAsUnread": "סמן כלא נקרא",
+    "delete": "מחק",
+    "failedToMarkAllAsRead": "נכשל בסימון הכל כנקרא",
+    "allNotificationsDeleted": "כל ההתראות נמחקו",
+    "failedToDeleteAll": "נכשל במחיקת כל ההתראות",
+    "failedToUpdate": "נכשל בעדכון ההתראה",
+    "failedToDelete": "נכשל במחיקת ההתראה"
+  }
+}
+

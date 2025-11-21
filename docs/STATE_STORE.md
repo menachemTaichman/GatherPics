@@ -34,9 +34,9 @@ useDataStore state
 ```
 
 - Relations are embedded in parent entities as Sets (e.g., `groups[groupId].images` is `Set<string>`).
-- Only `entities` are persisted in `sessionStorage['frw_entities']`. On hydration, arrays are coerced back to `Set`.
-- Current profile is stored in `localStorage['frw_currentProfile']` with general data and nested event-specific data.
-- Preferences are stored in `localStorage['frw_preferences']`.
+- Only `entities` are persisted in `sessionStorage['gather_pics_entities']`. On hydration, arrays are coerced back to `Set`.
+- Current profile is stored in `localStorage['gather_pics_currentProfile']` with general data and nested event-specific data.
+- Preferences are stored in `localStorage['gather_pics_preferences']`.
 
 ### Change Schema (API → Interceptor → Store)
 Endpoints may return a `changes` array. The API interceptor automatically injects `event_id` from the request URL (e.g., `/api/events/EVENT_ID/...`) into each change object. The interceptor then forwards changes to `store.applyChanges(changes)`.

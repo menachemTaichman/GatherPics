@@ -5,6 +5,7 @@ import { LayoutDashboard, LogIn } from 'lucide-react';
 import { TopNavigationBar } from '../components/layout';
 import { LoadingSpinner } from '../components/common';
 import { LoginModal } from '../components/auth';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/authContext';
 import { getCurrentProfile } from '../utils/profileService';
 import { APP_CONFIG } from '../config/appConfig';
@@ -12,6 +13,7 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventsGeneralList } from '../utils/dataManager';
 import { eventsAPI, API_BASE } from '../utils/apiService';
 import { ImageComponent } from '../hooks/useImage.jsx';
+import { useRTL } from '../hooks/useRTL';
 
 function formatDateDDMMYYYY(dateString) {
   if (!dateString) return '';
@@ -32,8 +34,10 @@ export default function HomePage() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const { requireAuth, isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const { t } = useTranslation();
   const currentProfile = getCurrentProfile();
   const eventsFromStore = useEventsGeneralList();
+  const { isRTL, me } = useRTL();
 
   useApplyScopes([{ entity: 'all', id: 'events', eventId: 'general' }]);
 
@@ -103,7 +107,7 @@ export default function HomePage() {
       .list()
       .catch(() => {
         if (!cancelled) {
-          setError('Failed to load events');
+          setError(t('homePage.failedToLoadEvents'));
         }
       })
       .finally(() => {
@@ -158,7 +162,7 @@ export default function HomePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Error</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('homePage.error')}</h1>
           <p className="text-gray-600 mb-4">{error}</p>
         </div>
       </div>
@@ -218,12 +222,11 @@ export default function HomePage() {
               </h1>
               
               <p className="text-xl text-gray-600 mb-4 leading-relaxed">
-                {APP_CONFIG.description}
+                {t('homePage.description')}
               </p>
               
               <p className="text-base text-gray-500 max-w-2xl mx-auto leading-relaxed">
-                Create event collections, organize photos by moments, discover people with smart face recognition, 
-                and share memories effortlessly with friends and family.
+                {t('homePage.subtitle')}
               </p>
             </motion.div>
 
@@ -240,8 +243,8 @@ export default function HomePage() {
                     to="/dashboard"
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
                   >
-                    <LayoutDashboard className="w-5 h-5 mr-2" />
-                    Dashboard
+                    <LayoutDashboard className={`w-5 h-5 ${me('2')}`} />
+                    {t('homePage.dashboard')}
                   </Link>
                 )}
                 {!isAuthenticated && (
@@ -249,8 +252,8 @@ export default function HomePage() {
                     onClick={openLoginModal}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
                   >
-                    <LogIn className="w-5 h-5 mr-2" />
-                    Log In
+                    <LogIn className={`w-5 h-5 ${me('2')}`} />
+                    {t('homePage.logIn')}
                   </button>
                 )}
               </motion.div>
@@ -267,10 +270,10 @@ export default function HomePage() {
             >
               <div className="text-center mb-10">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                  Explore Events
+                  {t('homePage.exploreEvents')}
                 </h2>
                 <p className="text-gray-600">
-                  Select an event to view its photos and memories
+                  {t('homePage.exploreEventsSubtitle')}
                 </p>
               </div>
               
@@ -310,7 +313,8 @@ export default function HomePage() {
                             {event.name}
                           </h3>
                           <svg 
-                            className="h-5 w-5 flex-shrink-0 text-gray-400 transition-all group-hover:text-primary-600 ml-2" 
+                            className={`h-5 w-5 flex-shrink-0 text-gray-400 transition-all group-hover:text-primary-600 ${me('2')}`} 
+                            style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}
                             fill="none" 
                             stroke="currentColor" 
                             viewBox="0 0 24 24"
@@ -320,7 +324,7 @@ export default function HomePage() {
                         </div>
                         {event.date && (
                           <div className="mb-3 flex items-center text-sm text-gray-500">
-                            <svg className="mr-2 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`${me('2')} h-4 w-4 flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             {formatDateDDMMYYYY(event.date)}
@@ -348,14 +352,14 @@ export default function HomePage() {
               to="/about"
               className="hover:text-primary-600 transition-colors duration-200"
             >
-              About
+              {t('homePage.about')}
             </Link>
             <span className="text-gray-400">•</span>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('feedback:open-form'))}
               className="hover:text-primary-600 transition-colors duration-200"
             >
-              Send Feedback
+              {t('homePage.sendFeedback')}
             </button>
           </div>
           <p className="text-gray-400 text-xs mt-4">

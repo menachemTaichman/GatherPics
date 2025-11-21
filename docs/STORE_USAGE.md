@@ -29,9 +29,9 @@ if (!eventId) return null; // or show loading state
 - Components should add early returns or show loading state when `eventId` is `null`
 
 **Storage Keys:**
-- Entities: `sessionStorage['frw_entities']` - nested by eventId: `{ [eventId]: { images: {}, groups: {}, ... }, general: { profiles: {}, ... } }`
-- Current Profile: `localStorage['frw_currentProfile']` - general data with `events` key
-- Preferences: `localStorage['frw_preferences']`
+- Entities: `sessionStorage['gather_pics_entities']` - nested by eventId: `{ [eventId]: { images: {}, groups: {}, ... }, general: { profiles: {}, ... } }`
+- Current Profile: `localStorage['gather_pics_currentProfile']` - general data with `events` key
+- Preferences: `localStorage['gather_pics_preferences']`
 
 ### Scopes: always scope your component
 Scopes gate which relation changes are allowed to apply in the current tab. Scopes are per-event and per-tab. Add the relevant scope(s) on mount and remove them on unmount.

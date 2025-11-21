@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, Bell, Calendar, Users, Image as ImageIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import HamburgerMenu from './HamburgerMenu.jsx';
 import { BucketDrawer } from './';
 import useBucketStore from '../../utils/bucketStore';
@@ -11,14 +13,135 @@ import { useAuth } from '../../contexts/authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import NotificationsDropdown from '../notifications/NotificationsDropdown.jsx';
 
+// Debug flag - set to true to enable debug logging
+const DEBUG_LANGUAGE = true;
+
 export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef, notifOpen: notifOpenProp, setNotifOpen: setNotifOpenProp, variant = 'dark', showBackground = false, mode = 'full' }) {
   const { toggle, lastPulseTs, queue } = useBucketStore();
   const { isAuthenticated } = useAuth();
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useRTL();
   const location = useLocation();
   const [notifCounts, setNotifCounts] = useState({ unreadCount: 0, totalCount: 0 });
   const [notifButtonRef, setNotifButtonRef] = useState(null);
   const [internalNotifOpen, setInternalNotifOpen] = useState(false);
   const permissions = usePermissions();
+  
+  // Debug refs to track changes
+  const prevLanguageRef = useRef(i18n.language);
+  const prevRTLRef = useRef(isRTL);
+  const renderCountRef = useRef(0);
+  const containerRef = useRef(null);
+  
+  // Track renders
+  renderCountRef.current += 1;
+  
+  // Debug: Log language and RTL changes
+  useEffect(() => {
+    if (!DEBUG_LANGUAGE) return;
+    
+    const currentLang = i18n.language;
+    const docDir = document.documentElement.dir;
+    const docLang = document.documentElement.lang;
+    
+    if (prevLanguageRef.current !== currentLang) {
+      console.log('[TopNavBar] Language changed:', {
+        from: prevLanguageRef.current,
+        to: currentLang,
+        docDir,
+        docLang,
+        isRTL,
+        timestamp: new Date().toISOString(),
+        renderCount: renderCountRef.current
+      });
+      prevLanguageRef.current = currentLang;
+    }
+    
+    if (prevRTLRef.current !== isRTL) {
+      console.log('[TopNavBar] RTL changed:', {
+        from: prevRTLRef.current,
+        to: isRTL,
+        language: currentLang,
+        docDir,
+        timestamp: new Date().toISOString(),
+        renderCount: renderCountRef.current
+      });
+      prevRTLRef.current = isRTL;
+    }
+  }, [i18n.language, isRTL]);
+  
+  // Debug: Log layout measurements when language/RTL changes
+  useEffect(() => {
+    if (!DEBUG_LANGUAGE || !containerRef.current) return;
+    
+    const measureLayout = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      
+      const rect = container.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(container);
+      
+      console.log('[TopNavBar] Layout measurements:', {
+        language: i18n.language,
+        isRTL,
+        docDir: document.documentElement.dir,
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        paddingLeft: computedStyle.paddingLeft,
+        paddingRight: computedStyle.paddingRight,
+        justifyContent: computedStyle.justifyContent,
+        direction: computedStyle.direction,
+        timestamp: new Date().toISOString()
+      });
+    };
+    
+    // Measure immediately
+    measureLayout();
+    
+    // Measure after a short delay to catch any layout shifts
+    const timeoutId = setTimeout(measureLayout, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [i18n.language, isRTL]);
+  
+  // Debug: Listen to language change events
+  useEffect(() => {
+    if (!DEBUG_LANGUAGE) return;
+    
+    const handleLanguageChanged = (lng) => {
+      console.log('[TopNavBar] languageChanged event:', {
+        newLanguage: lng,
+        currentLanguage: i18n.language,
+        docDir: document.documentElement.dir,
+        isRTL,
+        timestamp: new Date().toISOString()
+      });
+    };
+    
+    i18n.on('languageChanged', handleLanguageChanged);
+    
+    return () => {
+      i18n.off('languageChanged', handleLanguageChanged);
+    };
+  }, [i18n, isRTL]);
+  
+  // Debug: Log render info
+  useEffect(() => {
+    if (!DEBUG_LANGUAGE) return;
+    
+    console.log('[TopNavBar] Render:', {
+      renderCount: renderCountRef.current,
+      language: i18n.language,
+      isRTL,
+      docDir: document.documentElement.dir,
+      mode,
+      variant,
+      timestamp: new Date().toISOString()
+    });
+  });
   
   // Use prop if provided, otherwise use internal state
   const notifOpen = notifOpenProp !== undefined ? notifOpenProp : internalNotifOpen;
@@ -96,8 +219,8 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
   if (isMinimal) {
   return (
       <>
-    <div className={containerClass}>
-      <div className="flex items-center gap-2 pointer-events-auto">
+    <div className={containerClass} dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex items-center gap-2 pointer-events-auto" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Hamburger Menu */}
             <HamburgerMenu eventName={eventName} eventUrl={eventUrl} variant="dark" />
         {/* Bucket */}
@@ -109,7 +232,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
             }}
             className={buttonClass}
             style={iconStyle}
-            title="Bucket"
+            title={t('navigation.bucket')}
             animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
             transition={{ duration: 0.4 }}
             key={lastPulseTs}
@@ -118,7 +241,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
             <div className="relative">
                   <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
               {queue.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
                   {queue.length}
                 </span>
               )}
@@ -132,13 +255,13 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
             onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
             className={buttonClass}
             style={iconStyle}
-            title="Notifications"
+            title={t('navigation.notifications')}
             data-notif-toggle="true"
           >
             <div className="relative">
                   <Bell className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
                   {(effectiveCounts?.unreadCount || 0) > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                    <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
                       {effectiveCounts.unreadCount}
                     </span>
                   )}
@@ -159,8 +282,8 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
   // Universal fix: Add padding-top wrapper to prevent content from starting inside header
   return (
     <>
-      <div className={containerClass}>
-        <div className="flex items-center gap-2 pointer-events-auto">
+      <div className={containerClass} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="flex items-center gap-2 pointer-events-auto" dir={isRTL ? 'rtl' : 'ltr'}>
           {/* Hamburger Menu */}
           <HamburgerMenu eventName={eventName} eventUrl={eventUrl} variant={isLight ? 'light' : 'dark'} />
           
@@ -171,7 +294,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                 <Link
                   to={`/${eventUrl}/timeline`}
                   className={isActiveRoute('/timeline') ? activeNavLinkClass : navLinkClass}
-                  title="Timeline"
+                  title={t('navigation.timeline')}
                 >
                   <Calendar 
                     className={`w-5 h-5 ${isActiveRoute('/timeline') ? (isLight ? 'text-primary-600' : 'text-white') : ''}`}
@@ -183,7 +306,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                 <Link
                   to={`/${eventUrl}/people`}
                   className={isActiveRoute('/people') ? activeNavLinkClass : navLinkClass}
-                  title="People"
+                  title={t('navigation.people')}
                 >
                   <Users 
                     className={`w-5 h-5 ${isActiveRoute('/people') ? (isLight ? 'text-primary-600' : 'text-white') : ''}`}
@@ -195,7 +318,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                 <Link
                   to={`/${eventUrl}/albums`}
                   className={isActiveRoute('/albums') ? activeNavLinkClass : navLinkClass}
-                  title="Albums"
+                  title={t('navigation.albums')}
                 >
                   <ImageIcon 
                     className={`w-5 h-5 ${isActiveRoute('/albums') ? (isLight ? 'text-primary-600' : 'text-white') : ''}`}
@@ -215,7 +338,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
               }}
               className={buttonClass}
               style={iconStyle}
-              title="Bucket"
+              title={t('navigation.bucket')}
               animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
               transition={{ duration: 0.4 }}
               key={lastPulseTs}
@@ -224,7 +347,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
               <div className="relative">
                 <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
                 {queue.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                  <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
                     {queue.length}
                   </span>
                 )}
@@ -239,13 +362,13 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
               onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
               className={buttonClass}
               style={iconStyle}
-              title="Notifications"
+              title={t('navigation.notifications')}
               data-notif-toggle="true"
             >
               <div className="relative">
                 <Bell className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
               {(effectiveCounts?.unreadCount || 0) > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
                   {effectiveCounts.unreadCount}
                 </span>
               )}

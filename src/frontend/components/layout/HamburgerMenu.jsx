@@ -2,11 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useLocation } from 'react-router-dom';
-import { Menu, X, Home, UserCircle, LayoutDashboard, Calendar, MessageSquare, FileText } from 'lucide-react';
+import { Menu, X, Home, UserCircle, LayoutDashboard, Calendar, MessageSquare, FileText, Languages } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useAuth } from '../../contexts/authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,9 +19,11 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
   const buttonRef = useRef(null);
   const { isAuthenticated } = useAuth();
   const permissions = usePermissions();
+  const { t, i18n: i18nInstance } = useTranslation();
   const location = useLocation();
   const params = useParams();
   const currentEventUrl = params.eventUrl || eventUrl;
+  const { isRTL } = useRTL();
   
   const isLight = variant === 'light';
   const buttonClass = isLight 
@@ -34,10 +39,22 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
     const updatePosition = () => {
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.bottom + 8,
-          left: rect.left
-        });
+        const menuWidth = 256; // w-64 = 256px
+        if (isRTL) {
+          // Position from right edge in RTL
+          setMenuPosition({
+            top: rect.bottom + 8,
+            right: window.innerWidth - rect.right,
+            left: 'auto'
+          });
+        } else {
+          // Position from left edge in LTR
+          setMenuPosition({
+            top: rect.bottom + 8,
+            left: rect.left,
+            right: 'auto'
+          });
+        }
       }
     };
 
@@ -50,7 +67,28 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
         window.removeEventListener('scroll', updatePosition, true);
       };
     }
-  }, [isOpen]);
+  }, [isOpen, isRTL]);
+
+  // Update position immediately when language/direction changes
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const menuWidth = 256;
+      if (document.documentElement.dir === 'rtl') {
+        setMenuPosition({
+          top: rect.bottom + 8,
+          right: window.innerWidth - rect.right,
+          left: 'auto'
+        });
+      } else {
+        setMenuPosition({
+          top: rect.bottom + 8,
+          left: rect.left,
+          right: 'auto'
+        });
+      }
+    }
+  }, [i18nInstance.language, isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -95,35 +133,35 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
     },
     {
       id: 'account',
-      label: 'My Account',
+      label: t('menu.myAccount'),
       icon: UserCircle,
       onClick: handleAccountClick,
       show: true
     },
     {
       id: 'event',
-      label: eventName || 'Event Page',
+      label: eventName || t('menu.eventPage'),
       icon: Calendar,
       to: currentEventUrl ? `/${currentEventUrl}` : null,
       show: Boolean(currentEventUrl)
     },
     {
       id: 'dashboard',
-      label: 'Dashboard',
+      label: t('menu.dashboard'),
       icon: LayoutDashboard,
       to: '/dashboard',
       show: hasDashboard
     },
     {
       id: 'feedback',
-      label: 'Send Feedback',
+      label: t('menu.sendFeedback'),
       icon: MessageSquare,
       onClick: handleFeedbackClick,
       show: true
     },
     {
       id: 'about',
-      label: 'About',
+      label: t('menu.about'),
       icon: FileText,
       to: '/about',
       show: true
@@ -140,12 +178,16 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
           exit={{ opacity: 0, scale: 0.95, y: -10 }}
           transition={{ duration: 0.2 }}
           className="fixed w-64 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50"
+          dir={isRTL ? 'rtl' : 'ltr'}
           style={{
             top: `${menuPosition.top}px`,
-            left: `${menuPosition.left}px`
+            ...(isRTL ? { right: `${menuPosition.right}px` } : { left: `${menuPosition.left}px` })
           }}
         >
-          <div className="max-h-[80vh] overflow-y-auto">
+          <div 
+            className="max-h-[80vh] overflow-y-auto" 
+            dir={isRTL ? 'rtl' : 'ltr'}
+          >
             {menuItems.map((item, index) => {
               const Icon = item.icon;
               const isActive = item.to && location.pathname === item.to;
@@ -155,7 +197,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                   <button
                     key={item.id}
                     onClick={item.onClick}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors text-gray-700"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   >
                     <Icon className="w-5 h-5 text-gray-500" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -170,15 +213,52 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                   key={item.id}
                   to={item.to}
                   onClick={() => setIsOpen(false)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${
                     isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
                   }`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 >
                   <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
                   <span className="text-sm font-medium">{item.label}</span>
                 </Link>
               );
             })}
+            
+            {/* Language Selector */}
+            <div className="border-t border-gray-200 mt-2">
+              <div className="px-4 py-2">
+                <div className="flex items-center gap-3 mb-3" dir={isRTL ? 'rtl' : 'ltr'}>
+                  <Languages className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">{t('menu.language')}</span>
+                </div>
+                <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
+                  <button
+                    onClick={() => {
+                      i18n.changeLanguage('en');
+                    }}
+                    className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      i18nInstance.language === 'en'
+                        ? 'bg-white text-primary-700 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {t('menu.english')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      i18n.changeLanguage('he');
+                    }}
+                    className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      i18nInstance.language === 'he'
+                        ? 'bg-white text-primary-700 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {t('menu.hebrew')}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </motion.div>
       )}
@@ -192,7 +272,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
         onClick={() => setIsOpen(!isOpen)}
         className={buttonClass}
         style={iconStyle}
-        aria-label="Menu"
+        aria-label={t('menu.menu')}
       >
         {isOpen ? (
           <X className="w-5 h-5" style={iconStyle} />

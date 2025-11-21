@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Plus as PlusIcon, Image as ImageIcon, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { albumsAPI } from '../../utils/apiService';
 import { useDataStore } from '../../utils/dataManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -25,7 +26,21 @@ export default function AlbumQuickAddButton({
   const { defaultAlbumIds } = useEventDefaultAlbums(eventId, eventUrl);
   const defaultAlbumsReady = Boolean(defaultAlbumIds);
   const { showToast } = useToast();
+  const { i18n } = useTranslation();
+  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
   const navigate = useNavigate();
+  
+  // Update RTL state when language changes
+  useEffect(() => {
+    const updateDirection = () => {
+      setIsRTL(document.documentElement.dir === 'rtl');
+    };
+    updateDirection();
+    i18n.on('languageChanged', updateDirection);
+    return () => {
+      i18n.off('languageChanged', updateDirection);
+    };
+  }, [i18n]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
@@ -252,18 +267,25 @@ export default function AlbumQuickAddButton({
     if (!buttonRef) return {};
     const rect = buttonRef.getBoundingClientRect();
     const isUp = dropdownDirection === 'up';
+    const dropdownWidth = 256; // w-64 = 256px
 
     if (isUp) {
       return {
         position: 'fixed',
-        left: `${rect.left}px`,
+        ...(isRTL 
+          ? { right: `${window.innerWidth - rect.right}px` }
+          : { left: `${rect.left}px` }
+        ),
         bottom: `${window.innerHeight - rect.top + 8}px`,
         zIndex: 10000,
       };
     }
     return {
       position: 'fixed',
-      left: `${rect.left}px`,
+      ...(isRTL 
+        ? { right: `${window.innerWidth - rect.right}px` }
+        : { left: `${rect.left}px` }
+      ),
       top: `${rect.bottom + 8}px`,
       zIndex: 10000,
     };

@@ -24,6 +24,7 @@ import { initializePreferences } from '../utils/settings';
 import { ToastProvider, useToast } from '../contexts/ToastContext';
 import { AuthProvider, useAuth } from '../contexts/authContext';
 import { setCurrentProfile } from '../utils/profileService';
+import '../i18n'; // Initialize i18next
 import RequestFormModal from './requests/RequestFormModal.jsx';
 import { RequestDetailModal } from './requests';
 import { requestsAPI, feedbacksAPI } from '../utils/apiService';
