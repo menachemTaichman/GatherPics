@@ -1,4 +1,4 @@
-**Terms of Service & Use Agreement – Gather Pics**
+**Quick Summary:** As a professional subscriber, you own your photos and are responsible for them, and we provide the platform and face recognition technology. We handle your content securely and you can delete everything at any time. Payments are required for subscription, and we may update terms with notice.
 
 Last Updated: January 2025
 

@@ -1,4 +1,4 @@
-**Privacy Policy – Gather Pics**
+**Quick Summary:** We take your privacy seriously! This policy explains what information we collect, how we use it, and how we protect it. We collect your account info, photos, and face recognition data to provide the service and organize your photos. Everything is protected with encryption and secure storage. The key point: you own your photos, we just help you organize them. We use face recognition technology to automatically group photos by person, but we don't use this data for anything else. We never sell your information, and you can delete everything at any time.
 
 Last Updated: January 2025
 

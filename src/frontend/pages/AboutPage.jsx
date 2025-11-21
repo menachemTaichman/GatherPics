@@ -92,6 +92,8 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
     let inList = false;
     let listItems = [];
     let h2Index = 0;
+    let elementIndex = 0; // Unique counter for all elements
+    let quickSummary = null; // Store quick summary separately
 
     // Helper function to process inline markdown (bold, italic, links, etc.)
     const processInlineMarkdown = (text) => {
@@ -236,7 +238,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
       if (currentParagraph.length > 0) {
         const paragraphText = currentParagraph.join(' ');
         elements.push(
-          <p key={`p-${elements.length}`} className="mb-4 text-gray-700 leading-relaxed">
+          <p key={`p-${elementIndex++}`} className="mb-4 text-gray-700 leading-relaxed">
             {processInlineMarkdown(paragraphText)}
           </p>
         );
@@ -246,10 +248,11 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
 
     const flushList = () => {
       if (listItems.length > 0) {
+        const listKey = `ul-${elementIndex++}`;
         elements.push(
-          <ul key={`ul-${elements.length}`} className="list-disc list-inside mb-4 space-y-2 text-gray-700">
+          <ul key={listKey} className="list-disc list-inside mb-4 space-y-2 text-gray-700">
             {listItems.map((item, idx) => (
-              <li key={idx}>{processInlineMarkdown(item)}</li>
+              <li key={`${listKey}-item-${idx}`}>{processInlineMarkdown(item)}</li>
             ))}
           </ul>
         );
@@ -258,15 +261,47 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
       inList = false;
     };
 
+    let collectingSummary = false;
+    
     lines.forEach((line, index) => {
       const trimmed = line.trim();
+      
+      // Quick Summary detection - start collecting
+      if (trimmed.startsWith('**Quick Summary:**') || trimmed.startsWith('**Quick Summary**')) {
+        flushList();
+        flushParagraph();
+        // Extract summary text (remove the "**Quick Summary:**" prefix)
+        const summaryText = trimmed.replace(/^\*\*Quick Summary:\*\*\s*/, '').replace(/^\*\*Quick Summary\*\*\s*/, '');
+        quickSummary = summaryText;
+        collectingSummary = true;
+        return; // Skip normal processing
+      }
+      
+      // If we're collecting quick summary
+      if (collectingSummary) {
+        // Stop collecting on horizontal rule or empty line (but allow one empty line)
+        if (trimmed === '---' || trimmed.match(/^-{3,}$/)) {
+          collectingSummary = false;
+          return; // Skip the horizontal rule in normal processing
+        }
+        
+        // Continue collecting if line has content
+        if (trimmed) {
+          quickSummary += ' ' + trimmed;
+          return; // Skip normal processing
+        } else {
+          // Empty line - stop collecting
+          collectingSummary = false;
+          return; // Skip the empty line
+        }
+      }
       
       // Horizontal rule (---)
       if (trimmed === '---' || trimmed.match(/^-{3,}$/)) {
         flushList();
         flushParagraph();
         elements.push(
-          <hr key={`hr-${elements.length}`} className="my-6 border-gray-300" />
+          <hr key={`hr-${elementIndex++}`} className="my-6 border-gray-300" />
         );
       }
       // Headers
@@ -275,7 +310,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
         flushParagraph();
         const headerText = trimmed.substring(2);
         elements.push(
-          <h2 key={`h2-${elements.length}`} className="text-2xl font-semibold text-gray-900 mt-8 mb-4">
+          <h2 key={`h2-${elementIndex++}`} className="text-2xl font-semibold text-gray-900 mt-8 mb-4">
             {processInlineMarkdown(headerText)}
           </h2>
         );
@@ -284,6 +319,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
         flushParagraph();
         const headerText = trimmed.substring(3);
         const h2Key = `h2-${h2Index++}`;
+        const elementKey = `element-${elementIndex++}`;
         const h2Ref = (el) => {
           if (el) {
             h2Refs.current[h2Key] = el;
@@ -292,7 +328,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
           }
         };
         elements.push(
-          <div key={h2Key} className="relative">
+          <div key={elementKey} className="relative">
             <h3 
               ref={h2Ref}
               className="text-xl font-semibold text-gray-900 mt-6 mb-3"
@@ -307,7 +343,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
         flushParagraph();
         const headerText = trimmed.substring(4);
         elements.push(
-          <h4 key={`h4-${elements.length}`} className="text-lg font-semibold text-gray-900 mt-4 mb-2">
+          <h4 key={`h4-${elementIndex++}`} className="text-lg font-semibold text-gray-900 mt-4 mb-2">
             {processInlineMarkdown(headerText)}
           </h4>
         );
@@ -336,6 +372,31 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
 
     flushList();
     flushParagraph();
+
+    // Add Quick Summary box at the beginning if it exists
+    if (quickSummary) {
+      const summaryKey = `quick-summary-${elementIndex++}`;
+      elements.unshift(
+        <div 
+          key={summaryKey}
+          className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-l-4 border-blue-500 rounded-lg p-6 mb-8 shadow-sm"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-1">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Summary</h3>
+              <p className="text-gray-700 leading-relaxed">
+                {processInlineMarkdown(quickSummary)}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return elements;
   };
