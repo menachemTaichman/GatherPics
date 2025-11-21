@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText, Bell, ShoppingBag } from 'lucide-react';
+import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText } from 'lucide-react';
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
@@ -12,21 +12,11 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventGeneralById } from '../utils/dataManager';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../contexts/authContext';
-import HamburgerMenu from '../components/layout/HamburgerMenu.jsx';
-import NotificationsDropdown from '../components/notifications/NotificationsDropdown.jsx';
-import { BucketDrawer, AccountModal } from '../components/layout';
-import useBucketStore from '../utils/bucketStore';
-import { getCurrentProfile } from '../utils/profileService';
-import { profilesAPI } from '../utils/apiService';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const [showEventSettings, setShowEventSettings] = useState(false);
   const { showToast } = useToast();
   const { isAuthenticated } = useAuth();
-  const { toggle, lastPulseTs, queue, isOpen } = useBucketStore();
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifButtonRef, setNotifButtonRef] = useState(null);
-  const [notifCounts, setNotifCounts] = useState({ unreadCount: 0, totalCount: 0 });
   const heroContainerRef = useRef(null);
   const textOverlayRef = useRef(null);
   const imageSectionRef = useRef(null);
@@ -56,41 +46,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
   const eventName = resolvedEvent?.name || 'Event';
   const permissions = usePermissions();
   const canSeeAlbums = Boolean(eventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit);
-
-  // Notification counts
-  const cachedProfile = getCurrentProfile() || {};
-  const effectiveCounts = {
-    totalCount: Number(notifCounts?.totalCount || cachedProfile?.total_notifications || 0),
-    unreadCount: Number(notifCounts?.unreadCount || cachedProfile?.unread_notifications || 0),
-  };
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    (async () => {
-      try {
-        await profilesAPI.getCurrentProfile(eventUrl);
-        const p = getCurrentProfile() || {};
-        const totalNum = Number(p.total_notifications || 0);
-        const unreadNum = Number(p.unread_notifications || 0);
-        setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
-      } catch (e) {
-        const p = getCurrentProfile() || {};
-        const totalNum = Number(p.total_notifications || 0);
-        const unreadNum = Number(p.unread_notifications || 0);
-        setNotifCounts({ unreadCount: unreadNum, totalCount: totalNum });
-      }
-    })();
-  }, [eventUrl, isAuthenticated]);
-
-  useEffect(() => {
-    const closeOnOutside = (e) => {
-      if (notifOpen) setNotifOpen(false);
-    };
-    if (notifOpen) {
-      document.addEventListener('click', closeOnOutside);
-      return () => document.removeEventListener('click', closeOnOutside);
-    }
-  }, [notifOpen]);
 
   // Track previous representative_image value to detect actual changes
   const prevRepresentativeImageRef = useRef(undefined);
@@ -411,58 +366,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
         />
       </div>
 
-      {/* Top Navigation Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 px-8 sm:px-10 md:px-12 py-3 flex items-center justify-start pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Hamburger Menu */}
-          <HamburgerMenu eventName={eventName} eventUrl={eventUrl} />
-          {/* Bucket */}
-          {eventUrl && (
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggle();
-              }}
-              className="w-12 h-12 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0"
-              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}
-              title="Bucket"
-              animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
-              transition={{ duration: 0.4 }}
-              key={lastPulseTs}
-              data-bucket-toggle="true"
-            >
-              <div className="relative">
-                <ShoppingBag className="w-6 h-6" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
-                {queue.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-                    {queue.length}
-                  </span>
-                )}
-              </div>
-            </motion.button>
-          )}
-          {/* Notifications */}
-          {(effectiveCounts?.totalCount || 0) > 0 && (
-            <button
-              ref={setNotifButtonRef}
-              onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
-              className="w-12 h-12 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0"
-              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}
-              title="Notifications"
-            >
-              <div className="relative">
-                <Bell className="w-6 h-6" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
-                {(effectiveCounts?.unreadCount || 0) > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-                    {effectiveCounts.unreadCount}
-                  </span>
-                )}
-              </div>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Sticky Text Overlay */}
       <div 
         ref={textOverlayRef}
@@ -612,11 +515,6 @@ export default function EventHomePage({ eventUrl, eventData }) {
         />
       </PermissionGate>
 
-      <BucketDrawer />
-      <AccountModal hideButton={true} />
-      {notifOpen && notifButtonRef && (
-        <NotificationsDropdown buttonRef={notifButtonRef} isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
-      )}
     </motion.div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, ArrowUp, ArrowDown, Plus } from 'lucide-react';
+import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, Plus } from 'lucide-react';
 import { uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
@@ -13,6 +13,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { UploadFormModal } from '../../components/uploads';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { ScrollableTable } from '../../components/common';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -130,10 +131,6 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
     }
   };
 
-  const getSortIcon = (field) => {
-    if (sortBy !== field) return null;
-    return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
-  };
 
   const handleUploadComplete = async (result) => {
     // Refresh uploads list after successful upload
@@ -149,18 +146,23 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
     <>
       <div className="w-full">
         {/* Sticky Header */}
-        <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Uploads History
-              </h1>
-              <p className="text-gray-600">
-                {sortedUploads.length === 0 
-                  ? 'No uploads yet'
-                  : `${sortedUploads.length} upload${sortedUploads.length !== 1 ? 's' : ''}`
-                }
-              </p>
+        <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
+          <div className="w-full px-8 py-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Uploads History</h1>
+                  <p className="text-sm text-gray-500">
+                    {sortedUploads.length === 0 
+                      ? 'No uploads yet'
+                      : `${sortedUploads.length} upload${sortedUploads.length !== 1 ? 's' : ''}`
+                    }
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -181,173 +183,153 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
             </motion.div>
           ) : (
             <>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          ID
-                        </th>
-                        <th
-                          onClick={() => handleSort('started_at')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              <ScrollableTable
+                columns={[
+                  {
+                    key: 'id',
+                    label: 'ID',
+                    align: 'left',
+                    cellClassName: 'text-xs text-gray-500 font-mono',
+                    renderCell: (upload) => upload.id,
+                  },
+                  {
+                    key: 'started_at',
+                    label: 'Started',
+                    sortable: true,
+                    align: 'left',
+                    cellClassName: 'text-gray-900',
+                    renderCell: (upload) => formatDateTime(upload.started_at),
+                  },
+                  {
+                    key: 'profile_label',
+                    label: 'Profile',
+                    sortable: true,
+                    align: 'left',
+                    cellClassName: 'text-gray-700',
+                    renderCell: (upload) => upload.profile_label || 'Unknown',
+                  },
+                  {
+                    key: 'images_count',
+                    label: 'Images',
+                    sortable: true,
+                    align: 'center',
+                    cellClassName: 'text-gray-700',
+                    renderCell: (upload) => upload.images_count || 0,
+                  },
+                  {
+                    key: 'faces_count',
+                    label: 'Faces',
+                    sortable: true,
+                    align: 'center',
+                    cellClassName: 'text-gray-700',
+                    renderCell: (upload) => upload.faces_count || 0,
+                  },
+                  {
+                    key: 'clusters_count',
+                    label: 'Groups',
+                    sortable: true,
+                    align: 'center',
+                    cellClassName: 'text-gray-700',
+                    renderCell: (upload) => upload.clusters_count || 0,
+                  },
+                  {
+                    key: 'status',
+                    label: 'Status',
+                    sortable: true,
+                    align: 'left',
+                    renderCell: (upload) => (
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                        upload.status === 'completed' 
+                          ? 'bg-green-100 text-green-800' 
+                          : upload.status === 'failed'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {upload.status || 'unknown'}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'notes',
+                    label: 'Notes',
+                    align: 'left',
+                    cellClassName: 'text-gray-700',
+                    renderCell: (upload) =>
+                      editingNotes === upload.id ? (
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={notesValue}
+                            onChange={(e) => setNotesValue(e.target.value)}
+                            className="flex-1 border rounded px-2 py-1 text-sm"
+                            placeholder="Add notes..."
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveNotes(upload.id)}
+                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            title="Save"
+                          >
+                            <Save className="w-4 h-4 text-green-600" />
+                          </button>
+                          <button
+                            onClick={handleCancelEditNotes}
+                            className="p-1 hover:bg-red-100 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <RotateCcw className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2 group">
+                          <span className="flex-1 truncate max-w-xs">
+                            {upload.notes || <span className="text-gray-400 italic">No notes</span>}
+                          </span>
+                          <button
+                            onClick={() => handleEditNotes(upload)}
+                            className="p-1 hover:bg-blue-100 rounded transition-colors opacity-0 group-hover:opacity-100"
+                            title="Edit notes"
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </button>
+                        </div>
+                      ),
+                  },
+                  {
+                    key: 'actions',
+                    label: 'Actions',
+                    align: 'right',
+                    renderCell: (upload) => (
+                      <div className="flex items-center justify-end space-x-2">
+                        <Link
+                          to={`/${eventUrl}/uploads/${upload.id}`}
+                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors inline-flex"
+                          title="View upload"
                         >
-                          <div className="flex items-center space-x-1">
-                            <span>Started</span>
-                            {getSortIcon('started_at')}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort('profile_label')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        </Link>
+                        <button
+                          onClick={() => setDeleteUpload(upload)}
+                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Delete upload"
                         >
-                          <div className="flex items-center space-x-1">
-                            <span>Profile</span>
-                            {getSortIcon('profile_label')}
-                          </div>
-                        </th>
-                          <th
-                            onClick={() => handleSort('images_count')}
-                            className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center justify-center space-x-1">
-                              <span>Images</span>
-                              {getSortIcon('images_count')}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => handleSort('faces_count')}
-                            className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center justify-center space-x-1">
-                              <span>Faces</span>
-                              {getSortIcon('faces_count')}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => handleSort('clusters_count')}
-                            className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center justify-center space-x-1">
-                              <span>Groups</span>
-                              {getSortIcon('clusters_count')}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => handleSort('status')}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center space-x-1">
-                              <span>Status</span>
-                              {getSortIcon('status')}
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                            Notes
-                          </th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {sortedUploads.map((upload) => (
-                        <tr key={upload.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-                            {upload.id}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {formatDateTime(upload.started_at)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {upload.profile_label || 'Unknown'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                            {upload.images_count || 0}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                            {upload.faces_count || 0}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                            {upload.clusters_count || 0}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              upload.status === 'completed' 
-                                ? 'bg-green-100 text-green-800' 
-                                : upload.status === 'failed'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {upload.status || 'unknown'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {editingNotes === upload.id ? (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="text"
-                                  value={notesValue}
-                                  onChange={(e) => setNotesValue(e.target.value)}
-                                  className="flex-1 border rounded px-2 py-1 text-sm"
-                                  placeholder="Add notes..."
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => handleSaveNotes(upload.id)}
-                                  className="p-1 hover:bg-green-100 rounded transition-colors"
-                                  title="Save"
-                                >
-                                  <Save className="w-4 h-4 text-green-600" />
-                                </button>
-                                <button
-                                  onClick={handleCancelEditNotes}
-                                  className="p-1 hover:bg-red-100 rounded transition-colors"
-                                  title="Cancel"
-                                >
-                                  <RotateCcw className="w-4 h-4 text-red-600" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center space-x-2">
-                                <span className="flex-1 truncate max-w-xs">
-                                  {upload.notes || <span className="text-gray-400 italic">No notes</span>}
-                                </span>
-                                <button
-                                  onClick={() => handleEditNotes(upload)}
-                                  className="p-1 hover:bg-blue-100 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                  title="Edit notes"
-                                >
-                                  <Edit2 className="w-4 h-4 text-blue-600" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right">
-                            <div className="flex items-center justify-end space-x-2">
-                              <button
-                                onClick={() => navigate(`/${eventUrl}/uploads/${upload.id}`)}
-                                className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                title="View upload"
-                              >
-                                <Eye className="w-4 h-4 text-blue-600" />
-                              </button>
-                              <button
-                                onClick={() => setDeleteUpload(upload)}
-                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Delete upload"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    ),
+                  },
+                ]}
+                data={sortedUploads}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
+                emptyState={{
+                  icon: Upload,
+                  title: 'No uploads yet',
+                  message: 'Upload some photos to get started',
+                }}
+                getRowKey={(upload) => upload.id}
+              />
               
               {/* Note about data changes */}
               <div className="mt-4 text-xs text-gray-500 italic text-center">

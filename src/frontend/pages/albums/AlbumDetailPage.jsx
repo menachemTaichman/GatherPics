@@ -543,7 +543,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   return (
     <div className="w-full">
       {/* Pinned Header */}
-      <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link

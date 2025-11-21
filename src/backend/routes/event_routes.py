@@ -195,6 +195,7 @@ def create_event():
         return jsonify({"error": str(e)}), 400
 
 @event_bp.route('/events/resolve', methods=['GET'])
+@optional_auth
 def resolve_event():
     """Resolve event by URL slug. Public endpoint used by client resolver."""
     url = request.args.get('url', '').strip()
@@ -210,7 +211,14 @@ def resolve_event():
         event = gm.get_event_by_url(url)
         if not event:
             return jsonify({"error": "Event not found"}), 404
-        return jsonify({ 'event_id': event.get('event_id') or event.get('id'), 'event': event })
+
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'event',
+            'items': event,
+            'event_id': 'general'
+        }]
+        return jsonify({ 'event_id': event.get('event_id') or event.get('id'), 'event': event, 'changes': changes })
     except Exception:
         return jsonify({"error": "Event not found"}), 404
 

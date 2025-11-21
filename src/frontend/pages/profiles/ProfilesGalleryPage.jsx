@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ArrowUp, ArrowDown, ChevronDown, Calendar, Copy } from 'lucide-react';
+import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
@@ -11,12 +11,13 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useEventProfilesList, useProfilesList, useDataStore, useEventsGeneralList } from '../../utils/dataManager';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
-import Header from '../../components/layout/Header';
+import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { useParams } from 'react-router-dom';
 import { useEventUrls } from '../../hooks/useEventUrls';
+import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 
 const FILTER_ALL_EVENTS = 'dashboard';
@@ -73,7 +74,7 @@ export default function ProfilesGalleryPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Profile Management | ${APP_CONFIG.name}`;
+    document.title = `Profiles | ${APP_CONFIG.name}`;
   }, []);
 
   // Auto-show login modal when not authenticated
@@ -362,13 +363,6 @@ export default function ProfilesGalleryPage() {
     [sortBy, sortDir]
   );
 
-  const getSortIcon = useCallback(
-    (field) => {
-      if (sortBy !== field) return null;
-      return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
-    },
-    [sortBy, sortDir]
-  );
 
   const handleEditProfile = (profile) => {
     const mergedProfile = {
@@ -709,11 +703,265 @@ export default function ProfilesGalleryPage() {
     }
   }, [filterEventId, selectedEventName, showEventDropdown]);
 
+  // Build columns array dynamically
+  const columns = useMemo(() => {
+    const baseColumns = [
+      {
+        key: 'label',
+        label: 'Name',
+        sortable: true,
+        align: 'left',
+        headerClassName: 'w-48 min-w-[192px]',
+        cellClassName: 'text-gray-900 font-medium w-48 min-w-[192px]',
+        renderCell: (profile) =>
+          profile.isPlaceholder ? (
+            <span className="text-gray-400 italic">—</span>
+          ) : (
+            profile.label || 'Untitled Profile'
+          ),
+      },
+      {
+        key: 'hierarchy_rank',
+        label: 'Rank',
+        sortable: true,
+        align: 'left',
+        headerClassName: 'w-24 min-w-[96px]',
+        cellClassName: 'text-gray-700 w-24 min-w-[96px]',
+        renderCell: (profile) =>
+          profile.isPlaceholder ? (
+            <span className="text-gray-400 italic">—</span>
+          ) : (
+            profile.hierarchy_rank || 0
+          ),
+      },
+      {
+        key: 'is_public',
+        label: 'Accessibility',
+        sortable: true,
+        align: 'left',
+        headerClassName: 'w-36 min-w-[144px]',
+        cellClassName: 'w-36 min-w-[144px]',
+        renderCell: (profile) =>
+          profile.isPlaceholder ? (
+            <span className="text-gray-400 italic">—</span>
+          ) : (
+            <span
+              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                profile.is_public === 1
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-purple-100 text-purple-700'
+              }`}
+            >
+              {profile.is_public === 1 ? 'Public' : 'Private'}
+            </span>
+          ),
+      },
+    ];
+
+    if (currentProfile?.can_manage_create_events === 1) {
+      baseColumns.push({
+        key: 'can_create_events',
+        label: 'Can Create Events',
+        sortable: true,
+        align: 'left',
+        headerClassName: 'w-40 min-w-[160px]',
+        cellClassName: 'w-40 min-w-[160px]',
+        renderCell: (profile) =>
+          profile.isPlaceholder ? (
+            <span className="text-gray-400 italic">—</span>
+          ) : (
+            <span
+              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                profile.can_create_events === 1
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {profile.can_create_events === 1 ? 'Yes' : 'No'}
+            </span>
+          ),
+      });
+    }
+
+    baseColumns.push({
+      key: 'restricted_to_event_name',
+      label: 'Restricted To Event',
+      sortable: true,
+      align: 'left',
+      cellClassName: 'text-gray-700',
+      renderCell: (profile) =>
+        profile.isPlaceholder ? (
+          <span className="text-gray-400 italic">—</span>
+        ) : (
+          profile.restricted_to_event_name || <span className="text-gray-400 italic">—</span>
+        ),
+    });
+
+    if (filterEventId && filterEventId !== FILTER_ALL_EVENTS) {
+      baseColumns.push(
+        {
+          key: 'can_manage_event',
+          label: 'Can Manage',
+          sortable: true,
+          align: 'left',
+          renderCell: (profile) =>
+            profile.isPlaceholder ? (
+              <span className="text-gray-400 italic">—</span>
+            ) : (
+              <span
+                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                  profile.can_manage_event === 1
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {profile.can_manage_event === 1 ? 'Yes' : 'No'}
+              </span>
+            ),
+        },
+        {
+          key: 'can_delete_event',
+          label: 'Can Delete',
+          sortable: true,
+          align: 'left',
+          renderCell: (profile) =>
+            profile.isPlaceholder ? (
+              <span className="text-gray-400 italic">—</span>
+            ) : (
+              <span
+                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                  profile.can_delete_event === 1
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {profile.can_delete_event === 1 ? 'Yes' : 'No'}
+              </span>
+            ),
+        },
+        {
+          key: 'can_edit',
+          label: 'Can Edit',
+          sortable: true,
+          align: 'left',
+          renderCell: (profile) =>
+            profile.isPlaceholder ? (
+              <span className="text-gray-400 italic">—</span>
+            ) : (
+              <span
+                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                  profile.can_edit === 1
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {profile.can_edit === 1 ? 'Yes' : 'No'}
+              </span>
+            ),
+        }
+      );
+    }
+
+    baseColumns.push({
+      key: 'actions',
+      label: 'Actions',
+      align: 'right',
+      renderCell: (profile) => (
+        <div className="flex items-center justify-end space-x-2">
+          {profile.isPlaceholder ? (
+            <>
+              <span
+                className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                title="Please log in to manage profiles"
+              >
+                <Edit2 className="w-4 h-4" />
+              </span>
+              <span
+                className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                title="Please log in to manage profiles"
+              >
+                <Trash2 className="w-4 h-4" />
+              </span>
+            </>
+          ) : (
+            <>
+              {profile.is_public === 1 && (
+                <>
+                  {profile.has_public_access_code === 1 ? (
+                    <>
+                      <button
+                        onClick={() => handleCopyPublicLink(profile)}
+                        className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                        title="Copy public link"
+                      >
+                        <LinkIcon className="w-4 h-4 text-blue-600" />
+                      </button>
+                      <button
+                        onClick={() => handleResetPublicCode(profile)}
+                        className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                        title="Reset public access code"
+                      >
+                        <RotateCcw className="w-4 h-4 text-yellow-600" />
+                      </button>
+                      <button
+                        onClick={() => handleRemovePublicCode(profile)}
+                        className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                        title="Remove public access code"
+                      >
+                        <Minus className="w-4 h-4 text-red-600" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleResetPublicCode(profile)}
+                      className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                      title="Create public access code"
+                    >
+                      <LinkIcon className="w-4 h-4 text-green-600" />
+                    </button>
+                  )}
+                </>
+              )}
+              <button
+                onClick={() => handleEditProfile(profile)}
+                className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
+                title="Edit profile"
+              >
+                <Edit2 className="w-4 h-4 text-indigo-600" />
+              </button>
+              <button
+                onClick={() => handleDuplicateProfile(profile)}
+                disabled={duplicatingProfileId === profile.id}
+                className="p-2 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Duplicate profile"
+              >
+                {duplicatingProfileId === profile.id ? (
+                  <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Copy className="w-4 h-4 text-green-600" />
+                )}
+              </button>
+              <button
+                onClick={() => handleDeleteProfile(profile)}
+                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                title="Delete profile"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    });
+
+    return baseColumns;
+  }, [currentProfile, filterEventId, handleCopyPublicLink, handleResetPublicCode, handleRemovePublicCode, handleEditProfile, handleDuplicateProfile, handleDeleteProfile, duplicatingProfileId]);
+
   return (
     <>
-      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`}>
-        {!eventUrl && <Header />}
-        <div className="sticky top-16 z-30 bg-white border-b border-gray-200 shadow-sm">
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 ${!eventUrl ? 'pt-[4rem]' : ''}`}>
+        {!eventUrl && <TopNavigationBar variant="light" showBackground={true} mode="full" />}
+        <div className={`sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm`}>
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -828,291 +1076,19 @@ export default function ProfilesGalleryPage() {
               )}
             </motion.div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th
-                        onClick={() => handleSort('label')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-48 min-w-[192px]"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Name</span>
-                          {getSortIcon('label')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('hierarchy_rank')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-24 min-w-[96px]"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Rank</span>
-                          {getSortIcon('hierarchy_rank')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('is_public')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-36 min-w-[144px]"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Accessibility</span>
-                          {getSortIcon('is_public')}
-                        </div>
-                      </th>
-                      {currentProfile?.can_manage_create_events === 1 && (
-                        <th
-                          onClick={() => handleSort('can_create_events')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50 w-40 min-w-[160px]"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>Can Create Events</span>
-                            {getSortIcon('can_create_events')}
-                          </div>
-                        </th>
-                      )}
-                      <th
-                        onClick={() => handleSort('restricted_to_event_name')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Restricted To Event</span>
-                          {getSortIcon('restricted_to_event_name')}
-                        </div>
-                      </th>
-                      {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
-                        <>
-                          <th
-                            onClick={() => handleSort('can_manage_event')}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center space-x-1">
-                              <span>Can Manage</span>
-                              {getSortIcon('can_manage_event')}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => handleSort('can_delete_event')}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center space-x-1">
-                              <span>Can Delete</span>
-                              {getSortIcon('can_delete_event')}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => handleSort('can_edit')}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center space-x-1">
-                              <span>Can Edit</span>
-                              {getSortIcon('can_edit')}
-                            </div>
-                          </th>
-                        </>
-                      )}
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {sortedProfiles.map((profile) => (
-                      <tr key={profile.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900 font-medium w-48 min-w-[192px]">
-                          {profile.isPlaceholder ? (
-                            <span className="text-gray-400 italic">—</span>
-                          ) : (
-                            profile.label || 'Untitled Profile'
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 w-24 min-w-[96px]">
-                          {profile.isPlaceholder ? (
-                            <span className="text-gray-400 italic">—</span>
-                          ) : (
-                            profile.hierarchy_rank || 0
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm w-36 min-w-[144px]">
-                          {profile.isPlaceholder ? (
-                            <span className="text-gray-400 italic">—</span>
-                          ) : (
-                            <span
-                              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                profile.is_public === 1
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-purple-100 text-purple-700'
-                              }`}
-                            >
-                              {profile.is_public === 1 ? 'Public' : 'Private'}
-                            </span>
-                          )}
-                        </td>
-                        {currentProfile?.can_manage_create_events === 1 && (
-                          <td className="px-4 py-3 text-sm w-40 min-w-[160px]">
-                            {profile.isPlaceholder ? (
-                              <span className="text-gray-400 italic">—</span>
-                            ) : (
-                              <span
-                                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                  profile.can_create_events === 1
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}
-                              >
-                                {profile.can_create_events === 1 ? 'Yes' : 'No'}
-                              </span>
-                            )}
-                          </td>
-                        )}
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {profile.isPlaceholder ? (
-                            <span className="text-gray-400 italic">—</span>
-                          ) : (
-                            profile.restricted_to_event_name || <span className="text-gray-400 italic">—</span>
-                          )}
-                        </td>
-                        {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
-                          <>
-                            <td className="px-4 py-3 text-sm">
-                              {profile.isPlaceholder ? (
-                                <span className="text-gray-400 italic">—</span>
-                              ) : (
-                                <span
-                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                    profile.can_manage_event === 1
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-700'
-                                  }`}
-                                >
-                                  {profile.can_manage_event === 1 ? 'Yes' : 'No'}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {profile.isPlaceholder ? (
-                                <span className="text-gray-400 italic">—</span>
-                              ) : (
-                                <span
-                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                    profile.can_delete_event === 1
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-gray-100 text-gray-700'
-                                  }`}
-                                >
-                                  {profile.can_delete_event === 1 ? 'Yes' : 'No'}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {profile.isPlaceholder ? (
-                                <span className="text-gray-400 italic">—</span>
-                              ) : (
-                                <span
-                                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                    profile.can_edit === 1
-                                      ? 'bg-blue-100 text-blue-700'
-                                      : 'bg-gray-100 text-gray-700'
-                                  }`}
-                                >
-                                  {profile.can_edit === 1 ? 'Yes' : 'No'}
-                                </span>
-                              )}
-                            </td>
-                          </>
-                        )}
-                        <td className="px-4 py-3 text-sm text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            {profile.isPlaceholder ? (
-                              <>
-                                <span
-                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                  title="Please log in to manage profiles"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </span>
-                                <span
-                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                  title="Please log in to manage profiles"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                {profile.is_public === 1 && (
-                                  <>
-                                    {profile.has_public_access_code === 1 ? (
-                                      <>
-                                        <button
-                                          onClick={() => handleCopyPublicLink(profile)}
-                                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                          title="Copy public link"
-                                        >
-                                          <LinkIcon className="w-4 h-4 text-blue-600" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleResetPublicCode(profile)}
-                                          className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
-                                          title="Reset public access code"
-                                        >
-                                          <RotateCcw className="w-4 h-4 text-yellow-600" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleRemovePublicCode(profile)}
-                                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                          title="Remove public access code"
-                                        >
-                                          <Minus className="w-4 h-4 text-red-600" />
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleResetPublicCode(profile)}
-                                        className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                                        title="Create public access code"
-                                      >
-                                        <LinkIcon className="w-4 h-4 text-green-600" />
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => handleEditProfile(profile)}
-                                  className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                                  title="Edit profile"
-                                >
-                                  <Edit2 className="w-4 h-4 text-indigo-600" />
-                                </button>
-                                <button
-                                  onClick={() => handleDuplicateProfile(profile)}
-                                  disabled={duplicatingProfileId === profile.id}
-                                  className="p-2 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Duplicate profile"
-                                >
-                                  {duplicatingProfileId === profile.id ? (
-                                    <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-                                  ) : (
-                                    <Copy className="w-4 h-4 text-green-600" />
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteProfile(profile)}
-                                  className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                  title="Delete profile"
-                                >
-                                  <Trash2 className="w-4 h-4 text-red-600" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <ScrollableTable
+              columns={columns}
+              data={sortedProfiles}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              emptyState={{
+                icon: User,
+                title: 'No profiles',
+                message: 'Get started by creating a new profile.',
+              }}
+              getRowKey={(profile) => profile.id}
+            />
           )}
         </div>
       </div>

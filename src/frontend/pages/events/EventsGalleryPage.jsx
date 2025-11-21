@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Eye, Edit2, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Eye, Edit2, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, profilesAPI } from '../../utils/apiService';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -12,10 +12,11 @@ import { getCurrentProfile } from '../../utils/profileService';
 import { ConfirmDelete } from '../../components/modals';
 import { useEventsGeneralList, useDataStore } from '../../utils/dataManager';
 import { useApplyScopes } from '../../utils/storeUtils';
-import Header from '../../components/layout/Header';
+import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 
 function formatDate(dateString) {
@@ -61,7 +62,7 @@ export default function EventsGalleryPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Event Management | ${APP_CONFIG.name}`;
+    document.title = `Events | ${APP_CONFIG.name}`;
   }, []);
 
   // Auto-show login modal when not authenticated
@@ -249,13 +250,6 @@ export default function EventsGalleryPage() {
     [sortBy, sortDir]
   );
 
-  const getSortIcon = useCallback(
-    (field) => {
-      if (sortBy !== field) return null;
-      return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
-    },
-    [sortBy, sortDir]
-  );
 
   const handleFilterChange = useCallback((value) => {
     setFilterVisibility(value);
@@ -329,8 +323,8 @@ export default function EventsGalleryPage() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="bg-white border-b border-gray-200">
+        <TopNavigationBar variant="light" showBackground={true} mode="full" />
+        <div className="bg-white border-b border-gray-200 pt-[4rem]">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -414,202 +408,171 @@ export default function EventsGalleryPage() {
               </p>
             </motion.div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th
-                        onClick={() => handleSort('name')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Name</span>
-                          {getSortIcon('name')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('url')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>URL</span>
-                          {getSortIcon('url')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('date')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Date</span>
-                          {getSortIcon('date')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('is_public')}
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-1">
-                          <span>Visibility</span>
-                          {getSortIcon('is_public')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('images_count')}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center justify-center space-x-1">
-                          <span>Photos</span>
-                          {getSortIcon('images_count')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('faces_count')}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center justify-center space-x-1">
-                          <span>Faces</span>
-                          {getSortIcon('faces_count')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('albums_count')}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center justify-center space-x-1">
-                          <span>Albums</span>
-                          {getSortIcon('albums_count')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('moments_count')}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center justify-center space-x-1">
-                          <span>Moments</span>
-                          {getSortIcon('moments_count')}
-                        </div>
-                      </th>
-                      <th
-                        onClick={() => handleSort('total_size')}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                      >
-                        <div className="flex items-center justify-center space-x-1">
-                          <span>Total Size</span>
-                          {getSortIcon('total_size')}
-                        </div>
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {sortedEvents.map((event) => (
-                      <tr key={event.event_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                          {event.name || 'Untitled Event'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {event.url ? (
-                            <span className="font-mono text-xs text-blue-600">{event.url}</span>
-                          ) : (
-                            <span className="text-gray-400 italic text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {formatDate(event.date)}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
+            <ScrollableTable
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Name',
+                  sortable: true,
+                  align: 'left',
+                  cellClassName: 'text-gray-900 font-medium',
+                  renderCell: (event) => event.name || 'Untitled Event',
+                },
+                {
+                  key: 'url',
+                  label: 'URL',
+                  sortable: true,
+                  align: 'left',
+                  cellClassName: 'text-gray-600',
+                  renderCell: (event) =>
+                    event.url ? (
+                      <span className="font-mono text-xs text-blue-600">{event.url}</span>
+                    ) : (
+                      <span className="text-gray-400 italic text-xs">—</span>
+                    ),
+                },
+                {
+                  key: 'date',
+                  label: 'Date',
+                  sortable: true,
+                  align: 'left',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) => formatDate(event.date),
+                },
+                {
+                  key: 'is_public',
+                  label: 'Visibility',
+                  sortable: true,
+                  align: 'left',
+                  renderCell: (event) => (
+                    <span
+                      className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                        event.is_public
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {event.is_public ? 'Public' : 'Private'}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'images_count',
+                  label: 'Photos',
+                  sortable: true,
+                  align: 'center',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) => toNumber(event.images_count),
+                },
+                {
+                  key: 'faces_count',
+                  label: 'Faces',
+                  sortable: true,
+                  align: 'center',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) => toNumber(event.faces_count),
+                },
+                {
+                  key: 'albums_count',
+                  label: 'Albums',
+                  sortable: true,
+                  align: 'center',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) => toNumber(event.albums_count),
+                },
+                {
+                  key: 'moments_count',
+                  label: 'Moments',
+                  sortable: true,
+                  align: 'center',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) => toNumber(event.moments_count),
+                },
+                {
+                  key: 'total_size',
+                  label: 'Total Size',
+                  sortable: true,
+                  align: 'center',
+                  cellClassName: 'text-gray-700',
+                  renderCell: (event) =>
+                    event.total_size != null
+                      ? `${(event.total_size / (1024 * 1024)).toFixed(2)} MB`
+                      : '—',
+                },
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  align: 'right',
+                  renderCell: (event) => (
+                    <div className="flex items-center justify-end space-x-2">
+                      {event.isPlaceholder ? (
+                        <>
                           <span
-                            className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              event.is_public
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-amber-100 text-amber-700'
-                            }`}
+                            className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                            title="Please log in to view events"
                           >
-                            {event.is_public ? 'Public' : 'Private'}
+                            <Eye className="w-4 h-4" />
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {toNumber(event.images_count)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {toNumber(event.faces_count)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {toNumber(event.albums_count)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {toNumber(event.moments_count)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                          {event.total_size != null
-                            ? `${(event.total_size / (1024 * 1024)).toFixed(2)} MB`
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            {event.isPlaceholder ? (
-                              <>
-                                <span
-                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                  title="Please log in to view events"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </span>
-                                <span
-                                  className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                  title="Please log in to edit events"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                {event.url ? (
-                                  <Link
-                                    to={`/${event.url}`}
-                                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                    title="Open event"
-                                  >
-                                    <Eye className="w-4 h-4 text-blue-600" />
-                                  </Link>
-                                ) : (
-                                  <span
-                                    className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                                    title="Event URL not available"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </span>
-                                )}
-                                <button
-                                  onClick={() => openEditModal(event.url)}
-                                  className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                                  title="Edit settings"
-                                >
-                                  <Edit2 className="w-4 h-4 text-indigo-600" />
-                                </button>
-                                {deletableEventIds.has(String(event.event_id)) && (
-                                  <button
-                                    onClick={() => handleRequestDelete(event)}
-                                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                    title="Delete event"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          <span
+                            className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                            title="Please log in to edit events"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {event.url ? (
+                            <Link
+                              to={`/${event.url}`}
+                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="Open event"
+                            >
+                              <Eye className="w-4 h-4 text-blue-600" />
+                            </Link>
+                          ) : (
+                            <span
+                              className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                              title="Event URL not available"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </span>
+                          )}
+                          <button
+                            onClick={() => openEditModal(event.url)}
+                            className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
+                            title="Edit settings"
+                          >
+                            <Edit2 className="w-4 h-4 text-indigo-600" />
+                          </button>
+                          {deletableEventIds.has(String(event.event_id)) && (
+                            <button
+                              onClick={() => handleRequestDelete(event)}
+                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Delete event"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+              data={sortedEvents}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              emptyState={{
+                icon: Calendar,
+                title: 'No manageable events',
+                message: hasEditableEvents
+                  ? 'Try adjusting filters or sorting options.'
+                  : 'You do not have edit access to any events yet.',
+              }}
+              getRowKey={(event) => event.event_id}
+            />
           )}
         </div>
       </div>

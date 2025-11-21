@@ -216,7 +216,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 		if (!eventId) return; // Wait for eventId
 		
 		// Initialize timeline manager but don't handle URL yet (moments not ready)
-		timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-16', (momentKey) => {
+		timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-\\[4\\.5rem\\]', (momentKey) => {
 			// Callback from timeline manager when moment changes
 			const moment = momentsRefForCallback.current.find(m => m.label === momentKey);
 			if (moment) {
@@ -570,7 +570,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       <Toast toast={toast} />
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-30 px-8 py-4 shadow-sm">
+      <div className="bg-white border-b border-gray-200 sticky top-[4rem] z-30 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
             <h1 className="text-3xl font-bold text-gray-900">Timeline</h1>

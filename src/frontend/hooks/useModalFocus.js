@@ -263,10 +263,10 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // Only handle click outside if this modal is the topmost modal
     if (!isTopmostModal()) return;
     if (!modalRef.current.contains(e.target)) {
-      // Check if the click is on the toggle button (for BucketDrawer)
+      // Check if the click is on the toggle button (for BucketDrawer or NotificationsDropdown)
       let target = e.target;
       while (target && target !== document.body) {
-        if (target.dataset && target.dataset.bucketToggle === 'true') {
+        if (target.dataset && (target.dataset.bucketToggle === 'true' || target.dataset.notifToggle === 'true')) {
           return; // Don't close if clicking the toggle button
         }
         target = target.parentElement;

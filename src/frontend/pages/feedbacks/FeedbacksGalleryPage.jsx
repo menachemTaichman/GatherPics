@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown, Trash } from 'lucide-react';
+import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, Trash } from 'lucide-react';
 import { feedbacksAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useFeedbacksList } from '../../utils/dataManager';
@@ -13,7 +13,8 @@ import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useFeedbackViewerController from '../../hooks/useFeedbackViewerController';
-import Header from '../../components/layout/Header';
+import { TopNavigationBar } from '../../components/layout';
+import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 
 function formatDateTime(dateString) {
@@ -196,10 +197,6 @@ export default function FeedbacksGalleryPage() {
     }
   };
 
-  const getSortIcon = (field) => {
-    if (sortBy !== field) return null;
-    return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
-  };
 
   const handleFilterChange = (status) => {
     setFilterStatus(status);
@@ -218,10 +215,10 @@ export default function FeedbacksGalleryPage() {
   }, [currentFeedbacks, isAuthenticated]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      <TopNavigationBar variant="light" showBackground={true} mode="full" />
       {/* Page Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-gray-200 pt-[4rem] flex-none z-30">
         <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
@@ -298,145 +295,122 @@ export default function FeedbacksGalleryPage() {
       </div>
 
       {/* Content */}
-      <div className="w-full px-8 py-6">
-        {sortedFeedbacks.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12"
-          >
-            <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No feedbacks found</h3>
-            <p className="text-gray-500">
-              No feedback submissions match your current filter.
-            </p>
-          </motion.div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">ID</th>
-                    <th
-                      onClick={() => handleSort('sender_name')}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Sender</span>
-                        {getSortIcon('sender_name')}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('created_at')}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Date</span>
-                        {getSortIcon('created_at')}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('type')}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Type</span>
-                        {getSortIcon('type')}
-                      </div>
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Title</th>
-                    <th
-                      onClick={() => handleSort('status')}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Status</span>
-                        {getSortIcon('status')}
-                      </div>
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {sortedFeedbacks.map((feedback, index) => {
-                    const feedbackId = feedback.feedback_id || feedback.id;
-                    const isClosed = feedback.is_closed === 1;
-                    const isSolved = feedback.solved === 1;
-
-                    return (
-                      <tr key={feedbackId} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-                          {feedbackId || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {feedback.sender_name}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {formatDateTime(feedback.created_at)}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                          }`}>
-                            {feedback.type === 0 ? 'Bug' : 'Idea'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
-                          {feedback.title}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            isSolved
-                              ? 'bg-green-100 text-green-700'
-                              : isClosed
-                              ? 'bg-gray-100 text-gray-700'
-                              : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {isSolved ? (
-                              <>
-                                <CheckCircle className="inline mr-1 w-4 h-4 align-text-bottom text-green-600" />
-                                Solved
-                              </>
-                            ) : isClosed ? (
-                              <>
-                                <XCircle className="inline mr-1 w-4 h-4 align-text-bottom text-gray-600" />
-                                Closed
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="inline mr-1 w-4 h-4 align-text-bottom text-blue-600" />
-                                Open
-                              </>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={() => handleViewFeedback(feedback, index)}
-                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                              title="View details"
-                            >
-                              <Eye className="w-4 h-4 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFeedback(feedback)}
-                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      <div className="flex-1 min-h-0 w-full px-8 pt-6 pb-8">
+        <ScrollableTable
+          columns={[
+            {
+              key: 'feedback_id',
+              label: 'ID',
+              align: 'left',
+              cellClassName: 'text-xs text-gray-500 font-mono',
+              renderCell: (feedback) => feedback.feedback_id || feedback.id || 'N/A',
+            },
+            {
+              key: 'sender_name',
+              label: 'Sender',
+              sortable: true,
+              align: 'left',
+              renderCell: (feedback) => feedback.sender_name,
+            },
+            {
+              key: 'created_at',
+              label: 'Date',
+              sortable: true,
+              align: 'left',
+              cellClassName: 'text-gray-600',
+              renderCell: (feedback) => formatDateTime(feedback.created_at),
+            },
+            {
+              key: 'type',
+              label: 'Type',
+              sortable: true,
+              align: 'left',
+              renderCell: (feedback) => (
+                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                  feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                }`}>
+                  {feedback.type === 0 ? 'Bug' : 'Idea'}
+                </span>
+              ),
+            },
+            {
+              key: 'title',
+              label: 'Title',
+              align: 'left',
+              cellClassName: 'text-gray-900 max-w-xs truncate',
+              renderCell: (feedback) => feedback.title,
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              sortable: true,
+              align: 'left',
+              renderCell: (feedback) => {
+                const isClosed = feedback.is_closed === 1;
+                const isSolved = feedback.solved === 1;
+                return (
+                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                    isSolved
+                      ? 'bg-green-100 text-green-700'
+                      : isClosed
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {isSolved ? (
+                      <>
+                        <CheckCircle className="inline mr-1 w-4 h-4 align-text-bottom text-green-600" />
+                        Solved
+                      </>
+                    ) : isClosed ? (
+                      <>
+                        <XCircle className="inline mr-1 w-4 h-4 align-text-bottom text-gray-600" />
+                        Closed
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="inline mr-1 w-4 h-4 align-text-bottom text-blue-600" />
+                        Open
+                      </>
+                    )}
+                  </span>
+                );
+              },
+            },
+            {
+              key: 'actions',
+              label: 'Actions',
+              align: 'right',
+              renderCell: (feedback, index) => (
+                <div className="flex items-center justify-end space-x-2">
+                  <button
+                    onClick={() => handleViewFeedback(feedback, index)}
+                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                    title="View details"
+                  >
+                    <Eye className="w-4 h-4 text-blue-600" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFeedback(feedback)}
+                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+          data={sortedFeedbacks}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+          emptyState={{
+            icon: MessageSquare,
+            title: 'No feedbacks found',
+            message: 'No feedback submissions match your current filter.',
+          }}
+          getRowKey={(feedback) => feedback.feedback_id || feedback.id}
+        />
       </div>
 
       {/* Detail Modal */}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FileText, Shield, Accessibility, Info, MessageSquare, Languages } from 'lucide-react';
-import { Header } from '../components/layout';
+import { TopNavigationBar } from '../components/layout';
 import { FeedbackFormModal } from '../components/feedbacks';
 import { APP_CONFIG } from '../config/appConfig';
 
@@ -461,7 +461,7 @@ export default function AboutPage() {
 
 
   useEffect(() => {
-    document.title = `About - ${APP_CONFIG.name}`;
+    document.title = `About | ${APP_CONFIG.name}`;
     
     // Load markdown files based on selected language
     const loadMarkdown = async () => {
@@ -653,8 +653,8 @@ export default function AboutPage() {
 
   return (
     <>
-      <Header />
-      <div className="bg-gradient-to-b from-gray-50 to-white">
+      <TopNavigationBar variant="light" showBackground={true} mode="full" />
+      <div className="bg-gradient-to-b from-gray-50 to-white pt-[4rem]">
         <div className="container mx-auto px-4 pt-6 pb-4 max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start" style={{ overflow: 'visible' }}>
             {/* Sidebar Navigation */}

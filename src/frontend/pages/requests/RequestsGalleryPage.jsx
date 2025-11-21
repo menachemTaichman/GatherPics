@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, ArrowUp, ArrowDown, Trash } from 'lucide-react';
+import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, Trash } from 'lucide-react';
 import { requestsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useRequestsList } from '../../utils/dataManager';
@@ -13,6 +13,7 @@ import { RequestDetailModal } from '../../components/requests';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useRequestViewerController from '../../hooks/useRequestViewerController';
+import { ScrollableTable } from '../../components/common';
 
 function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
@@ -239,16 +240,12 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     };
   }, [currentRequests, isAuthenticated]);
 
-  const getSortIcon = (field) => {
-    if (sortBy !== field) return null;
-    return sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
-  };
 
   return (
     <>
       <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`}>
         {/* Header */}
-        <div className="sticky top-16 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -336,160 +333,139 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
         {/* Content Area */}
         <div className="w-full px-8 py-8">
-          {sortedRequests.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12"
-            >
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No requests yet</h3>
-              <p className="text-gray-500">
-                No access requests have been submitted yet.
-              </p>
-            </motion.div>
-          ) : (
-            <>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">ID</th>
-                        <th
-                          onClick={() => handleSort('requested_at')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>Requested</span>
-                            {getSortIcon('requested_at')}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort('profile_label')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>Profile</span>
-                            {getSortIcon('profile_label')}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort('accessible_groups_count')}
-                          className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                        >
-                          <div className="flex items-center justify-center space-x-1">
-                            <span>Groups</span>
-                            {getSortIcon('accessible_groups_count')}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort('status')}
-                          className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>Status</span>
-                            {getSortIcon('status')}
-                          </div>
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Details</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {sortedRequests.map((request, idx) => {
-                        const statusInfo = getRequestStatus(request);
-                        const StatusIcon = statusInfo.icon;
-                        return (
-                          <tr key={request.access_request_id || `request-${idx}`} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-xs text-gray-500 font-mono">
-                              {request.access_request_id || request.id || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {formatDateTime(request.requested_at)}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-700">
-                              {request.profile_label || 'Unknown'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-700 text-center">
-                              <div className="inline-flex items-center gap-1">
-                                {!!(request.approved_groups_count) && (
-                                  <span
-                                    title={`${request.approved_groups_count} approved groups`}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                                  >
-                                    {request.approved_groups_count} <span className="ml-1">✓</span>
-                                  </span>
-                                )}
-                                {!!(request.rejected_groups_count) && (
-                                  <span
-                                    title={`${request.rejected_groups_count} denied groups`}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
-                                  >
-                                    {request.rejected_groups_count} <span className="ml-1">✗</span>
-                                  </span>
-                                )}
-                                {!!(request.pending_groups_count) && (
-                                  <span
-                                    title={`${request.pending_groups_count} pending groups`
-                                    }
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                                  >
-                                    {request.pending_groups_count} <span className="ml-1">⏳</span>
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                statusInfo.color === 'blue' ? 'bg-blue-100 text-blue-800' :
-                                statusInfo.color === 'green' ? 'bg-green-100 text-green-800' :
-                                statusInfo.color === 'red' ? 'bg-red-100 text-red-800' :
-                                'bg-yellow-100 text-yellow-800'}`}
-                              >
-                                <StatusIcon className={`inline mr-1 w-4 h-4 align-text-bottom ${
-                                  statusInfo.color === 'blue' ? 'text-blue-600' :
-                                  statusInfo.color === 'green' ? 'text-green-600' :
-                                  statusInfo.color === 'red' ? 'text-red-600' :
-                                  'text-yellow-600'
-                                }`} />
-                                {statusInfo.status.charAt(0).toUpperCase() + statusInfo.status.slice(1)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                              {request.details || <span className="text-gray-400 italic">No details</span>}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right">
-                              <div className="flex items-center justify-end space-x-2">
-                                <button
-                                  onClick={() => handleViewRequest(request, idx)}
-                                  className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                  title="View details"
-                                >
-                                  <Eye className="w-4 h-4 text-blue-600" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteRequest(request)}
-                                  className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                  title="Delete request"
-                                >
-                                  <Trash2 className="w-4 h-4 text-red-600" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Note about data changes */}
-              <div className="mt-4 text-xs text-gray-500 italic text-center">
-                Note: Permissions may have changed since these requests were updated
-              </div>
-            </>
+          <ScrollableTable
+            columns={[
+              {
+                key: 'access_request_id',
+                label: 'ID',
+                align: 'left',
+                cellClassName: 'text-xs text-gray-500 font-mono',
+                renderCell: (request) => request.access_request_id || request.id || 'N/A',
+              },
+              {
+                key: 'requested_at',
+                label: 'Requested',
+                sortable: true,
+                align: 'left',
+                renderCell: (request) => formatDateTime(request.requested_at),
+              },
+              {
+                key: 'profile_label',
+                label: 'Profile',
+                sortable: true,
+                align: 'left',
+                cellClassName: 'text-gray-700',
+                renderCell: (request) => request.profile_label || 'Unknown',
+              },
+              {
+                key: 'accessible_groups_count',
+                label: 'Groups',
+                sortable: true,
+                align: 'center',
+                cellClassName: 'text-gray-700',
+                renderCell: (request) => (
+                  <div className="inline-flex items-center gap-1">
+                    {!!(request.approved_groups_count) && (
+                      <span
+                        title={`${request.approved_groups_count} approved groups`}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                      >
+                        {request.approved_groups_count} <span className="ml-1">✓</span>
+                      </span>
+                    )}
+                    {!!(request.rejected_groups_count) && (
+                      <span
+                        title={`${request.rejected_groups_count} denied groups`}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
+                      >
+                        {request.rejected_groups_count} <span className="ml-1">✗</span>
+                      </span>
+                    )}
+                    {!!(request.pending_groups_count) && (
+                      <span
+                        title={`${request.pending_groups_count} pending groups`}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                      >
+                        {request.pending_groups_count} <span className="ml-1">⏳</span>
+                      </span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'status',
+                label: 'Status',
+                sortable: true,
+                align: 'left',
+                renderCell: (request) => {
+                  const statusInfo = getRequestStatus(request);
+                  const StatusIcon = statusInfo.icon;
+                  return (
+                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      statusInfo.color === 'blue' ? 'bg-blue-100 text-blue-800' :
+                      statusInfo.color === 'green' ? 'bg-green-100 text-green-800' :
+                      statusInfo.color === 'red' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'}`}
+                    >
+                      <StatusIcon className={`inline mr-1 w-4 h-4 align-text-bottom ${
+                        statusInfo.color === 'blue' ? 'text-blue-600' :
+                        statusInfo.color === 'green' ? 'text-green-600' :
+                        statusInfo.color === 'red' ? 'text-red-600' :
+                        'text-yellow-600'
+                      }`} />
+                      {statusInfo.status.charAt(0).toUpperCase() + statusInfo.status.slice(1)}
+                    </span>
+                  );
+                },
+              },
+              {
+                key: 'details',
+                label: 'Details',
+                align: 'left',
+                cellClassName: 'text-gray-700 max-w-xs truncate',
+                renderCell: (request) => request.details || <span className="text-gray-400 italic">No details</span>,
+              },
+              {
+                key: 'actions',
+                label: 'Actions',
+                align: 'right',
+                renderCell: (request, idx) => (
+                  <div className="flex items-center justify-end space-x-2">
+                    <button
+                      onClick={() => handleViewRequest(request, idx)}
+                      className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                      title="View details"
+                    >
+                      <Eye className="w-4 h-4 text-blue-600" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRequest(request)}
+                      className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Delete request"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600" />
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            data={sortedRequests}
+            sortBy={sortBy}
+            sortDir={sortDir}
+            onSort={handleSort}
+            emptyState={{
+              icon: FileText,
+              title: 'No requests yet',
+              message: 'No access requests have been submitted yet.',
+            }}
+            getRowKey={(request, idx) => request.access_request_id || request.id || `request-${idx}`}
+          />
+          
+          {/* Note about data changes */}
+          {sortedRequests.length > 0 && (
+            <div className="mt-4 text-xs text-gray-500 italic text-center">
+              Note: Permissions may have changed since these requests were updated
+            </div>
           )}
         </div>
       </div>

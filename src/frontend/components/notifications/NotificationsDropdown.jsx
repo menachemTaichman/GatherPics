@@ -7,6 +7,8 @@ import { useDataStore, useMyNotificationsList } from '../../utils/dataManager';
 import { useToast } from '../../contexts/ToastContext';
 import { openFromNotification } from '../../utils/notificationNavigator';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useModalFocus } from '../../hooks/useModalFocus';
+import { useModalManager } from '../../utils/modalManager';
 
 export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const { showToast } = useToast();
@@ -18,6 +20,31 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const [refreshing, setRefreshing] = useState(false);
   const addScope = useDataStore((s) => s.addScope);
   const removeScope = useDataStore((s) => s.removeScope);
+
+  const { registerModal, unregisterModal } = useModalManager();
+  const modalId = 'notifications-dropdown';
+
+  // Register modal when opened, unregister when closed
+  useEffect(() => {
+    if (isOpen) {
+      registerModal({ 
+        id: modalId, 
+        type: 'popup',
+        allowOutsideScroll: true,
+        scopes: []
+      });
+      
+      return () => {
+        unregisterModal(modalId);
+      };
+    }
+  }, [isOpen, registerModal, unregisterModal, modalId]);
+
+  const { modalRef } = useModalFocus(isOpen, onClose || (() => {}), {
+    modalId: modalId,
+    modalType: 'popup',
+    allowOutsideScroll: true
+  });
 
   const notificationsList = useMyNotificationsList();
   const notifications = useMemo(() => {
@@ -207,7 +234,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   );
 
   return isOpen && buttonRef ? createPortal(
-    <div style={getDropdownPosition()} onClick={(e) => e.stopPropagation()}>
+    <div ref={modalRef} style={getDropdownPosition()} onClick={(e) => e.stopPropagation()}>
       {renderDropdownContent()}
     </div>,
     document.body

@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useLocation } from 'react-router-dom';
-import { Menu, X, Home, UserCircle, LayoutDashboard, Calendar, Users, Image as ImageIcon, MessageSquare, FileText } from 'lucide-react';
+import { Menu, X, Home, UserCircle, LayoutDashboard, Calendar, MessageSquare, FileText } from 'lucide-react';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useAuth } from '../../contexts/authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
 
-export default function HamburgerMenu({ eventName, eventUrl }) {
+export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
@@ -19,6 +19,12 @@ export default function HamburgerMenu({ eventName, eventUrl }) {
   const location = useLocation();
   const params = useParams();
   const currentEventUrl = params.eventUrl || eventUrl;
+  
+  const isLight = variant === 'light';
+  const buttonClass = isLight 
+    ? 'w-10 h-10 flex items-center justify-center transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-100 bg-transparent border-none p-0 rounded-lg'
+    : 'w-10 h-10 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0';
+  const iconStyle = isLight ? {} : { filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' };
 
   useEffect(() => {
     setIsClient(true);
@@ -29,8 +35,8 @@ export default function HamburgerMenu({ eventName, eventUrl }) {
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
         setMenuPosition({
-          top: rect.bottom + window.scrollY + 8,
-          left: rect.left + window.scrollX
+          top: rect.bottom + 8,
+          left: rect.left
         });
       }
     };
@@ -95,13 +101,6 @@ export default function HamburgerMenu({ eventName, eventUrl }) {
       show: true
     },
     {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      to: '/dashboard',
-      show: hasDashboard
-    },
-    {
       id: 'event',
       label: eventName || 'Event Page',
       icon: Calendar,
@@ -109,25 +108,11 @@ export default function HamburgerMenu({ eventName, eventUrl }) {
       show: Boolean(currentEventUrl)
     },
     {
-      id: 'timeline',
-      label: 'Timeline',
-      icon: Calendar,
-      to: getEventPath('/timeline'),
-      show: Boolean(currentEventUrl) && permissions.has_images
-    },
-    {
-      id: 'people',
-      label: 'People',
-      icon: Users,
-      to: getEventPath('/people'),
-      show: Boolean(currentEventUrl) && permissions.has_groups
-    },
-    {
-      id: 'albums',
-      label: 'Albums',
-      icon: ImageIcon,
-      to: getEventPath('/albums'),
-      show: Boolean(currentEventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit)
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      to: '/dashboard',
+      show: hasDashboard
     },
     {
       id: 'feedback',
@@ -205,14 +190,14 @@ export default function HamburgerMenu({ eventName, eventUrl }) {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-12 h-12 flex items-center justify-center transition-all text-white hover:opacity-80 bg-transparent border-none p-0"
-        style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}
+        className={buttonClass}
+        style={iconStyle}
         aria-label="Menu"
       >
         {isOpen ? (
-          <X className="w-7 h-7" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
+          <X className="w-5 h-5" style={iconStyle} />
         ) : (
-          <Menu className="w-7 h-7" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.5))' }} />
+          <Menu className="w-5 h-5" style={iconStyle} />
         )}
       </button>
       {isClient && createPortal(menuContent, document.body)}

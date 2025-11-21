@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, LogIn } from 'lucide-react';
-import { Header } from '../components/layout';
+import { TopNavigationBar } from '../components/layout';
 import { LoadingSpinner } from '../components/common';
 import { LoginModal } from '../components/auth';
 import { useAuth } from '../contexts/authContext';
@@ -169,9 +169,9 @@ export default function HomePage() {
 
   return (
     <>
-      <Header />
+      <TopNavigationBar variant="light" showBackground={true} mode="full" />
       <div
-        className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden"
+        className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden pt-[4rem]"
         style={{ minHeight: 'calc(100vh - 4rem)' }}
       >
         {/* Subtle animated background accent */}

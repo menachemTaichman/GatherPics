@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { MessageSquare, LayoutDashboard, Calendar, User, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import Header from '../../components/layout/Header';
+import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -155,7 +155,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100">
-      <Header />
+      <TopNavigationBar variant="light" showBackground={true} mode="full" />
+      <div className="pt-[4rem]">
       <div className="relative">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
@@ -241,6 +242,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </motion.div>
+      </div>
       </div>
 
       {/* Login Modal */}

@@ -120,11 +120,11 @@ export default function BucketDrawer() {
         <motion.aside
           ref={modalRef}
           key="bucket-drawer"
-          initial={{ x: '100%' }}
+          initial={{ x: '-100%' }}
           animate={{ x: 0 }}
-          exit={{ x: '100%' }}
+          exit={{ x: '-100%' }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          className="fixed top-16 right-0 h-[calc(100vh-4rem)] w-[360px] bg-white border-l border-gray-200 shadow-xl z-30 flex flex-col"
+          className="fixed top-16 left-0 h-[calc(100vh-4rem)] w-[360px] bg-white border-r border-gray-200 shadow-xl z-[100] flex flex-col"
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -339,6 +339,7 @@ function placeholder() {
   span.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-5-5L5 21"></path></svg>';
   return span;
 }
+
 
 
 

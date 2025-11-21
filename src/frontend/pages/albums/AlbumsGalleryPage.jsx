@@ -257,7 +257,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   return (
     <div className="w-full">
       {/* Sticky Header */}
-      <div className="sticky top-16 z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Header } from './layout';
+import { TopNavigationBar, AccountModal } from './layout';
 import { GroupsGalleryPage, GroupDetailPage } from '../pages/groups';
 import { AlbumsGalleryPage, AlbumDetailPage } from '../pages/albums';
 import { MomentsPage } from '../pages/moments';
@@ -396,9 +396,20 @@ function AppContent({ eventUrl }) {
 
   return (
     <>
-      {!isEventHomePage && <Header />}
-      <AnimatePresence mode="wait">
-        <Routes>
+      {/* TopNavigationBar for all event pages - different props for home page */}
+      {eventUrl && (
+        <TopNavigationBar
+          eventName={eventName}
+          eventUrl={eventUrl}
+          variant={isEventHomePage ? 'dark' : 'light'}
+          showBackground={!isEventHomePage}
+          mode={isEventHomePage ? 'minimal' : 'full'}
+        />
+      )}
+      {/* Add padding-top to Routes content when TopNavigationBar is shown */}
+      <div className={!isEventHomePage && eventUrl ? 'pt-[4rem]' : ''}>
+        <AnimatePresence mode="wait">
+          <Routes>
           <Route 
             path="people/:group_name" 
             element={
@@ -506,8 +517,9 @@ function AppContent({ eventUrl }) {
             path="" 
             element={<EventHomePage eventUrl={eventUrl} eventData={eventData} />} 
           />
-        </Routes>
-      </AnimatePresence>
+          </Routes>
+        </AnimatePresence>
+      </div>
 
       {/* Login Modal */}
       <LoginModal
@@ -632,6 +644,8 @@ export default function App() {
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>
           </div>
+          {/* Global AccountModal - works from any route, must be inside Router */}
+          <AccountModal hideButton={true} />
         </Router>
         {/* Global FeedbackDetailModal - works from any route */}
         {globalOpenFeedbackId && (
