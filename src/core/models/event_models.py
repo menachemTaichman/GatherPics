@@ -119,6 +119,18 @@ class EventModels(BaseModels):
             WHERE event_id = ?
         """
         self.db.execute_query(query, (count, self.db.event_id))
+        
+        # Track rekognition usage
+        event_label = event_data.get('name', '')
+        profile_id = self.db.profile_context.get('profile_id')
+        profile_label = self.get_entities('current_profile', profile_id).get('label', '')
+        self.add('rekognition_usaged', {
+            'event_id': self.db.event_id,
+            'event_label': event_label,
+            'profile_id': profile_id,
+            'profile_label': profile_label,
+            'calls_count': count,
+        })
 
     # -------- Moments helpers --------
     def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:

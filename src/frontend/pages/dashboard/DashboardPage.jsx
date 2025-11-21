@@ -8,8 +8,6 @@ import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
 import { getCurrentProfile } from '../../utils/profileService';
 import { usePermissions } from '../../hooks/usePermissions';
-import SettingsModal from '../../components/settings/SettingsModal';
-
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const currentProfile = getCurrentProfile();
@@ -18,7 +16,6 @@ export default function DashboardPage() {
   const hasFeedbacks = currentProfile?.has_feedbacks === 1;
   const isProfilesManager = permissions.isProfilesManager;
   const hasSettings = permissions.has_settings;
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Set document title
   useEffect(() => {
@@ -77,8 +74,7 @@ export default function DashboardPage() {
       title: 'App Settings',
       description: 'Manage system-wide configuration',
       icon: Settings,
-      link: null,
-      onClick: () => setShowSettingsModal(true),
+      link: '/dashboard/settings',
       iconBg: 'from-gray-100 to-gray-50',
       iconColor: 'text-gray-600',
       hoverBg: 'group-hover:from-gray-500 group-hover:to-gray-600',
@@ -251,12 +247,6 @@ export default function DashboardPage() {
         onClose={closeLoginModal}
         onLogin={login}
         error={loginError}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
       />
     </div>
   );

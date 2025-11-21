@@ -10,6 +10,7 @@ import { EventsGalleryPage } from '../pages/events';
 import RequestsGalleryPage from '../pages/requests/RequestsGalleryPage';
 import { FeedbacksGalleryPage } from '../pages/feedbacks';
 import { DashboardPage } from '../pages/dashboard';
+import { SettingsPage } from '../pages/settings';
 import ProfilesGalleryPage from '../pages/profiles/ProfilesGalleryPage';
 import HomePage from '../pages/HomePage';
 import EventHomePage from '../pages/EventHomePage';
@@ -640,6 +641,7 @@ export default function App() {
               <Route path="/dashboard/events" element={<EventsGalleryPage />} />
               <Route path="/dashboard/profiles" element={<ProfilesGalleryPage />} />
               <Route path="/dashboard/feedbacks" element={<FeedbacksGalleryPage />} />
+              <Route path="/dashboard/settings" element={<SettingsPage />} />
               <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>

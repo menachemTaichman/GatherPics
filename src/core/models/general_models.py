@@ -342,6 +342,7 @@ class GeneralModels(BaseModels):
             raise Exception('Settings not found')
 
         result['developer_hierarchy_rank'] = 10
+        result['rekognition_usage'] = self.get_entities('rekognition_usaged')
 
         return result
     

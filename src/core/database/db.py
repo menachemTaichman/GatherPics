@@ -107,6 +107,19 @@ class DB:
                     'rekognition_calls_limit',
                 ],
             },
+            'rekognition_usaged': {
+                'primary_key': 'usage_id',
+                'accessible_table': 'accessible_rekognition_usaged',
+                'fields': [
+                    'usage_id',
+                    'event_id',
+                    'event_label',
+                    'profile_id',
+                    'profile_label',
+                    'calls_count',
+                    'created_at',
+                ],
+            },
             'events': {
                 'primary_key': 'event_id',
                 'accessible_table': 'accessible_events',
@@ -527,6 +540,15 @@ class DB:
                 FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL,
                 FOREIGN KEY (event_in_deletion) REFERENCES events(event_id) ON DELETE SET NULL
             ''',
+            'rekognition_usaged': '''
+                usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL,
+                event_label TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                profile_label TEXT NOT NULL,
+                calls_count INTEGER NOT NULL DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            ''',
             'default_preferences': '''
                 preference_group TEXT NOT NULL,
                 preference_key TEXT NOT NULL,
@@ -782,6 +804,9 @@ class DB:
     @classmethod
     def INDEXES(self) -> list:
         return {
+            'idx_rekognition_usaged_event_id': 'rekognition_usaged(event_id)',
+            'idx_rekognition_usaged_profile_id': 'rekognition_usaged(profile_id)',
+            'idx_rekognition_usaged_created_at': 'rekognition_usaged(created_at)',
             'idx_events_name': 'events(name)',
             'idx_events_url': 'events(url)',
             'idx_events_representative_image': 'events(representative_image)',
@@ -834,6 +859,14 @@ class DB:
                 FROM settings s
                 WHERE s.id = 1
                 AND s.developer_id = cur_profile('profile_id')
+            ''',
+            # rekognition usage
+            'accessible_rekognition_usaged': '''
+                SELECT
+                    ru.*
+                FROM rekognition_usaged ru
+                JOIN settings s ON s.id = 1
+                WHERE s.developer_id = cur_profile('profile_id')
             ''',
 
             # all profiles accessibility
@@ -1645,6 +1678,34 @@ class DB:
                         min_rank_to_create_event = NEW.min_rank_to_create_event,
                         rekognition_calls_limit = NEW.rekognition_calls_limit
                     WHERE id = 1;
+                END;
+            """,
+
+            # rekognition usage
+            'trg_accessible_rekognition_usaged_insert': """
+                INSTEAD OF INSERT ON accessible_rekognition_usaged
+                BEGIN
+                    SELECT CASE
+                        WHEN cur_profile('profile_id') <> (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
+                            RAISE(ABORT, 'Permission denied: only developer can insert rekognition usage')
+                    END;
+
+                    INSERT INTO rekognition_usaged (
+                        event_id,
+                        event_label,
+                        profile_id,
+                        profile_label,
+                        calls_count,
+                        created_at
+                    )
+                    VALUES (
+                        NEW.event_id,
+                        NEW.event_label,
+                        NEW.profile_id,
+                        NEW.profile_label,
+                        NEW.calls_count,
+                        COALESCE(NEW.created_at, CURRENT_TIMESTAMP)
+                    );
                 END;
             """,
 

@@ -280,6 +280,9 @@ ids = {
 
 
 # recreate_views_triggers_and_indexes(db)
+
+# event.models.add_rekognition_calls(4)
+
 settings = general_models.db.execute_query('SELECT * FROM settings WHERE id = 1;', return_format=ReturnFormat.DICT)
 print(settings)
 print('--------------------------------')
