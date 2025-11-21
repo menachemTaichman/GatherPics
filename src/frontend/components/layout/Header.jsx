@@ -1,7 +1,7 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Settings, Clock, User, ShoppingBag, Home, Album, Bell } from 'lucide-react';
-import { SettingsManager, BucketDrawer } from './';
+import { AccountModal, BucketDrawer } from './';
 import useBucketStore from '../../utils/bucketStore';
 import { usePermissions } from '../../hooks/usePermissions';
 import NotificationsDropdown from '../notifications/NotificationsDropdown.jsx';
@@ -197,7 +197,7 @@ export default function Header() {
               </motion.button>
             )}
 
-            <SettingsManager />
+            <AccountModal />
 
             {/* Notifications Button - last after settings */}
             {(effectiveCounts?.totalCount || 0) > 0 && (

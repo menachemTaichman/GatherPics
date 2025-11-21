@@ -124,6 +124,17 @@ The Photographer grants the Site Operator a limited, non-exclusive, royalty-free
 ### D. Public Events
 If the Photographer chooses to define an event as "Public," they authorize the Site Operator to publicly display the event name and Cover Photo in the Site's public galleries.
 
+### E. Site Operator's Intellectual Property
+All intellectual property rights in and to the Service, including but not limited to:
+- The platform, software, and technology underlying the Service
+- The face recognition technology implementation and algorithms
+- The user interface, design, layout, and user experience
+- All trademarks, logos, and branding
+- Documentation, code, and technical specifications
+- Any improvements, modifications, or enhancements to the Service
+
+are and shall remain the exclusive property of the Site Operator and are protected by copyright, trademark, patent, and other intellectual property laws. The Photographer acknowledges that they do not acquire any ownership rights in the Service or its underlying technology by using the Service.
+
 ---
 
 ## 7. Prohibited Use
