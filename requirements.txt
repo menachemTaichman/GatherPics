@@ -14,3 +14,8 @@ pytest>=7.4.0
 black>=23.0.0
 flake8>=6.0.0
 exifread
+
+# Database
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
+yoyo-migrations>=8.2.0

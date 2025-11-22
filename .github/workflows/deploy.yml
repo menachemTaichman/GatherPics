@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run database migrations
+        run: |
+          python -c "
+          import os
+          from dotenv import load_dotenv
+          from yoyo import read_migrations, get_backend
+          
+          load_dotenv()
+          
+          db_url = f\"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}\"
+          backend = get_backend(db_url)
+          migrations = read_migrations('migrations')
+          pending = backend.to_apply(migrations)
+          
+          if not pending:
+              print('No pending migrations. Database is up-to-date.')
+          else:
+              print(f'Found {len(pending)} pending migration(s):')
+              for migration in pending:
+                  print(f'  - {migration}')
+              print('Applying migrations...')
+              backend.apply_migrations(pending)
+              print('✓ Migrations applied successfully!')
+          "
+      
+      - name: Deploy application
+        # Add your deployment steps here
+        # Examples:
+        # - Deploy to server via SSH
+        # - Deploy to cloud platform (AWS, GCP, Azure)
+        # - Build and push Docker image
+        # - Update Kubernetes deployment
+        run: |
+          echo "Add your deployment commands here"
+          # Example: ssh user@server 'cd /app && git pull && systemctl restart app'
+

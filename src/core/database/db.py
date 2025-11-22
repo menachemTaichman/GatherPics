@@ -1,10 +1,10 @@
-import sqlite3
+import psycopg2
+from psycopg2 import errors as psycopg2_errors
 from typing import Any
 import json
 from contextlib import contextmanager
 import os
 from enum import Enum
-from src.core.config import DATA_ROOT
 from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 
 class ReturnFormat(Enum):
@@ -19,81 +19,32 @@ class ReturnFormat(Enum):
     LIST_AND_DICT_DICTS = 'list_and_dict_dicts'
 
 class DB:
+    """Database connection and query handler with row-level security."""
     
-    # @staticmethod
-    # def CONSTANTS() -> dict:
-    #     return {
-    #         'profiles_preferences': {
-    #             'general': {
-    #                 'select': (bool, False),
-    #                 'size': (float, 1.0),
-    #                 'includeArchived': (bool, False)
-    #             },
-    #             'ImageViewer': {
-    #                 'albumsHeight': (int, 200),
-    #                 'albumsOpen': (bool, False),
-    #                 'facesOpen': (bool, False),
-    #                 'sidebarOpen': (bool, False)
-    #             },
-    #             'GroupDetail': {
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'Moments': {
-    #                 'sortDir': (str, 'asc'),
-    #                 'carouselExpanded': (bool, True)
-    #             },
-    #             'EditMomentImagesModal': {
-    #                 'filter': (str, 'all'),
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'GroupsGallery': {
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'name')
-    #             },
-    #             'AlbumsGallery': {
-    #                 'sortBy': (str, 'name'),
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'AlbumsDetail': {
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'BucketDrawer': {
-    #                 'mode': (str, 'download'),
-    #                 'quality': (str, 'high'),
-    #                 'excludeAlready': (bool, True),
-    #                 'alreadyDownloaded': (list, []),
-    #                 'alreadyUploaded': (list, []),
-    #                 'queue': (list, [])
-    #             },
-    #             'UploadsGallery': {
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'started_at')
-    #             },
-    #             'UploadDetail': {
-    #                 'mode': (str, 'groups'),
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'EventsGallery': {
-    #                 'filterVisibility': (str, 'all'),
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'date')
-    #             },
-    #             'RequestsGallery': {
-    #                 'filterStatus': (str, 'all'),
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'requested_at')
-    #             },
-    #             'RequestsDetail': {
-    #                 'sortDir': (str, 'asc')
-    #             },
-    #             'FeedbacksGallery': {
-    #                 'filterStatus': (str, 'all'),
-    #                 'sortDir': (str, 'desc'),
-    #                 'sortBy': (str, 'created_at')
-    #             }
-    #         }
-    #     }
-
+    # Class-level connection pool (shared across all instances)
+    _connection_pool = None
+    
+    @classmethod
+    def _get_connection_pool(cls):
+        """Get or create the shared connection pool."""
+        if cls._connection_pool is None:
+            # Load environment variables from .env file if it exists (development only)
+            # In production (AWS), environment variables are already set
+            if os.path.exists('.env'):
+                from dotenv import load_dotenv
+                load_dotenv()
+            
+            cls._connection_pool = psycopg2.pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                host=os.getenv('DB_HOST', 'localhost'),
+                database=os.getenv('DB_NAME', 'photo_app_db'),
+                user=os.getenv('DB_USER', 'postgres'),
+                password=os.getenv('DB_PASSWORD', ''),
+                port=os.getenv('DB_PORT', '5432')
+            )
+        return cls._connection_pool
+    
     @staticmethod
     def STRUCTURE() -> dict:
         return {
@@ -3872,37 +3823,7 @@ class DB:
             fields.extend(DB.STRUCTURE()[table].get('details_fields', []))
         return DB._get_fields(fields, as_table)
 
-    @staticmethod
-    def create_db(db_path: str):
-        """Create a new SQLite DB with all tables and initial data."""
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        
-        conn = sqlite3.connect(db_path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        
-        try:
-            # Create tables            
-            for table, schema in DB.TABLES().items():
-                conn.execute(f'CREATE TABLE IF NOT EXISTS {table} ({schema})')
-            
-            # Create indexes
-            for index_name, index_query in DB.INDEXES().items():
-                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
-            
-            # Create views
-            for view_name, view_sql in DB.VIEWS().items():
-                conn.execute(f'CREATE VIEW IF NOT EXISTS {view_name} AS {view_sql}')
-            
-            # Create triggers
-            for trigger_name, trigger_sql in DB.TRIGGERS().items():
-                conn.execute(f'CREATE TRIGGER IF NOT EXISTS {trigger_name} {trigger_sql}')
-            
-            conn.commit()
-        finally:
-            conn.close()
-        
-        return db_path
-
+    # TODO: remove those 2 methods
     @staticmethod
     def current_profile_fields() -> dict:
         return {
@@ -3929,10 +3850,7 @@ class DB:
     def __init__(self, *, event_id: str | None = None, profile_id: str | None = None, public_code: str | None = None):
         """Initialize database connection."""
         self.event_id = event_id
-        self.db_path = os.path.join(DATA_ROOT, 'database.db')
-        if not os.path.exists(self.db_path):
-            file_name = os.path.basename(self.db_path)
-            raise FileNotFoundError(f"Database file not found: {file_name}")
+        self.connection_pool = self._get_connection_pool()
 
         self.profile_context = self.current_profile_fields()
         self.event_profile_context = self.current_event_profile_fields()
@@ -3942,7 +3860,7 @@ class DB:
                 raise Forbidden('Access denied: no event ID provided')
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT profile_id FROM profiles WHERE public_access_code = ?', (public_code,))
+                cursor.execute('SELECT profile_id FROM profiles WHERE public_access_code = %s', (public_code,))
                 result = cursor.fetchone()
                 if result:
                     self.profile_id = result[0]
@@ -3959,32 +3877,54 @@ class DB:
     @profile_id.setter
     def profile_id(self, profile_id: str | None):
         """Set the current profile id for access control."""        
-        profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = ?', (profile_id,), return_format=ReturnFormat.DICT)
-
-        if profile:
-            for field, default_val in self.current_profile_fields().items():
-                val = profile.get(field, default_val)
-                self.profile_context[field] = val
+        # Store profile_id in context (for Python code access)
+        self.profile_context['profile_id'] = profile_id
+        
+        # Store event_id in event_profile_context (for Python code access)
+        # The SQL functions will query the database tables directly
+        self.event_profile_context['event_id'] = self.event_id
+        
+        # Still populate other fields in context for Python code that might use them
+        if profile_id:
+            profile = self.execute_query('SELECT * FROM profiles WHERE profile_id = %s', (profile_id,), return_format=ReturnFormat.DICT)
+            if profile:
+                for field, default_val in self.current_profile_fields().items():
+                    if field != 'profile_id':  # Already set above
+                        val = profile.get(field, default_val)
+                        self.profile_context[field] = val
             
             if self.event_id:
-                event_profile = self.execute_query('SELECT * FROM events_profiles WHERE event_id = ? AND profile_id = ?', (self.event_id, profile_id), return_format=ReturnFormat.DICT)
-                for field, default_val in self.current_event_profile_fields().items():
-                    val = event_profile.get(field, default_val)
-                    self.event_profile_context[field] = val
+                event_profile = self.execute_query('SELECT * FROM events_profiles WHERE event_id = %s AND profile_id = %s', (self.event_id, profile_id), return_format=ReturnFormat.DICT)
+                if event_profile:
+                    for field, default_val in self.current_event_profile_fields().items():
+                        if field != 'event_id':  # Already set above
+                            val = event_profile.get(field, default_val)
+                            self.event_profile_context[field] = val
 
-    # TODO: intigrate with execute_query
     @contextmanager
     def get_connection(self):
         """Context manager for database connections with profile context."""
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        
+        conn = self.connection_pool.getconn()
         try:
-            conn.create_function("cur_profile", 1, lambda key: self.profile_context.get(key))
-            conn.create_function("cur_event_profile", 1, lambda key: self.event_profile_context.get(key))
+            # Set only profile_id and event_id in session variables
+            # All other fields are automatically queried from the database tables
+            with conn.cursor() as cursor:
+                # Set profile_id
+                profile_id = self.profile_context.get('profile_id')
+                if profile_id:
+                    cursor.execute("SELECT set_profile_context(%s, %s)", ('profile_id', str(profile_id)))
+                
+                # Set event_id (if provided, otherwise NULL)
+                event_id = self.event_profile_context.get('event_id') or self.event_id
+                if event_id:
+                    cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', str(event_id)))
+                else:
+                    cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', ''))
+                
+                conn.commit()
             yield conn
         finally:
-            conn.close()
+            self.connection_pool.putconn(conn)
 
     def execute_query(self, query: str, params: tuple | list = (), return_format: ReturnFormat | None = None) -> Any:
         """Execute any SQL query and return results according to return_format.
@@ -3994,31 +3934,36 @@ class DB:
         """
         results = None
         row_count = None
+        has_resultset = False
 
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute(query, params)
+                cursor = conn.cursor()
+                cursor.execute(query, params)
                 has_resultset = cursor.description is not None
                 if has_resultset:
                     rows = cursor.fetchall()
                 else:
                     row_count = cursor.rowcount
+                    rows = []
                 conn.commit()
+                cursor.close()
         
-        except sqlite3.IntegrityError as e:
-            if "Policy error" in str(e):
-                error_message = str(e).replace("Policy error: ", "")
+        except psycopg2_errors.Error as e:
+            error_str = str(e)
+            if "Policy error" in error_str:
+                error_message = error_str.replace("Policy error: ", "")
                 raise DBPolicyError(f"Policy error: {error_message}") from e
-            elif "Permission denied" in str(e):
-                error_message = str(e).replace("Permission denied: ", "")
+            elif "Permission denied" in error_str:
+                error_message = error_str.replace("Permission denied: ", "")
                 raise Forbidden(f"Permission denied: {error_message}") from e
             else:
-                error_message = str(e).replace("Integrity error: ", "")
-                raise DatabaseError(f"Integrity error: {error_message}") from e
-
-        except sqlite3.Error as e:
-            error_message = str(e).replace("Database error: ", "")
-            raise DatabaseError(f"Internal error: {error_message}") from e
+                if isinstance(e, psycopg2_errors.IntegrityError):
+                    error_message = error_str.replace("Integrity error: ", "")
+                    raise DatabaseError(f"Integrity error: {error_message}") from e
+                else:
+                    error_message = error_str.replace("Database error: ", "")
+                    raise DatabaseError(f"Internal error: {error_message}") from e
         
         if has_resultset:
             columns = [desc[0] for desc in cursor.description]
@@ -4070,11 +4015,11 @@ class DB:
                 if not v:
                     clauses.append("1=0")
                 else:
-                    placeholders = ",".join(["?"] * len(v))
+                    placeholders = ",".join(["%s"] * len(v))
                     clauses.append(f"{k} IN ({placeholders})")
                     values += v
             else:
-                clauses.append(f"{k}=?")
+                clauses.append(f"{k}=%s")
                 values.append(v)
         return " AND ".join(clauses), values
 
@@ -4097,20 +4042,17 @@ class DB:
         return_format = ReturnFormat.LIST_TUPLES if isinstance(p_keys, list) else ReturnFormat.LIST_VALUES
 
         keys = list(fields)
-        row_placeholders = f"({", ".join(["?"] * len(keys))})"
+        row_placeholders = f"({", ".join(["%s"] * len(keys))})"
         value_placeholders = ", ".join([row_placeholders] * len(values))
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES {value_placeholders}"
-        # sql += f" RETURNING {returning}"
+        sql += f" RETURNING {returning}"
 
         all_values = []
         for value in values:
             for v in value:
                 all_values.append(v)
 
-        _ = self.execute_query(sql, all_values, ReturnFormat.VALUE)
-        len_inserted = len(values)
-
-        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {table} ORDER BY rowid DESC LIMIT {len_inserted}', (), return_format)
+        return self.execute_query(sql, all_values, return_format)
 
     def insert(self, table: str, data: dict) -> str | None:
         """
@@ -4129,13 +4071,11 @@ class DB:
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 
         keys = list(data.keys())
-        placeholders = ", ".join(["?"] * len(keys))
+        placeholders = ", ".join(["%s"] * len(keys))
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES ({placeholders})"
         sql += f" RETURNING {returning}"
 
-        self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
-
-        return self.execute_query(f'SELECT {self.get_id_field(table)} FROM {self.get_original_table(table)} ORDER BY rowid DESC LIMIT 1', (), ReturnFormat.VALUE)
+        return self.execute_query(sql, [data[k] for k in keys], ReturnFormat.VALUE)
 
     def update(self, table: str, where: dict, fields: dict) -> list:
         """Update rows matching WHERE clause and return their primary keys (if defined)."""
@@ -4146,7 +4086,7 @@ class DB:
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 
-        set_clause = ", ".join([f"{k}=?" for k in fields])
+        set_clause = ", ".join([f"{k}=%s" for k in fields])
         where_clause, where_values = self._build_where(where)
         sql = f"UPDATE {target} SET {set_clause} WHERE {where_clause}"
         sql += f" RETURNING {returning}"
