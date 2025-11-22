@@ -166,10 +166,10 @@ steps = [
         CREATE TABLE IF NOT EXISTS faces (
             face_id TEXT PRIMARY KEY NOT NULL,
             image_id TEXT NOT NULL,
-            width REAL,
-            height REAL,
-            left REAL,
-            top REAL,
+            face_width REAL,
+            face_height REAL,
+            face_left REAL,
+            face_top REAL,
             file_size INTEGER,
             group_id TEXT NOT NULL
         );
@@ -189,8 +189,8 @@ steps = [
             moment_id TEXT PRIMARY KEY NOT NULL,
             label TEXT,
             description TEXT,
-            start TIMESTAMP,
-            end TIMESTAMP,
+            start_date TIMESTAMP,
+            end_date TIMESTAMP,
             representative_image TEXT,
             UNIQUE (event_id, label)
         );
@@ -580,7 +580,15 @@ steps = [
         CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
         CREATE INDEX IF NOT EXISTS idx_feedbacks_type ON feedbacks(type);
         CREATE INDEX IF NOT EXISTS idx_images_date_taken ON images(date_taken);
+        CREATE INDEX IF NOT EXISTS idx_images_upload_id ON images(upload_id);
         CREATE INDEX IF NOT EXISTS idx_faces_group_id_image_id ON faces(group_id, image_id);
+        CREATE INDEX IF NOT EXISTS idx_events_profiles_profile_event ON events_profiles(profile_id, event_id);
+        CREATE INDEX IF NOT EXISTS idx_events_profiles_groups_group_profile ON events_profiles_groups(group_id, profile_id);
+        CREATE INDEX IF NOT EXISTS idx_events_profiles_groups_event_profile ON events_profiles_groups(event_id, profile_id);
+        CREATE INDEX IF NOT EXISTS idx_events_profiles_albums_album_profile ON events_profiles_albums(album_id, profile_id);
+        CREATE INDEX IF NOT EXISTS idx_events_profiles_albums_event_profile ON events_profiles_albums(event_id, profile_id);
+        CREATE INDEX IF NOT EXISTS idx_albums_images_album_id ON albums_images(album_id);
+        CREATE INDEX IF NOT EXISTS idx_albums_images_image_id ON albums_images(image_id);
         CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
         CREATE INDEX IF NOT EXISTS idx_uploads_started_at ON uploads(started_at);
         CREATE INDEX IF NOT EXISTS idx_access_requests_requested_at ON access_requests(requested_at);        
@@ -589,7 +597,15 @@ steps = [
         DROP INDEX IF EXISTS idx_access_requests_requested_at;
         DROP INDEX IF EXISTS idx_uploads_started_at;
         DROP INDEX IF EXISTS idx_uploads_status;
+        DROP INDEX IF EXISTS idx_albums_images_image_id;
+        DROP INDEX IF EXISTS idx_albums_images_album_id;
+        DROP INDEX IF EXISTS idx_events_profiles_albums_event_profile;
+        DROP INDEX IF EXISTS idx_events_profiles_albums_album_profile;
+        DROP INDEX IF EXISTS idx_events_profiles_groups_event_profile;
+        DROP INDEX IF EXISTS idx_events_profiles_groups_group_profile;
+        DROP INDEX IF EXISTS idx_events_profiles_profile_event;
         DROP INDEX IF EXISTS idx_faces_group_id_image_id;
+        DROP INDEX IF EXISTS idx_images_upload_id;
         DROP INDEX IF EXISTS idx_images_date_taken;
         DROP INDEX IF EXISTS idx_feedbacks_type;
         DROP INDEX IF EXISTS idx_notifications_type;

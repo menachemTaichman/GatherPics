@@ -56,11 +56,11 @@ class GeneralModels(BaseModels):
         if not profile:
             raise Forbidden('Profile not found')
         new_profile_label = f"Copy of {profile['label']}"
-        pattern = f"{new_profile_label} [0-9]*"
+        pattern = f"{new_profile_label} [0-9].*"
         query = f"""
-            SELECT MAX(CAST(SUBSTR(label, LENGTH(?) + 2) AS INTEGER)) AS last_profile_num
+            SELECT MAX(CAST(SUBSTRING(label FROM LENGTH(%s) + 2) AS INTEGER)) AS last_profile_num
             FROM profiles
-            WHERE label GLOB ?
+            WHERE label ~ %s
         """
         last_profile_num = self.db.execute_query(
             query,
@@ -119,7 +119,7 @@ class GeneralModels(BaseModels):
             accessible_profiles = self.db.STRUCTURE()['profiles']['accessible_table']
         else:
             accessible_profiles = 'current_profile'
-        query = f'SELECT password FROM {accessible_profiles} WHERE profile_id = ?'
+        query = f'SELECT password FROM {accessible_profiles} WHERE profile_id = %s'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
         if not result:
             raise Forbidden('Profile not found')
@@ -147,7 +147,7 @@ class GeneralModels(BaseModels):
             '''
                 SELECT value_type
                 FROM default_preferences
-                WHERE preference_group = ? AND preference_key = ?
+                WHERE preference_group = %s AND preference_key = %s
             ''',
             (preference_group, preference_key),
             return_format=ReturnFormat.VALUE
@@ -182,7 +182,7 @@ class GeneralModels(BaseModels):
 
     def get_public_access_code(self, profile_id: str) -> str:
         """Get the public access code for a profile."""
-        query = f'SELECT public_access_code FROM accessible_profiles WHERE profile_id = ?'
+        query = f'SELECT public_access_code FROM accessible_profiles WHERE profile_id = %s'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
         if not result:
             raise Forbidden('Profile not found')
@@ -310,15 +310,15 @@ class GeneralModels(BaseModels):
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
         fields = self.db.get_view_fields('events')
-        query = f'SELECT {fields} FROM accessible_events WHERE url = ?'
+        query = f'SELECT {fields} FROM accessible_events WHERE url = %s'
         event = self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
         if not event:
-            return self.db.execute_query("SELECT event_id FROM events WHERE url = ?", (url,), return_format=ReturnFormat.DICT)
+            return self.db.execute_query("SELECT event_id FROM events WHERE url = %s", (url,), return_format=ReturnFormat.DICT)
         return event
 
     def get_event_url(self, event_id: str) -> str | None:
         """Get event URL by event ID."""
-        query = 'SELECT url FROM events WHERE event_id = ?'
+        query = 'SELECT url FROM events WHERE event_id = %s'
         return self.db.execute_query(query, (event_id,), return_format=ReturnFormat.VALUE)
 
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
@@ -357,7 +357,7 @@ class GeneralModels(BaseModels):
         Returns:
             profile_id if authenticated, None otherwise
         """
-        query = 'SELECT profile_id FROM profiles WHERE label = ? AND password = ?'
+        query = 'SELECT profile_id FROM profiles WHERE label = %s AND password = %s'
         return self.db.execute_query(query, (label, password), return_format=ReturnFormat.VALUE)
 
     def authenticate_public_access(self, event_id: str, public_code: str) -> str:
@@ -369,8 +369,8 @@ class GeneralModels(BaseModels):
         query = '''
             SELECT profile_id
             FROM profiles
-            WHERE public_access_code = ?
-            AND restricted_to_event = ?
+            WHERE public_access_code = %s
+            AND restricted_to_event = %s
         '''
         profile_id = self.db.execute_query(query, (public_code, event_id), return_format=ReturnFormat.VALUE)
         if not profile_id:
@@ -398,9 +398,9 @@ class GeneralModels(BaseModels):
         query = '''
             SELECT profile_id
             FROM refresh_tokens
-            WHERE token = ?
+            WHERE token = %s
             AND revoked = 0
-            AND datetime(expires_at) > datetime('now')
+            AND expires_at > NOW()
         '''
         return self.db.execute_query(query, (token,), return_format=ReturnFormat.VALUE)
     
@@ -408,8 +408,8 @@ class GeneralModels(BaseModels):
         """Revoke a refresh token."""
         query = '''
             UPDATE refresh_tokens
-            SET revoked = 1, revoked_at = datetime('now')
-            WHERE token = ?
+            SET revoked = 1, revoked_at = NOW()
+            WHERE token = %s
         '''
         self.db.execute_query(query, (token,))
 
@@ -417,12 +417,12 @@ class GeneralModels(BaseModels):
         """Revoke all refresh tokens for a profile."""
         query = '''
             UPDATE refresh_tokens
-            SET revoked = 1, revoked_at = datetime('now')
+            SET revoked = 1, revoked_at = NOW()
             WHERE 1=1
         '''
         params = ()
         if profile_id:
-            query += ' AND profile_id = ?'
+            query += ' AND profile_id = %s'
             params = (profile_id,)
 
         self.db.execute_query(query, params)

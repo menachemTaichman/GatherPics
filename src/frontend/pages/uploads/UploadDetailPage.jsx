@@ -483,10 +483,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         face_id: faceId,
         image_id: face.image_id,
         group_id: expandedGroup,
-        width: face?.width || 0,
-        height: face?.height || 0,
-        left: face?.left || 0,
-        top: face?.top || 0,
+        face_width: face?.face_width || 0,
+        face_height: face?.face_height || 0,
+        face_left: face?.face_left || 0,
+        face_top: face?.face_top || 0,
         group_label: groupEntity?.label || ''
       });
     }

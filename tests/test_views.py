@@ -370,23 +370,23 @@ class TestDBPerformance(unittest.TestCase):
         new_group_id = self.db.execute_query("SELECT groupID FROM groups LIMIT 1")[0][0]
         
         start_time_view = time.time()
-        self.db.execute_query(f"UPDATE accessible_faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['?']*len(face_ids_to_update))})", face_ids_to_update)
+        self.db.execute_query(f"UPDATE accessible_faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['%s']*len(face_ids_to_update))})", face_ids_to_update)
         end_time_view = time.time()
         print(f"\n  Regroup 10 faces -> View: {end_time_view - start_time_view:.4f}s")
 
         start_time_base = time.time()
-        self.db.execute_query(f"UPDATE faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['?']*len(face_ids_to_update))})", face_ids_to_update)
+        self.db.execute_query(f"UPDATE faces SET groupID = '{new_group_id}' WHERE faceID IN ({','.join(['%s']*len(face_ids_to_update))})", face_ids_to_update)
         end_time_base = time.time()
         print(f"  Regroup 10 faces -> Base: {end_time_base - start_time_base:.4f}s")
 
         # Action 2: Move images to another moment
         start_time_view = time.time()
-        self.db.execute_query(f"UPDATE accessible_images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['?']*len(images_to_move))})", images_to_move)
+        self.db.execute_query(f"UPDATE accessible_images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['%s']*len(images_to_move))})", images_to_move)
         end_time_view = time.time()
         print(f"\n  Move 10 images -> View: {end_time_view - start_time_view:.4f}s")
 
         start_time_base = time.time()
-        self.db.execute_query(f"UPDATE images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['?']*len(images_to_move))})", images_to_move)
+        self.db.execute_query(f"UPDATE images SET momentID = '{target_moment_id}' WHERE imageID IN ({','.join(['%s']*len(images_to_move))})", images_to_move)
         end_time_base = time.time()
         print(f"  Move 10 images -> Base: {end_time_base - start_time_base:.4f}s")
 

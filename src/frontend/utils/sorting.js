@@ -102,11 +102,11 @@ export const sortMoments = (moments, sortOrder = 'asc') => {
   
   return [...moments].sort((a, b) => {
     // Handle moments without start field
-    if (!a.start && !b.start) return 0;
-    if (!a.start) return 1;
-    if (!b.start) return -1;
-    
-    const comparison = new Date(a.start) - new Date(b.start);
+    if (!a.start_date && !b.start_date) return 0;
+    if (!a.start_date) return 1;
+    if (!b.start_date) return -1;
+
+    const comparison = new Date(a.start_date) - new Date(b.start_date);
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 };

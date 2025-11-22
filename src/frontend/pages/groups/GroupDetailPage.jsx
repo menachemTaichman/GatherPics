@@ -1110,10 +1110,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           face_id: faceId,
           image_id: face.image_id,
           group_id: face.group_id,
-          width: face.width || 0,
-          height: face.height || 0,
-          left: face.left || 0,
-          top: face.top || 0,
+          face_width: face.face_width || 0,
+          face_height: face.face_height || 0,
+          face_left: face.face_left || 0,
+          face_top: face.face_top || 0,
           group_label: face.group_id ? store.entities?.[eventId]?.groups?.[face.group_id]?.label : group.label
         });
       }
@@ -1133,10 +1133,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             face_id: faceId,
             image_id: face.image_id,
             group_id: face.group_id,
-            width: face?.width || 0,
-            height: face?.height || 0,
-            left: face?.left || 0,
-            top: face?.top || 0,
+            face_width: face?.face_width || 0,
+            face_height: face?.face_height || 0,
+            face_left: face?.face_left || 0,
+            face_top: face?.face_top || 0,
             group_label: face.group_id ? store.entities?.[eventId]?.groups?.[face.group_id]?.label : group.label
           });
         }
@@ -1788,8 +1788,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       .map(fId => facesMap[fId])
                       .filter(f => f && f.image_id === imageId)
                       .sort((a, b) => {
-                        const sizeA = (a.width || 0) * (a.height || 0);
-                        const sizeB = (b.width || 0) * (b.height || 0);
+                        const sizeA = (a.face_width || 0) * (a.face_height || 0);
+                        const sizeB = (b.face_width || 0) * (b.face_height || 0);
                         return sizeB - sizeA;
                       });
                     faceId = facesInImage[0]?.id || null;

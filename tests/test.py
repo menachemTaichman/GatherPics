@@ -5,6 +5,7 @@ from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
 from src.core.errors import DatabaseError
 import os
+import time
 
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
 profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
@@ -15,27 +16,35 @@ general_db = general_models.db
 
 def drop_views_triggers_and_indexes(db: DB):
     # get all views, triggers and indexes from the db itseilf, drop them, import them again
-    views = db.execute_query('SELECT name FROM sqlite_master WHERE type="view"')
-    triggers = db.execute_query('SELECT name FROM sqlite_master WHERE type="trigger"')
-    indexes = db.execute_query('SELECT name FROM sqlite_master WHERE type="index" AND name NOT LIKE "sqlite_autoindex%"')
+    views = db.execute_query("SELECT table_name FROM information_schema.views WHERE table_schema = 'public'")
+    triggers = db.execute_query("SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public'")
+    indexes = db.execute_query("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname NOT LIKE 'pg_%'")
 
     for view in views:
         try:
-            db.execute_query(f'DROP VIEW {view[0]}')
+            view_name = view[0] if isinstance(view, tuple) else view
+            db.execute_query(f'DROP VIEW IF EXISTS {view_name} CASCADE')
         except Exception as e:
-            print(f'Error dropping view {view[0]}: {e}')
+            print(f'Error dropping view {view_name}: {e}')
 
     for trigger in triggers:
         try:
-            db.execute_query(f'DROP TRIGGER {trigger[0]}')
+            trigger_name = trigger[0] if isinstance(trigger, tuple) else trigger
+            # PostgreSQL requires table name for DROP TRIGGER
+            # We'll need to get the table name from information_schema
+            trigger_info = db.execute_query(f"SELECT event_object_table FROM information_schema.triggers WHERE trigger_name = '{trigger_name}' AND trigger_schema = 'public' LIMIT 1")
+            if trigger_info:
+                table_name = trigger_info[0][0] if isinstance(trigger_info[0], tuple) else trigger_info[0]
+                db.execute_query(f'DROP TRIGGER IF EXISTS {trigger_name} ON {table_name} CASCADE')
         except Exception as e:
-            print(f'Error dropping trigger {trigger[0]}: {e}')
+            print(f'Error dropping trigger {trigger_name}: {e}')
 
     for index in indexes:
         try:
-            db.execute_query(f'DROP INDEX {index[0]}')
+            index_name = index[0] if isinstance(index, tuple) else index
+            db.execute_query(f'DROP INDEX IF EXISTS {index_name} CASCADE')
         except Exception as e:
-            print(f'Error dropping index {index[0]}: {e}')
+            print(f'Error dropping index {index_name}: {e}')
 
 def create_views_triggers_and_indexes(db: DB):
 
@@ -91,7 +100,10 @@ def recreate_tables_with_data(db: DB):
     # ------------------------------------------------------
 
     drop_views_triggers_and_indexes(db)
-    db.execute_query('PRAGMA foreign_keys = OFF;')
+    # PostgreSQL doesn't support disabling foreign keys like SQLite
+    # Foreign key constraints are always enforced, so we'll need to handle this differently
+    # For now, we'll just comment this out as it's not directly translatable
+    # db.execute_query('SET session_replication_role = replica;')  # Disable triggers temporarily
 
     # שלב 1️⃣ – גיבוי כל הטבלאות
     print("📦 גיבוי כל הטבלאות...")
@@ -111,8 +123,8 @@ def recreate_tables_with_data(db: DB):
 
     # עוזר כללי להעתקת נתונים בין טבלאות לפי עמודות משותפות
     def copy_common_columns(src, dst):
-        old_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({src});", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({dst});", return_format=ReturnFormat.LIST_TUPLES)]
+        old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{src}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{dst}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
         common = [c for c in old_cols if c in new_cols]
         if not common:
             print(f"  ⚠️ אין עמודות משותפות בין {src} ל-{dst}")
@@ -128,8 +140,8 @@ def recreate_tables_with_data(db: DB):
         print(f"  🔁 טיפול בצמד {a} ↔ {b} (שדה בעייתי: {problematic})")
 
         # העתקה של טבלה A בלי השדה הבעייתי
-        old_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({a}_backup);", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[1] for r in db.execute_query(f"PRAGMA table_info({a});", return_format=ReturnFormat.LIST_TUPLES)]
+        old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}_backup' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+        new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
         common_cols = [c for c in old_cols if c in new_cols and c != problematic]
         if common_cols:
             cols = ', '.join(common_cols)
@@ -141,14 +153,27 @@ def recreate_tables_with_data(db: DB):
         print(f"    ✅ {b}: הועתקו כל הנתונים")
 
         # עדכון שדה בעייתי אחרי שטבלת B קיימת
-        db.execute_query(f"""
-            UPDATE {a}
-            SET {problematic} = (
-                SELECT {problematic}
-                FROM {a}_backup
-                WHERE {a}_backup.rowid = {a}.rowid
-            )
-        """)
+        # PostgreSQL doesn't have rowid, so we need to use the primary key
+        # Get the primary key column name
+        pk_col = db.execute_query(f"""
+            SELECT column_name 
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu 
+                ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.table_name = '{a}' 
+                AND tc.constraint_type = 'PRIMARY KEY'
+                AND tc.table_schema = 'public'
+            LIMIT 1
+        """, return_format=ReturnFormat.VALUE)
+        if pk_col:
+            db.execute_query(f"""
+                UPDATE {a}
+                SET {problematic} = (
+                    SELECT {problematic}
+                    FROM {a}_backup
+                    WHERE {a}_backup.{pk_col} = {a}.{pk_col}
+                )
+            """)
         print(f"    🔄 {a}: עודכן השדה {problematic}")
 
         handled |= {a, b}
@@ -164,7 +189,9 @@ def recreate_tables_with_data(db: DB):
     print("\n🧹 מחיקת טבלאות הגיבוי...")
     for table_name in creation_order:
         db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
-    db.execute_query('PRAGMA foreign_keys = ON;')
+    # PostgreSQL doesn't support enabling foreign keys like SQLite
+    # Foreign key constraints are always enforced
+    # db.execute_query('SET session_replication_role = DEFAULT;')  # Re-enable triggers
     create_views_triggers_and_indexes(db)
 
     print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
@@ -243,22 +270,22 @@ def add_preference(preference_group: str, preference_key: str, value_type: str, 
             preference_key,
             value_type,
             value
-        ) VALUES (?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s)
     """
     params = [preference_group, preference_key, value_type, value]
     db.execute_query(query, params)
-    query = f"""
-        INSERT INTO profiles_preferences (
-            profile_id,
-            preference_group,
-            preference_key,
-            preference_value
-        )
-        SELECT profile_id, ?, ?, ?
-        FROM profiles
-    """
-    params = [preference_group, preference_key, value]
-    db.execute_query(query, params)
+    # query = f"""
+    #     INSERT INTO profiles_preferences (
+    #         profile_id,
+    #         preference_group,
+    #         preference_key,
+    #         preference_value
+    #     )
+    #     SELECT profile_id, %s, %s, %s
+    #     FROM profiles
+    # """
+    # params = [preference_group, preference_key, value]
+    # db.execute_query(query, params)
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -280,3 +307,32 @@ ids = {
 
 
 # recreate_views_triggers_and_indexes(db)
+
+class Timeit:
+    def __init__(self, name: str):
+        self.name = name
+    
+    def __enter__(self):
+        self.start = time.time()
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end = time.time()
+        print(f'{self.name} took {self.end - self.start} seconds')
+
+views = [
+    'accessible_images',
+    'accessible_faces',
+    'accessible_albums',
+    'accessible_moments',
+    'accessible_groups',
+    'accessible_groups_images',
+    'accessible_albums_images',
+    'accessible_uploads',
+    
+]
+
+for view in views:
+    with Timeit(view):
+        result = event.models.db.execute_query(f'SELECT * FROM {view};', return_format=ReturnFormat.LIST_DICTS)
+        print(len(result))
+        print('--------------------------------')

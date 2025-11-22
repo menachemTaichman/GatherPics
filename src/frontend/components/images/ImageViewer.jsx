@@ -1128,7 +1128,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       const offsetYpx = (containerH - displayedH) / 2; // letterbox top
 
       // Faces may be normalized (0..1) or absolute in original pixels. Detect heuristically.
-      const isNormalized = face.left <= 1 && face.top <= 1 && face.width <= 1 && face.height <= 1;
+      const isNormalized = face.face_left <= 1 && face.face_top <= 1 && face.face_width <= 1 && face.face_height <= 1;
       const toPx = (value, axis) => {
         if (isNormalized) {
           return value * (axis === 'x' ? displayedW : displayedH);
@@ -1137,10 +1137,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         return (value / base) * (axis === 'x' ? displayedW : displayedH);
       };
 
-      const leftPx = offsetXpx + toPx(face.left, 'x');
-      const topPx = offsetYpx + toPx(face.top, 'y');
-      const widthPx = toPx(face.width, 'x');
-      const heightPx = toPx(face.height, 'y');
+      const leftPx = offsetXpx + toPx(face.face_left, 'x');
+      const topPx = offsetYpx + toPx(face.face_top, 'y');
+      const widthPx = toPx(face.face_width, 'x');
+      const heightPx = toPx(face.face_height, 'y');
       
       return {
         left: `${(leftPx / containerW) * 100}%`,
@@ -1152,10 +1152,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Fallback when not loaded: assume normalized coords
     return {
-      left: `${face.left * 100}%`,
-      top: `${face.top * 100}%`,
-      width: `${face.width * 100}%`,
-      height: `${face.height * 100}%`,
+      left: `${face.face_left * 100}%`,
+      top: `${face.face_top * 100}%`,
+      width: `${face.face_width * 100}%`,
+      height: `${face.face_height * 100}%`,
     };
   };
 

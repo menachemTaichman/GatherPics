@@ -22,7 +22,7 @@ class EventModels(BaseModels):
             raise ValueError(f"Representative not found for {entity}")
         representative_table = representative_metadata['table']
         representative_field = representative_metadata['field']
-        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {self.db.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
+        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {self.db.get_id_field(entity)} = %s', (entity_id,), return_format=ReturnFormat.VALUE)
         return representative_table, representative_id
 
     def ensure_representative(self, table: str, entity_id: str) -> str | None:
@@ -47,7 +47,7 @@ class EventModels(BaseModels):
         FROM {relation} r
         INNER JOIN {table} t
         ON t.{id_field} = r.{id_field}
-        WHERE r.{id_field} = ?
+        WHERE r.{id_field} = %s
         AND t.{representative_field} = r.{child_id_field}
         """
         representative_id = self.db.execute_query(query, (entity_id, ), return_format=ReturnFormat.VALUE)
@@ -62,11 +62,18 @@ class EventModels(BaseModels):
             join_clause = f'INNER JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field}'
             parent = 'r'
 
+        # Determine size fields based on child table type
+        if child == 'faces':
+            size_expr = 'c.face_width * c.face_height'
+        else:
+            # For images and other entities, use standard width/height
+            size_expr = 'c.width * c.height'
+
         query = f"""SELECT c.{child_id_field}
         FROM {accessible_child} c
         {join_clause}
-        WHERE {parent}.{id_field} = ?
-        ORDER BY c.width * c.height DESC
+        WHERE {parent}.{id_field} = %s
+        ORDER BY {size_expr} DESC
         LIMIT 1
         """
         biggest = self.db.execute_query(query, (entity_id,), return_format=ReturnFormat.VALUE)
@@ -115,8 +122,8 @@ class EventModels(BaseModels):
 
         query = f"""
             UPDATE events
-            SET rekognition_calls_used = rekognition_calls_used + ?
-            WHERE event_id = ?
+            SET rekognition_calls_used = rekognition_calls_used + %s
+            WHERE event_id = %s
         """
         self.db.execute_query(query, (count, self.db.event_id))
         
@@ -158,13 +165,13 @@ class EventModels(BaseModels):
         accessible_moments = self.db.STRUCTURE()['moments']['accessible_table']
         accessible_images = self.db.STRUCTURE()['images']['accessible_table']
 
-        placeholders = ','.join('?' for _ in image_ids)
+        placeholders = ','.join('%s' for _ in image_ids)
         query = f"""
             WITH matched AS (
                 SELECT i.image_id, m.moment_id
                 FROM {accessible_images} AS i
                 JOIN {accessible_moments} AS m
-                ON i.date_taken BETWEEN m.start AND m.end
+                ON i.date_taken BETWEEN m.start_date AND m.end_date
                 WHERE i.image_id IN ({placeholders})
             )
             UPDATE {accessible_images}
@@ -210,7 +217,7 @@ class EventModels(BaseModels):
         query = f"""
             SELECT DISTINCT ai.upload_id, ai.moment_id
             FROM accessible_images ai
-            WHERE ai.image_id IN ({','.join(['?'] * len(image_ids))})
+            WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
             AND ai.moment_id IS NOT NULL
         """
         result = self.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
@@ -220,7 +227,7 @@ class EventModels(BaseModels):
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
         accessible_images = self.db.STRUCTURE()['images']['accessible_table']
-        query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['?'] * len(valid_image_ids))})'
+        query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})'
         self.db.execute_query(query, valid_image_ids)
         
         updated_uploads_to_moments = {}
@@ -258,9 +265,9 @@ class EventModels(BaseModels):
         query = f"""
             SELECT DISTINCT ai.upload_id, ai.moment_id
             FROM accessible_images ai
-            WHERE ai.image_id IN ({','.join(['?'] * len(image_ids))})
+            WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
             AND ai.moment_id IS NOT NULL
-            AND ai.moment_id <> ?
+            AND ai.moment_id <> %s
         """
         result = self.db.execute_query(query, image_ids + [moment_id], return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, affected_moment_id in result:
@@ -292,7 +299,7 @@ class EventModels(BaseModels):
     # -------- Images helpers --------
     def get_images_count(self) -> int:
         """Get the number of images in the event."""
-        return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = ?', (self.db.event_id,), return_format=ReturnFormat.VALUE)
+        return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = %s', (self.db.event_id,), return_format=ReturnFormat.VALUE)
 
     def is_image_deletable(self, image_id: str) -> bool:
         """Check if an image is deletable.
@@ -305,11 +312,11 @@ class EventModels(BaseModels):
             return False
         
         query = f"""
-            SELECT COUNT(*) FROM accessible_faces WHERE image_id = ?
+            SELECT COUNT(*) FROM accessible_faces WHERE image_id = %s
         """
         accessible_faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
         query = f"""
-            SELECT COUNT(*) FROM faces WHERE image_id = ?
+            SELECT COUNT(*) FROM faces WHERE image_id = %s
         """
         faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
 
@@ -319,10 +326,10 @@ class EventModels(BaseModels):
     def get_last_group_num(self) -> int:
         """Get the last group number."""
         query = f"""
-            SELECT MAX(CAST(SUBSTR(label, 8) AS INTEGER)) AS last_group_num
+            SELECT MAX(CAST(SUBSTRING(label FROM 8) AS INTEGER)) AS last_group_num
             FROM groups
-            WHERE label LIKE 'Person %'
-            AND SUBSTR(label, 8) GLOB '[0-9]*'
+            WHERE label LIKE 'Person %%'
+            AND SUBSTRING(label FROM 8) ~ '^[0-9]+$'
         """
 
         return self.db.execute_query(query, return_format=ReturnFormat.VALUE)
@@ -343,11 +350,11 @@ class EventModels(BaseModels):
         if isinstance(image_ids, str):
             image_ids = [image_ids]
 
-        image_placeholders = ','.join(['?'] * len(image_ids))
+        image_placeholders = ','.join(['%s'] * len(image_ids))
         query = f"""
             SELECT f.face_id FROM {accessible_faces} f 
             WHERE f.image_id IN ({image_placeholders}) 
-            AND f.group_id = ?
+            AND f.group_id = %s
         """
         return self.db.execute_query(query, image_ids + [group_id], return_format=ReturnFormat.LIST_VALUES)
 
@@ -364,8 +371,8 @@ class EventModels(BaseModels):
         if not base_image_ids or not group_ids:
             return []
 
-        group_id_placeholders = ','.join(['?'] * len(group_ids))
-        image_placeholders = ','.join(['?'] * len(base_image_ids))
+        group_id_placeholders = ','.join(['%s'] * len(group_ids))
+        image_placeholders = ','.join(['%s'] * len(base_image_ids))
         accessible_groups = self.db.STRUCTURE()['groups']['accessible_table']
         accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
 
@@ -400,8 +407,8 @@ class EventModels(BaseModels):
         query = f"""
             SELECT DISTINCT auf.upload_id, auf.group_id
             FROM accessible_uploads_faces auf
-            WHERE auf.face_id IN ({','.join(['?'] * len(face_ids))})
-            AND auf.group_id <> ?
+            WHERE auf.face_id IN ({','.join(['%s'] * len(face_ids))})
+            AND auf.group_id <> %s
         """
         result = self.db.execute_query(query, face_ids + [target_group_id], return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, group_id in result:
@@ -503,8 +510,8 @@ class EventModels(BaseModels):
         if edited and (closed_details and closed_details != ''):
             query = f"""
                 UPDATE access_requests SET
-                closed_details = ?
-                WHERE access_request_id = ?
+                closed_details = %s
+                WHERE access_request_id = %s
             """
             closed_details = self.db.serialize_value(list, access_request['closed_details'] + [closed_details])
             self.db.execute_query(query, (closed_details, access_request_id))
@@ -543,9 +550,9 @@ class EventModels(BaseModels):
                     OR (ayt.{id_field} IS NOT NULL AND aep.{all_field} = 0)
                 THEN 1 ELSE 0 END AS is_accessible
                 FROM {accessible_table} at
-                JOIN {accessible_event_profiles} aep ON aep.profile_id = ?
+                JOIN {accessible_event_profiles} aep ON aep.profile_id = %s
                 LEFT JOIN {accessible_permission_table} ayt ON at.{id_field} = ayt.{id_field} AND ayt.profile_id = aep.profile_id
-                WHERE at.{id_field} IN ({','.join(['?'] * len(ids))})
+                WHERE at.{id_field} IN ({','.join(['%s'] * len(ids))})
         """
         result = self.db.execute_query(query, [profile_id] + ids, return_format=ReturnFormat.LIST_TUPLES)
         if len(result) != len(ids):
@@ -559,9 +566,9 @@ class EventModels(BaseModels):
                 {id_field},
                 is_accessible
                 FROM {accessibility_table}
-                WHERE {id_field} IN ({','.join(['?'] * len(ids))})
+                WHERE {id_field} IN ({','.join(['%s'] * len(ids))})
                 AND event_id = cur_event_profile('event_id')
-                AND profile_id = ?
+                AND profile_id = %s
         """
         result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
 
@@ -623,7 +630,7 @@ class EventModels(BaseModels):
             True if group is to request access, False if not
         """
         query = f"""
-            SELECT * FROM current_groups_to_request_access WHERE group_id = ?
+            SELECT * FROM current_groups_to_request_access WHERE group_id = %s
         """
         return bool(self.db.execute_query(query, (group_id,), return_format=ReturnFormat.VALUE))
 
@@ -637,7 +644,7 @@ class EventModels(BaseModels):
         """
         request_id = self.add('my_access_requests', data)
 
-        values_clause = ','.join([f'(?, ?)' for _ in range(len(group_ids))])
+        values_clause = ','.join([f'(%s, %s)' for _ in range(len(group_ids))])
         values = ()
         for group_id in group_ids:
             values += (request_id, group_id)

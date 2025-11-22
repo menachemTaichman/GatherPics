@@ -16,7 +16,7 @@ steps = [
             s.*
         FROM settings s
         WHERE s.id = 1
-        AND cur_profile_bool('is_current_developer');
+        AND cur_profile_bool('is_developer');
         
         -- rekognition usage
         CREATE OR REPLACE VIEW accessible_rekognition_usaged AS
@@ -24,7 +24,7 @@ steps = [
             ru.*
         FROM rekognition_usaged ru
         JOIN settings s ON s.id = 1
-        WHERE cur_profile_bool('is_current_developer');
+        WHERE cur_profile_bool('is_developer');
 
         -- all profiles accessibility
         CREATE OR REPLACE VIEW albums_accessibility_helper AS
@@ -32,68 +32,95 @@ steps = [
             a.event_id,
             a.album_id,
             ep.profile_id,
-            CASE WHEN
-                (ep.all_albums AND epa.album_id IS NULL)
-                OR (NOT ep.all_albums AND epa.album_id IS NOT NULL)
-            THEN 1 ELSE 0 END AS is_accessible
+            TRUE AS is_accessible
         FROM albums a
         JOIN events_profiles ep ON a.event_id = ep.event_id
-        LEFT JOIN events_profiles_albums epa ON
-            a.album_id = epa.album_id
-            AND ep.profile_id = epa.profile_id
-            AND a.album_id = epa.album_id;
-        
-        CREATE OR REPLACE VIEW images_accessibility AS
+        WHERE ep.all_albums IS TRUE
+        UNION ALL
         SELECT
-            i.event_id,
-            i.image_id,
+            a.event_id,
+            a.album_id,
             ep.profile_id,
-            CASE WHEN
-                ((ep.all_images AND epi.image_id IS NULL)
-                OR (NOT ep.all_images AND epi.image_id IS NOT NULL))
-                AND (aah.is_accessible = 1 OR aah.is_accessible IS NULL)
-            THEN 1 ELSE 0 END AS is_accessible
-        FROM images i
-        JOIN events_profiles ep ON i.event_id = ep.event_id
-        LEFT JOIN events_profiles_images epi ON
-            i.image_id = epi.image_id
-            AND ep.profile_id = epi.profile_id
-            AND i.image_id = epi.image_id
-        LEFT JOIN (
-            albums_images ai
-            INNER JOIN albums a ON ai.album_id = a.album_id
-            INNER JOIN events e ON
-                e.event_id = a.event_id
-                AND a.album_id = e.archive_album_id
-            INNER JOIN albums_accessibility_helper aah ON aah.album_id = ai.album_id
-        ) ON i.image_id = ai.image_id AND aah.profile_id = ep.profile_id;
-        
+            TRUE AS is_accessible
+        FROM albums a
+        JOIN events_profiles ep ON a.event_id = ep.event_id
+        JOIN events_profiles_albums epa ON 
+            a.album_id = epa.album_id 
+            AND ep.profile_id = epa.profile_id
+        WHERE ep.all_albums IS FALSE;
+
         CREATE OR REPLACE VIEW groups_accessibility_helper AS
         SELECT
             g.event_id,
             g.group_id,
             ep.profile_id,
-            CASE WHEN
-                ((ep.all_groups AND epg.group_id IS NULL)
-                OR (NOT ep.all_groups AND epg.group_id IS NOT NULL))
-                AND (ep.can_edit OR g.group_id <> e.unassociated_group_id)
-            THEN 1 ELSE 0 END AS is_accessible_helper
+            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible_helper
         FROM groups g
-        INNER JOIN events e ON g.event_id = e.event_id
+        JOIN events e ON g.event_id = e.event_id
         JOIN events_profiles ep ON g.event_id = ep.event_id
-        LEFT JOIN events_profiles_groups epg ON
-            g.group_id = epg.group_id
+        WHERE ep.all_groups IS TRUE
+        UNION ALL
+        SELECT
+            g.event_id,
+            g.group_id,
+            ep.profile_id,
+            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible_helper
+        FROM groups g
+        JOIN events e ON g.event_id = e.event_id
+        JOIN events_profiles ep ON g.event_id = ep.event_id
+        JOIN events_profiles_groups epg ON 
+            g.group_id = epg.group_id 
             AND ep.profile_id = epg.profile_id
-            AND g.group_id = epg.group_id;
-        
+        WHERE ep.all_groups IS FALSE;
+
+        CREATE OR REPLACE VIEW images_accessibility AS
+        WITH base_image_access AS (
+            SELECT
+                i.event_id,
+                i.image_id,
+                ep.profile_id
+            FROM images i
+            JOIN events_profiles ep ON i.event_id = ep.event_id
+            WHERE ep.all_images IS TRUE
+            UNION ALL
+            SELECT
+                i.event_id,
+                i.image_id,
+                ep.profile_id
+            FROM images i
+            JOIN events_profiles ep ON i.event_id = ep.event_id
+            JOIN events_profiles_images epi ON 
+                i.image_id = epi.image_id 
+                AND ep.profile_id = epi.profile_id
+            WHERE ep.all_images IS FALSE
+        )
+        SELECT
+            bia.event_id,
+            bia.image_id,
+            bia.profile_id,
+            (COALESCE(archive_check.is_accessible, TRUE)) AS is_accessible
+        FROM base_image_access bia
+        LEFT JOIN (
+            SELECT 
+                ai.image_id, 
+                aah.profile_id, 
+                aah.is_accessible
+            FROM albums_images ai
+            JOIN albums a ON ai.album_id = a.album_id
+            JOIN events e ON a.event_id = e.event_id AND a.album_id = e.archive_album_id
+            JOIN albums_accessibility_helper aah ON aah.album_id = ai.album_id
+        ) archive_check ON 
+            bia.image_id = archive_check.image_id 
+            AND bia.profile_id = archive_check.profile_id;
+            
         CREATE OR REPLACE VIEW faces_accessibility AS
         SELECT
             ep.event_id,
             f.face_id,
             ep.profile_id,
-            CASE WHEN
-                (ia.is_accessible = 1 AND gah.is_accessible_helper = 1)
-            THEN 1 ELSE 0 END AS is_accessible
+            (
+                ia.is_accessible AND gah.is_accessible_helper
+            ) AS is_accessible
         FROM faces f
         INNER JOIN images i ON f.image_id = i.image_id
         JOIN events_profiles ep ON i.event_id = ep.event_id
@@ -105,21 +132,31 @@ steps = [
             gah.event_id,
             gah.group_id,
             gah.profile_id,
-            CASE WHEN
-                gah.is_accessible_helper = 1
-                AND (ep.can_edit OR 
-                    EXISTS (
+            (
+                gah.is_accessible_helper
+                AND (
+                    ep.can_edit
+                    OR EXISTS (
                         SELECT 1
                         FROM faces_accessibility fa
                         INNER JOIN faces f ON fa.face_id = f.face_id
                         WHERE f.group_id = gah.group_id
                         AND fa.profile_id = gah.profile_id
-                        AND fa.is_accessible = 1
+                        AND fa.is_accessible
                     )
                 )
-            THEN 1 ELSE 0 END AS is_accessible
+            ) AS is_accessible
         FROM groups_accessibility_helper gah
         JOIN events_profiles ep ON gah.event_id = ep.event_id AND gah.profile_id = ep.profile_id;
+        
+        -- groups_images view (needed by groups_to_request_access)
+        CREATE OR REPLACE VIEW groups_images AS
+        SELECT DISTINCT ON (i.image_id, g.group_id)
+            i.image_id as image_id,
+            g.group_id as group_id
+        FROM images i
+        INNER JOIN faces f ON i.image_id = f.image_id
+        INNER JOIN groups g ON f.group_id = g.group_id;
         
         CREATE OR REPLACE VIEW groups_to_request_access AS
         SELECT
@@ -127,7 +164,7 @@ steps = [
             gah.profile_id,
             gah.group_id
         FROM groups_accessibility_helper gah
-        WHERE gah.is_accessible_helper = 0
+        WHERE gah.is_accessible_helper
         AND EXISTS (
             SELECT 1
             FROM groups_images gi
@@ -135,7 +172,7 @@ steps = [
                 gi.image_id = ia.image_id
                 AND ia.event_id = gah.event_id
                 AND ia.profile_id = gah.profile_id
-                AND ia.is_accessible = 1
+                AND ia.is_accessible
             WHERE gi.group_id = gah.group_id
         );
         
@@ -144,16 +181,17 @@ steps = [
             ep.event_id,
             m.moment_id,
             ep.profile_id,
-            CASE WHEN
-                (ep.can_edit OR EXISTS (
+            (
+                ep.can_edit
+                OR EXISTS (
                     SELECT 1
                     FROM images_accessibility ia
                     INNER JOIN images i ON i.image_id = ia.image_id
                     WHERE i.moment_id = m.moment_id
                     AND ia.profile_id = ep.profile_id
-                    AND ia.is_accessible = 1
-                ))
-            THEN 1 ELSE 0 END AS is_accessible
+                    AND ia.is_accessible
+                )
+            ) AS is_accessible
         FROM moments m
         JOIN events_profiles ep ON m.event_id = ep.event_id;
         
@@ -162,17 +200,17 @@ steps = [
             aah.event_id,
             aah.album_id,
             ep.profile_id,
-            CASE WHEN
-                aah.is_accessible = 1
+            (
+                aah.is_accessible
                 AND (ep.can_edit OR EXISTS (
                     SELECT 1
                     FROM images_accessibility ia
                     INNER JOIN albums_images ai ON ai.image_id = ia.image_id
                     WHERE ai.album_id = aah.album_id
                     AND ia.profile_id = ep.profile_id
-                    AND ia.is_accessible = 1
+                    AND ia.is_accessible
                 ))
-            THEN 1 ELSE 0 END AS is_accessible
+            ) AS is_accessible
         FROM albums_accessibility_helper aah
         JOIN events_profiles ep ON aah.event_id = ep.event_id AND aah.profile_id = ep.profile_id;
 
@@ -180,7 +218,7 @@ steps = [
         CREATE OR REPLACE VIEW accessible_events AS
         SELECT
             e.*,
-            ep.profile_id IS NOT NULL AS is_accessible,
+            (ep.profile_id IS NOT NULL) AS is_accessible,
             CASE WHEN ep.can_manage_event THEN (
                 SELECT COUNT(*)
                 FROM images_accessibility ia
@@ -259,11 +297,11 @@ steps = [
         SELECT
             p.*,
             ae.name AS restricted_to_event_name,
-            CASE WHEN
+            (
                 cur_profile('restricted_to_event') IS NULL
                 OR cur_profile('restricted_to_event') = p.restricted_to_event
-            THEN 1 ELSE 0 END AS is_editable,
-            public_access_code IS NOT NULL AS has_public_access_code
+            ) AS is_editable,
+            (public_access_code IS NOT NULL) AS has_public_access_code
         FROM profiles p
         LEFT JOIN accessible_events ae ON p.restricted_to_event = ae.event_id
         WHERE p.hierarchy_rank < cur_profile_int('hierarchy_rank')
@@ -284,111 +322,6 @@ steps = [
         AND pp.preference_key = dp.preference_key
         WHERE pp.profile_id = cur_profile('profile_id');
 
-        -- current profile
-        CREATE OR REPLACE VIEW current_groups_to_request_access AS
-        SELECT
-            gta.group_id
-        FROM groups_to_request_access gta
-        WHERE gta.event_id = cur_event_profile('event_id')
-        AND gta.profile_id = cur_profile('profile_id');
-        
-        CREATE OR REPLACE VIEW current_event_profile AS
-        SELECT
-            ep.event_id,
-            ep.profile_id,
-            ep.can_manage_event,
-            ep.can_delete_event,
-            ep.can_upload_and_delete_images,
-            ep.can_edit,
-            ep.all_images,
-            ep.all_groups,
-            ep.all_albums,
-            EXISTS (SELECT 1 FROM accessible_albums aa WHERE aa.album_id = e.archive_album_id) AS has_archive_album,
-            EXISTS (SELECT 1 FROM accessible_albums aa WHERE aa.album_id = e.favorites_album_id) AS has_favorites_album,
-            (ep.can_edit OR EXISTS (SELECT 1 FROM accessible_images)) AS has_images,
-            (ep.can_edit OR EXISTS (SELECT 1 FROM accessible_groups)) AS has_groups,
-            (ep.can_edit OR EXISTS (
-                SELECT 1 FROM accessible_albums aa
-                WHERE aa.album_id IS DISTINCT FROM e.archive_album_id
-                AND aa.album_id IS DISTINCT FROM e.favorites_album_id
-            )) AS has_albums,
-            EXISTS (SELECT 1 FROM current_groups_to_request_access) AS enable_new_requests,
-            (SELECT COUNT(*) FROM accessible_access_requests WHERE NOT is_closed) AS pending_access_requests_count
-        FROM events_profiles ep
-        JOIN events e ON e.event_id = ep.event_id
-        WHERE ep.event_id = cur_event_profile('event_id')
-        AND ep.profile_id = cur_profile('profile_id');
-     
-        CREATE OR REPLACE VIEW current_profile AS
-        SELECT
-            p.profile_id,
-            p.label,
-            p.password,
-            p.email,
-            p.hierarchy_rank,
-            p.can_create_events,
-            p.restricted_to_event,
-            p.is_public,
-            (p.hierarchy_rank > 0) AS is_profiles_manager,
-            (p.hierarchy_rank > (SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1)) AS can_manage_create_events,
-            COUNT(mn.notification_id) AS total_notifications,
-            COUNT(DISTINCT CASE WHEN NOT mn.read THEN mn.notification_id END) AS unread_notifications,
-            (SELECT COUNT(*) FROM accessible_feedbacks WHERE NOT is_closed) AS pending_feedbacks,
-            cur_profile_bool('is_current_developer') AS has_feedbacks,
-            cur_profile_bool('is_current_developer') AS has_settings,
-            (SUM(CASE WHEN cpe.can_manage_event THEN 1 ELSE 0 END) > 0 OR p.can_create_events) AS has_manageable_events,
-            (
-                SUM(CASE WHEN cpe.can_manage_event THEN 1 ELSE 0 END) > 0
-                OR p.can_create_events
-                OR cur_profile_bool('is_current_developer')
-            ) AS has_dashboard
-        FROM profiles p
-        LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
-        LEFT JOIN current_profile_events cpe ON p.profile_id = cpe.profile_id
-        WHERE p.profile_id = cur_profile('profile_id')
-        GROUP BY p.profile_id;
-        
-        CREATE OR REPLACE VIEW current_profile_events AS
-        SELECT
-            ep.profile_id,
-            ep.event_id,
-            ep.can_manage_event,
-            ep.can_delete_event
-        FROM events_profiles ep
-        WHERE ep.profile_id = cur_profile('profile_id');
-
-        -- event profiles
-        CREATE OR REPLACE VIEW accessible_events_profiles AS
-        SELECT ep.*
-        FROM events_profiles ep
-        INNER JOIN profiles p ON ep.profile_id = p.profile_id
-        INNER JOIN accessible_events ae ON ep.event_id = ae.event_id
-        WHERE p.hierarchy_rank < cur_profile_int('hierarchy_rank');
-        
-        CREATE OR REPLACE VIEW accessible_events_profiles_images AS
-        SELECT epi.*
-        FROM events_profiles_images epi
-        INNER JOIN accessible_events_profiles aep
-        ON epi.profile_id = aep.profile_id
-        AND aep.event_id = epi.event_id
-        WHERE aep.event_id = cur_event_profile('event_id');
-        
-        CREATE OR REPLACE VIEW accessible_events_profiles_groups AS
-        SELECT epg.*
-        FROM events_profiles_groups epg
-        INNER JOIN accessible_events_profiles aep
-        ON epg.profile_id = aep.profile_id
-        AND epg.event_id = aep.event_id
-        WHERE aep.event_id = cur_event_profile('event_id');
-        
-        CREATE OR REPLACE VIEW accessible_events_profiles_albums AS
-        SELECT epa.*
-        FROM events_profiles_albums epa
-        INNER JOIN accessible_events_profiles aep
-        ON epa.profile_id = aep.profile_id
-        AND epa.event_id = aep.event_id
-        WHERE aep.event_id = cur_event_profile('event_id');
-
         -- notifications
         CREATE OR REPLACE VIEW my_notifications AS
         SELECT * FROM notifications
@@ -399,8 +332,8 @@ steps = [
         WHERE NOT cur_profile_bool('is_public');
         
         CREATE OR REPLACE VIEW accessible_notifications AS
-        SELECT * FROM notifications
-        INNER JOIN accessible_profiles ap ON notifications.profile_id = ap.profile_id;
+        SELECT n.* FROM notifications n
+        INNER JOIN accessible_profiles ap ON n.profile_id = ap.profile_id;
 
         -- feedbacks
         CREATE OR REPLACE VIEW feedbacks_details AS
@@ -454,11 +387,89 @@ steps = [
         
         CREATE OR REPLACE VIEW accessible_feedbacks AS
         SELECT
-            *,
+            fe.*,
             p.label AS closed_by_label
         FROM feedbacks_details fe
         LEFT JOIN profiles p ON fe.closed_by = p.profile_id
-        WHERE cur_profile_bool('is_current_developer');
+        WHERE cur_profile_bool('is_developer');
+
+        -- current profile
+        CREATE OR REPLACE VIEW current_profile_events AS
+        SELECT
+            ep.profile_id,
+            ep.event_id,
+            ep.can_manage_event,
+            ep.can_delete_event
+        FROM events_profiles ep
+        WHERE ep.profile_id = cur_profile('profile_id');
+        
+        CREATE OR REPLACE VIEW current_groups_to_request_access AS
+        SELECT
+            gta.group_id
+        FROM groups_to_request_access gta
+        WHERE gta.event_id = cur_event_profile('event_id')
+        AND gta.profile_id = cur_profile('profile_id');
+     
+        CREATE OR REPLACE VIEW current_profile AS
+        SELECT
+            p.profile_id,
+            p.label,
+            p.password,
+            p.email,
+            p.hierarchy_rank,
+            p.can_create_events,
+            p.restricted_to_event,
+            p.is_public,
+            (p.hierarchy_rank > 0) AS is_profiles_manager,
+            (p.hierarchy_rank > (SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1)) AS can_manage_create_events,
+            COUNT(mn.notification_id) AS total_notifications,
+            COUNT(DISTINCT CASE WHEN NOT mn.read THEN mn.notification_id END) AS unread_notifications,
+            (SELECT COUNT(*) FROM accessible_feedbacks WHERE NOT is_closed) AS pending_feedbacks,
+            cur_profile_bool('is_developer') AS has_feedbacks,
+            cur_profile_bool('is_developer') AS has_settings,
+            (SUM(CASE WHEN cpe.can_manage_event THEN 1 ELSE 0 END) > 0 OR p.can_create_events) AS has_manageable_events,
+            (
+                SUM(CASE WHEN cpe.can_manage_event THEN 1 ELSE 0 END) > 0
+                OR p.can_create_events
+                OR cur_profile_bool('is_developer')
+            ) AS has_dashboard
+        FROM profiles p
+        LEFT JOIN my_notifications mn ON p.profile_id = mn.profile_id
+        LEFT JOIN current_profile_events cpe ON p.profile_id = cpe.profile_id
+        WHERE p.profile_id = cur_profile('profile_id')
+        GROUP BY p.profile_id;
+
+        -- event profiles
+        CREATE OR REPLACE VIEW accessible_events_profiles AS
+        SELECT ep.*
+        FROM events_profiles ep
+        INNER JOIN profiles p ON ep.profile_id = p.profile_id
+        INNER JOIN accessible_events ae ON ep.event_id = ae.event_id
+        WHERE p.hierarchy_rank < cur_profile_int('hierarchy_rank');
+        
+        CREATE OR REPLACE VIEW accessible_events_profiles_images AS
+        SELECT epi.*
+        FROM events_profiles_images epi
+        INNER JOIN accessible_events_profiles aep
+        ON epi.profile_id = aep.profile_id
+        AND aep.event_id = epi.event_id
+        WHERE aep.event_id = cur_event_profile('event_id');
+        
+        CREATE OR REPLACE VIEW accessible_events_profiles_groups AS
+        SELECT epg.*
+        FROM events_profiles_groups epg
+        INNER JOIN accessible_events_profiles aep
+        ON epg.profile_id = aep.profile_id
+        AND epg.event_id = aep.event_id
+        WHERE aep.event_id = cur_event_profile('event_id');
+        
+        CREATE OR REPLACE VIEW accessible_events_profiles_albums AS
+        SELECT epa.*
+        FROM events_profiles_albums epa
+        INNER JOIN accessible_events_profiles aep
+        ON epa.profile_id = aep.profile_id
+        AND epa.event_id = aep.event_id
+        WHERE aep.event_id = cur_event_profile('event_id');
 
         -- images
         CREATE OR REPLACE VIEW accessible_images AS
@@ -506,15 +517,7 @@ steps = [
             AND fa.event_id = cur_event_profile('event_id')
             AND fa.is_accessible;
 
-        -- groups
-        CREATE OR REPLACE VIEW groups_images AS
-        SELECT DISTINCT ON (i.image_id, g.group_id)
-            i.image_id as image_id,
-            g.group_id as group_id
-        FROM images i
-        INNER JOIN faces f ON i.image_id = f.image_id
-        INNER JOIN groups g ON f.group_id = g.group_id;
-        
+        -- groups (groups_images view already created above)
         CREATE OR REPLACE VIEW accessible_groups_images AS
         SELECT DISTINCT ON (ai.image_id, af.group_id)
             ai.image_id as image_id,
@@ -552,24 +555,25 @@ steps = [
 
         -- moments
         CREATE OR REPLACE VIEW accessible_moments AS
+        WITH moments_stats AS (
+            SELECT
+                ma.moment_id,
+                COUNT(ai.image_id) as images_count,
+                COUNT(DISTINCT CASE WHEN NOT ai.is_archived THEN ai.image_id END) AS active_images_count
+            FROM moments_accessibility ma
+            LEFT JOIN accessible_images ai ON ma.moment_id = ai.moment_id
+            WHERE
+                ma.event_id = cur_event_profile('event_id')
+                AND ma.profile_id = cur_profile('profile_id')
+                AND ma.is_accessible
+            GROUP BY ma.moment_id
+        )
         SELECT
-            m.moment_id,
-            m.event_id,
-            m.label,
-            m.description,
-            m.start,
-            m.end,
-            m.representative_image,
-            COUNT(ai.image_id) as images_count,
-            COUNT(DISTINCT CASE WHEN NOT ai.is_archived THEN agi.image_id END) AS active_images_count
+            m.*,
+            ms.images_count,
+            ms.active_images_count
         FROM moments m
-        INNER JOIN moments_accessibility ma ON m.moment_id = ma.moment_id
-        LEFT JOIN accessible_images ai ON ma.moment_id = ai.moment_id
-        WHERE
-            ma.event_id = cur_event_profile('event_id')
-            AND ma.profile_id = cur_profile('profile_id')
-            AND ma.is_accessible
-        GROUP BY m.moment_id, m.event_id, m.label, m.description, m.start, m.end, m.representative_image;
+        INNER JOIN moments_stats ms ON m.moment_id = ms.moment_id;
 
         -- albums
         CREATE OR REPLACE VIEW albums_images_actual AS
@@ -631,25 +635,33 @@ steps = [
         WHERE cur_event_profile_bool('can_upload_and_delete_images');
         
         CREATE OR REPLACE VIEW uploads_groups AS
-        SELECT DISTINCT ON (u.upload_id, g.group_id)
+        SELECT DISTINCT ON (u.upload_id, gi.group_id)
             u.*,
-            g.group_id as group_id
+            gi.group_id as group_id
         FROM uploads u
         INNER JOIN images i ON u.upload_id = i.upload_id
-        INNER JOIN faces f ON i.image_id = f.image_id
-        INNER JOIN groups g ON f.group_id = g.group_id
+        INNER JOIN groups_images gi ON i.image_id = gi.image_id
         WHERE u.event_id = cur_event_profile('event_id');
         
         CREATE OR REPLACE VIEW accessible_uploads_groups AS
-        SELECT DISTINCT ON (u.upload_id, g.group_id)
+        WITH upload_groups_stats AS (
+            SELECT
+                u.upload_id,
+                f.group_id,
+                COUNT(DISTINCT f.face_id) as group_upload_faces_count
+            FROM accessible_uploads u
+            INNER JOIN accessible_images i ON u.upload_id = i.upload_id
+            INNER JOIN accessible_faces f ON i.image_id = f.image_id
+            GROUP BY u.upload_id, f.group_id
+        )
+        SELECT
             u.*,
-            g.group_id as group_id,
+            ugs.group_id as group_id,
             g.faces_count as group_faces_count,
-            COUNT(DISTINCT f.face_id) as group_upload_faces_count
+            ugs.group_upload_faces_count
         FROM accessible_uploads u
-        INNER JOIN accessible_images i ON u.upload_id = i.upload_id
-        INNER JOIN accessible_faces f ON i.image_id = f.image_id
-        INNER JOIN accessible_groups g ON f.group_id = g.group_id;
+        INNER JOIN upload_groups_stats ugs ON u.upload_id = ugs.upload_id
+        INNER JOIN accessible_groups g ON ugs.group_id = g.group_id;
         
         CREATE OR REPLACE VIEW uploads_moments AS
         SELECT DISTINCT ON (u.upload_id, m.moment_id)
@@ -661,14 +673,24 @@ steps = [
         WHERE u.event_id = cur_event_profile('event_id');
         
         CREATE OR REPLACE VIEW accessible_uploads_moments AS
-        SELECT DISTINCT ON (u.upload_id, m.moment_id)
+        WITH upload_moments_stats AS (
+            SELECT
+                u.upload_id,
+                i.moment_id,
+                COUNT(DISTINCT i.image_id) as moment_upload_images_count
+            FROM accessible_uploads u
+            INNER JOIN accessible_images i ON u.upload_id = i.upload_id
+            WHERE i.moment_id IS NOT NULL
+            GROUP BY u.upload_id, i.moment_id
+        )
+        SELECT
             u.*,
-            m.moment_id as moment_id,
+            ums.moment_id as moment_id,
             m.images_count as moment_images_count,
-            COUNT(DISTINCT i.image_id) as moment_upload_images_count
+            ums.moment_upload_images_count
         FROM accessible_uploads u
-        INNER JOIN accessible_images i ON u.upload_id = i.upload_id
-        INNER JOIN accessible_moments m ON i.moment_id = m.moment_id;
+        INNER JOIN upload_moments_stats ums ON u.upload_id = ums.upload_id
+        INNER JOIN accessible_moments m ON ums.moment_id = m.moment_id;
         
         CREATE OR REPLACE VIEW uploads_faces AS
         SELECT u.upload_id, f.face_id, f.group_id
@@ -762,10 +784,39 @@ steps = [
         INNER JOIN groups_accessibility ga ON
             ag.group_id = ga.group_id
             AND ga.profile_id = cur_profile('profile_id')
-            AND ga.is_accessible = 1
+            AND ga.is_accessible
             AND ga.event_id = cur_event_profile('event_id');
+
+        -- current_event_profile
+        CREATE OR REPLACE VIEW current_event_profile AS
+        SELECT
+            ep.event_id,
+            ep.profile_id,
+            ep.can_manage_event,
+            ep.can_delete_event,
+            ep.can_upload_and_delete_images,
+            ep.can_edit,
+            ep.all_images,
+            ep.all_groups,
+            ep.all_albums,
+            EXISTS (SELECT 1 FROM accessible_albums aa WHERE aa.album_id = e.archive_album_id) AS has_archive_album,
+            EXISTS (SELECT 1 FROM accessible_albums aa WHERE aa.album_id = e.favorites_album_id) AS has_favorites_album,
+            (ep.can_edit OR EXISTS (SELECT 1 FROM accessible_images)) AS has_images,
+            (ep.can_edit OR EXISTS (SELECT 1 FROM accessible_groups)) AS has_groups,
+            (ep.can_edit OR EXISTS (
+                SELECT 1 FROM accessible_albums aa
+                WHERE aa.album_id IS DISTINCT FROM e.archive_album_id
+                AND aa.album_id IS DISTINCT FROM e.favorites_album_id
+            )) AS has_albums,
+            EXISTS (SELECT 1 FROM current_groups_to_request_access) AS enable_new_requests,
+            (SELECT COUNT(*) FROM accessible_access_requests WHERE NOT is_closed) AS pending_access_requests_count
+        FROM events_profiles ep
+        JOIN events e ON e.event_id = ep.event_id
+        WHERE ep.event_id = cur_event_profile('event_id')
+        AND ep.profile_id = cur_profile('profile_id');
         """,
         """
+        DROP VIEW IF EXISTS current_event_profile CASCADE;
         DROP VIEW IF EXISTS accessible_access_requests_groups CASCADE;
         DROP VIEW IF EXISTS accessible_access_requests CASCADE;
         DROP VIEW IF EXISTS accessible_my_access_requests_groups CASCADE;
@@ -789,9 +840,15 @@ steps = [
         DROP VIEW IF EXISTS accessible_moments CASCADE;
         DROP VIEW IF EXISTS accessible_groups CASCADE;
         DROP VIEW IF EXISTS accessible_groups_images CASCADE;
-        DROP VIEW IF EXISTS groups_images CASCADE;
         DROP VIEW IF EXISTS accessible_faces CASCADE;
         DROP VIEW IF EXISTS accessible_images CASCADE;
+        DROP VIEW IF EXISTS accessible_events_profiles_albums CASCADE;
+        DROP VIEW IF EXISTS accessible_events_profiles_groups CASCADE;
+        DROP VIEW IF EXISTS accessible_events_profiles_images CASCADE;
+        DROP VIEW IF EXISTS accessible_events_profiles CASCADE;
+        DROP VIEW IF EXISTS current_profile CASCADE;
+        DROP VIEW IF EXISTS current_groups_to_request_access CASCADE;
+        DROP VIEW IF EXISTS current_profile_events CASCADE;
         DROP VIEW IF EXISTS accessible_feedbacks CASCADE;
         DROP VIEW IF EXISTS accessible_my_feedbacks CASCADE;
         DROP VIEW IF EXISTS my_feedbacks CASCADE;
@@ -799,20 +856,13 @@ steps = [
         DROP VIEW IF EXISTS accessible_notifications CASCADE;
         DROP VIEW IF EXISTS accessible_my_notifications CASCADE;
         DROP VIEW IF EXISTS my_notifications CASCADE;
-        DROP VIEW IF EXISTS accessible_events_profiles_albums CASCADE;
-        DROP VIEW IF EXISTS accessible_events_profiles_groups CASCADE;
-        DROP VIEW IF EXISTS accessible_events_profiles_images CASCADE;
-        DROP VIEW IF EXISTS accessible_events_profiles CASCADE;
-        DROP VIEW IF EXISTS current_profile_events CASCADE;
-        DROP VIEW IF EXISTS current_profile CASCADE;
-        DROP VIEW IF EXISTS current_event_profile CASCADE;
-        DROP VIEW IF EXISTS current_groups_to_request_access CASCADE;
         DROP VIEW IF EXISTS my_preferences CASCADE;
         DROP VIEW IF EXISTS accessible_profiles CASCADE;
         DROP VIEW IF EXISTS accessible_events CASCADE;
         DROP VIEW IF EXISTS albums_accessibility CASCADE;
         DROP VIEW IF EXISTS moments_accessibility CASCADE;
         DROP VIEW IF EXISTS groups_to_request_access CASCADE;
+        DROP VIEW IF EXISTS groups_images CASCADE;
         DROP VIEW IF EXISTS groups_accessibility CASCADE;
         DROP VIEW IF EXISTS faces_accessibility CASCADE;
         DROP VIEW IF EXISTS groups_accessibility_helper CASCADE;

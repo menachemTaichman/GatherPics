@@ -747,7 +747,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                       <div className="text-center">
                       <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
                       <div className="text-xs text-gray-500 truncate max-w-[7rem]">
-                        {formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}
+                        {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
                       </div>
                     </div>
                   </motion.div>
@@ -784,10 +784,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
                   <div className="text-xs text-gray-700 mb-1 font-medium">
-                    {formatTimeOnly(currentVisibleMoment.start)} - {formatTimeOnly(currentVisibleMoment.end)}
+                    {formatTimeOnly(currentVisibleMoment.start_date)} - {formatTimeOnly(currentVisibleMoment.end_date)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {formatDate(currentVisibleMoment.start)}
+                    {formatDate(currentVisibleMoment.start_date)}
                   </div>
                 </>
               ) : (

@@ -26,10 +26,10 @@ class BaseModels(ABC):
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its id for conflict checking."""
 
-        where_clause = ' AND '.join([f'{k}=?' for k in fields.keys()])
+        where_clause = ' AND '.join([f'{k}=%s' for k in fields.keys()])
         where_params = tuple(fields.values())
         if exclude_id:
-            where_clause += f' AND {self.db.get_id_field(table)} != ?'
+            where_clause += f' AND {self.db.get_id_field(table)} != %s'
             where_params += (exclude_id,)
         id_field = self.db.get_id_field(table)
         query = f"""
@@ -58,7 +58,7 @@ class BaseModels(ABC):
             relation_table = child[0]
             if only_accessible:
                 relation_table = self.db.STRUCTURE()[relation_table]['accessible_table']
-            query = f'SELECT EXISTS(SELECT 1 FROM {relation_table} WHERE {id_field} = ?)'
+            query = f'SELECT EXISTS(SELECT 1 FROM {relation_table} WHERE {id_field} = %s)'
             results = self.db.execute_query(query, (entity_id,))
             if results[0][0]:
                 return False
@@ -68,7 +68,7 @@ class BaseModels(ABC):
     def is_accessible(self, table: str, entity_id: str) -> bool:
         accessible_table = self.db.STRUCTURE()[table]['accessible_table']
         id_field = self.db.get_id_field(table)
-        query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = ?)'
+        query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = %s)'
         results = self.db.execute_query(query, (entity_id,))
         return bool(results[0][0])
 
@@ -92,7 +92,7 @@ class BaseModels(ABC):
             single_item = True
         
         if entity_ids:
-            where_clause += f'WHERE {self.db.get_id_field(table)} IN ({','.join(['?'] * len(entity_ids))})'
+            where_clause += f'WHERE {self.db.get_id_field(table)} IN ({','.join(['%s'] * len(entity_ids))})'
         else:
             entity_ids = []
 
@@ -127,7 +127,7 @@ class BaseModels(ABC):
             raise ValueError(f"Representative not found for {entity}")
         representative_table = representative_metadata['table']
         representative_field = representative_metadata['field']
-        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {self.db.get_id_field(entity)} = ?', (entity_id,), return_format=ReturnFormat.VALUE)
+        representative_id = self.db.execute_query(f'SELECT {representative_field} FROM {entity} WHERE {self.db.get_id_field(entity)} = %s', (entity_id,), return_format=ReturnFormat.VALUE)
         return representative_table, representative_id
 
     def get_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str] | None = None, *, within: bool = True, return_ids: bool = False) -> list[str] | dict[str, dict] | tuple[list[str] | dict[str, dict], dict[str, dict]]:
@@ -165,18 +165,18 @@ class BaseModels(ABC):
         join_clause = ''        
         if exclusive:
             if within:
-                where_clause = f'c.{id_field} = ?'
+                where_clause = f'c.{id_field} = %s'
             else:
-                where_clause = f'(c.{id_field} <> ? OR c.{id_field} IS NULL)'
+                where_clause = f'(c.{id_field} <> %s OR c.{id_field} IS NULL)'
         else:
-            join_clause = f' LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = ?'
+            join_clause = f' LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
             if within:
                 where_clause = f'r.{child_id_field} IS NOT NULL'
             else:
                 where_clause = f'r.{child_id_field} IS NULL'
 
         if child_ids is not None:
-            where_clause += f' AND c.{child_id_field} IN ({','.join(['?'] * len(child_ids))})'
+            where_clause += f' AND c.{child_id_field} IN ({','.join(['%s'] * len(child_ids))})'
         else:
             child_ids = []
 
@@ -191,8 +191,8 @@ class BaseModels(ABC):
             valid_child_ids = list(valid_childs.keys())
             query = f"""SELECT {relation_table_fields}
             FROM {accessible_relation} r
-            WHERE r.{id_field} = ?
-            AND r.{child_id_field} IN ({','.join(['?'] * len(valid_child_ids))})
+            WHERE r.{id_field} = %s
+            AND r.{child_id_field} IN ({','.join(['%s'] * len(valid_child_ids))})
             """
             childs_data = self.db.execute_query(query, (entity_id, *valid_child_ids), return_format=ReturnFormat.DICT_DICTS)
             return valid_childs, childs_data
@@ -243,7 +243,7 @@ class BaseModels(ABC):
             query = f"""
                 SELECT {fields}
                 FROM {accessible_relation} r
-                WHERE r.{child_id_field} IN ({','.join(['?'] * len(params))})
+                WHERE r.{child_id_field} IN ({','.join(['%s'] * len(params))})
                 AND r.{id_field} IS NOT NULL
             """
             parent_ids = self.db.execute_query(query, params, return_format=return_format)
@@ -377,7 +377,7 @@ class BaseModels(ABC):
         if operation == ADD and exclusive:
             detached_parents = self.get_parents(child_table, valid_child_ids, parent)
 
-        placeholders = ','.join(['?'] * len(valid_child_ids))
+        placeholders = ','.join(['%s'] * len(valid_child_ids))
         params = []
         added_data = ''
         if exclusive:
@@ -386,35 +386,35 @@ class BaseModels(ABC):
                 added_data = ',' + ','.join([f'{k} = NULL' for k in data.keys()])
 
             if operation == ADD:
-                query = f'UPDATE {accessible_relation_table} SET {id_field} = ?{added_data} WHERE {child_id_field} IN ({placeholders})'
+                query = f'UPDATE {accessible_relation_table} SET {id_field} = %s{added_data} WHERE {child_id_field} IN ({placeholders})'
             elif operation == REMOVE:
-                query = f'UPDATE {accessible_relation_table} SET {id_field} = NULL{added_data} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
+                query = f'UPDATE {accessible_relation_table} SET {id_field} = NULL{added_data} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
             self.db.execute_query(query, params)
         else:
             if operation == ADD:
                 added_values_clause = ''
                 added_data_clause = ''
                 if data:
-                    added_values_clause = ',' + ','.join([f'?' for _ in range(len(data.keys()))])
+                    added_values_clause = ',' + ','.join([f'%s' for _ in range(len(data.keys()))])
                     added_data_clause = ',' + ','.join([f'{k}' for k in data.keys()])
 
-                values_clause = ','.join([f'(?, ?{added_values_clause})'] * len(valid_child_ids))
+                values_clause = ','.join([f'(%s, %s{added_values_clause})'] * len(valid_child_ids))
                 for cid in valid_child_ids:
                     params.extend([entity_id, cid])
                     if data:
                         params.extend(data.values())
 
-                query = f'INSERT OR IGNORE INTO {accessible_relation_table} ({id_field}, {child_id_field}{added_data_clause}) VALUES {values_clause}'
+                query = f'INSERT INTO {accessible_relation_table} ({id_field}, {child_id_field}{added_data_clause}) VALUES {values_clause} ON CONFLICT DO NOTHING'
                 self.db.execute_query(query, params)
             elif operation == REMOVE:
                 params.extend([entity_id, *valid_child_ids])
-                query = f'DELETE FROM {accessible_relation_table} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
+                query = f'DELETE FROM {accessible_relation_table} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
                 self.db.execute_query(query, params)
             elif operation == UPDATE:
                 if data:
-                    updated_data_clause = ','.join([f'{k} = ?' for k in data.keys()])
+                    updated_data_clause = ','.join([f'{k} = %s' for k in data.keys()])
                     params = [*data.values(), entity_id, *valid_child_ids]
-                    query = f'UPDATE {accessible_relation_table} SET {updated_data_clause} WHERE {id_field} = ? AND {child_id_field} IN ({placeholders})'
+                    query = f'UPDATE {accessible_relation_table} SET {updated_data_clause} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
                     self.db.execute_query(query, params)
 
         return valid_child_ids, detached_parents

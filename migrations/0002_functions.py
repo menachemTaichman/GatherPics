@@ -15,7 +15,7 @@ steps = [
         BEGIN
             PERFORM set_config('app.profile_context.' || key, COALESCE(value, ''), false);
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS set_profile_context(TEXT, TEXT)"
     ),
@@ -54,7 +54,7 @@ steps = [
             
             RETURN COALESCE(result_val, '');
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile(TEXT)"
     ),
@@ -65,7 +65,7 @@ steps = [
         BEGIN
             PERFORM set_config('app.event_profile_context.' || key, COALESCE(value, ''), false);
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS set_event_profile_context(TEXT, TEXT)"
     ),
@@ -97,7 +97,7 @@ steps = [
             
             RETURN COALESCE(result_val, '');
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile(TEXT)"
     ),
@@ -108,7 +108,7 @@ steps = [
         BEGIN
             RETURN cur_profile(key);
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_text(TEXT)"
     ),
@@ -125,7 +125,7 @@ steps = [
             END IF;
             RETURN val::INTEGER;
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_int(TEXT)"
     ),
@@ -142,7 +142,7 @@ steps = [
             END IF;
             RETURN LOWER(val)::BOOLEAN;
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_bool(TEXT)"
     ),
@@ -153,7 +153,7 @@ steps = [
         BEGIN
             RETURN cur_event_profile(key);
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_text(TEXT)"
     ),
@@ -170,7 +170,7 @@ steps = [
             END IF;
             RETURN val::INTEGER;
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_int(TEXT)"
     ),
@@ -187,7 +187,7 @@ steps = [
             END IF;
             RETURN LOWER(val)::BOOLEAN;
         END;
-        $$ LANGUAGE plpgsql;
+        $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_bool(TEXT)"
     ),

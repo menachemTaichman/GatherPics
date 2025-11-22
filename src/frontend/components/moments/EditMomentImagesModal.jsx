@@ -294,13 +294,13 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
   const isImageInPeriod = (imageId) => {
     // Check if image is in period based on moment date range
-    if (!moment || !moment.start || !moment.end) return false;
+    if (!moment || !moment.start_date || !moment.end_date) return false;
     
     const image = allImagesWithTimestamps.find(img => img.id === imageId);
     if (!image || !image.date_taken) return false;
     
-    const startDate = new Date(moment.start);
-    const endDate = new Date(moment.end);
+    const startDate = new Date(moment.start_date);
+    const endDate = new Date(moment.end_date);
     const imageDate = new Date(image.date_taken);
     
     return imageDate >= startDate && imageDate <= endDate;
@@ -318,9 +318,9 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       );
     } else if (filterType === 'in-period') {
       // Filter images locally based on date_taken and moment date range
-      if (moment && moment.start && moment.end) {
-        const startDate = new Date(moment.start);
-        const endDate = new Date(moment.end);
+      if (moment && moment.start_date && moment.end_date) {
+        const startDate = new Date(moment.start_date);
+        const endDate = new Date(moment.end_date);
         
         filteredImages = filteredImages.filter(img => {
           if (!img || !img.date_taken) return false;
@@ -533,8 +533,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     currentMomentImageIds,
     filterType,
     sortOrder,
-    moment?.start,
-    moment?.end
+    moment?.start_date,
+    moment?.end_date
   ]);
 
   // Focus the image element when focusedImageIndex changes

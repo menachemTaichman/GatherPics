@@ -1138,19 +1138,19 @@ steps = [
                 face_id,
                 image_id,
                 group_id,
-                width,
-                height,
-                left,
-                top
+                face_width,
+                face_height,
+                face_left,
+                face_top
             )
             VALUES (
                 NEW.face_id,
                 NEW.image_id,
                 NEW.group_id,
-                COALESCE(NEW.width, 0),
-                COALESCE(NEW.height, 0),
-                COALESCE(NEW.left, 0),
-                COALESCE(NEW.top, 0)
+                COALESCE(NEW.face_width, 0),
+                COALESCE(NEW.face_height, 0),
+                COALESCE(NEW.face_left, 0),
+                COALESCE(NEW.face_top, 0)
             );
             
             RETURN NEW;
@@ -1436,8 +1436,8 @@ steps = [
                 event_id,
                 label,
                 description,
-                start,
-                end,
+                start_date,
+                end_date,
                 representative_image
             )
             VALUES (
@@ -1445,8 +1445,8 @@ steps = [
                 cur_event_profile('event_id'),
                 NEW.label,
                 NEW.description,
-                NEW.start,
-                NEW.end,
+                NEW.start_date,
+                NEW.end_date,
                 NEW.representative_image
             );
             
@@ -1473,8 +1473,8 @@ steps = [
             UPDATE moments SET
                 label = NEW.label,
                 description = NEW.description,
-                start = NEW.start,
-                end = NEW.end,
+                start_date = NEW.start_date,
+                end_date = NEW.end_date,
                 representative_image = NEW.representative_image
             WHERE moment_id = OLD.moment_id;
             
@@ -1960,9 +1960,9 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_ensure_defaults_in_event_insert()
         RETURNS TRIGGER AS $$
         DECLARE
-            archive_album_id TEXT := gen_random_uuid();
-            favorites_album_id TEXT := gen_random_uuid();
-            unassociated_group_id TEXT := gen_random_uuid();
+            v_archive_album_id TEXT := gen_random_uuid();
+            v_favorites_album_id TEXT := gen_random_uuid();
+            v_unassociated_group_id TEXT := gen_random_uuid();
         BEGIN
             INSERT INTO events_profiles (
                 event_id,
@@ -1982,21 +1982,21 @@ steps = [
             ON CONFLICT DO NOTHING;
 
             INSERT INTO albums (event_id, album_id, label)
-            VALUES (NEW.event_id, archive_album_id, 'Archive')
+            VALUES (NEW.event_id, v_archive_album_id, 'Archive')
             ON CONFLICT DO NOTHING;
 
             INSERT INTO albums (event_id, album_id, label)
-            VALUES (NEW.event_id, favorites_album_id, 'Favorites')
+            VALUES (NEW.event_id, v_favorites_album_id, 'Favorites')
             ON CONFLICT DO NOTHING;
 
             INSERT INTO groups (event_id, group_id, label)
-            VALUES (NEW.event_id, unassociated_group_id, 'Unassociated')
+            VALUES (NEW.event_id, v_unassociated_group_id, 'Unassociated')
             ON CONFLICT DO NOTHING;
 
             UPDATE events SET
-                archive_album_id = archive_album_id,
-                favorites_album_id = favorites_album_id,
-                unassociated_group_id = unassociated_group_id
+                archive_album_id = v_archive_album_id,
+                favorites_album_id = v_favorites_album_id,
+                unassociated_group_id = v_unassociated_group_id
             WHERE event_id = NEW.event_id;
             
             RETURN NEW;

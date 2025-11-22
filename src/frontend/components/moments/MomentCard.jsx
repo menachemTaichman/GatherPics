@@ -222,11 +222,11 @@ const MomentCard = forwardRef(({
                                  <div className="flex items-center space-x-4 text-sm text-gray-500 h-8">
                    <div className="flex items-center space-x-1">
                      <Clock className="w-4 h-4" />
-                     <span>{formatTimeOnly(moment.start)} - {formatTimeOnly(moment.end)}</span>
+                     <span>{formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}</span>
                    </div>
                    <div className="flex items-center space-x-1">
                      <Calendar className="w-4 h-4" />
-                     <span>{formatDate(moment.start)}</span>
+                     <span>{formatDate(moment.start_date)}</span>
                    </div>
                    {(() => {
                      const photoCount = includeArchived ? moment.images_count : moment.active_images_count;

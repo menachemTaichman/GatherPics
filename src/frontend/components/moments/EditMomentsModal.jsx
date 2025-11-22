@@ -167,7 +167,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     
     // Check if any moment was just created or updated with time range
       const momentsWithTimeRange = editingMoments.filter(m => 
-      m.start && m.end && 
+      m.start_date && m.end_date && 
       ((String(m.id || m.moment_id).startsWith('temp-')) || m.images === undefined)
     );
     
@@ -694,13 +694,13 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-start-${moment.id || moment.moment_id}`}
                         name={`moment-start-${moment.id || moment.moment_id}`}
-                        value={moment.start}
-                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { start: e.target.value })}
+                        value={moment.start_date}
+                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { start_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.start && (
+                      {moment.start_date && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.start)}
+                          {formatDateTime(moment.start_date)}
                         </div>
                       )}
                     </div>
@@ -711,13 +711,13 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-end-${moment.id || moment.moment_id}`}
                         name={`moment-end-${moment.id || moment.moment_id}`}
-                        value={moment.end}
-                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { end: e.target.value })}
+                        value={moment.end_date}
+                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { end_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.end && (
+                      {moment.end_date && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.end)}
+                          {formatDateTime(moment.end_date)}
                         </div>
                       )}
                     </div>

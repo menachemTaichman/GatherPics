@@ -301,8 +301,8 @@ export default function MoveToMomentModal({
             const minutes = String(date.getMinutes()).padStart(2, '0');
             return `${year}-${month}-${day} ${hours}:${minutes}`;
           };
-          newMomentData.start = formatDateForBackend(minDate);
-          newMomentData.end = formatDateForBackend(maxDate);
+          newMomentData.start_date = formatDateForBackend(minDate);
+          newMomentData.end_date = formatDateForBackend(maxDate);
         }
         
         const createResult = await momentsAPI.create(newMomentData, eventUrl);
@@ -523,7 +523,7 @@ export default function MoveToMomentModal({
                         {moment.label || `Moment ${moment.id}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {formatTime(moment.start)} - {formatTime(moment.end)}
+                        {formatTime(moment.start_date)} - {formatTime(moment.end_date)}
                       </p>
                       <p className="text-xs text-gray-500">
                         {getImageCount(moment)} images

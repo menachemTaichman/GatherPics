@@ -171,10 +171,10 @@ class Event():
             )
             return {
                 "image_id": image_id,
-                "width": bbox['width'],
-                "height": bbox['height'],
-                "left": bbox['left'],
-                "top": bbox['top'],
+                "face_width": bbox['width'],
+                "face_height": bbox['height'],
+                "face_left": bbox['left'],
+                "face_top": bbox['top'],
                 "face_id": face_id,
                 "group_id": unassociated_group_id
             }
@@ -362,8 +362,8 @@ class Event():
             _send_progress('faces', 0, 1, 'Adding faces to database...')
             if all_faces:
                 _log("Adding faces to database...")
-                all_faces_values = [[face['face_id'], face['image_id'], face['width'], face['height'], face['left'], face['top'], face['group_id']] for face in all_faces]
-                self.models.add_many('faces', ['face_id', 'image_id', 'width', 'height', 'left', 'top', 'group_id'], all_faces_values)
+                all_faces_values = [[face['face_id'], face['image_id'], face['face_width'], face['face_height'], face['face_left'], face['face_top'], face['group_id']] for face in all_faces]
+                self.models.add_many('faces', ['face_id', 'image_id', 'face_width', 'face_height', 'face_left', 'face_top', 'group_id'], all_faces_values)
                 _send_progress('clustering', 0, 1, 'Clustering faces...')
                 _log("Clustering faces...")
 
