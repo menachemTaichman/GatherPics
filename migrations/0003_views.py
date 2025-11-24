@@ -32,77 +32,49 @@ steps = [
             a.event_id,
             a.album_id,
             ep.profile_id,
-            (epa.album_id IS NULL) AS is_accessible
+            (
+                (ep.all_albums AND epa.album_id IS NULL)
+                OR (NOT ep.all_albums AND epa.album_id IS NOT NULL)
+            ) AS is_accessible
         FROM albums a
         JOIN events_profiles ep ON a.event_id = ep.event_id
         LEFT JOIN events_profiles_albums epa ON 
             a.album_id = epa.album_id 
-            AND ep.profile_id = epa.profile_id
-        WHERE ep.all_albums
-        UNION ALL
-        SELECT
-            a.event_id,
-            a.album_id,
-            ep.profile_id,
-            (epa.album_id IS NOT NULL) AS is_accessible
-        FROM albums a
-        JOIN events_profiles ep ON a.event_id = ep.event_id
-        JOIN events_profiles_albums epa ON 
-            a.album_id = epa.album_id 
-            AND ep.profile_id = epa.profile_id
-        WHERE NOT ep.all_albums;
+            AND ep.profile_id = epa.profile_id;
 
         CREATE OR REPLACE VIEW groups_accessibility_base AS
         SELECT
             g.event_id,
             g.group_id,
             ep.profile_id,
-            (epg.group_id IS NULL AND (ep.can_edit OR g.group_id <> e.unassociated_group_id)) AS is_accessible
+            (
+                (
+                    (ep.all_groups AND epg.group_id IS NULL)
+                    OR (NOT ep.all_groups AND epg.group_id IS NOT NULL)
+                )
+                AND (ep.can_edit OR g.group_id <> e.unassociated_group_id)
+            ) AS is_accessible
         FROM groups g
         JOIN events e ON g.event_id = e.event_id
         JOIN events_profiles ep ON g.event_id = ep.event_id
         LEFT JOIN events_profiles_groups epg ON 
             g.group_id = epg.group_id 
-            AND ep.profile_id = epg.profile_id
-        WHERE ep.all_groups
-        UNION ALL
-        SELECT
-            g.event_id,
-            g.group_id,
-            ep.profile_id,
-            (epg.group_id IS NOT NULL AND (ep.can_edit OR g.group_id <> e.unassociated_group_id)) AS is_accessible
-        FROM groups g
-        JOIN events e ON g.event_id = e.event_id
-        JOIN events_profiles ep ON g.event_id = ep.event_id
-        LEFT JOIN events_profiles_groups epg ON 
-            g.group_id = epg.group_id 
-            AND ep.profile_id = epg.profile_id
-        WHERE NOT ep.all_groups;
+            AND ep.profile_id = epg.profile_id;
 
         CREATE OR REPLACE VIEW images_accessibility_base AS
         SELECT
             i.event_id,
             i.image_id,
             ep.profile_id,
-            (epi.image_id IS NULL) AS is_accessible
+            (
+                (ep.all_images AND epi.image_id IS NULL)
+                OR (NOT ep.all_images AND epi.image_id IS NOT NULL)
+            ) AS is_accessible
         FROM images i
         JOIN events_profiles ep ON i.event_id = ep.event_id
         LEFT JOIN events_profiles_images epi ON 
             i.image_id = epi.image_id 
-            AND ep.profile_id = epi.profile_id
-        WHERE ep.all_images
-        UNION ALL
-        SELECT
-            i.event_id,
-            i.image_id,
-            ep.profile_id,
-            (epi.image_id IS NOT NULL) AS is_accessible
-        FROM images i
-        JOIN events_profiles ep ON i.event_id = ep.event_id
-        JOIN events_profiles_images epi ON 
-            i.image_id = epi.image_id 
-            AND ep.profile_id = epi.profile_id
-        WHERE NOT ep.all_images;
+            AND ep.profile_id = epi.profile_id;
 
         CREATE OR REPLACE VIEW images_accessibility AS
         SELECT
@@ -535,37 +507,39 @@ steps = [
             AND ga.event_id = cur_event_profile('event_id');
         
         CREATE OR REPLACE VIEW accessible_groups AS
-        WITH group_faces_stats AS (
-            SELECT 
-                af.group_id,
-                COUNT(DISTINCT af.face_id) AS faces_count
-            FROM accessible_faces af
-            GROUP BY af.group_id
-        ),
-        group_images_stats AS (
-            SELECT 
-                agi.group_id,
-                COUNT(DISTINCT agi.image_id) AS images_count,
-                COUNT(DISTINCT CASE WHEN NOT ai.is_archived THEN agi.image_id END) AS active_images_count
-            FROM accessible_groups_images agi
-            INNER JOIN accessible_images ai ON agi.image_id = ai.image_id
-            GROUP BY agi.group_id
-        )
         SELECT 
-            g.*,
+            g.event_id,
+            g.group_id,
+            g.label,
+            g.representative_face,
             rf.image_id as representative_image,
-            COALESCE(gfs.faces_count, 0) AS faces_count,
-            COALESCE(gis.images_count, 0) AS images_count,
-            COALESCE(gis.active_images_count, 0) AS active_images_count
+            COALESCE(stats.faces_count, 0) as faces_count,
+            COALESCE(stats.images_count, 0) as images_count,
+            COALESCE(stats.active_images_count, 0) as active_images_count
         FROM groups g
+        JOIN events_profiles ep ON g.event_id = ep.event_id AND ep.profile_id = cur_profile('profile_id')
         LEFT JOIN faces rf ON g.representative_face = rf.face_id
-        INNER JOIN groups_accessibility ga ON
-            g.group_id = ga.group_id
-            AND ga.profile_id = cur_profile('profile_id')
-            AND ga.is_accessible
-            AND ga.event_id = cur_event_profile('event_id')
-        LEFT JOIN group_faces_stats gfs ON g.group_id = gfs.group_id
-        LEFT JOIN group_images_stats gis ON g.group_id = gis.group_id;
+        LEFT JOIN events_profiles_groups epg ON g.group_id = epg.group_id AND ep.profile_id = epg.profile_id
+        JOIN events e ON g.event_id = e.event_id
+        LEFT JOIN LATERAL (
+            SELECT 
+                COUNT(f.face_id) as faces_count,
+                COUNT(DISTINCT f.image_id) as images_count,
+                COUNT(DISTINCT CASE WHEN ai.image_id IS NULL THEN f.image_id END) as active_images_count
+            FROM faces f
+            JOIN images i ON f.image_id = i.image_id
+            LEFT JOIN events_profiles_images epi ON i.image_id = epi.image_id AND epi.profile_id = ep.profile_id
+            LEFT JOIN albums_images ai ON i.image_id = ai.image_id AND ai.album_id = e.archive_album_id
+            WHERE f.group_id = g.group_id
+            AND (ep.all_images OR epi.image_id IS NOT NULL)
+        ) stats ON TRUE
+        WHERE 
+            g.event_id = cur_event_profile('event_id')
+            AND (
+                ep.all_groups 
+                OR epg.group_id IS NOT NULL
+                OR (NOT ep.can_edit AND g.group_id = e.unassociated_group_id)
+            );
 
         -- moments
         CREATE OR REPLACE VIEW accessible_moments AS
