@@ -548,7 +548,7 @@ class EventModels(BaseModels):
                 WHERE s.{id_field} IN ({','.join(['%s'] * len(ids))})
                 AND s.profile_id = %s
         """
-        result = self.db.execute_query(query, [profile_id] + ids, return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
         if len(result) != len(ids):
             raise Forbidden("Some of the entities are not accessible")
 

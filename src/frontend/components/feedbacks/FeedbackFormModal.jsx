@@ -31,7 +31,7 @@ export default function FeedbackFormModal({
   
   const { showToast } = useToast();
   const currentProfile = useMemo(() => getCurrentProfile(), []);
-  const currentProfileIsPublic = currentProfile?.is_public === 1;
+  const currentProfileIsPublic = Boolean(currentProfile?.is_public);
   const currentProfileHasEmail = !!(currentProfile?.email);
   
   const { registerModal, unregisterModal } = useModalManager();
@@ -84,7 +84,7 @@ export default function FeedbackFormModal({
           title: effectiveFeedback.title || '',
           type: effectiveFeedback.type || 0,
           message: effectiveFeedback.message || '',
-          communication_consent: effectiveFeedback.communication_consent === 1,
+          communication_consent: Boolean(effectiveFeedback.communication_consent),
           include_metadata: false
         });
       } else {
@@ -130,7 +130,7 @@ export default function FeedbackFormModal({
           title: formData.title.trim(),
           type: formData.type,
           message: formData.message.trim(),
-          communication_consent: formData.communication_consent ? 1 : 0,
+          communication_consent: Boolean(formData.communication_consent),
         };
 
         await feedbacksAPI.updateMyFeedback(feedbackId, updatePayload);
@@ -191,7 +191,7 @@ export default function FeedbackFormModal({
 
   // Check if editing and view states
   const isEditing = !!effectiveFeedback;
-  const isClosed = effectiveFeedback?.is_closed === 1;
+  const isClosed = Boolean(effectiveFeedback?.is_closed);
   const isViewOnly = isEditing && isClosed;
 
   // Check if form is valid for submission

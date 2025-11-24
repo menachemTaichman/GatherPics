@@ -36,7 +36,7 @@ function createEmptyEventDraft(uploadsLimits = null) {
     name: '',
     url: '',
     date: '',
-    is_public: 0,
+    is_public: 0, // Internal state uses 0/1, but will be converted to true/false when sending to backend
     images_count_limit: uploadsLimits?.images_count_limit ?? 0,
     image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
     rekognition_calls_limit: uploadsLimits?.rekognition_calls_limit ?? 0,
@@ -154,7 +154,7 @@ export default function EditEventModal({
       name: evt.name || '',
       url: evt.url || '',
       date: normalizeDateForInput(evt.date),
-      is_public: evt.is_public ?? 0,
+      is_public: Boolean(evt.is_public) ? 1 : 0,
       images_count_limit:
         evt.images_count_limit !== null && evt.images_count_limit !== undefined
           ? Number(evt.images_count_limit)
@@ -272,8 +272,8 @@ export default function EditEventModal({
     const originalUrl = (baseEvent.url || '').trim();
     const draftDate = normalizeDateForInput(eventDraft.date);
     const originalDate = normalizeDateForInput(baseEvent.date);
-    const draftPublic = Number(eventDraft.is_public ?? 0);
-    const originalPublic = Number(baseEvent.is_public ?? 0);
+    const draftPublic = Boolean(eventDraft.is_public ?? false);
+    const originalPublic = Boolean(baseEvent.is_public ?? false);
     const draftImagesLimit = eventDraft.images_count_limit ?? null;
     const originalImagesLimit = baseEvent.images_count_limit ?? null;
     const draftSizeLimit = eventDraft.image_size_limit_bytes ?? null;
@@ -488,7 +488,7 @@ export default function EditEventModal({
       name: trimmedName,
       url: trimmedUrl,
       date: eventDraft.date || null,
-      is_public: eventDraft.is_public,
+      is_public: Boolean(eventDraft.is_public),
       images_count_limit: eventDraft.images_count_limit,
       image_size_limit_bytes: eventDraft.image_size_limit_bytes,
     };
@@ -744,7 +744,7 @@ export default function EditEventModal({
                             <label className="relative inline-flex cursor-pointer items-center">
                               <input
                                 type="checkbox"
-                                checked={eventDraft.is_public === 1}
+                                checked={Boolean(eventDraft.is_public)}
                                 onChange={(e) => handleEventToggle('is_public', e.target.checked)}
                                 className="peer sr-only"
                               />

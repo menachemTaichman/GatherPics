@@ -60,7 +60,7 @@ export function hasArchivedAccess() {
   // This will be computed from accessible albums in useProfilePermissions
   // Kept here for potential standalone use
   const profile = getCurrentProfile();
-  return profile?.archived_access === true || profile?.archived_access === 1;
+  return Boolean(profile?.archived_access);
 }
 
 /**
@@ -71,7 +71,7 @@ export function hasFavoritesAccess() {
   // This will be computed from accessible albums in useProfilePermissions
   // Kept here for potential standalone use
   const profile = getCurrentProfile();
-  return profile?.favorites_access === true || profile?.favorites_access === 1;
+  return Boolean(profile?.favorites_access);
 }
 
 export default {

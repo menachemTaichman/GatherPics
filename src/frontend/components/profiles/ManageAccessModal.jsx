@@ -51,6 +51,11 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         console.error('Failed to check access:', err);
         setSpecifyStatus(null);
         setActualStatus(null);
+        
+        if (err.response?.status === 403) {
+          const errorMsg = err.response?.data?.error || 'Some of the entities are not accessible';
+          showToast(errorMsg, 'error');
+        }
       }
     };
 

@@ -121,7 +121,7 @@ export default function FeedbackDetailModal({
     }
   }, [feedbackId, showToast, onClose]);
 
-  const isClosed = feedback?.is_closed === 1;
+  const isClosed = Boolean(feedback?.is_closed);
 
   // Navigation handlers
   const handleNavigate = useCallback((direction) => {
@@ -288,7 +288,7 @@ export default function FeedbackDetailModal({
                       <User className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-900">{feedback.sender_name}</span>
                     </div>
-                    {feedback.profile_is_public === 1 && feedback.profile_label && (
+                    {Boolean(feedback.profile_is_public) && feedback.profile_label && (
                       <div className="flex items-center space-x-2">
                         <User className="w-4 h-4 text-gray-400" />
                         <span className="text-xs text-gray-600">Profile:</span>

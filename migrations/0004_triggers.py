@@ -273,7 +273,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: cannot create profile to a different event than the current profile';
             END IF;
             
-            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible = 1) THEN
+            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
 
@@ -301,7 +301,7 @@ steps = [
         BEGIN
             IF OLD.profile_id NOT IN (
                 SELECT profile_id FROM accessible_profiles ap
-                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable = 1
+                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable
             ) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
@@ -320,7 +320,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: cannot update profile to a different event than the current profile';
             END IF;
             
-            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible = 1) THEN
+            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
 
@@ -345,7 +345,7 @@ steps = [
         BEGIN
             IF OLD.profile_id NOT IN (
                 SELECT profile_id FROM accessible_profiles ap
-                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable = 1
+                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable
             ) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
@@ -706,7 +706,7 @@ steps = [
             END IF;
             
             IF NEW.profile_id NOT IN (
-                SELECT profile_id FROM accessible_profiles ap WHERE ap.is_editable = 1
+                SELECT profile_id FROM accessible_profiles ap WHERE ap.is_editable
             ) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;

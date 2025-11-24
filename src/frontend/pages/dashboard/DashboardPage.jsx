@@ -12,8 +12,8 @@ export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const currentProfile = getCurrentProfile();
   const permissions = usePermissions();
-  const hasManageableEvents = currentProfile?.has_manageable_events === 1;
-  const hasFeedbacks = currentProfile?.has_feedbacks === 1;
+  const hasManageableEvents = Boolean(currentProfile?.has_manageable_events);
+  const hasFeedbacks = Boolean(currentProfile?.has_feedbacks);
   const isProfilesManager = permissions.isProfilesManager;
   const hasSettings = permissions.has_settings;
 

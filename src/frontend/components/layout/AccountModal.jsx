@@ -91,7 +91,7 @@ export default function AccountModal({ hideButton = false }) {
 
   // Apply scopes
   const profileId = currentProfile?.id || currentProfile?.profile_id;
-  const isPublic = currentProfile?.is_public === 1;
+  const isPublic = Boolean(currentProfile?.is_public);
 
   const scopeConfig = useMemo(() => {
     if (!isOpen || !profileId) {
@@ -126,7 +126,7 @@ export default function AccountModal({ hideButton = false }) {
 
   // Fetch my feedbacks when modal opens
   useEffect(() => {
-    if (isOpen && isAuthenticated && currentProfile?.is_public !== 1) {
+    if (isOpen && isAuthenticated && !Boolean(currentProfile?.is_public)) {
       fetchMyFeedbacks();
     }
   }, [isOpen, isAuthenticated, currentProfile?.is_public]);
@@ -378,7 +378,7 @@ export default function AccountModal({ hideButton = false }) {
                           Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {currentProfile?.is_public !== 1 && (
+                          {!Boolean(currentProfile?.is_public) && (
                             <button
                               onClick={() => setShowChangePasswordModal(true)}
                               className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-blue-700 shadow-sm"
@@ -396,7 +396,7 @@ export default function AccountModal({ hideButton = false }) {
                           </button>
                         </div>
                       </div>
-                      {currentProfile?.is_public !== 1 && (
+                      {!Boolean(currentProfile?.is_public) && (
                         <div 
                           className="flex items-center space-x-1.5"
                           onKeyDown={(e) => {
@@ -484,7 +484,7 @@ export default function AccountModal({ hideButton = false }) {
 
                     {/* My Requests Section - only show if there are requests or new requests are enabled */}
                     {(() => {
-                      const isPublic = currentProfile?.is_public === 1;
+                      const isPublic = Boolean(currentProfile?.is_public);
                       const enableNewRequests = permissions.enable_new_requests;
                       const hasRequests = userRequests.length > 0;
                       const shouldShow = enableNewRequests || (!isPublic && hasRequests);
@@ -599,7 +599,7 @@ export default function AccountModal({ hideButton = false }) {
 
                     {/* My Feedbacks Section - for non-public profiles only, only show if there are feedbacks */}
                     {(() => {
-                      const isPublic = currentProfile?.is_public === 1;
+                      const isPublic = Boolean(currentProfile?.is_public);
                       const hasFeedbacks = userFeedbacks.length > 0;
                       const shouldShow = !isPublic && hasFeedbacks;
                       
@@ -614,7 +614,7 @@ export default function AccountModal({ hideButton = false }) {
                             {sortedMyFeedbacks.map((feedback, index) => {
                               const feedbackKey = feedback?.id || feedback?.feedback_id || `feedback-${index}`;
                               const feedbackId = feedback?.id || feedback?.feedback_id;
-                              const isClosed = feedback?.is_closed === 1;
+                              const isClosed = Boolean(feedback?.is_closed);
                               
                               return (
                                 <div

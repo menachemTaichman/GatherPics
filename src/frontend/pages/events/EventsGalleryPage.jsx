@@ -146,7 +146,7 @@ export default function EventsGalleryPage() {
     if (!isAuthenticated) return new Set();
     return new Set(
       Object.entries(profileEvents)
-        .filter(([, perms]) => perms && (perms.can_manage_event === 1 || perms.can_manage_event === true))
+        .filter(([, perms]) => perms && Boolean(perms.can_manage_event))
         .map(([id]) => String(id))
     );
   }, [profileEvents, isAuthenticated]);
@@ -155,7 +155,7 @@ export default function EventsGalleryPage() {
     if (!isAuthenticated) return new Set();
     return new Set(
       Object.entries(profileEvents)
-        .filter(([, perms]) => perms && (perms.can_delete_event === 1 || perms.can_delete_event === true))
+        .filter(([, perms]) => perms && Boolean(perms.can_delete_event))
         .map(([id]) => String(id))
     );
   }, [profileEvents, isAuthenticated]);
@@ -211,7 +211,7 @@ export default function EventsGalleryPage() {
         case 'url':
           return (evt.url || '').toLowerCase();
         case 'is_public':
-          return evt.is_public ? 1 : 0;
+          return Boolean(evt.is_public) ? 1 : 0;
         case 'images_count':
           return toNumber(evt.images_count);
         case 'faces_count':

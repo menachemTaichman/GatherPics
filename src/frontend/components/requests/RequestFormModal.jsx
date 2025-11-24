@@ -48,7 +48,7 @@ export default function RequestFormModal({
   const currentProfileId = currentProfile?.id || currentProfile?.profile_id;
   const currentProfileHasEmail = !!(currentProfile?.email);
   const [allGroups, setAllGroups] = useState([]);
-  const currentProfileIsPublic = currentProfile?.is_public === 1;
+  const currentProfileIsPublic = Boolean(currentProfile?.is_public);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'request-form-modal';

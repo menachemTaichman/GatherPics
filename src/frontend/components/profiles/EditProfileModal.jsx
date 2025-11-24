@@ -134,15 +134,15 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   }, [currentProfile, selectedEventId]);
   
   // Check if current profile has permissions to grant these permissions
-  // Check for explicit value of 1 (not just truthy)
-  const canGrantCanCreateEvents = currentProfile?.can_create_events === 1;
-  const canGrantCanUploadAndDeleteImages = currentProfileEventPermissions?.can_upload_and_delete_images === 1;
-  const canGrantCanEdit = currentProfileEventPermissions?.can_edit === 1;
-  const canGrantAllImages = currentProfileEventPermissions?.all_images === 1;
-  const canGrantAllGroups = currentProfileEventPermissions?.all_groups === 1;
-  const canGrantAllAlbums = currentProfileEventPermissions?.all_albums === 1;
-  const canGrantCanManageEvent = currentProfileEventPermissions?.can_manage_event === 1;
-  const canGrantCanDeleteEvent = currentProfileEventPermissions?.can_delete_event === 1;
+  // Check for explicit true value (handles both true/1 and false/0)
+  const canGrantCanCreateEvents = Boolean(currentProfile?.can_create_events);
+  const canGrantCanUploadAndDeleteImages = Boolean(currentProfileEventPermissions?.can_upload_and_delete_images);
+  const canGrantCanEdit = Boolean(currentProfileEventPermissions?.can_edit);
+  const canGrantAllImages = Boolean(currentProfileEventPermissions?.all_images);
+  const canGrantAllGroups = Boolean(currentProfileEventPermissions?.all_groups);
+  const canGrantAllAlbums = Boolean(currentProfileEventPermissions?.all_albums);
+  const canGrantCanManageEvent = Boolean(currentProfileEventPermissions?.can_manage_event);
+  const canGrantCanDeleteEvent = Boolean(currentProfileEventPermissions?.can_delete_event);
   
   // Apply scopes for profile relations
   useApplyScopes(profile?.id ? [
@@ -163,35 +163,35 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const profileGroups = selectedEventId ? profileGroupsRaw : [];
   
   // Compute when fields should be disabled based on database constraints
-  // Constraint: can_upload_and_delete_images = 1 requires all_groups = 1 and can_edit = 1, and no forbidden groups
-  // all_groups should be disabled when can_upload_and_delete_images = 1 (cannot restrict groups if upload is enabled)
-  const disableAllGroups = editingProfile?.can_upload_and_delete_images === 1;
+  // Constraint: can_upload_and_delete_images requires all_groups and can_edit, and no forbidden groups
+  // all_groups should be disabled when can_upload_and_delete_images is enabled (cannot restrict groups if upload is enabled)
+  const disableAllGroups = Boolean(editingProfile?.can_upload_and_delete_images);
   const allGroupsDisabledReason = disableAllGroups 
     ? 'Cannot restrict groups when Upload & Delete Photos is enabled' 
     : null;
   
   // can_upload_and_delete_images should be disabled when:
-  // - is_public = 1 (public profiles cannot have upload permissions), OR
-  // - all_groups = 0 (groups are restricted), OR
-  // - can_edit = 0 (edit permission required), OR
-  // - there are forbidden groups (when all_groups = 1 and profileGroups.length > 0)
-  const hasForbiddenGroups = editingProfile?.all_groups === 1 && profileGroups.length > 0;
-  const disableCanUploadAndDeleteImages = editingProfile?.is_public === 1 || editingProfile?.all_groups === 0 || editingProfile?.can_edit === 0 || hasForbiddenGroups;
+  // - is_public is true (public profiles cannot have upload permissions), OR
+  // - all_groups is false (groups are restricted), OR
+  // - can_edit is false (edit permission required), OR
+  // - there are forbidden groups (when all_groups is true and profileGroups.length > 0)
+  const hasForbiddenGroups = Boolean(editingProfile?.all_groups) && profileGroups.length > 0;
+  const disableCanUploadAndDeleteImages = Boolean(editingProfile?.is_public) || !Boolean(editingProfile?.all_groups) || !Boolean(editingProfile?.can_edit) || hasForbiddenGroups;
   const canUploadAndDeleteImagesDisabledReason = disableCanUploadAndDeleteImages
-    ? editingProfile?.is_public === 1
+    ? Boolean(editingProfile?.is_public)
       ? 'Public profiles cannot have upload permissions'
-      : editingProfile?.all_groups === 0
+      : !Boolean(editingProfile?.all_groups)
         ? 'All People Access must be enabled'
-        : editingProfile?.can_edit === 0
+        : !Boolean(editingProfile?.can_edit)
           ? 'Can Edit permission must be enabled'
           : 'Remove forbidden groups first'
     : null;
   
-  // can_edit should be enabled/required when can_upload_and_delete_images = 1
-  // Note: This is more of a constraint than a disable - if can_upload_and_delete_images is 1, can_edit must also be 1
-  // Also disabled when is_public = 1 (public profiles cannot have edit permissions)
-  const requiresCanEdit = editingProfile?.can_upload_and_delete_images === 1;
-  const disableCanEdit = editingProfile?.is_public === 1;
+  // can_edit should be enabled/required when can_upload_and_delete_images is enabled
+  // Note: This is more of a constraint than a disable - if can_upload_and_delete_images is enabled, can_edit must also be enabled
+  // Also disabled when is_public is true (public profiles cannot have edit permissions)
+  const requiresCanEdit = Boolean(editingProfile?.can_upload_and_delete_images);
+  const disableCanEdit = Boolean(editingProfile?.is_public);
   
   // Get permissions for the selected event (not the URL event)
   // This ensures PermissionGate checks permissions for the event being edited
@@ -213,7 +213,7 @@ const restrictedEventName = editingProfile && 'restricted_to_event_name' in edit
 
 const publicToggleRestrictedByEvent = !restrictedToEventId;
 const publicToggleRestrictedByRank = (editingProfile?.hierarchy_rank ?? 0) > 0;
-const publicToggleRestrictedByCanCreateEvents = editingProfile?.can_create_events === 1;
+const publicToggleRestrictedByCanCreateEvents = Boolean(editingProfile?.can_create_events);
 const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank || publicToggleRestrictedByCanCreateEvents;
 const publicToggleTooltip = publicToggleRestrictedByCanCreateEvents
   ? 'Profiles with event creation permissions cannot be public.'
@@ -223,17 +223,17 @@ const publicToggleTooltip = publicToggleRestrictedByCanCreateEvents
       ? 'Public access is only available for profiles restricted to an event.'
       : undefined;
 const isRestricted = Boolean(editingProfile?.restricted_to_event || currentProfile?.restricted_to_event);
-const disableRestrictionToggle = isCurrentProfileRestricted || editingProfile?.is_public === 1 || editingProfile?.can_create_events === 1;
+const disableRestrictionToggle = isCurrentProfileRestricted || Boolean(editingProfile?.is_public) || Boolean(editingProfile?.can_create_events);
 const restrictionTooltip = isCurrentProfileRestricted
   ? 'You are restricted to an event and cannot change restrictions'
-  : editingProfile?.is_public === 1
+  : Boolean(editingProfile?.is_public)
     ? 'Public profiles must be restricted to their own event'
-    : editingProfile?.can_create_events === 1
+    : Boolean(editingProfile?.can_create_events)
       ? 'Profiles with event creation permissions cannot be restricted to an event'
       : `Manage restrictions`
-const disableEventManagementToggles = editingProfile?.is_public === 1;
+const disableEventManagementToggles = Boolean(editingProfile?.is_public);
 const disableCanCreateEvents = disableEventManagementToggles || isRestricted;
-const disableRankSelection = editingProfile?.is_public === 1;
+const disableRankSelection = Boolean(editingProfile?.is_public);
 
   // Check if event-specific fields have been modified
   const hasEventSpecificChanges = useMemo(() => {
@@ -450,12 +450,12 @@ const disableRankSelection = editingProfile?.is_public === 1;
         password: '',
         hierarchy_rank: profile?.hierarchy_rank || 0,
         can_create_events: 0,
-        can_upload_and_delete_images: profile?.can_upload_and_delete_images || 0,
-        can_edit: profile?.can_edit || 0,
-        all_images: profile?.all_images || 0,
-        all_groups: profile?.all_groups || 0,
-        all_albums: profile?.all_albums || 0,
-        is_public: profile?.is_public || 0,
+        can_upload_and_delete_images: Boolean(profile?.can_upload_and_delete_images) ? 1 : 0,
+        can_edit: Boolean(profile?.can_edit) ? 1 : 0,
+        all_images: Boolean(profile?.all_images) ? 1 : 0,
+        all_groups: Boolean(profile?.all_groups) ? 1 : 0,
+        all_albums: Boolean(profile?.all_albums) ? 1 : 0,
+        is_public: Boolean(profile?.is_public) ? 1 : 0,
         can_manage_event: 0,
         can_delete_event: 0,
         restricted_to_event: defaultRestrictedEventId,
@@ -491,15 +491,15 @@ const disableRankSelection = editingProfile?.is_public === 1;
         email: initialProfile.email || '',
         password: undefined, // Don't include password when editing
         hierarchy_rank: initialProfile.hierarchy_rank || 0,
-        can_create_events: initialProfile.can_create_events || 0,
-        can_upload_and_delete_images: eventProfileData.can_upload_and_delete_images ?? initialProfile.can_upload_and_delete_images ?? 0,
-        can_edit: eventProfileData.can_edit ?? initialProfile.can_edit ?? 0,
-        all_images: eventProfileData.all_images ?? initialProfile.all_images ?? 0,
-        all_groups: eventProfileData.all_groups ?? initialProfile.all_groups ?? 0,
-        all_albums: eventProfileData.all_albums ?? initialProfile.all_albums ?? 0,
-        is_public: initialProfile.is_public || 0,
-        can_manage_event: eventProfileData.can_manage_event ?? initialProfile.can_manage_event ?? 0,
-        can_delete_event: eventProfileData.can_delete_event ?? initialProfile.can_delete_event ?? 0,
+        can_create_events: Boolean(initialProfile.can_create_events) ? 1 : 0,
+        can_upload_and_delete_images: Boolean(eventProfileData.can_upload_and_delete_images ?? initialProfile.can_upload_and_delete_images) ? 1 : 0,
+        can_edit: Boolean(eventProfileData.can_edit ?? initialProfile.can_edit) ? 1 : 0,
+        all_images: Boolean(eventProfileData.all_images ?? initialProfile.all_images) ? 1 : 0,
+        all_groups: Boolean(eventProfileData.all_groups ?? initialProfile.all_groups) ? 1 : 0,
+        all_albums: Boolean(eventProfileData.all_albums ?? initialProfile.all_albums) ? 1 : 0,
+        is_public: Boolean(initialProfile.is_public) ? 1 : 0,
+        can_manage_event: Boolean(eventProfileData.can_manage_event ?? initialProfile.can_manage_event) ? 1 : 0,
+        can_delete_event: Boolean(eventProfileData.can_delete_event ?? initialProfile.can_delete_event) ? 1 : 0,
         restricted_to_event: initialProfile.restricted_to_event || null,
         restricted_to_event_name: initialProfile.restricted_to_event_name || null
       };
@@ -712,13 +712,13 @@ const disableRankSelection = editingProfile?.is_public === 1;
     
     if (selectedEventId && eventProfile) {
       const eventSpecificData = {
-        can_upload_and_delete_images: eventProfile.can_upload_and_delete_images ?? 0,
-        can_edit: eventProfile.can_edit ?? 0,
-        all_images: eventProfile.all_images ?? 0,
-        all_groups: eventProfile.all_groups ?? 0,
-        all_albums: eventProfile.all_albums ?? 0,
-        can_manage_event: eventProfile.can_manage_event ?? 0,
-        can_delete_event: eventProfile.can_delete_event ?? 0,
+        can_upload_and_delete_images: Boolean(eventProfile.can_upload_and_delete_images) ? 1 : 0,
+        can_edit: Boolean(eventProfile.can_edit) ? 1 : 0,
+        all_images: Boolean(eventProfile.all_images) ? 1 : 0,
+        all_groups: Boolean(eventProfile.all_groups) ? 1 : 0,
+        all_albums: Boolean(eventProfile.all_albums) ? 1 : 0,
+        can_manage_event: Boolean(eventProfile.can_manage_event) ? 1 : 0,
+        can_delete_event: Boolean(eventProfile.can_delete_event) ? 1 : 0,
       };
       
       // Set initial state if we don't have it yet, or if eventId changed (meaning we had fallback state)
@@ -741,13 +741,13 @@ const disableRankSelection = editingProfile?.is_public === 1;
       const currentProfile = editingProfileRef.current;
       if (currentProfile) {
         const fallbackInitialState = {
-          can_upload_and_delete_images: currentProfile.can_upload_and_delete_images ?? 0,
-          can_edit: currentProfile.can_edit ?? 0,
-          all_images: currentProfile.all_images ?? 0,
-          all_groups: currentProfile.all_groups ?? 0,
-          all_albums: currentProfile.all_albums ?? 0,
-          can_manage_event: currentProfile.can_manage_event ?? 0,
-          can_delete_event: currentProfile.can_delete_event ?? 0,
+          can_upload_and_delete_images: Boolean(currentProfile.can_upload_and_delete_images) ? 1 : 0,
+          can_edit: Boolean(currentProfile.can_edit) ? 1 : 0,
+          all_images: Boolean(currentProfile.all_images) ? 1 : 0,
+          all_groups: Boolean(currentProfile.all_groups) ? 1 : 0,
+          all_albums: Boolean(currentProfile.all_albums) ? 1 : 0,
+          can_manage_event: Boolean(currentProfile.can_manage_event) ? 1 : 0,
+          can_delete_event: Boolean(currentProfile.can_delete_event) ? 1 : 0,
         };
         
         setInitialEventSpecificState(fallbackInitialState);
@@ -875,12 +875,13 @@ const disableRankSelection = editingProfile?.is_public === 1;
 
     try {
       // General profile data (always saved)
+      // Convert boolean values (1/0) to true/false for backend
       const generalProfileData = {
         label: editingProfile.label,
         email: editingProfile.email || null,
         hierarchy_rank: editingProfile.hierarchy_rank,
-        can_create_events: editingProfile.can_create_events,
-        is_public: editingProfile.is_public,
+        can_create_events: Boolean(editingProfile.can_create_events),
+        is_public: Boolean(editingProfile.is_public),
         restricted_to_event: editingProfile.restricted_to_event || null
       };
       
@@ -890,15 +891,15 @@ const disableRankSelection = editingProfile?.is_public === 1;
       }
 
       // Event-specific profile data (only if selectedEventId is set)
-      // Send all fields - backend will handle permission validation
+      // Convert boolean values (1/0) to true/false for backend
       const eventProfileData = selectedEventId ? {
-        can_manage_event: editingProfile.can_manage_event,
-        can_delete_event: editingProfile.can_delete_event,
-        can_upload_and_delete_images: editingProfile.can_upload_and_delete_images,
-        can_edit: editingProfile.can_edit,
-        all_images: editingProfile.all_images,
-        all_groups: editingProfile.all_groups,
-        all_albums: editingProfile.all_albums
+        can_manage_event: Boolean(editingProfile.can_manage_event),
+        can_delete_event: Boolean(editingProfile.can_delete_event),
+        can_upload_and_delete_images: Boolean(editingProfile.can_upload_and_delete_images),
+        can_edit: Boolean(editingProfile.can_edit),
+        all_images: Boolean(editingProfile.all_images),
+        all_groups: Boolean(editingProfile.all_groups),
+        all_albums: Boolean(editingProfile.all_albums)
       } : {};
 
       if (isCreating) {
@@ -1050,14 +1051,15 @@ const disableRankSelection = editingProfile?.is_public === 1;
     
     try {
       // Send all event-specific fields - backend will handle permission validation
+      // Convert boolean values (1/0) to true/false for backend
       const eventProfileData = {
-        can_manage_event: editingProfile.can_manage_event,
-        can_delete_event: editingProfile.can_delete_event,
-        can_upload_and_delete_images: editingProfile.can_upload_and_delete_images,
-        can_edit: editingProfile.can_edit,
-        all_images: editingProfile.all_images,
-        all_groups: editingProfile.all_groups,
-        all_albums: editingProfile.all_albums
+        can_manage_event: Boolean(editingProfile.can_manage_event),
+        can_delete_event: Boolean(editingProfile.can_delete_event),
+        can_upload_and_delete_images: Boolean(editingProfile.can_upload_and_delete_images),
+        can_edit: Boolean(editingProfile.can_edit),
+        all_images: Boolean(editingProfile.all_images),
+        all_groups: Boolean(editingProfile.all_groups),
+        all_albums: Boolean(editingProfile.all_albums)
       };
       
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
@@ -1379,7 +1381,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
   const maxRank = (currentProfile?.hierarchy_rank || 0) - 1;
   const rankOptions = Array.from({ length: Math.max(0, maxRank) + 1 }, (_, i) => i);
 
-  const hasEmailField = editingProfile.is_public !== 1;
+  const hasEmailField = !Boolean(editingProfile.is_public);
   const basicInfoGridLayout = hasEmailField
     ? 'md:grid-cols-[15rem_15rem_auto]'
     : 'md:grid-cols-[15rem_auto]';
@@ -1734,18 +1736,18 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   </div>
 
                   {/* Can Create Events */}
-                  {currentProfile?.can_manage_create_events === 1 && (
+                  {Boolean(currentProfile?.can_manage_create_events) && (
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
                         <p className="font-medium text-gray-900">Can Create Events</p>
                         <p className="text-sm text-gray-500">Can create new events</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (editingProfile?.is_public === 1 ? 'Public profiles cannot create events' : 'Restricted profiles cannot create events') : undefined}>
+                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (Boolean(editingProfile?.is_public) ? 'Public profiles cannot create events' : 'Restricted profiles cannot create events') : undefined}>
                           <input
                             type="checkbox"
-                            checked={editingProfile.can_create_events === 1}
-                            onChange={(e) => handleFieldChange('can_create_events', e.target.checked ? 1 : 0)}
+                            checked={Boolean(editingProfile.can_create_events)}
+                            onChange={(e) => handleFieldChange('can_create_events', Boolean(e.target.checked))}
                             disabled={!canGrantCanCreateEvents || disableCanCreateEvents}
                             className="sr-only peer"
                           />
@@ -1753,7 +1755,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         </label>
                         {disableCanCreateEvents && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
-                            {editingProfile?.is_public === 1 
+                            {Boolean(editingProfile?.is_public) 
                               ? 'Public profiles cannot create events.'
                               : 'Restricted profiles cannot create events.'}
                           </p>
@@ -1794,7 +1796,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                       >
                         <input
                           type="checkbox"
-                          checked={editingProfile.is_public === 1}
+                          checked={Boolean(editingProfile.is_public)}
                           onChange={(e) => handleFieldChange('is_public', e.target.checked ? 1 : 0)}
                           className="sr-only peer"
                           disabled={disablePublicToggle}
@@ -2022,7 +2024,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                           <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanManageEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                             <input
                               type="checkbox"
-                              checked={editingProfile.can_manage_event === 1}
+                              checked={Boolean(editingProfile.can_manage_event)}
                               onChange={(e) => handleFieldChange('can_manage_event', e.target.checked ? 1 : 0)}
                               className="sr-only peer"
                               disabled={disableEventManagementToggles || !canGrantCanManageEvent}
@@ -2057,7 +2059,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                           <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanDeleteEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                             <input
                               type="checkbox"
-                              checked={editingProfile.can_delete_event === 1}
+                              checked={Boolean(editingProfile.can_delete_event)}
                               onChange={(e) => handleFieldChange('can_delete_event', e.target.checked ? 1 : 0)}
                               className="sr-only peer"
                               disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
@@ -2093,14 +2095,14 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages && !disableCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanUploadAndDeleteImages ? canUploadAndDeleteImagesDisabledReason : undefined}>
                           <input
                             type="checkbox"
-                            checked={editingProfile.can_upload_and_delete_images === 1}
+                            checked={Boolean(editingProfile.can_upload_and_delete_images)}
                           onChange={(e) => {
-                            const newValue = e.target.checked ? 1 : 0;
+                            const newValue = Boolean(e.target.checked);
                             handleFieldChange('can_upload_and_delete_images', newValue);
                             // If enabling upload, also enable can_edit and all_groups (constraint)
-                            if (newValue === 1) {
-                              handleFieldChange('can_edit', 1);
-                              handleFieldChange('all_groups', 1);
+                            if (Boolean(newValue)) {
+                              handleFieldChange('can_edit', true);
+                              handleFieldChange('all_groups', true);
                             }
                           }}
                             disabled={!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages}
@@ -2126,14 +2128,14 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         <label className={`relative inline-flex items-center ${canGrantCanEdit && !requiresCanEdit && !disableCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanEdit ? 'Public profiles cannot have edit permissions' : requiresCanEdit ? 'Required when Upload & Delete Photos is enabled' : undefined}>
                           <input
                             type="checkbox"
-                            checked={editingProfile.can_edit === 1}
+                            checked={Boolean(editingProfile.can_edit)}
                             onChange={(e) => {
-                              const newValue = e.target.checked ? 1 : 0;
+                              const newValue = Boolean(e.target.checked);
                               // If disabling can_edit while can_upload_and_delete_images is enabled, also disable upload
-                              if (newValue === 0 && editingProfile.can_upload_and_delete_images === 1) {
-                                handleFieldChange('can_upload_and_delete_images', 0);
+                              if (!newValue && Boolean(editingProfile.can_upload_and_delete_images)) {
+                                handleFieldChange('can_upload_and_delete_images', false);
                               }
-                              handleFieldChange('can_edit', newValue);
+                              handleFieldChange('can_edit', Boolean(newValue));
                             }}
                             disabled={!canGrantCanEdit || requiresCanEdit || disableCanEdit}
                             className="sr-only peer"
@@ -2177,8 +2179,8 @@ const disableRankSelection = editingProfile?.is_public === 1;
                       <label className={`relative inline-flex items-center ${canGrantAllImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                         <input
                           type="checkbox"
-                          checked={editingProfile.all_images === 1}
-                          onChange={(e) => handleFieldChange('all_images', e.target.checked ? 1 : 0)}
+                          checked={Boolean(editingProfile.all_images)}
+                          onChange={(e) => handleFieldChange('all_images', Boolean(e.target.checked))}
                           disabled={!canGrantAllImages}
                           className="sr-only peer"
                         />
@@ -2212,8 +2214,8 @@ const disableRankSelection = editingProfile?.is_public === 1;
                       <label className={`relative inline-flex items-center ${canGrantAllAlbums ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                         <input
                           type="checkbox"
-                          checked={editingProfile.all_albums === 1}
-                          onChange={(e) => handleFieldChange('all_albums', e.target.checked ? 1 : 0)}
+                          checked={Boolean(editingProfile.all_albums)}
+                          onChange={(e) => handleFieldChange('all_albums', Boolean(e.target.checked))}
                           disabled={!canGrantAllAlbums}
                           className="sr-only peer"
                         />
@@ -2248,14 +2250,14 @@ const disableRankSelection = editingProfile?.is_public === 1;
                         <label className={`relative inline-flex items-center ${canGrantAllGroups && !disableAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableAllGroups ? allGroupsDisabledReason : undefined}>
                           <input
                             type="checkbox"
-                            checked={editingProfile.all_groups === 1}
+                            checked={Boolean(editingProfile.all_groups)}
                           onChange={(e) => {
-                            const newValue = e.target.checked ? 1 : 0;
+                            const newValue = Boolean(e.target.checked);
                             // If disabling all_groups (restricting groups) while can_upload_and_delete_images is enabled, also disable upload
-                            if (newValue === 0 && editingProfile.can_upload_and_delete_images === 1) {
-                              handleFieldChange('can_upload_and_delete_images', 0);
+                            if (!newValue && Boolean(editingProfile.can_upload_and_delete_images)) {
+                              handleFieldChange('can_upload_and_delete_images', false);
                             }
-                            handleFieldChange('all_groups', newValue);
+                            handleFieldChange('all_groups', Boolean(newValue));
                           }}
                             disabled={!canGrantAllGroups || disableAllGroups}
                             className="sr-only peer"
@@ -2297,7 +2299,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {editingProfile.all_images === 1 
+                  {Boolean(editingProfile.all_images) 
                     ? '🚫 These photos are FORBIDDEN to this profile' 
                     : '✓ These are the ONLY photos accessible to this profile'}
                 </p>
@@ -2340,7 +2342,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {editingProfile.all_albums === 1 
+                  {Boolean(editingProfile.all_albums) 
                     ? '🚫 These albums are FORBIDDEN to this profile' 
                     : '✓ These are the ONLY albums accessible to this profile'}
                 </p>
@@ -2383,7 +2385,7 @@ const disableRankSelection = editingProfile?.is_public === 1;
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {editingProfile.all_groups === 1 
+                  {Boolean(editingProfile.all_groups) 
                     ? '🚫 These people are FORBIDDEN to this profile' 
                     : '✓ These are the ONLY people accessible to this profile'}
                 </p>

@@ -232,7 +232,7 @@ export default function ProfilesGalleryPage() {
             ? publicAccessFlags[baseIdStr]
             : undefined;
           const hasPublicAccessCode =
-            (hasPublicAccessOverride ?? profile?.has_public_access_code ?? 0) === 1;
+            Boolean(hasPublicAccessOverride ?? profile?.has_public_access_code);
           const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
             ? publicAccessCodes[baseIdStr]
             : undefined;
@@ -241,15 +241,15 @@ export default function ProfilesGalleryPage() {
             id: baseIdStr,
             label: profile.label || '',
             hierarchy_rank: Number(profile.hierarchy_rank ?? 0),
-            is_public: (profile.is_public ?? 0) === 1 ? 1 : 0,
+            is_public: Boolean(profile.is_public) ? 1 : 0,
             has_public_access_code: hasPublicAccessCode ? 1 : 0,
             public_access_code: publicAccessCode,
             restricted_to_event: profile.restricted_to_event ?? null,
             restricted_to_event_name: profile.restricted_to_event_name ?? null,
-            can_create_events: (profile.can_create_events ?? 0) === 1 ? 1 : 0,
-            can_manage_event: (eventProfile?.can_manage_event ?? 0) === 1 ? 1 : 0,
-            can_delete_event: (eventProfile?.can_delete_event ?? 0) === 1 ? 1 : 0,
-            can_edit: (eventProfile?.can_edit ?? 0) === 1 ? 1 : 0,
+            can_create_events: Boolean(profile.can_create_events) ? 1 : 0,
+            can_manage_event: Boolean(eventProfile?.can_manage_event) ? 1 : 0,
+            can_delete_event: Boolean(eventProfile?.can_delete_event) ? 1 : 0,
+            can_edit: Boolean(eventProfile?.can_edit) ? 1 : 0,
             eventProfile: eventProfile || null,
             generalProfile: profile,
           };
@@ -272,7 +272,7 @@ export default function ProfilesGalleryPage() {
         ? publicAccessFlags[baseIdStr]
         : undefined;
       const hasPublicAccessCode =
-        (hasPublicAccessOverride ?? profile?.has_public_access_code ?? 0) === 1;
+        Boolean(hasPublicAccessOverride ?? profile?.has_public_access_code);
       const publicAccessCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, baseIdStr)
         ? publicAccessCodes[baseIdStr]
         : undefined;
@@ -281,15 +281,15 @@ export default function ProfilesGalleryPage() {
         id: baseIdStr,
         label: profile.label || '',
         hierarchy_rank: Number(profile.hierarchy_rank ?? 0),
-        is_public: (profile.is_public ?? 0) === 1 ? 1 : 0,
-        has_public_access_code: hasPublicAccessCode ? 1 : 0,
+        is_public: Boolean(profile.is_public) ? 1 : 0,
+        has_public_access_code: Boolean(hasPublicAccessCode) ? 1 : 0,
         public_access_code: publicAccessCode,
         restricted_to_event: profile.restricted_to_event ?? null,
         restricted_to_event_name: profile.restricted_to_event_name ?? null,
-        can_create_events: (profile.can_create_events ?? 0) === 1 ? 1 : 0,
-        can_manage_event: (eventProfile?.can_manage_event ?? 0) === 1 ? 1 : 0,
-        can_delete_event: (eventProfile?.can_delete_event ?? 0) === 1 ? 1 : 0,
-        can_edit: (eventProfile?.can_edit ?? 0) === 1 ? 1 : 0,
+        can_create_events: Boolean(profile.can_create_events) ? 1 : 0,
+        can_manage_event: Boolean(eventProfile?.can_manage_event) ? 1 : 0,
+        can_delete_event: Boolean(eventProfile?.can_delete_event) ? 1 : 0,
+        can_edit: Boolean(eventProfile?.can_edit) ? 1 : 0,
         eventProfile: eventProfile || null,
         generalProfile: profile,
       };
@@ -322,9 +322,9 @@ export default function ProfilesGalleryPage() {
         case 'hierarchy_rank':
           return profile.hierarchy_rank || 0;
         case 'is_public':
-          return profile.is_public ? 1 : 0;
+          return Boolean(profile.is_public) ? 1 : 0;
         case 'can_create_events':
-          return profile.can_create_events ? 1 : 0;
+          return Boolean(profile.can_create_events) ? 1 : 0;
         case 'restricted_to_event_name':
           return (profile.restricted_to_event_name || '').toLowerCase();
         case 'can_manage_event':
@@ -540,7 +540,7 @@ export default function ProfilesGalleryPage() {
 
   const stats = useMemo(() => {
     const total = profilesArray.length;
-    const publicCount = profilesArray.filter((p) => p.is_public === 1).length;
+    const publicCount = profilesArray.filter((p) => Boolean(p.is_public)).length;
     const privateCount = total - publicCount;
     return { total, public: publicCount, private: privateCount };
   }, [profilesArray]);
@@ -747,18 +747,18 @@ export default function ProfilesGalleryPage() {
           ) : (
             <span
               className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                profile.is_public === 1
+                Boolean(profile.is_public)
                   ? 'bg-green-100 text-green-700'
                   : 'bg-purple-100 text-purple-700'
               }`}
             >
-              {profile.is_public === 1 ? 'Public' : 'Private'}
+              {Boolean(profile.is_public) ? 'Public' : 'Private'}
             </span>
           ),
       },
     ];
 
-    if (currentProfile?.can_manage_create_events === 1) {
+    if (Boolean(currentProfile?.can_manage_create_events)) {
       baseColumns.push({
         key: 'can_create_events',
         label: 'Can Create Events',
@@ -772,12 +772,12 @@ export default function ProfilesGalleryPage() {
           ) : (
             <span
               className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                profile.can_create_events === 1
+                Boolean(profile.can_create_events)
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-100 text-gray-700'
               }`}
             >
-              {profile.can_create_events === 1 ? 'Yes' : 'No'}
+              {Boolean(profile.can_create_events) ? 'Yes' : 'No'}
             </span>
           ),
       });
@@ -810,12 +810,12 @@ export default function ProfilesGalleryPage() {
             ) : (
               <span
                 className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                  profile.can_manage_event === 1
+                  Boolean(profile.can_manage_event)
                     ? 'bg-green-100 text-green-700'
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {profile.can_manage_event === 1 ? 'Yes' : 'No'}
+                {Boolean(profile.can_manage_event) ? 'Yes' : 'No'}
               </span>
             ),
         },
@@ -830,12 +830,12 @@ export default function ProfilesGalleryPage() {
             ) : (
               <span
                 className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                  profile.can_delete_event === 1
+                  Boolean(profile.can_delete_event)
                     ? 'bg-red-100 text-red-700'
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {profile.can_delete_event === 1 ? 'Yes' : 'No'}
+                {Boolean(profile.can_delete_event) ? 'Yes' : 'No'}
               </span>
             ),
         },
@@ -850,12 +850,12 @@ export default function ProfilesGalleryPage() {
             ) : (
               <span
                 className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                  profile.can_edit === 1
+                  Boolean(profile.can_edit)
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {profile.can_edit === 1 ? 'Yes' : 'No'}
+                {Boolean(profile.can_edit) ? 'Yes' : 'No'}
               </span>
             ),
         }
@@ -885,9 +885,9 @@ export default function ProfilesGalleryPage() {
             </>
           ) : (
             <>
-              {profile.is_public === 1 && (
+              {Boolean(profile.is_public) && (
                 <>
-                  {profile.has_public_access_code === 1 ? (
+                  {Boolean(profile.has_public_access_code) ? (
                     <>
                       <button
                         onClick={() => handleCopyPublicLink(profile)}

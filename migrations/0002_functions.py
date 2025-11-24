@@ -52,7 +52,7 @@ steps = [
                 USING profile_id_val;
             END;
             
-            RETURN COALESCE(result_val, '');
+            RETURN result_val;
         END;
         $$ LANGUAGE plpgsql STABLE;
         """,
@@ -95,7 +95,7 @@ steps = [
                 USING event_id_val, profile_id_val;
             END;
             
-            RETURN COALESCE(result_val, '');
+            RETURN result_val;
         END;
         $$ LANGUAGE plpgsql STABLE;
         """,

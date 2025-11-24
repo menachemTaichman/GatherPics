@@ -80,7 +80,7 @@ export default function useImageActions({
         
         const action = newFavoriteStatus ? 'Added to' : 'Removed from';
         const actualCount = newFavoriteStatus ? result.len_added : result.len_removed;
-        const countText = actualCount // === 1 ? '' : `${actualCount} `;
+        const countText = actualCount;
         
         const favoritesHref = `/${eventUrl}/albums/${encodeURIComponent('Favorites')}`;
         showToast(
@@ -117,7 +117,7 @@ export default function useImageActions({
         
         const action = newArchivedStatus ? 'moved to' : 'removed from';
         const actualCount = newArchivedStatus ? result.len_added : result.len_removed;
-        const countText = actualCount // actualCount === 1 ? '' : `${actualCount} `;
+        const countText = actualCount;
         
         const archiveHref = `/${eventUrl}/albums/${encodeURIComponent('Archive')}`;
         showToast(

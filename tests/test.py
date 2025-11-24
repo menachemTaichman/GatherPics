@@ -306,17 +306,10 @@ ids = {
 }
 
 
-event = general_models.get_entities('events', event_id)
-event_instance = Event(event_id)
-if not event:
-    raise ValueError('Event not found')
-representative_image = event['representative_image']
-if not representative_image:
-    raise ValueError('Representative image not found')
-file_path = os.path.join(event_instance.display_dir, f'{representative_image}.webp')
-if not os.path.exists(file_path):
-    raise ValueError('File not found')
-
+group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
+other_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
+result = event.models.check_accessibility(other_profile_id, 'groups', [group_id])
+print(result)
 
 class Timeit:
     def __init__(self, name: str):

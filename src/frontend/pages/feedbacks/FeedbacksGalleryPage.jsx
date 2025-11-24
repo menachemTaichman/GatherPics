@@ -346,8 +346,8 @@ export default function FeedbacksGalleryPage() {
               sortable: true,
               align: 'left',
               renderCell: (feedback) => {
-                const isClosed = feedback.is_closed === 1;
-                const isSolved = feedback.solved === 1;
+                const isClosed = Boolean(feedback.is_closed);
+                const isSolved = Boolean(feedback.solved);
                 return (
                   <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                     isSolved
