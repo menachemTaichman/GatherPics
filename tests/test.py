@@ -306,7 +306,17 @@ ids = {
 }
 
 
-# recreate_views_triggers_and_indexes(db)
+event = general_models.get_entities('events', event_id)
+event_instance = Event(event_id)
+if not event:
+    raise ValueError('Event not found')
+representative_image = event['representative_image']
+if not representative_image:
+    raise ValueError('Representative image not found')
+file_path = os.path.join(event_instance.display_dir, f'{representative_image}.webp')
+if not os.path.exists(file_path):
+    raise ValueError('File not found')
+
 
 class Timeit:
     def __init__(self, name: str):
@@ -319,6 +329,7 @@ class Timeit:
         self.end = time.time()
         print(f'{self.name} took {self.end - self.start} seconds')
 
+
 views = [
     'accessible_images',
     'accessible_faces',
@@ -328,7 +339,7 @@ views = [
     'accessible_groups_images',
     'accessible_albums_images',
     'accessible_uploads',
-    
+
 ]
 
 for view in views:

@@ -5,7 +5,13 @@ from datetime import timedelta
 import traceback
 import os
 
-from src.core.config import DIST_DIR
+# Load environment variables from .env file if it exists (development only)
+# In production (AWS), environment variables are already set
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
+
+DIST_DIR = os.getenv('DIST_DIR', os.path.abspath(os.path.join(os.path.dirname(__file__), '../../dist')))
 from src.core.errors import Forbidden, DatabaseError, DBPolicyError
 from src.backend.routes import (
     auth_bp,

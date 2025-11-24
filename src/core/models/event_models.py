@@ -526,54 +526,48 @@ class EventModels(BaseModels):
             list of accessible ids, list of inaccessible ids
         """
         permissions = {
-            'images': ('events_profiles_images', 'all_images', 'images_accessibility'),
-            'albums': ('events_profiles_albums', 'all_albums', 'albums_accessibility'),
-            'groups': ('events_profiles_groups', 'all_groups', 'groups_accessibility'),
+            'images': ('images_accessibility_base', 'images_accessibility', 'accessible_images'),
+            'albums': ('albums_accessibility_base', 'albums_accessibility', 'accessible_albums'),
+            'groups': ('groups_accessibility_base', 'groups_accessibility', 'accessible_groups'),
         }
         
-        permission_table, all_field, accessibility_table = permissions.get(entity)
-        if not permission_table:
+        specify, actual, accessible_table = permissions.get(entity)
+        if not specify:
             raise ValueError(f"Invalid entity: {entity}")
 
         if not self.is_accessible('events_profiles', profile_id):
             raise Forbidden("The profile is not accessible")
 
         id_field = self.db.get_id_field(entity)
-        accessible_event_profiles = self.db.STRUCTURE()['events_profiles']['accessible_table']
-        accessible_permission_table = self.db.STRUCTURE()[permission_table]['accessible_table']
-        accessible_table = self.db.STRUCTURE()[entity]['accessible_table']
         query = f"""
             SELECT
-                at.{id_field},
-                CASE WHEN
-                    (ayt.{id_field} IS NULL AND aep.{all_field} = 1)
-                    OR (ayt.{id_field} IS NOT NULL AND aep.{all_field} = 0)
-                THEN 1 ELSE 0 END AS is_accessible
-                FROM {accessible_table} at
-                JOIN {accessible_event_profiles} aep ON aep.profile_id = %s
-                LEFT JOIN {accessible_permission_table} ayt ON at.{id_field} = ayt.{id_field} AND ayt.profile_id = aep.profile_id
-                WHERE at.{id_field} IN ({','.join(['%s'] * len(ids))})
+                s.{id_field},
+                s.is_accessible
+                FROM {specify} s
+                INNER JOIN {accessible_table} at ON s.{id_field} = at.{id_field}
+                WHERE s.{id_field} IN ({','.join(['%s'] * len(ids))})
+                AND s.profile_id = %s
         """
         result = self.db.execute_query(query, [profile_id] + ids, return_format=ReturnFormat.LIST_TUPLES)
         if len(result) != len(ids):
             raise Forbidden("Some of the entities are not accessible")
 
-        specify_accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
-        specify_inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
+        specify_accessible_ids = [id for id, is_accessible in result if is_accessible == True]
+        specify_inaccessible_ids = [id for id, is_accessible in result if is_accessible == False]
 
         query = f"""
             SELECT
-                {id_field},
-                is_accessible
-                FROM {accessibility_table}
-                WHERE {id_field} IN ({','.join(['%s'] * len(ids))})
-                AND event_id = cur_event_profile('event_id')
-                AND profile_id = %s
+                a.{id_field},
+                a.is_accessible
+                FROM {actual} a
+                WHERE a.{id_field} IN ({','.join(['%s'] * len(ids))})
+                AND a.event_id = cur_event_profile('event_id')
+                AND a.profile_id = %s
         """
         result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
 
-        actual_accessible_ids = [id for id, is_accessible in result if is_accessible == 1]
-        actual_inaccessible_ids = [id for id, is_accessible in result if is_accessible == 0]
+        actual_accessible_ids = [id for id, is_accessible in result if is_accessible == True]
+        actual_inaccessible_ids = [id for id, is_accessible in result if is_accessible == False]
 
         return specify_accessible_ids, specify_inaccessible_ids, actual_accessible_ids, actual_inaccessible_ids
 

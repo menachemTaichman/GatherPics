@@ -27,7 +27,7 @@ steps = [
         WHERE cur_profile_bool('is_developer');
 
         -- all profiles accessibility
-        CREATE OR REPLACE VIEW albums_accessibility_helper AS
+        CREATE OR REPLACE VIEW albums_accessibility_base AS
         SELECT
             a.event_id,
             a.album_id,
@@ -35,7 +35,11 @@ steps = [
             TRUE AS is_accessible
         FROM albums a
         JOIN events_profiles ep ON a.event_id = ep.event_id
-        WHERE ep.all_albums IS TRUE
+        LEFT JOIN events_profiles_albums epa ON 
+            a.album_id = epa.album_id 
+            AND ep.profile_id = epa.profile_id
+        WHERE ep.all_albums
+        AND epa.album_id IS NULL
         UNION ALL
         SELECT
             a.event_id,
@@ -47,107 +51,110 @@ steps = [
         JOIN events_profiles_albums epa ON 
             a.album_id = epa.album_id 
             AND ep.profile_id = epa.profile_id
-        WHERE ep.all_albums IS FALSE;
+        WHERE NOT ep.all_albums;
 
-        CREATE OR REPLACE VIEW groups_accessibility_helper AS
+        CREATE OR REPLACE VIEW groups_accessibility_base AS
         SELECT
             g.event_id,
             g.group_id,
             ep.profile_id,
-            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible_helper
+            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible
         FROM groups g
         JOIN events e ON g.event_id = e.event_id
         JOIN events_profiles ep ON g.event_id = ep.event_id
-        WHERE ep.all_groups IS TRUE
+        LEFT JOIN events_profiles_groups epg ON 
+            g.group_id = epg.group_id 
+            AND ep.profile_id = epg.profile_id
+        WHERE ep.all_groups
+        AND epg.group_id IS NULL
         UNION ALL
         SELECT
             g.event_id,
             g.group_id,
             ep.profile_id,
-            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible_helper
+            (ep.can_edit OR g.group_id <> e.unassociated_group_id) AS is_accessible
         FROM groups g
         JOIN events e ON g.event_id = e.event_id
         JOIN events_profiles ep ON g.event_id = ep.event_id
         JOIN events_profiles_groups epg ON 
             g.group_id = epg.group_id 
             AND ep.profile_id = epg.profile_id
-        WHERE ep.all_groups IS FALSE;
+        WHERE NOT ep.all_groups;
+
+        CREATE OR REPLACE VIEW images_accessibility_base AS
+        SELECT
+            i.event_id,
+            i.image_id,
+            ep.profile_id,
+            TRUE AS is_accessible
+        FROM images i
+        JOIN events_profiles ep ON i.event_id = ep.event_id
+        LEFT JOIN events_profiles_images epi ON 
+            i.image_id = epi.image_id 
+            AND ep.profile_id = epi.profile_id
+        WHERE ep.all_images
+        AND epi.image_id IS NULL
+        UNION ALL
+        SELECT
+            i.event_id,
+            i.image_id,
+            ep.profile_id,
+            TRUE AS is_accessible
+        FROM images i
+        JOIN events_profiles ep ON i.event_id = ep.event_id
+        JOIN events_profiles_images epi ON 
+            i.image_id = epi.image_id 
+            AND ep.profile_id = epi.profile_id
+        WHERE NOT ep.all_images;
 
         CREATE OR REPLACE VIEW images_accessibility AS
-        WITH base_image_access AS (
-            SELECT
-                i.event_id,
-                i.image_id,
-                ep.profile_id
-            FROM images i
-            JOIN events_profiles ep ON i.event_id = ep.event_id
-            WHERE ep.all_images IS TRUE
-            UNION ALL
-            SELECT
-                i.event_id,
-                i.image_id,
-                ep.profile_id
-            FROM images i
-            JOIN events_profiles ep ON i.event_id = ep.event_id
-            JOIN events_profiles_images epi ON 
-                i.image_id = epi.image_id 
-                AND ep.profile_id = epi.profile_id
-            WHERE ep.all_images IS FALSE
-        )
         SELECT
-            bia.event_id,
-            bia.image_id,
-            bia.profile_id,
-            (COALESCE(archive_check.is_accessible, TRUE)) AS is_accessible
-        FROM base_image_access bia
-        LEFT JOIN (
-            SELECT 
-                ai.image_id, 
-                aah.profile_id, 
-                aah.is_accessible
-            FROM albums_images ai
-            JOIN albums a ON ai.album_id = a.album_id
-            JOIN events e ON a.event_id = e.event_id AND a.album_id = e.archive_album_id
-            JOIN albums_accessibility_helper aah ON aah.album_id = ai.album_id
-        ) archive_check ON 
-            bia.image_id = archive_check.image_id 
-            AND bia.profile_id = archive_check.profile_id;
+            iab.event_id,
+            iab.image_id,
+            iab.profile_id,
+            (iab.is_accessible AND COALESCE(aab.is_accessible, TRUE)) AS is_accessible
+        FROM images_accessibility_base iab
+        INNER JOIN events e ON iab.event_id = e.event_id
+        LEFT JOIN albums_images ai ON
+            e.archive_album_id = ai.album_id
+            AND ai.image_id = iab.image_id
+        LEFT JOIN albums_accessibility_base aab ON
+            aab.album_id = ai.album_id
+            AND aab.profile_id = iab.profile_id;
             
         CREATE OR REPLACE VIEW faces_accessibility AS
         SELECT
             ep.event_id,
             f.face_id,
             ep.profile_id,
-            (
-                ia.is_accessible AND gah.is_accessible_helper
-            ) AS is_accessible
+            (ia.is_accessible AND gab.is_accessible) AS is_accessible
         FROM faces f
         INNER JOIN images i ON f.image_id = i.image_id
         JOIN events_profiles ep ON i.event_id = ep.event_id
         INNER JOIN images_accessibility ia ON f.image_id = ia.image_id AND ia.profile_id = ep.profile_id
-        INNER JOIN groups_accessibility_helper gah ON f.group_id = gah.group_id AND gah.profile_id = ep.profile_id;
+        INNER JOIN groups_accessibility_base gab ON f.group_id = gab.group_id AND gab.profile_id = ep.profile_id;
         
         CREATE OR REPLACE VIEW groups_accessibility AS
         SELECT
-            gah.event_id,
-            gah.group_id,
-            gah.profile_id,
+            gab.event_id,
+            gab.group_id,
+            gab.profile_id,
             (
-                gah.is_accessible_helper
+                gab.is_accessible
                 AND (
                     ep.can_edit
                     OR EXISTS (
                         SELECT 1
                         FROM faces_accessibility fa
                         INNER JOIN faces f ON fa.face_id = f.face_id
-                        WHERE f.group_id = gah.group_id
-                        AND fa.profile_id = gah.profile_id
+                        WHERE f.group_id = gab.group_id
+                        AND fa.profile_id = gab.profile_id
                         AND fa.is_accessible
                     )
                 )
             ) AS is_accessible
-        FROM groups_accessibility_helper gah
-        JOIN events_profiles ep ON gah.event_id = ep.event_id AND gah.profile_id = ep.profile_id;
+        FROM groups_accessibility_base gab
+        JOIN events_profiles ep ON gab.event_id = ep.event_id AND gab.profile_id = ep.profile_id;
         
         -- groups_images view (needed by groups_to_request_access)
         CREATE OR REPLACE VIEW groups_images AS
@@ -160,20 +167,20 @@ steps = [
         
         CREATE OR REPLACE VIEW groups_to_request_access AS
         SELECT
-            gah.event_id,
-            gah.profile_id,
-            gah.group_id
-        FROM groups_accessibility_helper gah
-        WHERE gah.is_accessible_helper
+            gab.event_id,
+            gab.profile_id,
+            gab.group_id
+        FROM groups_accessibility_base gab
+        WHERE gab.is_accessible
         AND EXISTS (
             SELECT 1
             FROM groups_images gi
             INNER JOIN images_accessibility ia ON
                 gi.image_id = ia.image_id
-                AND ia.event_id = gah.event_id
-                AND ia.profile_id = gah.profile_id
+                AND ia.event_id = gab.event_id
+                AND ia.profile_id = gab.profile_id
                 AND ia.is_accessible
-            WHERE gi.group_id = gah.group_id
+            WHERE gi.group_id = gab.group_id
         );
         
         CREATE OR REPLACE VIEW moments_accessibility AS
@@ -197,22 +204,22 @@ steps = [
         
         CREATE OR REPLACE VIEW albums_accessibility AS
         SELECT
-            aah.event_id,
-            aah.album_id,
+            aab.event_id,
+            aab.album_id,
             ep.profile_id,
             (
-                aah.is_accessible
+                aab.is_accessible
                 AND (ep.can_edit OR EXISTS (
                     SELECT 1
                     FROM images_accessibility ia
                     INNER JOIN albums_images ai ON ai.image_id = ia.image_id
-                    WHERE ai.album_id = aah.album_id
+                    WHERE ai.album_id = aab.album_id
                     AND ia.profile_id = ep.profile_id
                     AND ia.is_accessible
                 ))
             ) AS is_accessible
-        FROM albums_accessibility_helper aah
-        JOIN events_profiles ep ON aah.event_id = ep.event_id AND aah.profile_id = ep.profile_id;
+        FROM albums_accessibility_base aab
+        JOIN events_profiles ep ON aab.event_id = ep.event_id AND aab.profile_id = ep.profile_id;
 
         -- events
         CREATE OR REPLACE VIEW accessible_events AS
@@ -481,7 +488,7 @@ steps = [
         INNER JOIN images_accessibility ia ON i.image_id = ia.image_id
         INNER JOIN events e ON e.event_id = ia.event_id
         LEFT JOIN (
-            albums_accessibility_helper aa1
+            albums_accessibility_base aa1
             INNER JOIN albums_images ai1 ON
                 aa1.album_id = ai1.album_id
                 AND aa1.is_accessible
@@ -490,7 +497,7 @@ steps = [
             AND aa1.profile_id = ia.profile_id
             AND aa1.album_id = e.archive_album_id
         LEFT JOIN (
-            albums_accessibility_helper aa2
+            albums_accessibility_base aa2
             INNER JOIN albums_images ai2 ON
                 aa2.album_id = ai2.album_id
                 AND aa2.is_accessible
@@ -865,9 +872,10 @@ steps = [
         DROP VIEW IF EXISTS groups_images CASCADE;
         DROP VIEW IF EXISTS groups_accessibility CASCADE;
         DROP VIEW IF EXISTS faces_accessibility CASCADE;
-        DROP VIEW IF EXISTS groups_accessibility_helper CASCADE;
+        DROP VIEW IF EXISTS groups_accessibility_base CASCADE;
         DROP VIEW IF EXISTS images_accessibility CASCADE;
-        DROP VIEW IF EXISTS albums_accessibility_helper CASCADE;
+        DROP VIEW IF EXISTS albums_accessibility_base CASCADE;
+        DROP VIEW IF EXISTS images_accessibility_base CASCADE;
         DROP VIEW IF EXISTS accessible_rekognition_usaged CASCADE;
         DROP VIEW IF EXISTS accessible_settings CASCADE;
         """

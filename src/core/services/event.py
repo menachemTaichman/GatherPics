@@ -5,7 +5,7 @@ from datetime import datetime
 from src.core.errors import Forbidden, DBPolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
-from src.core.config import DATA_ROOT
+from src.core import DATA_ROOT
 
 class Event():
     """Event model for managing event data and operations."""

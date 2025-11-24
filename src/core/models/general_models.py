@@ -324,7 +324,7 @@ class GeneralModels(BaseModels):
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process images for an event."""
         event = self.get_event(event_id)
-        if self.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', 0) == 0:
+        if not self.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden('Permission denied: cannot upload and delete images')
         
         return event.process_new_images(
@@ -399,7 +399,7 @@ class GeneralModels(BaseModels):
             SELECT profile_id
             FROM refresh_tokens
             WHERE token = %s
-            AND revoked = 0
+            AND NOT revoked
             AND expires_at > NOW()
         '''
         return self.db.execute_query(query, (token,), return_format=ReturnFormat.VALUE)
@@ -408,7 +408,7 @@ class GeneralModels(BaseModels):
         """Revoke a refresh token."""
         query = '''
             UPDATE refresh_tokens
-            SET revoked = 1, revoked_at = NOW()
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE token = %s
         '''
         self.db.execute_query(query, (token,))
@@ -417,7 +417,7 @@ class GeneralModels(BaseModels):
         """Revoke all refresh tokens for a profile."""
         query = '''
             UPDATE refresh_tokens
-            SET revoked = 1, revoked_at = NOW()
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE 1=1
         '''
         params = ()
@@ -434,7 +434,7 @@ class GeneralModels(BaseModels):
         Returns:
             list of notification ids that were marked as read
         """
-        query = 'SELECT notification_id FROM my_notifications WHERE read = 0'
+        query = 'SELECT notification_id FROM my_notifications WHERE NOT read'
         notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
         self.edit('my_notifications', notification_ids, {'read': 1, 'read_at': read_at})
         return notification_ids

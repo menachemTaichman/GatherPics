@@ -1,21 +1,23 @@
-import json
 import os
 from PIL import Image
 import boto3
 from io import BytesIO
 from collections import defaultdict
-from src.core.config import AWS_CONFIG_PATH
 
 class AWSRekognitionHelper:
     def __init__(self, event_id: str):
-        with open(AWS_CONFIG_PATH, 'r') as f:
-            config = json.load(f)
+        # Load environment variables from .env file if it exists (development only)
+        # In production (AWS), environment variables are already set
+        if os.path.exists('.env'):
+            from dotenv import load_dotenv
+            load_dotenv()
+        
         try:
             self.client = boto3.client(
             'rekognition',
-            aws_access_key_id=config['aws_access_key_id'],
-                aws_secret_access_key=config['aws_secret_access_key'],
-                region_name=config['region']
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION')
             )
         except Exception as e:
             print(f"Error initializing AWS Rekognition client: {e}")

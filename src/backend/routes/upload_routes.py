@@ -161,7 +161,7 @@ def upload_files_only(event_id):
     
     saved_files = []
     try:
-        if general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', 0) == 0:
+        if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
         for file in files:

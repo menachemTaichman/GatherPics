@@ -6,8 +6,17 @@ and utility functions. It is independent of any web framework and can be
 used by Flask, CLI tools, background workers, or any other Python code.
 """
 
-from src.core.config import DATA_ROOT
+import os
+
+# Load environment variables from .env file if it exists (development only)
+# In production (AWS), environment variables are already set
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
+
 from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+
+DATA_ROOT = os.getenv('DATA_ROOT', os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data')))
 
 __all__ = [
     'DATA_ROOT',

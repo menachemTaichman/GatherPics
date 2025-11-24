@@ -18,7 +18,7 @@ from psycopg2.extras import execute_batch
 from psycopg2 import errors as psycopg2_errors
 from dotenv import load_dotenv
 from yoyo import read_migrations, get_backend
-from src.core.config import DATA_ROOT
+from src.core import DATA_ROOT
 
 # Load environment variables
 load_dotenv()
