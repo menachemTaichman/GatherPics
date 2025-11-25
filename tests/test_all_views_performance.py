@@ -147,16 +147,54 @@ def get_all_views(db: DB):
     
     return ordered_found + remaining
 
-def test_view(db: DB, view_name: str, analyze_plan: bool = False):
-    """Test a single view and return results."""
+def test_view(db: DB, view_name: str, analyze_plan: bool = False, timeout_seconds: float = None):
+    """Test a single view and return results.
+    
+    Args:
+        db: Database instance
+        view_name: Name of the view to test
+        analyze_plan: Whether to analyze query plan
+        timeout_seconds: Timeout in seconds (None = no timeout)
+    """
     print(f"Testing: {view_name}...")
+    timed_out = False
+    original_timeout = None
+    elapsed_time = None
+    
     try:
+        # Set statement timeout if specified
+        if timeout_seconds is not None:
+            try:
+                # Get current timeout setting
+                timeout_query = db.execute_query(
+                    "SHOW statement_timeout;",
+                    return_format=ReturnFormat.LIST_TUPLES
+                )
+                if timeout_query:
+                    original_timeout = timeout_query[0][0]
+                
+                # Set timeout (convert to milliseconds for PostgreSQL)
+                timeout_ms = int(timeout_seconds * 1000)
+                db.execute_query(f"SET statement_timeout = '{timeout_ms}ms';")
+            except Exception as e:
+                print(f"Warning: Could not set timeout: {str(e)}")
+        
         with Timeit(view_name) as timer:
             result = db.execute_query(
                 f'SELECT * FROM {view_name};', 
                 return_format=ReturnFormat.LIST_DICTS
             )
             row_count = len(result)
+        
+        # Get elapsed time after context manager exits
+        elapsed_time = timer.elapsed
+        
+        # Restore original timeout if it was set
+        if timeout_seconds is not None and original_timeout:
+            try:
+                db.execute_query(f"SET statement_timeout = '{original_timeout}';")
+            except:
+                pass
         
         plan_info = None
         if analyze_plan:
@@ -172,27 +210,62 @@ def test_view(db: DB, view_name: str, analyze_plan: bool = False):
         
         return {
             'view': view_name,
-            'time': timer.elapsed,
+            'time': elapsed_time,
             'rows': row_count,
             'error': None,
-            'plan': plan_info
+            'plan': plan_info,
+            'timed_out': False
         }
     except Exception as e:
+        error_msg = str(e)
+        timed_out = 'timeout' in error_msg.lower() or 'canceling statement' in error_msg.lower()
+        
+        # Get elapsed time if timer was used (timer.elapsed is set in __exit__)
+        try:
+            if 'timer' in locals() and hasattr(timer, 'elapsed'):
+                elapsed_time = timer.elapsed
+        except:
+            pass
+        
+        # Restore original timeout if it was set
+        if timeout_seconds is not None and original_timeout:
+            try:
+                db.execute_query(f"SET statement_timeout = '{original_timeout}';")
+            except:
+                pass
+        
+        # If timed out, get the query plan
+        plan_info = None
+        if timed_out:
+            try:
+                print(f"  Query timed out after {timeout_seconds}s, getting query plan...")
+                plan_result = db.execute_query(
+                    f'EXPLAIN (ANALYZE, BUFFERS, VERBOSE) SELECT * FROM {view_name};',
+                    return_format=ReturnFormat.LIST_TUPLES
+                )
+                if plan_result:
+                    plan_info = '\n'.join([row[0] for row in plan_result])
+            except Exception as plan_error:
+                plan_info = f"Error getting plan after timeout: {str(plan_error)}"
+        
         return {
             'view': view_name,
-            'time': None,
+            'time': elapsed_time,
             'rows': None,
-            'error': str(e),
-            'plan': None
+            'error': error_msg,
+            'plan': plan_info,
+            'timed_out': timed_out
         }
 
-def main(event_id: str = None, profile_id: str = None, output_file: str = None):
+def main(event_id: str = None, profile_id: str = None, output_file: str = None, timeout_seconds: float = None, stop_on_timeout: bool = False):
     """Main function to test all views performance.
     
     Args:
         event_id: Event ID to test (defaults to hardcoded value)
         profile_id: Profile ID to use (defaults to hardcoded value)
         output_file: Path to output file (defaults to timestamped filename)
+        timeout_seconds: Timeout in seconds for each query (None = no timeout)
+        stop_on_timeout: If True, stop testing after first query that times out (default: False)
     """
     # Create output filename if not provided
     if output_file is None:
@@ -208,6 +281,10 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None):
     with Tee(output_file):
         print(f"Event ID: {event.event_id}")
         print(f"Profile ID: {db.profile_context.get('profile_id', profile_id)}")
+        if timeout_seconds is not None:
+            print(f"Query timeout: {timeout_seconds}s")
+        if stop_on_timeout:
+            print(f"Stop on timeout: Enabled (will stop after first slow query)")
         print()
         
         # Get all views
@@ -217,14 +294,59 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None):
         
         # Test each view
         results = []
+        stopped_early = False
+        plans_already_printed = set()  # Track views whose plans were already printed
         for view in views:
-            result = test_view(db, view)
+            result = test_view(db, view, timeout_seconds=timeout_seconds)
             results.append(result)
             
             if result['error']:
-                print(f"❌ {result['view']}: ERROR - {result['error']}")
+                if result.get('timed_out'):
+                    print(f"⏱️  {result['view']}: TIMEOUT after {timeout_seconds}s - {result['error']}")
+                    if result['plan']:
+                        print(f"\nQuery Plan for {result['view']}:")
+                        print("-" * 80)
+                        print(result['plan'])
+                        print("-" * 80)
+                        plans_already_printed.add(result['view'])  # Mark as already printed
+                    
+                    # Stop testing if stop_on_timeout is enabled
+                    if stop_on_timeout:
+                        print(f"\n{'='*80}")
+                        print(f"STOPPING TEST: Query timed out and stop_on_timeout is enabled")
+                        print(f"{'='*80}\n")
+                        stopped_early = True
+                        break
+                else:
+                    print(f"❌ {result['view']}: ERROR - {result['error']}")
             else:
                 print(f"✓ {result['view']}: {result['time']:.4f}s ({result['rows']} rows)")
+                
+                # Check if query exceeded timeout threshold (even if it completed)
+                if stop_on_timeout and timeout_seconds is not None and result['time'] is not None and result['time'] > timeout_seconds:
+                    print(f"\n⚠️  Query exceeded timeout threshold ({timeout_seconds}s) but completed in {result['time']:.4f}s")
+                    # Get query plan for this slow query
+                    try:
+                        print(f"  Getting query plan for {result['view']}...")
+                        plan_result = db.execute_query(
+                            f'EXPLAIN (ANALYZE, BUFFERS, VERBOSE) SELECT * FROM {result["view"]};',
+                            return_format=ReturnFormat.LIST_TUPLES
+                        )
+                        if plan_result:
+                            plan_text = '\n'.join([row[0] for row in plan_result])
+                            print(f"\nQuery Plan for {result['view']}:")
+                            print("-" * 80)
+                            print(plan_text)
+                            print("-" * 80)
+                            plans_already_printed.add(result['view'])
+                    except Exception as plan_error:
+                        print(f"  Error getting plan: {str(plan_error)}")
+                    
+                    print(f"\n{'='*80}")
+                    print(f"STOPPING TEST: Query exceeded timeout threshold and stop_on_timeout is enabled")
+                    print(f"{'='*80}\n")
+                    stopped_early = True
+                    break
             print('--------------------------------')
         
         # Analyze slow views with query plans
@@ -262,6 +384,10 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None):
         print("PERFORMANCE SUMMARY")
         print("="*80)
         
+        if stopped_early:
+            print(f"\n⚠ Testing stopped early after encountering a timeout")
+            print(f"   Tested {len(results)} of {len(views)} views\n")
+        
         successful = [r for r in results if r['error'] is None]
         failed = [r for r in results if r['error'] is not None]
         
@@ -296,9 +422,25 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None):
                     print(f"  {result['view']:50} {result['time']:8.4f}s ({result['rows']:6} rows)")
         
         if failed:
-            print(f"\n❌ Failed queries: {len(failed)}")
-            for result in failed:
-                print(f"  {result['view']}: {result['error']}")
+            timed_out_views = [r for r in failed if r.get('timed_out')]
+            other_failed = [r for r in failed if not r.get('timed_out')]
+            
+            if timed_out_views:
+                print(f"\n⏱️  Timed out queries: {len(timed_out_views)}")
+                for result in timed_out_views:
+                    print(f"  {result['view']}: Timed out after {timeout_seconds}s")
+                    # Only show plan if it wasn't already printed during the test
+                    if result.get('plan') and result['view'] not in plans_already_printed:
+                        print(f"    Query Plan:")
+                        for line in result['plan'].split('\n')[:20]:  # Show first 20 lines
+                            print(f"      {line}")
+                        if len(result['plan'].split('\n')) > 20:
+                            print(f"      ... ({len(result['plan'].split('\n')) - 20} more lines)")
+            
+            if other_failed:
+                print(f"\n❌ Failed queries: {len(other_failed)}")
+                for result in other_failed:
+                    print(f"  {result['view']}: {result['error']}")
         
         print("\n" + "="*80)
     
@@ -308,9 +450,11 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None):
     return results
 
 if __name__ == '__main__':
-    # Allow event_id and profile_id to be passed as command line arguments
-    event_id_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    profile_id_arg = sys.argv[2] if len(sys.argv) > 2 else None
-    output_file_arg = sys.argv[3] if len(sys.argv) > 3 else None
-    results = main(event_id_arg, profile_id_arg, output_file_arg)
+    # Allow event_id, profile_id, output_file, timeout_seconds, and stop_on_timeout to be passed as command line arguments
+    event_id_arg = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1].lower() != 'none' else None
+    profile_id_arg = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].lower() != 'none' else None
+    output_file_arg = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3].lower() != 'none' else None
+    timeout_arg = float(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] and sys.argv[4].lower() != 'none' else None
+    stop_on_timeout_arg = sys.argv[5].lower() in ('1', 'true', 'yes', 'y') if len(sys.argv) > 5 and sys.argv[5] else False
+    results = main(event_id_arg, profile_id_arg, output_file_arg, timeout_arg, stop_on_timeout_arg)
 

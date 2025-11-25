@@ -303,6 +303,8 @@ class GeneralModels(BaseModels):
         # TODO: use transaction
         try:
             self.delete('events', event_id)
+            self.db.execute_query('ANALYZE;')
+
         except Exception as e:
             self.db.execute_query('UPDATE settings SET event_in_deletion = NULL WHERE id = 1')
             raise e

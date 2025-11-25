@@ -611,6 +611,15 @@ def migrate_data():
         
         print("\nData migration complete!")
         
+        # Analyze database after migration
+        print("\nAnalyzing database...")
+        try:
+            pg_cursor.execute('ANALYZE;')
+            pg_conn.commit()
+            print("Database analysis complete!")
+        except Exception as e:
+            print(f"Warning: Database analysis failed: {e}")
+        
     finally:
         sqlite_cursor.close()
         sqlite_conn.close()

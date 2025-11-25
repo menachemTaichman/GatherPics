@@ -407,6 +407,9 @@ class Event():
             _log(f"  - Groups created: {summary['groups_created']}")
             if assign_moments:
                 _log(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
+
+            self.models.db.execute_query('ANALYZE;')
+
             return summary
         
         except Exception as e:

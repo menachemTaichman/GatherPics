@@ -305,7 +305,7 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-
+a = 1
 group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
 other_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
 result = event.models.check_accessibility(other_profile_id, 'groups', [group_id])

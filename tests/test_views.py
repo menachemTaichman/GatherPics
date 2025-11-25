@@ -204,6 +204,16 @@ class TestDBPerformance(unittest.TestCase):
         print(f"Groups: {len(cls.group_ids)}")
         print(f"Profiles: {len(cls.profiles)}")
         print(f"Albums: {len(cls.album_ids)}")
+        print("="*80)
+        
+        # Analyze database after generating data
+        print("\nAnalyzing database...")
+        try:
+            cls.models.db.execute_query('ANALYZE;')
+            print("Database analysis complete!")
+        except Exception as e:
+            print(f"Warning: Database analysis failed: {e}")
+        
         print("="*80 + "\n")
 
     @classmethod

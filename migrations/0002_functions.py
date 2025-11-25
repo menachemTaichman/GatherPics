@@ -1,6 +1,7 @@
 """
 PostgreSQL functions for cur_profile() and cur_event_profile().
 Creates functions for accessing profile and event profile context using session variables.
+Uses static default values set from Python code instead of querying database tables.
 """
 
 from yoyo import step
@@ -148,6 +149,23 @@ steps = [
     ),
     step(
         """
+        -- Typed variant: Get profile context as UUID
+        CREATE OR REPLACE FUNCTION cur_profile_uuid(key TEXT) RETURNS UUID AS $$
+        DECLARE
+            val TEXT;
+        BEGIN
+            val := cur_profile(key);
+            IF val IS NULL OR val = '' THEN
+                RETURN NULL;
+            END IF;
+            RETURN val::UUID;
+        END;
+        $$ LANGUAGE plpgsql STABLE;
+        """,
+        "DROP FUNCTION IF EXISTS cur_profile_uuid(TEXT)"
+    ),
+    step(
+        """
         -- Typed variant: Get event profile context as TEXT
         CREATE OR REPLACE FUNCTION cur_event_profile_text(key TEXT) RETURNS TEXT AS $$
         BEGIN
@@ -190,6 +208,23 @@ steps = [
         $$ LANGUAGE plpgsql STABLE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_bool(TEXT)"
+    ),
+    step(
+        """
+        -- Typed variant: Get event profile context as UUID
+        CREATE OR REPLACE FUNCTION cur_event_profile_uuid(key TEXT) RETURNS UUID AS $$
+        DECLARE
+            val TEXT;
+        BEGIN
+            val := cur_event_profile(key);
+            IF val IS NULL OR val = '' THEN
+                RETURN NULL;
+            END IF;
+            RETURN val::UUID;
+        END;
+        $$ LANGUAGE plpgsql STABLE;
+        """,
+        "DROP FUNCTION IF EXISTS cur_event_profile_uuid(TEXT)"
     ),
 ]
 

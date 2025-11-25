@@ -14,20 +14,20 @@ steps = [
         -- settings
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            developer_id TEXT,
+            developer_id UUID,
             image_size_limit_bytes INTEGER DEFAULT 0,
             images_count_limit INTEGER DEFAULT 0,
             rekognition_calls_limit INTEGER DEFAULT 0,
             min_rank_to_create_event INTEGER DEFAULT 0,
-            event_in_deletion TEXT DEFAULT NULL
+            event_in_deletion UUID DEFAULT NULL
         );
         
         -- rekognition_usaged
         CREATE TABLE IF NOT EXISTS rekognition_usaged (
             usage_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            event_id TEXT NOT NULL,
+            event_id UUID NOT NULL,
             event_label TEXT NOT NULL,
-            profile_id TEXT NOT NULL,
+            profile_id UUID NOT NULL,
             profile_label TEXT NOT NULL,
             calls_count INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -44,7 +44,7 @@ steps = [
         
         -- events
         CREATE TABLE IF NOT EXISTS events (
-            event_id TEXT PRIMARY KEY NOT NULL,
+            event_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             name TEXT NOT NULL,
             date TEXT,
             url TEXT NOT NULL,
@@ -53,30 +53,30 @@ steps = [
             image_size_limit_bytes INTEGER NOT NULL DEFAULT 0,
             rekognition_calls_limit INTEGER NOT NULL DEFAULT 0,
             rekognition_calls_used INTEGER NOT NULL DEFAULT 0,
-            archive_album_id TEXT,
-            favorites_album_id TEXT,
-            unassociated_group_id TEXT,
-            representative_image TEXT,
+            archive_album_id UUID,
+            favorites_album_id UUID,
+            unassociated_group_id UUID,
+            representative_image UUID,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_by TEXT
+            created_by UUID
         );
         
         -- profiles
         CREATE TABLE IF NOT EXISTS profiles (
-            profile_id TEXT PRIMARY KEY NOT NULL,
+            profile_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             label TEXT NOT NULL,
             email TEXT,
             password TEXT NOT NULL,
             hierarchy_rank INTEGER DEFAULT 0 CHECK (hierarchy_rank >= 0),
             can_create_events BOOLEAN NOT NULL DEFAULT FALSE,
-            restricted_to_event TEXT DEFAULT NULL,
+            restricted_to_event UUID DEFAULT NULL,
             is_public BOOLEAN NOT NULL DEFAULT FALSE,
             public_access_code TEXT
         );
         
         -- profiles_preferences
         CREATE TABLE IF NOT EXISTS profiles_preferences (
-            profile_id TEXT NOT NULL,
+            profile_id UUID NOT NULL,
             preference_group TEXT NOT NULL,
             preference_key TEXT NOT NULL,
             preference_value TEXT NOT NULL,
@@ -86,7 +86,7 @@ steps = [
         -- refresh_tokens
         CREATE TABLE IF NOT EXISTS refresh_tokens (
             token_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            profile_id TEXT NOT NULL,
+            profile_id UUID NOT NULL,
             token TEXT NOT NULL UNIQUE,
             issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             expires_at TIMESTAMP NOT NULL,
@@ -99,7 +99,7 @@ steps = [
         -- notifications
         CREATE TABLE IF NOT EXISTS notifications (
             notification_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            profile_id TEXT NOT NULL,
+            profile_id UUID NOT NULL,
             message TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             read BOOLEAN NOT NULL DEFAULT FALSE,
@@ -111,7 +111,7 @@ steps = [
         -- feedbacks
         CREATE TABLE IF NOT EXISTS feedbacks (
             feedback_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            profile_id TEXT,
+            profile_id UUID,
             sender_name TEXT,
             sender_email TEXT,
             communication_consent BOOLEAN NOT NULL DEFAULT FALSE,
@@ -126,14 +126,14 @@ steps = [
             is_closed BOOLEAN NOT NULL DEFAULT FALSE,
             solved BOOLEAN NOT NULL DEFAULT FALSE,
             closed_at TIMESTAMP,
-            closed_by TEXT,
+            closed_by UUID,
             closed_details TEXT
         );
         
         -- events_profiles
         CREATE TABLE IF NOT EXISTS events_profiles (
-            event_id TEXT,
-            profile_id TEXT,
+            event_id UUID,
+            profile_id UUID,
             can_manage_event BOOLEAN NOT NULL DEFAULT FALSE,
             can_delete_event BOOLEAN NOT NULL DEFAULT FALSE,
             can_upload_and_delete_images BOOLEAN NOT NULL DEFAULT FALSE,
@@ -146,8 +146,8 @@ steps = [
         
         -- images
         CREATE TABLE IF NOT EXISTS images (
-            event_id TEXT NOT NULL,
-            image_id TEXT PRIMARY KEY NOT NULL,
+            event_id UUID NOT NULL,
+            image_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             label TEXT,
             date_taken TIMESTAMP,
             file_size INTEGER,
@@ -156,7 +156,7 @@ steps = [
             thumb_file_size INTEGER,
             width INTEGER,
             height INTEGER,
-            moment_id TEXT,
+            moment_id UUID,
             description TEXT,
             upload_id INTEGER,
             UNIQUE (event_id, label)
@@ -164,81 +164,78 @@ steps = [
         
         -- faces
         CREATE TABLE IF NOT EXISTS faces (
-            face_id TEXT PRIMARY KEY NOT NULL,
-            image_id TEXT NOT NULL,
+            face_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+            image_id UUID NOT NULL,
             face_width REAL,
             face_height REAL,
             face_left REAL,
             face_top REAL,
             file_size INTEGER,
-            group_id TEXT NOT NULL
+            group_id UUID NOT NULL
         );
         
         -- groups
         CREATE TABLE IF NOT EXISTS groups (
-            event_id TEXT NOT NULL,
-            group_id TEXT PRIMARY KEY NOT NULL,
+            event_id UUID NOT NULL,
+            group_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             label TEXT,
-            representative_face TEXT,
+            representative_face UUID,
             UNIQUE (event_id, label)
         );
         
         -- moments
         CREATE TABLE IF NOT EXISTS moments (
-            event_id TEXT NOT NULL,
-            moment_id TEXT PRIMARY KEY NOT NULL,
+            event_id UUID NOT NULL,
+            moment_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             label TEXT,
             description TEXT,
             start_date TIMESTAMP,
             end_date TIMESTAMP,
-            representative_image TEXT,
+            representative_image UUID,
             UNIQUE (event_id, label)
         );
         
         -- albums
         CREATE TABLE IF NOT EXISTS albums (
-            event_id TEXT NOT NULL,
-            album_id TEXT PRIMARY KEY NOT NULL,
+            event_id UUID NOT NULL,
+            album_id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
             label TEXT,
             description TEXT,
-            representative_image TEXT,
+            representative_image UUID,
             UNIQUE (event_id, label)
         );
         
         -- albums_images
         CREATE TABLE IF NOT EXISTS albums_images (
-            album_id TEXT NOT NULL,
-            image_id TEXT NOT NULL,
+            album_id UUID NOT NULL,
+            image_id UUID NOT NULL,
             PRIMARY KEY (album_id, image_id)
         );
         
-        -- events_profiles_images
-        CREATE TABLE IF NOT EXISTS events_profiles_images (
-            event_id TEXT,
-            profile_id TEXT,
-            image_id TEXT,
-            PRIMARY KEY (event_id, profile_id, image_id)
+        -- profiles_images
+        CREATE TABLE IF NOT EXISTS profiles_images (
+            profile_id UUID,
+            image_id UUID,
+            PRIMARY KEY (profile_id, image_id)
         );
         
-        -- events_profiles_groups
-        CREATE TABLE IF NOT EXISTS events_profiles_groups (
-            event_id TEXT,
-            profile_id TEXT,
-            group_id TEXT,
-            PRIMARY KEY (event_id, profile_id, group_id)
+        -- profiles_groups
+        CREATE TABLE IF NOT EXISTS profiles_groups (
+            profile_id UUID,
+            group_id UUID,
+            PRIMARY KEY (profile_id, group_id)
         );
         
-        -- events_profiles_albums
-        CREATE TABLE IF NOT EXISTS events_profiles_albums (
-            event_id TEXT,
-            profile_id TEXT,
-            album_id TEXT,
-            PRIMARY KEY (event_id, profile_id, album_id)
+        -- profiles_albums
+        CREATE TABLE IF NOT EXISTS profiles_albums (
+            profile_id UUID,
+            album_id UUID,
+            PRIMARY KEY (profile_id, album_id)
         );
         
         -- uploads
         CREATE TABLE IF NOT EXISTS uploads (
-            event_id TEXT,
+            event_id UUID,
             upload_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMP,
@@ -249,14 +246,14 @@ steps = [
             moments_count INTEGER,
             errors TEXT,
             notes TEXT,
-            profile_id TEXT
+            profile_id UUID
         );
         
         -- access_requests
         CREATE TABLE IF NOT EXISTS access_requests (
-            event_id TEXT,
+            event_id UUID,
             access_request_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-            profile_id TEXT NOT NULL,
+            profile_id UUID NOT NULL,
             requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             applicant_name TEXT,
             applicant_email TEXT,
@@ -265,18 +262,18 @@ steps = [
             communication_consent BOOLEAN NOT NULL DEFAULT FALSE,
             is_closed BOOLEAN NOT NULL DEFAULT FALSE,
             closed_at TIMESTAMP,
-            closed_by TEXT,
+            closed_by UUID,
             closed_details TEXT,
-            applicant_profile_id TEXT
+            applicant_profile_id UUID
         );
         
         -- access_requests_groups
         CREATE TABLE IF NOT EXISTS access_requests_groups (
             access_request_id INTEGER,
-            group_id TEXT,
+            group_id UUID,
             approved BOOLEAN DEFAULT NULL,
             closed_at TIMESTAMP,
-            closed_by TEXT,
+            closed_by UUID,
             closed_details TEXT,
             PRIMARY KEY (access_request_id, group_id)
         );
@@ -299,9 +296,9 @@ steps = [
         DROP TABLE IF EXISTS access_requests_groups CASCADE;
         DROP TABLE IF EXISTS access_requests CASCADE;
         DROP TABLE IF EXISTS uploads CASCADE;
-        DROP TABLE IF EXISTS events_profiles_albums CASCADE;
-        DROP TABLE IF EXISTS events_profiles_groups CASCADE;
-        DROP TABLE IF EXISTS events_profiles_images CASCADE;
+        DROP TABLE IF EXISTS profiles_albums CASCADE;
+        DROP TABLE IF EXISTS profiles_groups CASCADE;
+        DROP TABLE IF EXISTS profiles_images CASCADE;
         DROP TABLE IF EXISTS albums_images CASCADE;
         DROP TABLE IF EXISTS albums CASCADE;
         DROP TABLE IF EXISTS moments CASCADE;
@@ -454,31 +451,31 @@ steps = [
             ADD CONSTRAINT fk_albums_images_image_id 
             FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE;
         
-        -- Foreign keys for events_profiles_images
-        ALTER TABLE events_profiles_images
-            ADD CONSTRAINT fk_events_profiles_images_ep 
-            FOREIGN KEY (event_id, profile_id) REFERENCES events_profiles(event_id, profile_id) ON DELETE CASCADE;
+        -- Foreign keys for profiles_images
+        ALTER TABLE profiles_images
+            ADD CONSTRAINT fk_profiles_images_profile_id 
+            FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE;
         
-        ALTER TABLE events_profiles_images
-            ADD CONSTRAINT fk_events_profiles_images_image_id 
+        ALTER TABLE profiles_images
+            ADD CONSTRAINT fk_profiles_images_image_id 
             FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE;
         
-        -- Foreign keys for events_profiles_groups
-        ALTER TABLE events_profiles_groups
-            ADD CONSTRAINT fk_events_profiles_groups_ep 
-            FOREIGN KEY (event_id, profile_id) REFERENCES events_profiles(event_id, profile_id) ON DELETE CASCADE;
+        -- Foreign keys for profiles_groups
+        ALTER TABLE profiles_groups
+            ADD CONSTRAINT fk_profiles_groups_profile_id 
+            FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE;
         
-        ALTER TABLE events_profiles_groups
-            ADD CONSTRAINT fk_events_profiles_groups_group_id 
+        ALTER TABLE profiles_groups
+            ADD CONSTRAINT fk_profiles_groups_group_id 
             FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE;
         
-        -- Foreign keys for events_profiles_albums
-        ALTER TABLE events_profiles_albums
-            ADD CONSTRAINT fk_events_profiles_albums_ep 
-            FOREIGN KEY (event_id, profile_id) REFERENCES events_profiles(event_id, profile_id) ON DELETE CASCADE;
+        -- Foreign keys for profiles_albums
+        ALTER TABLE profiles_albums
+            ADD CONSTRAINT fk_profiles_albums_profile_id 
+            FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE;
         
-        ALTER TABLE events_profiles_albums
-            ADD CONSTRAINT fk_events_profiles_albums_album_id 
+        ALTER TABLE profiles_albums
+            ADD CONSTRAINT fk_profiles_albums_album_id 
             FOREIGN KEY (album_id) REFERENCES albums(album_id) ON DELETE CASCADE;
         
         -- Foreign keys for uploads
@@ -530,12 +527,12 @@ steps = [
         ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS fk_access_requests_event_id;
         ALTER TABLE uploads DROP CONSTRAINT IF EXISTS fk_uploads_profile_id;
         ALTER TABLE uploads DROP CONSTRAINT IF EXISTS fk_uploads_event_id;
-        ALTER TABLE events_profiles_albums DROP CONSTRAINT IF EXISTS fk_events_profiles_albums_album_id;
-        ALTER TABLE events_profiles_albums DROP CONSTRAINT IF EXISTS fk_events_profiles_albums_ep;
-        ALTER TABLE events_profiles_groups DROP CONSTRAINT IF EXISTS fk_events_profiles_groups_group_id;
-        ALTER TABLE events_profiles_groups DROP CONSTRAINT IF EXISTS fk_events_profiles_groups_ep;
-        ALTER TABLE events_profiles_images DROP CONSTRAINT IF EXISTS fk_events_profiles_images_image_id;
-        ALTER TABLE events_profiles_images DROP CONSTRAINT IF EXISTS fk_events_profiles_images_ep;
+        ALTER TABLE profiles_albums DROP CONSTRAINT IF EXISTS fk_profiles_albums_album_id;
+        ALTER TABLE profiles_albums DROP CONSTRAINT IF EXISTS fk_profiles_albums_profile_id;
+        ALTER TABLE profiles_groups DROP CONSTRAINT IF EXISTS fk_profiles_groups_group_id;
+        ALTER TABLE profiles_groups DROP CONSTRAINT IF EXISTS fk_profiles_groups_profile_id;
+        ALTER TABLE profiles_images DROP CONSTRAINT IF EXISTS fk_profiles_images_image_id;
+        ALTER TABLE profiles_images DROP CONSTRAINT IF EXISTS fk_profiles_images_profile_id;
         ALTER TABLE albums_images DROP CONSTRAINT IF EXISTS fk_albums_images_image_id;
         ALTER TABLE albums_images DROP CONSTRAINT IF EXISTS fk_albums_images_album_id;
         ALTER TABLE albums DROP CONSTRAINT IF EXISTS fk_albums_representative_image;
@@ -586,8 +583,6 @@ step(
         CREATE INDEX IF NOT EXISTS idx_faces_image_id_group_id ON faces(image_id, group_id); -- Reverse index for joins
         CREATE INDEX IF NOT EXISTS idx_events_profiles_profile_event ON events_profiles(profile_id, event_id);
         CREATE INDEX IF NOT EXISTS idx_events_profiles_composite ON events_profiles(event_id, profile_id, all_images, all_groups, can_edit);
-        CREATE INDEX IF NOT EXISTS idx_events_profiles_groups_group_profile ON events_profiles_groups(group_id, profile_id);
-        CREATE INDEX IF NOT EXISTS idx_events_profiles_albums_album_profile ON events_profiles_albums(album_id, profile_id);
         CREATE INDEX IF NOT EXISTS idx_albums_images_image_id ON albums_images(image_id);
         CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
         CREATE INDEX IF NOT EXISTS idx_uploads_started_at ON uploads(started_at);
@@ -598,8 +593,6 @@ step(
         DROP INDEX IF EXISTS idx_uploads_started_at;
         DROP INDEX IF EXISTS idx_uploads_status;
         DROP INDEX IF EXISTS idx_albums_images_image_id;
-        DROP INDEX IF EXISTS idx_events_profiles_albums_album_profile;
-        DROP INDEX IF EXISTS idx_events_profiles_groups_group_profile;
         DROP INDEX IF EXISTS idx_events_profiles_composite;
         DROP INDEX IF EXISTS idx_events_profiles_profile_event;
         DROP INDEX IF EXISTS idx_faces_image_id_group_id;
