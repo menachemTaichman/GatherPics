@@ -342,13 +342,13 @@ class DB:
                     'faces': {'relation_table': 'uploads_faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']},
                     'groups': {
                         'relation_table': 'uploads_groups',
-                        'fields_needed': ['label', 'representative_face', 'faces_count'],
-                        'relation_table_fields': ['group_faces_count', 'group_upload_faces_count']
+                        'fields_needed': ['label', 'representative_face'],
+                        'relation_table_fields': ['faces_count', 'upload_faces_count']
                     },
                     'moments': {
                         'relation_table': 'uploads_moments',
                         'fields_needed': ['label', 'representative_image', 'images_count'],
-                        'relation_table_fields': ['moment_images_count', 'moment_upload_images_count']
+                        'relation_table_fields': ['images_count', 'upload_images_count']
                     },
                 },
                 'serializable': {

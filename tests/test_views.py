@@ -24,7 +24,9 @@ class TestDBPerformance(unittest.TestCase):
     """Test database views performance with comprehensive test data."""
     
     PROFILE_ID = "89cb4967-0eba-48af-99cc-5e87407fb639"  # Developer profile
-    EVENT_ID = "test-performance-views-event"  # Hardcoded event ID for reuse
+    EVENT_ID_STR = "test-performance-views-event"  # Hardcoded event ID string for reuse
+    # Generate deterministic UUID from string for database
+    EVENT_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, EVENT_ID_STR))
 
     @classmethod
     def setUpClass(cls):
@@ -79,7 +81,58 @@ class TestDBPerformance(unittest.TestCase):
                         conn.commit()
                         
                         # Delete in proper order to avoid foreign key violations
-                        # Delete faces first (they reference images and groups)
+                        # Delete junction tables first (before referenced tables)
+                        
+                        # Delete access_requests_groups (references access_requests and groups)
+                        cursor.execute("""
+                            DELETE FROM access_requests_groups 
+                            WHERE access_request_id IN (
+                                SELECT access_request_id FROM access_requests WHERE event_id = %s
+                            )
+                        """, (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} access_requests_groups")
+                        
+                        # Delete access_requests (references events)
+                        cursor.execute("DELETE FROM access_requests WHERE event_id = %s", (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} access_requests")
+                        
+                        # Delete profiles_images (junction table - delete BEFORE images)
+                        cursor.execute("""
+                            DELETE FROM profiles_images 
+                            WHERE image_id IN (
+                                SELECT image_id FROM images WHERE event_id = %s
+                            )
+                        """, (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} profiles_images")
+                        
+                        # Delete profiles_groups (junction table - delete BEFORE groups)
+                        cursor.execute("""
+                            DELETE FROM profiles_groups 
+                            WHERE group_id IN (
+                                SELECT group_id FROM groups WHERE event_id = %s
+                            )
+                        """, (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} profiles_groups")
+                        
+                        # Delete profiles_albums (junction table - delete BEFORE albums)
+                        cursor.execute("""
+                            DELETE FROM profiles_albums 
+                            WHERE album_id IN (
+                                SELECT album_id FROM albums WHERE event_id = %s
+                            )
+                        """, (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} profiles_albums")
+                        
+                        # Delete albums_images (junction table - delete BEFORE albums and images)
+                        cursor.execute("""
+                            DELETE FROM albums_images 
+                            WHERE album_id IN (
+                                SELECT album_id FROM albums WHERE event_id = %s
+                            )
+                        """, (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} albums_images")
+                        
+                        # Delete faces (references images and groups)
                         cursor.execute("""
                             DELETE FROM faces 
                             WHERE image_id IN (
@@ -88,40 +141,33 @@ class TestDBPerformance(unittest.TestCase):
                         """, (cls.EVENT_ID,))
                         print(f"  Deleted {cursor.rowcount} faces")
                         
-                        # Delete groups (after faces are gone)
-                        cursor.execute("DELETE FROM groups WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} groups")
-                        
-                        # Delete images (after faces are gone)
+                        # Delete images (references events, moments, uploads)
                         cursor.execute("DELETE FROM images WHERE event_id = %s", (cls.EVENT_ID,))
                         print(f"  Deleted {cursor.rowcount} images")
                         
-                        # Delete albums_images
-                        cursor.execute("""
-                            DELETE FROM albums_images 
-                            WHERE album_id IN (
-                                SELECT album_id FROM albums WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} album_images")
+                        # Delete groups (references events)
+                        cursor.execute("DELETE FROM groups WHERE event_id = %s", (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} groups")
                         
-                        # Delete albums
+                        # Delete albums (references events)
                         cursor.execute("DELETE FROM albums WHERE event_id = %s", (cls.EVENT_ID,))
                         print(f"  Deleted {cursor.rowcount} albums")
                         
-                        # Delete moments
+                        # Delete moments (references events)
                         cursor.execute("DELETE FROM moments WHERE event_id = %s", (cls.EVENT_ID,))
                         print(f"  Deleted {cursor.rowcount} moments")
                         
-                        # Delete uploads
+                        # Delete uploads (references events)
                         cursor.execute("DELETE FROM uploads WHERE event_id = %s", (cls.EVENT_ID,))
                         print(f"  Deleted {cursor.rowcount} uploads")
                         
-                        # Delete events_profiles and related
-                        cursor.execute("DELETE FROM events_profiles_images WHERE event_id = %s", (cls.EVENT_ID,))
-                        cursor.execute("DELETE FROM events_profiles_groups WHERE event_id = %s", (cls.EVENT_ID,))
-                        cursor.execute("DELETE FROM events_profiles_albums WHERE event_id = %s", (cls.EVENT_ID,))
+                        # Delete events_profiles (references events and profiles)
                         cursor.execute("DELETE FROM events_profiles WHERE event_id = %s", (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} events_profiles")
+                        
+                        # Delete rekognition_usaged (references events)
+                        cursor.execute("DELETE FROM rekognition_usaged WHERE event_id = %s", (cls.EVENT_ID,))
+                        print(f"  Deleted {cursor.rowcount} rekognition_usaged")
                         
                         # Delete profiles where restricted_to_event = event_id
                         cursor.execute("DELETE FROM profiles WHERE restricted_to_event = %s", (cls.EVENT_ID,))
@@ -129,7 +175,7 @@ class TestDBPerformance(unittest.TestCase):
                         if deleted_profiles > 0:
                             print(f"  Deleted {deleted_profiles} profiles restricted to event")
                         
-                        # Delete from events table
+                        # Delete from events table (last)
                         cursor.execute("DELETE FROM events WHERE event_id = %s", (cls.EVENT_ID,))
                         conn.commit()
                         
@@ -167,19 +213,108 @@ class TestDBPerformance(unittest.TestCase):
         
         # Create event with hardcoded event_id
         # Get max limits from settings to ensure valid values
-        settings = gm.get_entities('settings', 1)
+        # Query settings table directly instead of using get_entities (which uses accessible_settings view)
+        settings = db.execute_query(
+            'SELECT * FROM settings WHERE id = 1',
+            return_format=ReturnFormat.DICT
+        )
         max_image_size = settings.get('image_size_limit_bytes', 13631488)  # Default ~13MB
         max_images_count = settings.get('images_count_limit', 6000)
         
-        cls.event_id = gm.create_event({
-            'event_id': cls.EVENT_ID,  # Use hardcoded ID
-            'name': f'Performance Test Event ({cls.EVENT_ID})',  # Make name unique
-            'url': cls.EVENT_ID,
-            'date': datetime.now().isoformat(),
-            'is_public': False,
-            'images_count_limit': min(10000, max_images_count),
-            'image_size_limit_bytes': max_image_size  # Use max allowed from settings
-        })
+        # Insert event directly into events table (bypassing accessible_events view)
+        db.execute_query("""
+            INSERT INTO events (event_id, name, url, date, is_public, images_count_limit, image_size_limit_bytes, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (event_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                url = EXCLUDED.url,
+                date = EXCLUDED.date,
+                is_public = EXCLUDED.is_public,
+                images_count_limit = EXCLUDED.images_count_limit,
+                image_size_limit_bytes = EXCLUDED.image_size_limit_bytes
+        """, (
+            cls.EVENT_ID,
+            f'Performance Test Event ({cls.EVENT_ID})',
+            cls.EVENT_ID,
+            datetime.now().isoformat(),
+            False,
+            min(10000, max_images_count),
+            max_image_size,
+            cls.PROFILE_ID
+        ))
+        
+        # Manually create default albums, groups, and developer profile entry
+        # (normally done by trg_ensure_defaults_in_event_insert trigger)
+        
+        # Get developer_id from settings
+        developer_id = db.execute_query(
+            'SELECT developer_id FROM settings WHERE id = 1',
+            return_format=ReturnFormat.VALUE
+        )
+        if not developer_id:
+            developer_id = cls.PROFILE_ID  # Fallback to test profile
+        
+        # Check if default albums/groups already exist, otherwise create them
+        archive_album = db.execute_query(
+            "SELECT album_id FROM albums WHERE event_id = %s AND label = 'Archive'",
+            (cls.EVENT_ID,),
+            return_format=ReturnFormat.DICT
+        )
+        if archive_album:
+            archive_album_id = archive_album.get('album_id')
+        else:
+            archive_album_id = str(uuid.uuid4())
+            db.execute_query("""
+                INSERT INTO albums (event_id, album_id, label)
+                VALUES (%s, %s, 'Archive')
+            """, (cls.EVENT_ID, archive_album_id))
+        
+        favorites_album = db.execute_query(
+            "SELECT album_id FROM albums WHERE event_id = %s AND label = 'Favorites'",
+            (cls.EVENT_ID,),
+            return_format=ReturnFormat.DICT
+        )
+        if favorites_album:
+            favorites_album_id = favorites_album.get('album_id')
+        else:
+            favorites_album_id = str(uuid.uuid4())
+            db.execute_query("""
+                INSERT INTO albums (event_id, album_id, label)
+                VALUES (%s, %s, 'Favorites')
+            """, (cls.EVENT_ID, favorites_album_id))
+        
+        unassociated_group = db.execute_query(
+            "SELECT group_id FROM groups WHERE event_id = %s AND label = 'Unassociated'",
+            (cls.EVENT_ID,),
+            return_format=ReturnFormat.DICT
+        )
+        if unassociated_group:
+            unassociated_group_id = unassociated_group.get('group_id')
+        else:
+            unassociated_group_id = str(uuid.uuid4())
+            db.execute_query("""
+                INSERT INTO groups (event_id, group_id, label)
+                VALUES (%s, %s, 'Unassociated')
+            """, (cls.EVENT_ID, unassociated_group_id))
+        
+        # Update event with default IDs (after albums and groups are created)
+        db.execute_query("""
+            UPDATE events SET
+                archive_album_id = %s,
+                favorites_album_id = %s,
+                unassociated_group_id = %s
+            WHERE event_id = %s
+        """, (archive_album_id, favorites_album_id, unassociated_group_id, cls.EVENT_ID))
+        
+        # Create events_profiles entry for developer
+        db.execute_query("""
+            INSERT INTO events_profiles (
+                event_id, profile_id, can_manage_event, can_delete_event,
+                can_upload_and_delete_images, can_edit, all_images, all_groups, all_albums
+            )
+            VALUES (%s, %s, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+            ON CONFLICT (event_id, profile_id) DO NOTHING
+        """, (cls.EVENT_ID, developer_id))
         
         # Ensure we're using the hardcoded ID
         cls.event_id = cls.EVENT_ID
@@ -433,9 +568,10 @@ class TestDBPerformance(unittest.TestCase):
         """Generate profiles with different access levels."""
         print("Generating profiles...")
         
-        cls.profiles = [
+        # Generate deterministic UUIDs for profile IDs
+        profile_data = [
             {
-                'profile_id': 'admin',
+                'profile_id_str': 'admin',
                 'label': 'Admin',
                 'email': 'admin@test.com',
                 'password': 'password',
@@ -444,7 +580,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'couple',
+                'profile_id_str': 'couple',
                 'label': 'Couple',
                 'email': 'couple@test.com',
                 'password': 'password',
@@ -453,7 +589,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'editor',
+                'profile_id_str': 'editor',
                 'label': 'Editor',
                 'email': 'editor@test.com',
                 'password': 'password',
@@ -462,7 +598,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'guest',
+                'profile_id_str': 'guest',
                 'label': 'Guest',
                 'email': 'guest@test.com',
                 'password': 'password',
@@ -471,7 +607,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'family',
+                'profile_id_str': 'family',
                 'label': 'Family',
                 'email': 'family@test.com',
                 'password': 'password',
@@ -480,7 +616,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'friends',
+                'profile_id_str': 'friends',
                 'label': 'Friends',
                 'email': 'friends@test.com',
                 'password': 'password',
@@ -489,7 +625,7 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             },
             {
-                'profile_id': 'no_access',
+                'profile_id_str': 'no_access',
                 'label': 'No Access',
                 'email': 'noaccess@test.com',
                 'password': 'password',
@@ -498,6 +634,21 @@ class TestDBPerformance(unittest.TestCase):
                 'is_public': False
             }
         ]
+        
+        # Convert profile_id_str to UUID
+        cls.profiles = []
+        for p in profile_data:
+            profile_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"test-profile-{p['profile_id_str']}"))
+            cls.profiles.append({
+                'profile_id': profile_id,
+                'profile_id_str': p['profile_id_str'],  # Keep for reference
+                'label': p['label'],
+                'email': p['email'],
+                'password': p['password'],
+                'hierarchy_rank': p['hierarchy_rank'],
+                'can_create_events': p['can_create_events'],
+                'is_public': p['is_public']
+            })
         
         # Create profiles - insert directly into profiles table if they don't exist
         db = cls.models.db
@@ -528,9 +679,10 @@ class TestDBPerformance(unittest.TestCase):
         db = cls.models.db
         for profile in cls.profiles:
             profile_id = profile['profile_id']
+            profile_id_str = profile.get('profile_id_str', '')
             
             # Determine permissions based on profile
-            if profile_id == 'admin':
+            if profile_id_str == 'admin':
                 can_manage = True
                 can_delete = True
                 can_upload = True
@@ -538,7 +690,7 @@ class TestDBPerformance(unittest.TestCase):
                 all_images = True
                 all_groups = True
                 all_albums = True
-            elif profile_id in ['couple', 'editor']:
+            elif profile_id_str in ['couple', 'editor']:
                 can_manage = True
                 can_delete = False
                 can_upload = True
@@ -575,31 +727,31 @@ class TestDBPerformance(unittest.TestCase):
             
             # For restricted profiles, add specific image access (batch insert)
             images_to_insert = []
-            if profile_id == 'guest':
+            if profile_id_str == 'guest':
                 # 50% of images
                 images_to_insert = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.5))
-            elif profile_id == 'family':
+            elif profile_id_str == 'family':
                 # 90% of images
                 images_to_insert = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.9))
-            elif profile_id == 'friends':
+            elif profile_id_str == 'friends':
                 # 80% of images
                 images_to_insert = random.sample(cls.image_ids, int(len(cls.image_ids) * 0.8))
             
-            # Batch insert events_profiles_images
+            # Batch insert profiles_images (no event_id column)
             if images_to_insert:
                 batch_size = 500
                 for i in range(0, len(images_to_insert), batch_size):
                     batch = images_to_insert[i:i+batch_size]
-                    row_placeholders = "(%s, %s, %s)"
+                    row_placeholders = "(%s, %s)"
                     value_placeholders = ", ".join([row_placeholders] * len(batch))
                     sql = f"""
-                        INSERT INTO events_profiles_images (event_id, profile_id, image_id)
+                        INSERT INTO profiles_images (profile_id, image_id)
                         VALUES {value_placeholders}
                         ON CONFLICT DO NOTHING
                     """
                     all_values = []
                     for image_id in batch:
-                        all_values.extend([cls.event_id, profile_id, image_id])
+                        all_values.extend([profile_id, image_id])
                     db.execute_query(sql, all_values)
         
         print(f"  Generated {len(cls.profiles)} profiles with access permissions")

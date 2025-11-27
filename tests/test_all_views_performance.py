@@ -68,60 +68,77 @@ def get_views_in_order():
     """Get views in the order they are created in migrations/0003_views.py.
     This ensures dependencies are tested before dependents."""
     return [
-        'accessible_settings',
-        'accessible_rekognition_usaged',
-        'albums_accessibility_base',
-        'groups_accessibility_base',
-        'images_accessibility_base',
-        'images_accessibility',
-        'faces_accessibility',
-        'groups_accessibility',
-        'groups_images',
-        'groups_to_request_access',
-        'moments_accessibility',
-        'albums_accessibility',
-        'accessible_events',
-        'accessible_profiles',
+        'settings_ctx',
+        'settings_ext',
+        'rekognition_usaged_ctx',
+        'rekognition_usaged_ext',
+        'profiles_ctx',
+        'profiles_ext',
         'my_preferences',
-        'my_notifications',
-        'accessible_my_notifications',
-        'accessible_notifications',
+        'my_notifications_ctx',
+        'my_notifications_ext',
         'feedbacks_details',
-        'my_feedbacks',
-        'accessible_my_feedbacks',
-        'accessible_feedbacks',
-        'current_profile_events',
-        'current_groups_to_request_access',
-        'current_profile',
-        'accessible_events_profiles',
-        'accessible_events_profiles_images',
-        'accessible_events_profiles_groups',
-        'accessible_events_profiles_albums',
-        'accessible_images',
-        'accessible_faces',
-        'accessible_groups_images',
-        'accessible_groups',
-        'accessible_moments',
+        'my_feedbacks_ctx',
+        'my_feedbacks_ext',
+        'feedbacks_ctx',
+        'feedbacks_ext',
+        'images_default_albums',
+        'groups_images',
         'albums_images_actual',
-        'accessible_albums_images',
-        'accessible_albums_images_actual',
-        'accessible_albums',
-        'uploads_details',
-        'accessible_uploads',
-        'uploads_groups',
-        'accessible_uploads_groups',
         'uploads_moments',
-        'accessible_uploads_moments',
+        'uploads_groups',
         'uploads_faces',
-        'accessible_uploads_faces',
-        'access_requests_groups_details',
+        'images_def',
+        'groups_def',
+        'albums_def',
+        'images_eff',
+        'faces_eff',
+        'groups_eff',
+        'moments_eff',
+        'albums_eff',
+        'events_ctx',
+        'images_ctx',
+        'faces_ctx',
+        'groups_ctx',
+        'groups_images_ctx',
+        'moments_ctx',
+        'albums_ctx',
+        'albums_images_ctx',
+        'albums_images_actual_ctx',
+        'uploads_ctx',
+        'uploads_groups_ctx',
+        'uploads_moments_ctx',
+        'uploads_faces_ctx',
+        'my_access_requests_ctx',
+        'my_access_requests_groups_ctx',
+        'access_requests_groups_ctx',
+        'access_requests_ctx',
+        'events_profiles_ctx',
+        'profiles_images_ctx',
+        'profiles_groups_ctx',
+        'profiles_albums_ctx',
         'access_requests_details',
-        'my_access_requests',
-        'accessible_my_access_requests',
-        'my_access_requests_groups',
-        'accessible_my_access_requests_groups',
-        'accessible_access_requests',
-        'accessible_access_requests_groups',
+        'images_ext',
+        'faces_ext',
+        'groups_ext',
+        'moments_ext',
+        'albums_ext',
+        'uploads_ext',
+        'uploads_groups_ext',
+        'uploads_faces_ext',
+        'uploads_moments_ext',
+        'my_access_requests_ext',
+        'my_access_requests_groups_ext',
+        'access_requests_ext',
+        'access_requests_groups_ext',
+        'events_profiles_ext',
+        'profiles_images_ext',
+        'profiles_groups_ext',
+        'profiles_albums_ext',
+        'events_ext',
+        'groups_to_access_requests_ctx',
+        'current_profile_events',
+        'current_profile',
         'current_event_profile',
     ]
 
@@ -318,13 +335,13 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
                         stopped_early = True
                         break
                 else:
-                    print(f"❌ {result['view']}: ERROR - {result['error']}")
+                    print(f"[ERROR] {result['view']}: ERROR - {result['error']}")
             else:
-                print(f"✓ {result['view']}: {result['time']:.4f}s ({result['rows']} rows)")
+                print(f"[OK] {result['view']}: {result['time']:.4f}s ({result['rows']} rows)")
                 
                 # Check if query exceeded timeout threshold (even if it completed)
                 if stop_on_timeout and timeout_seconds is not None and result['time'] is not None and result['time'] > timeout_seconds:
-                    print(f"\n⚠️  Query exceeded timeout threshold ({timeout_seconds}s) but completed in {result['time']:.4f}s")
+                    print(f"\n[WARNING] Query exceeded timeout threshold ({timeout_seconds}s) but completed in {result['time']:.4f}s")
                     # Get query plan for this slow query
                     try:
                         print(f"  Getting query plan for {result['view']}...")
@@ -359,7 +376,7 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
             print("ANALYZING SLOW VIEWS (Query Plans)")
             print("="*80)
             
-            for result in slow_views[:10]:  # Top 10 slowest
+            for result in slow_views[:20]:  # Top 20 slowest
                 print(f"\n{'='*80}")
                 print(f"VIEW: {result['view']}")
                 print(f"Time: {result['time']:.4f}s | Rows: {result['rows']}")
@@ -407,9 +424,9 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
             sorted_results = sorted(successful, key=lambda x: x['time'], reverse=True)
             
             print("\n" + "-"*80)
-            print("SLOWEST VIEWS (Top 10):")
+            print("SLOWEST VIEWS (Top 20):")
             print("-"*80)
-            for i, result in enumerate(sorted_results[:10], 1):
+            for i, result in enumerate(sorted_results[:20], 1):
                 print(f"{i:2}. {result['view']:50} {result['time']:8.4f}s ({result['rows']:6} rows)")
             
             # Identify views that might need optimization (> 1 second)
@@ -438,7 +455,7 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
                             print(f"      ... ({len(result['plan'].split('\n')) - 20} more lines)")
             
             if other_failed:
-                print(f"\n❌ Failed queries: {len(other_failed)}")
+                print(f"\n[ERROR] Failed queries: {len(other_failed)}")
                 for result in other_failed:
                     print(f"  {result['view']}: {result['error']}")
         

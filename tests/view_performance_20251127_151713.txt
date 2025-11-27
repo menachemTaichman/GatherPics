@@ -1,0 +1,1265 @@
+Event ID: 75cb6635-879d-4386-b023-366444dc0fb2
+Profile ID: 89cb4967-0eba-48af-99cc-5e87407fb639
+
+Fetching all views from database...
+Found 72 views
+
+Testing: groups_images...
+✓ groups_images: 0.0028s (133 rows)
+--------------------------------
+Testing: my_preferences...
+✓ my_preferences: 0.0046s (47 rows)
+--------------------------------
+Testing: feedbacks_details...
+✓ feedbacks_details: 0.0031s (12 rows)
+--------------------------------
+Testing: current_profile_events...
+✓ current_profile_events: 0.0027s (1 rows)
+--------------------------------
+Testing: current_profile...
+✓ current_profile: 0.0046s (1 rows)
+--------------------------------
+Testing: albums_images_actual...
+✓ albums_images_actual: 0.0058s (10 rows)
+--------------------------------
+Testing: uploads_groups...
+✓ uploads_groups: 0.0043s (20 rows)
+--------------------------------
+Testing: uploads_moments...
+✓ uploads_moments: 0.0030s (6 rows)
+--------------------------------
+Testing: uploads_faces...
+✓ uploads_faces: 0.0017s (25 rows)
+--------------------------------
+Testing: access_requests_details...
+✓ access_requests_details: 0.0315s (1 rows)
+--------------------------------
+Testing: current_event_profile...
+✓ current_event_profile: 0.1160s (1 rows)
+--------------------------------
+Testing: access_requests_ctx...
+✓ access_requests_ctx: 0.0340s (1 rows)
+--------------------------------
+Testing: access_requests_ext...
+✓ access_requests_ext: 0.0577s (1 rows)
+--------------------------------
+Testing: access_requests_groups_ctx...
+✓ access_requests_groups_ctx: 0.0341s (1 rows)
+--------------------------------
+Testing: access_requests_groups_ext...
+✓ access_requests_groups_ext: 0.0282s (1 rows)
+--------------------------------
+Testing: albums_ctx...
+✓ albums_ctx: 0.0097s (3 rows)
+--------------------------------
+Testing: albums_def...
+✓ albums_def: 0.0012s (15 rows)
+--------------------------------
+Testing: albums_eff...
+✓ albums_eff: 0.0090s (15 rows)
+--------------------------------
+Testing: albums_ext...
+✓ albums_ext: 0.0237s (3 rows)
+--------------------------------
+Testing: albums_images_actual_ctx...
+✓ albums_images_actual_ctx: 0.0135s (10 rows)
+--------------------------------
+Testing: albums_images_ctx...
+✓ albums_images_ctx: 0.0125s (29 rows)
+--------------------------------
+Testing: events_ctx...
+✓ events_ctx: 0.0020s (1 rows)
+--------------------------------
+Testing: events_ext...
+✓ events_ext: 0.0355s (1 rows)
+--------------------------------
+Testing: events_profiles_ctx...
+✓ events_profiles_ctx: 0.0038s (4 rows)
+--------------------------------
+Testing: events_profiles_ext...
+✓ events_profiles_ext: 0.0029s (4 rows)
+--------------------------------
+Testing: faces_ctx...
+✓ faces_ctx: 0.0103s (178 rows)
+--------------------------------
+Testing: faces_eff...
+✓ faces_eff: 0.0095s (890 rows)
+--------------------------------
+Testing: faces_ext...
+✓ faces_ext: 0.0087s (178 rows)
+--------------------------------
+Testing: feedbacks_ctx...
+✓ feedbacks_ctx: 0.0010s (12 rows)
+--------------------------------
+Testing: feedbacks_ext...
+✓ feedbacks_ext: 0.0021s (12 rows)
+--------------------------------
+Testing: groups_ctx...
+✓ groups_ctx: 0.0173s (33 rows)
+--------------------------------
+Testing: groups_def...
+✓ groups_def: 0.0033s (165 rows)
+--------------------------------
+Testing: groups_eff...
+✓ groups_eff: 0.0181s (165 rows)
+--------------------------------
+Testing: groups_ext...
+✓ groups_ext: 0.0502s (33 rows)
+--------------------------------
+Testing: groups_images_ctx...
+✓ groups_images_ctx: 0.0214s (133 rows)
+--------------------------------
+Testing: groups_to_access_requests_ctx...
+✓ groups_to_access_requests_ctx: 0.0064s (0 rows)
+--------------------------------
+Testing: images_ctx...
+✓ images_ctx: 0.0062s (34 rows)
+--------------------------------
+Testing: images_def...
+✓ images_def: 0.0017s (170 rows)
+--------------------------------
+Testing: images_default_albums...
+✓ images_default_albums: 0.0015s (34 rows)
+--------------------------------
+Testing: images_eff...
+✓ images_eff: 0.0033s (170 rows)
+--------------------------------
+Testing: images_ext...
+✓ images_ext: 0.0230s (34 rows)
+--------------------------------
+Testing: moments_ctx...
+✓ moments_ctx: 0.0075s (11 rows)
+--------------------------------
+Testing: moments_eff...
+✓ moments_eff: 0.0084s (55 rows)
+--------------------------------
+Testing: moments_ext...
+✓ moments_ext: 0.0180s (11 rows)
+--------------------------------
+Testing: my_access_requests_ctx...
+✓ my_access_requests_ctx: 0.0024s (0 rows)
+--------------------------------
+Testing: my_access_requests_ext...
+✓ my_access_requests_ext: 0.0322s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ctx...
+✓ my_access_requests_groups_ctx: 0.0030s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ext...
+✓ my_access_requests_groups_ext: 0.0483s (0 rows)
+--------------------------------
+Testing: my_feedbacks_ctx...
+✓ my_feedbacks_ctx: 0.0018s (11 rows)
+--------------------------------
+Testing: my_feedbacks_ext...
+✓ my_feedbacks_ext: 0.0024s (11 rows)
+--------------------------------
+Testing: my_notifications_ctx...
+✓ my_notifications_ctx: 0.0011s (13 rows)
+--------------------------------
+Testing: my_notifications_ext...
+✓ my_notifications_ext: 0.0011s (13 rows)
+--------------------------------
+Testing: profiles_albums_ctx...
+✓ profiles_albums_ctx: 0.0128s (1 rows)
+--------------------------------
+Testing: profiles_albums_ext...
+✓ profiles_albums_ext: 0.0133s (1 rows)
+--------------------------------
+Testing: profiles_ctx...
+✓ profiles_ctx: 0.0025s (4 rows)
+--------------------------------
+Testing: profiles_ext...
+✓ profiles_ext: 0.0022s (4 rows)
+--------------------------------
+Testing: profiles_groups_ctx...
+✓ profiles_groups_ctx: 0.0195s (1 rows)
+--------------------------------
+Testing: profiles_groups_ext...
+✓ profiles_groups_ext: 0.0220s (1 rows)
+--------------------------------
+Testing: profiles_images_ctx...
+✓ profiles_images_ctx: 0.0069s (1 rows)
+--------------------------------
+Testing: profiles_images_ext...
+✓ profiles_images_ext: 0.0060s (1 rows)
+--------------------------------
+Testing: rekognition_usaged_ctx...
+✓ rekognition_usaged_ctx: 0.0028s (2 rows)
+--------------------------------
+Testing: rekognition_usaged_ext...
+✓ rekognition_usaged_ext: 0.0012s (2 rows)
+--------------------------------
+Testing: settings_ctx...
+✓ settings_ctx: 0.0010s (1 rows)
+--------------------------------
+Testing: settings_ext...
+✓ settings_ext: 0.0010s (1 rows)
+--------------------------------
+Testing: uploads_ctx...
+✓ uploads_ctx: 0.0014s (3 rows)
+--------------------------------
+Testing: uploads_ext...
+✓ uploads_ext: 0.0014s (3 rows)
+--------------------------------
+Testing: uploads_faces_ctx...
+✓ uploads_faces_ctx: 0.0121s (25 rows)
+--------------------------------
+Testing: uploads_faces_ext...
+✓ uploads_faces_ext: 0.0108s (25 rows)
+--------------------------------
+Testing: uploads_groups_ctx...
+✓ uploads_groups_ctx: 0.0308s (20 rows)
+--------------------------------
+Testing: uploads_groups_ext...
+✓ uploads_groups_ext: 0.0630s (20 rows)
+--------------------------------
+Testing: uploads_moments_ctx...
+✓ uploads_moments_ctx: 0.0100s (6 rows)
+--------------------------------
+Testing: uploads_moments_ext...
+✓ uploads_moments_ext: 0.0163s (6 rows)
+--------------------------------
+
+================================================================================
+ANALYZING SLOW VIEWS (Query Plans)
+================================================================================
+
+================================================================================
+VIEW: current_event_profile
+Time: 0.1160s | Rows: 1
+================================================================================
+Nested Loop  (cost=76.99..150.76 rows=1 width=53) (actual time=2.273..2.332 rows=1.00 loops=1)
+  Output: ep.event_id, ep.profile_id, ep.can_manage_event, ep.can_delete_event, ep.can_upload_and_delete_images, ep.can_edit, ep.all_images, ep.all_groups, ep.all_albums, EXISTS(SubPlan 3), EXISTS(SubPlan 9), (ep.can_edit OR (InitPlan 13).col1), (ep.can_edit OR (InitPlan 16).col1), (ep.can_edit OR EXISTS(SubPlan 19)), (InitPlan 20).col1, (InitPlan 23).col1
+  Buffers: shared hit=207
+  InitPlan 13
+    ->  Nested Loop  (cost=0.42..22.78 rows=3 width=0) (never executed)
+          Inner Unique: true
+          ->  Nested Loop  (cost=0.28..20.45 rows=3 width=32) (never executed)
+                Output: i_5.image_id, i_6.image_id
+                Join Filter: (((ai_arc_2.image_id IS NULL) OR (ep_10.all_albums AND (pa_4.album_id IS NULL)) OR ((NOT ep_10.all_albums) AND (pa_4.album_id IS NOT NULL))) AND (a_6.album_id = e_5.archive_album_id))
+                ->  Nested Loop Left Join  (cost=0.28..15.44 rows=7 width=64) (never executed)
+                      Output: i_5.image_id, i_6.image_id, ai_arc_2.image_id, e_5.archive_album_id
+                      Inner Unique: true
+                      Join Filter: (e_6.archive_album_id = ai_arc_2.album_id)
+                      ->  Nested Loop  (cost=0.14..11.59 rows=7 width=64) (never executed)
+                            Output: i_5.image_id, i_6.image_id, e_6.archive_album_id, e_5.archive_album_id
+                            Inner Unique: true
+                            Join Filter: (i_6.event_id = e_6.event_id)
+                            ->  Nested Loop  (cost=0.14..10.47 rows=7 width=64) (never executed)
+                                  Output: i_5.image_id, i_6.event_id, i_6.image_id, e_5.archive_album_id
+                                  Inner Unique: true
+                                  ->  Nested Loop Left Join  (cost=0.00..6.88 rows=7 width=32) (never executed)
+                                        Output: i_5.image_id, e_5.archive_album_id
+                                        Inner Unique: true
+                                        Join Filter: (i_5.image_id = pi_2.image_id)
+                                        Filter: ((ep_9.all_images AND (pi_2.image_id IS NULL)) OR ((NOT ep_9.all_images) AND (pi_2.image_id IS NOT NULL)))
+                                        ->  Nested Loop  (cost=0.00..5.10 rows=34 width=33) (never executed)
+                                              Output: i_5.image_id, ep_9.all_images, e_5.archive_album_id
+                                              Join Filter: (i_5.event_id = ep_9.event_id)
+                                              ->  Nested Loop  (cost=0.00..3.33 rows=1 width=49) (never executed)
+                                                    Output: ep_9.event_id, ep_9.all_images, e_5.event_id, e_5.archive_album_id
+                                                    Inner Unique: true
+                                                    Join Filter: (e_5.event_id = ep_9.event_id)
+                                                    ->  Seq Scan on public.events_profiles ep_9  (cost=0.00..2.31 rows=1 width=33) (never executed)
+                                                          Output: ep_9.event_id, ep_9.profile_id, ep_9.can_manage_event, ep_9.can_delete_event, ep_9.can_upload_and_delete_images, ep_9.can_edit, ep_9.all_images, ep_9.all_groups, ep_9.all_albums
+                                                          Filter: ((ep_9.all_images OR (NOT ep_9.all_images)) AND (ep_9.profile_id = cur_profile_uuid('profile_id'::text)))
+                                                    ->  Seq Scan on public.events e_5  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                          Output: e_5.event_id, e_5.name, e_5.date, e_5.url, e_5.is_public, e_5.images_count_limit, e_5.image_size_limit_bytes, e_5.rekognition_calls_limit, e_5.rekognition_calls_used, e_5.archive_album_id, e_5.favorites_album_id, e_5.unassociated_group_id, e_5.representative_image, e_5.created_at, e_5.created_by
+                                              ->  Seq Scan on public.images i_5  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                    Output: i_5.event_id, i_5.image_id, i_5.label, i_5.date_taken, i_5.file_size, i_5.high_quality_file_size, i_5.display_file_size, i_5.thumb_file_size, i_5.width, i_5.height, i_5.moment_id, i_5.description, i_5.upload_id
+                                        ->  Materialize  (cost=0.00..1.27 rows=1 width=32) (never executed)
+                                              Output: pi_2.image_id, pi_2.profile_id
+                                              ->  Seq Scan on public.profiles_images pi_2  (cost=0.00..1.26 rows=1 width=32) (never executed)
+                                                    Output: pi_2.image_id, pi_2.profile_id
+                                                    Filter: (pi_2.profile_id = cur_profile_uuid('profile_id'::text))
+                                  ->  Index Only Scan using idx_images_event_id_image_id on public.images i_6  (cost=0.14..0.51 rows=1 width=32) (never executed)
+                                        Output: i_6.event_id, i_6.image_id
+                                        Index Cond: (i_6.image_id = i_5.image_id)
+                                        Heap Fetches: 0
+                                        Index Searches: 0
+                            ->  Materialize  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                  Output: e_6.event_id, e_6.archive_album_id, e_6.favorites_album_id
+                                  ->  Seq Scan on public.events e_6  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                        Output: e_6.event_id, e_6.archive_album_id, e_6.favorites_album_id
+                      ->  Index Scan using idx_albums_images_image_id on public.albums_images ai_arc_2  (cost=0.14..0.53 rows=2 width=32) (never executed)
+                            Output: ai_arc_2.album_id, ai_arc_2.image_id
+                            Index Cond: (ai_arc_2.image_id = i_6.image_id)
+                            Index Searches: 0
+                ->  Materialize  (cost=0.00..4.71 rows=3 width=33) (never executed)
+                      Output: a_6.album_id, ep_10.all_albums, pa_4.album_id
+                      ->  Nested Loop Left Join  (cost=0.00..4.69 rows=3 width=33) (never executed)
+                            Output: a_6.album_id, ep_10.all_albums, pa_4.album_id
+                            Inner Unique: true
+                            Join Filter: (a_6.album_id = pa_4.album_id)
+                            ->  Nested Loop  (cost=0.00..3.38 rows=3 width=17) (never executed)
+                                  Output: a_6.album_id, ep_10.all_albums
+                                  Join Filter: (a_6.event_id = ep_10.event_id)
+                                  ->  Seq Scan on public.events_profiles ep_10  (cost=0.00..2.31 rows=1 width=33) (never executed)
+                                        Output: ep_10.event_id, ep_10.profile_id, ep_10.can_manage_event, ep_10.can_delete_event, ep_10.can_upload_and_delete_images, ep_10.can_edit, ep_10.all_images, ep_10.all_groups, ep_10.all_albums
+                                        Filter: (ep_10.profile_id = cur_profile_uuid('profile_id'::text))
+                                  ->  Seq Scan on public.albums a_6  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                        Output: a_6.event_id, a_6.album_id, a_6.label, a_6.description, a_6.representative_image
+                            ->  Materialize  (cost=0.00..1.27 rows=1 width=32) (never executed)
+                                  Output: pa_4.album_id, pa_4.profile_id
+                                  ->  Seq Scan on public.profiles_albums pa_4  (cost=0.00..1.26 rows=1 width=32) (never executed)
+                                        Output: pa_4.album_id, pa_4.profile_id
+                                        Filter: (pa_4.profile_id = cur_profile_uuid('profile_id'::text))
+          ->  Index Scan using images_pkey on public.images i_4  (cost=0.14..0.76 rows=1 width=16) (never executed)
+                Output: i_4.event_id, i_4.image_id, i_4.label, i_4.date_taken, i_4.file_size, i_4.high_quality_file_size, i_4.display_file_size, i_4.thumb_file_size, i_4.width, i_4.height, i_4.moment_id, i_4.description, i_4.upload_id
+                Index Cond: (i_4.image_id = i_5.image_id)
+                Filter: (i_4.event_id = cur_event_profile_uuid('event_id'::text))
+                Index Searches: 0
+  InitPlan 16
+    ->  Nested Loop  (cost=2.47..268.80 rows=10 width=0) (never executed)
+          Inner Unique: true
+          ->  Hash Join  (cost=2.33..261.03 rows=10 width=16) (never executed)
+                Output: g_2.group_id
+                Inner Unique: true
+                Hash Cond: (g_2.event_id = ep_15.event_id)
+                Join Filter: (ep_15.can_edit OR (ANY ((g_2.group_id = (hashed SubPlan 15).col1) AND (ep_16.profile_id = (hashed SubPlan 15).col2))))
+                ->  Nested Loop Left Join  (cost=0.00..6.92 rows=13 width=80) (never executed)
+                      Output: g_2.event_id, g_2.group_id, e_10.event_id, ep_16.event_id, ep_16.profile_id
+                      Inner Unique: true
+                      Join Filter: (g_2.group_id = pg_1.group_id)
+                      Filter: ((ep_16.all_groups AND (pg_1.group_id IS NULL)) OR ((NOT ep_16.all_groups) AND (pg_1.group_id IS NOT NULL)))
+                      ->  Nested Loop  (cost=0.00..5.16 rows=33 width=81) (never executed)
+                            Output: g_2.event_id, g_2.group_id, e_10.event_id, ep_16.event_id, ep_16.profile_id, ep_16.all_groups
+                            Join Filter: ((ep_16.can_edit OR (g_2.group_id <> e_10.unassociated_group_id)) AND (g_2.event_id = e_10.event_id))
+                            ->  Nested Loop  (cost=0.00..3.33 rows=1 width=66) (never executed)
+                                  Output: e_10.event_id, e_10.unassociated_group_id, ep_16.event_id, ep_16.profile_id, ep_16.all_groups, ep_16.can_edit
+                                  Inner Unique: true
+                                  Join Filter: (e_10.event_id = ep_16.event_id)
+                                  ->  Seq Scan on public.events e_10  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                        Output: e_10.event_id, e_10.name, e_10.date, e_10.url, e_10.is_public, e_10.images_count_limit, e_10.image_size_limit_bytes, e_10.rekognition_calls_limit, e_10.rekognition_calls_used, e_10.archive_album_id, e_10.favorites_album_id, e_10.unassociated_group_id, e_10.representative_image, e_10.created_at, e_10.created_by
+                                  ->  Seq Scan on public.events_profiles ep_16  (cost=0.00..2.31 rows=1 width=34) (never executed)
+                                        Output: ep_16.event_id, ep_16.profile_id, ep_16.can_manage_event, ep_16.can_delete_event, ep_16.can_upload_and_delete_images, ep_16.can_edit, ep_16.all_images, ep_16.all_groups, ep_16.all_albums
+                                        Filter: ((ep_16.all_groups OR (NOT ep_16.all_groups)) AND (ep_16.profile_id = cur_profile_uuid('profile_id'::text)))
+                            ->  Seq Scan on public.groups g_2  (cost=0.00..1.33 rows=33 width=32) (never executed)
+                                  Output: g_2.event_id, g_2.group_id, g_2.label, g_2.representative_face
+                      ->  Materialize  (cost=0.00..1.27 rows=1 width=32) (never executed)
+                            Output: pg_1.group_id, pg_1.profile_id
+                            ->  Seq Scan on public.profiles_groups pg_1  (cost=0.00..1.26 rows=1 width=32) (never executed)
+                                  Output: pg_1.group_id, pg_1.profile_id
+                                  Filter: (pg_1.profile_id = cur_profile_uuid('profile_id'::text))
+                ->  Hash  (cost=2.31..2.31 rows=1 width=33) (never executed)
+                      Output: ep_15.event_id, ep_15.profile_id, ep_15.can_edit
+                      ->  Seq Scan on public.events_profiles ep_15  (cost=0.00..2.31 rows=1 width=33) (never executed)
+                            Output: ep_15.event_id, ep_15.profile_id, ep_15.can_edit
+                            Filter: (ep_15.profile_id = cur_profile_uuid('profile_id'::text))
+                SubPlan 15
+                  ->  Nested Loop  (cost=27.36..38.93 rows=18 width=32) (never executed)
+                        Output: f.group_id, ep_11.profile_id
+                        Inner Unique: true
+                        ->  Hash Join  (cost=27.21..33.98 rows=18 width=32) (never executed)
+                              Output: f_1.face_id, ep_11.profile_id
+                              Hash Cond: ((ep_13.profile_id = ep_14.profile_id) AND (f_1.group_id = g.group_id))
+                              ->  Hash Join  (cost=19.33..25.35 rows=56 width=80) (never executed)
+                                    Output: f_1.group_id, f_1.face_id, ep_11.profile_id, ep_12.profile_id, ep_13.profile_id
+                                    Hash Cond: (f_1.image_id = i_7.image_id)
+                                    ->  Seq Scan on public.faces f_1  (cost=0.00..4.78 rows=178 width=48) (never executed)
+                                          Output: f_1.face_id, f_1.image_id, f_1.face_width, f_1.face_height, f_1.face_left, f_1.face_top, f_1.file_size, f_1.group_id
+                                    ->  Hash  (cost=19.19..19.19 rows=11 width=96) (never executed)
+                                          Output: i_7.image_id, ep_11.profile_id, i_8.image_id, ep_12.profile_id, i_9.image_id, ep_13.profile_id
+                                          ->  Hash Join  (cost=13.22..19.19 rows=11 width=96) (never executed)
+                                                Output: i_7.image_id, ep_11.profile_id, i_8.image_id, ep_12.profile_id, i_9.image_id, ep_13.profile_id
+                                                Inner Unique: true
+                                                Hash Cond: ((i_7.event_id = ep_11.event_id) AND (ep_13.profile_id = ep_11.profile_id))
+                                                ->  Hash Join  (cost=12.09..17.98 rows=11 width=96) (never executed)
+                                                      Output: i_7.image_id, i_7.event_id, i_8.image_id, ep_12.profile_id, i_9.image_id, ep_13.profile_id
+                                                      Inner Unique: true
+                                                      Hash Cond: (i_8.image_id = i_7.image_id)
+                                                      ->  Hash Join  (cost=10.33..16.19 rows=11 width=64) (never executed)
+                                                            Output: i_8.image_id, ep_12.profile_id, i_9.image_id, ep_13.profile_id
+                                                            Hash Cond: ((e_7.archive_album_id = a_7.album_id) AND (ep_12.profile_id = ep_13.profile_id))
+                                                            Join Filter: ((ai_arc_3.image_id IS NULL) OR (ep_13.all_albums AND (pa_5.album_id IS NULL)) OR ((NOT ep_13.all_albums) AND (pa_5.album_id IS NOT NULL)))
+                                                            ->  Hash Left Join  (cost=6.67..11.93 rows=27 width=80) (never executed)
+                                                                  Output: i_8.image_id, ep_12.profile_id, i_9.image_id, ai_arc_3.image_id, e_7.archive_album_id
+                                                                  Inner Unique: true
+                                                                  Hash Cond: ((e_8.archive_album_id = ai_arc_3.album_id) AND (i_9.image_id = ai_arc_3.image_id))
+                                                                  ->  Nested Loop  (cost=4.95..10.06 rows=27 width=80) (never executed)
+                                                                        Output: i_8.image_id, ep_12.profile_id, i_9.image_id, e_8.archive_album_id, e_7.archive_album_id
+                                                                        Join Filter: (i_9.event_id = e_8.event_id)
+                                                                        ->  Seq Scan on public.events e_8  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                                                              Output: e_8.event_id, e_8.name, e_8.date, e_8.url, e_8.is_public, e_8.images_count_limit, e_8.image_size_limit_bytes, e_8.rekognition_calls_limit, e_8.rekognition_calls_used, e_8.archive_album_id, e_8.favorites_album_id, e_8.unassociated_group_id, e_8.representative_image, e_8.created_at, e_8.created_by
+                                                                        ->  Hash Join  (cost=4.95..8.71 rows=27 width=80) (never executed)
+                                                                              Output: i_8.image_id, ep_12.profile_id, i_9.event_id, i_9.image_id, e_7.archive_album_id
+                                                                              Inner Unique: true
+                                                                              Hash Cond: (i_8.image_id = i_9.image_id)
+                                                                              ->  Hash Left Join  (cost=3.19..6.87 rows=27 width=48) (never executed)
+                                                                                    Output: i_8.image_id, ep_12.profile_id, e_7.archive_album_id
+                                                                                    Inner Unique: true
+                                                                                    Hash Cond: ((i_8.image_id = pi_3.image_id) AND (ep_12.profile_id = pi_3.profile_id))
+                                                                                    Filter: ((ep_12.all_images AND (pi_3.image_id IS NULL)) OR ((NOT ep_12.all_images) AND (pi_3.image_id IS NOT NULL)))
+                                                                                    ->  Hash Join  (cost=2.16..5.12 rows=136 width=49) (never executed)
+                                                                                          Output: i_8.image_id, ep_12.profile_id, ep_12.all_images, e_7.archive_album_id
+                                                                                          Hash Cond: (i_8.event_id = ep_12.event_id)
+                                                                                          ->  Seq Scan on public.images i_8  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                                                Output: i_8.event_id, i_8.image_id, i_8.label, i_8.date_taken, i_8.file_size, i_8.high_quality_file_size, i_8.display_file_size, i_8.thumb_file_size, i_8.width, i_8.height, i_8.moment_id, i_8.description, i_8.upload_id
+                                                                                          ->  Hash  (cost=2.11..2.11 rows=4 width=65) (never executed)
+                                                                                                Output: ep_12.event_id, ep_12.profile_id, ep_12.all_images, e_7.event_id, e_7.archive_album_id
+                                                                                                ->  Nested Loop  (cost=0.00..2.11 rows=4 width=65) (never executed)
+                                                                                                      Output: ep_12.event_id, ep_12.profile_id, ep_12.all_images, e_7.event_id, e_7.archive_album_id
+                                                                                                      Join Filter: (e_7.event_id = ep_12.event_id)
+                                                                                                      ->  Seq Scan on public.events e_7  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                            Output: e_7.event_id, e_7.name, e_7.date, e_7.url, e_7.is_public, e_7.images_count_limit, e_7.image_size_limit_bytes, e_7.rekognition_calls_limit, e_7.rekognition_calls_used, e_7.archive_album_id, e_7.favorites_album_id, e_7.unassociated_group_id, e_7.representative_image, e_7.created_at, e_7.created_by
+                                                                                                      ->  Seq Scan on public.events_profiles ep_12  (cost=0.00..1.05 rows=4 width=33) (never executed)
+                                                                                                            Output: ep_12.event_id, ep_12.profile_id, ep_12.can_manage_event, ep_12.can_delete_event, ep_12.can_upload_and_delete_images, ep_12.can_edit, ep_12.all_images, ep_12.all_groups, ep_12.all_albums
+                                                                                                            Filter: (ep_12.all_images OR (NOT ep_12.all_images))
+                                                                                    ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                                                          Output: pi_3.image_id, pi_3.profile_id
+                                                                                          ->  Seq Scan on public.profiles_images pi_3  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                Output: pi_3.image_id, pi_3.profile_id
+                                                                              ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                                                    Output: i_9.event_id, i_9.image_id
+                                                                                    ->  Seq Scan on public.images i_9  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                                          Output: i_9.event_id, i_9.image_id
+                                                                  ->  Hash  (cost=1.29..1.29 rows=29 width=32) (never executed)
+                                                                        Output: ai_arc_3.image_id, ai_arc_3.album_id
+                                                                        ->  Seq Scan on public.albums_images ai_arc_3  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                                                                              Output: ai_arc_3.image_id, ai_arc_3.album_id
+                                                            ->  Hash  (cost=3.43..3.43 rows=15 width=49) (never executed)
+                                                                  Output: a_7.album_id, ep_13.profile_id, ep_13.all_albums, pa_5.album_id
+                                                                  ->  Hash Left Join  (cost=1.02..3.43 rows=15 width=49) (never executed)
+                                                                        Output: a_7.album_id, ep_13.profile_id, ep_13.all_albums, pa_5.album_id
+                                                                        Inner Unique: true
+                                                                        Hash Cond: ((a_7.album_id = pa_5.album_id) AND (ep_13.profile_id = pa_5.profile_id))
+                                                                        ->  Nested Loop  (cost=0.00..2.31 rows=15 width=33) (never executed)
+                                                                              Output: a_7.album_id, ep_13.profile_id, ep_13.all_albums
+                                                                              Join Filter: (a_7.event_id = ep_13.event_id)
+                                                                              ->  Seq Scan on public.events_profiles ep_13  (cost=0.00..1.05 rows=5 width=33) (never executed)
+                                                                                    Output: ep_13.event_id, ep_13.profile_id, ep_13.can_manage_event, ep_13.can_delete_event, ep_13.can_upload_and_delete_images, ep_13.can_edit, ep_13.all_images, ep_13.all_groups, ep_13.all_albums
+                                                                              ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (never executed)
+                                                                                    Output: a_7.event_id, a_7.album_id
+                                                                                    ->  Seq Scan on public.albums a_7  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                                                                          Output: a_7.event_id, a_7.album_id
+                                                                        ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                                              Output: pa_5.album_id, pa_5.profile_id
+                                                                              ->  Seq Scan on public.profiles_albums pa_5  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                    Output: pa_5.album_id, pa_5.profile_id
+                                                      ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                            Output: i_7.image_id, i_7.event_id
+                                                            ->  Seq Scan on public.images i_7  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                  Output: i_7.image_id, i_7.event_id
+                                                ->  Hash  (cost=1.05..1.05 rows=5 width=32) (never executed)
+                                                      Output: ep_11.profile_id, ep_11.event_id
+                                                      ->  Seq Scan on public.events_profiles ep_11  (cost=0.00..1.05 rows=5 width=32) (never executed)
+                                                            Output: ep_11.profile_id, ep_11.event_id
+                              ->  Hash  (cost=7.11..7.11 rows=52 width=32) (never executed)
+                                    Output: g.group_id, ep_14.profile_id
+                                    ->  Hash Left Join  (cost=3.19..7.11 rows=52 width=32) (never executed)
+                                          Output: g.group_id, ep_14.profile_id
+                                          Inner Unique: true
+                                          Hash Cond: ((g.group_id = pg.group_id) AND (ep_14.profile_id = pg.profile_id))
+                                          Filter: ((ep_14.all_groups AND (pg.group_id IS NULL)) OR ((NOT ep_14.all_groups) AND (pg.group_id IS NOT NULL)))
+                                          ->  Hash Join  (cost=2.16..5.39 rows=130 width=33) (never executed)
+                                                Output: g.group_id, ep_14.profile_id, ep_14.all_groups
+                                                Hash Cond: (g.event_id = e_9.event_id)
+                                                Join Filter: (ep_14.can_edit OR (g.group_id <> e_9.unassociated_group_id))
+                                                ->  Seq Scan on public.groups g  (cost=0.00..1.33 rows=33 width=32) (never executed)
+                                                      Output: g.event_id, g.group_id, g.label, g.representative_face
+                                                ->  Hash  (cost=2.11..2.11 rows=4 width=66) (never executed)
+                                                      Output: e_9.event_id, e_9.unassociated_group_id, ep_14.event_id, ep_14.profile_id, ep_14.all_groups, ep_14.can_edit
+                                                      ->  Nested Loop  (cost=0.00..2.11 rows=4 width=66) (never executed)
+                                                            Output: e_9.event_id, e_9.unassociated_group_id, ep_14.event_id, ep_14.profile_id, ep_14.all_groups, ep_14.can_edit
+                                                            Join Filter: (e_9.event_id = ep_14.event_id)
+                                                            ->  Seq Scan on public.events e_9  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                  Output: e_9.event_id, e_9.name, e_9.date, e_9.url, e_9.is_public, e_9.images_count_limit, e_9.image_size_limit_bytes, e_9.rekognition_calls_limit, e_9.rekognition_calls_used, e_9.archive_album_id, e_9.favorites_album_id, e_9.unassociated_group_id, e_9.representative_image, e_9.created_at, e_9.created_by
+                                                            ->  Seq Scan on public.events_profiles ep_14  (cost=0.00..1.05 rows=4 width=34) (never executed)
+                                                                  Output: ep_14.event_id, ep_14.profile_id, ep_14.can_manage_event, ep_14.can_delete_event, ep_14.can_upload_and_delete_images, ep_14.can_edit, ep_14.all_images, ep_14.all_groups, ep_14.all_albums
+                                                                  Filter: (ep_14.all_groups OR (NOT ep_14.all_groups))
+                                          ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                Output: pg.group_id, pg.profile_id
+                                                ->  Seq Scan on public.profiles_groups pg  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                      Output: pg.group_id, pg.profile_id
+                        ->  Index Scan using faces_pkey on public.faces f  (cost=0.14..0.27 rows=1 width=32) (never executed)
+                              Output: f.face_id, f.image_id, f.face_width, f.face_height, f.face_left, f.face_top, f.file_size, f.group_id
+                              Index Cond: (f.face_id = f_1.face_id)
+                              Index Searches: 0
+          ->  Index Scan using groups_pkey on public.groups g_1  (cost=0.14..0.77 rows=1 width=16) (never executed)
+                Output: g_1.event_id, g_1.group_id, g_1.label, g_1.representative_face
+                Index Cond: (g_1.group_id = g_2.group_id)
+                Filter: (g_1.event_id = cur_event_profile_uuid('event_id'::text))
+                Index Searches: 0
+  InitPlan 20
+    ->  Nested Loop Left Join  (cost=24.40..31.35 rows=2 width=0) (actual time=1.813..1.818 rows=0.00 loops=1)
+          Inner Unique: true
+          Join Filter: (g_3.group_id = pg_2.group_id)
+          Filter: ((((NOT ep_21.all_groups) OR (pg_2.group_id IS NOT NULL)) AND (ep_21.all_groups OR (pg_2.group_id IS NULL))) OR ((NOT ep_21.can_edit) AND (g_3.group_id = e_13.unassociated_group_id)))
+          Rows Removed by Filter: 33
+          Buffers: shared hit=183
+          ->  Nested Loop  (cost=24.40..30.03 rows=3 width=34) (actual time=0.531..1.797 rows=33.00 loops=1)
+                Output: g_3.group_id, e_13.unassociated_group_id, ep_21.all_groups, ep_21.can_edit
+                Inner Unique: true
+                Buffers: shared hit=182
+                ->  Nested Loop  (cost=24.26..29.17 rows=1 width=34) (actual time=0.520..1.630 rows=33.00 loops=1)
+                      Output: e_13.unassociated_group_id, f_2.group_id, ep_21.all_groups, ep_21.can_edit
+                      Buffers: shared hit=116
+                      ->  Nested Loop  (cost=24.26..25.58 rows=1 width=32) (actual time=0.506..0.519 rows=33.00 loops=1)
+                            Output: e_13.unassociated_group_id, f_2.group_id
+                            Buffers: shared hit=83
+                            ->  Seq Scan on public.events e_13  (cost=0.00..1.26 rows=1 width=32) (actual time=0.009..0.010 rows=1.00 loops=1)
+                                  Output: e_13.event_id, e_13.name, e_13.date, e_13.url, e_13.is_public, e_13.images_count_limit, e_13.image_size_limit_bytes, e_13.rekognition_calls_limit, e_13.rekognition_calls_used, e_13.archive_album_id, e_13.favorites_album_id, e_13.unassociated_group_id, e_13.representative_image, e_13.created_at, e_13.created_by
+                                  Filter: (e_13.event_id = cur_event_profile_uuid('event_id'::text))
+                                  Buffers: shared hit=1
+                            ->  HashAggregate  (cost=24.26..24.29 rows=3 width=16) (actual time=0.496..0.506 rows=33.00 loops=1)
+                                  Output: f_2.group_id
+                                  Group Key: f_2.group_id
+                                  Batches: 1  Memory Usage: 32kB
+                                  Buffers: shared hit=82
+                                  ->  Hash Join  (cost=23.41..24.25 rows=3 width=16) (actual time=0.440..0.478 rows=133.00 loops=1)
+                                        Output: f_2.group_id
+                                        Hash Cond: (f_2.image_id = i_13.image_id)
+                                        Buffers: shared hit=82
+                                        ->  HashAggregate  (cost=5.67..6.01 rows=34 width=32) (actual time=0.068..0.082 rows=133.00 loops=1)
+                                              Output: f_2.group_id, f_2.image_id
+                                              Group Key: f_2.group_id, f_2.image_id
+                                              Batches: 1  Memory Usage: 40kB
+                                              Buffers: shared hit=3
+                                              ->  Seq Scan on public.faces f_2  (cost=0.00..4.78 rows=178 width=32) (actual time=0.010..0.018 rows=178.00 loops=1)
+                                                    Output: f_2.face_id, f_2.image_id, f_2.face_width, f_2.face_height, f_2.face_left, f_2.face_top, f_2.file_size, f_2.group_id
+                                                    Buffers: shared hit=3
+                                        ->  Hash  (cost=17.71..17.71 rows=3 width=48) (actual time=0.367..0.370 rows=34.00 loops=1)
+                                              Output: i_12.image_id, i_13.image_id, i_14.image_id
+                                              Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                              Buffers: shared hit=79
+                                              ->  Nested Loop  (cost=10.73..17.71 rows=3 width=48) (actual time=0.195..0.363 rows=34.00 loops=1)
+                                                    Output: i_12.image_id, i_13.image_id, i_14.image_id
+                                                    Inner Unique: true
+                                                    Buffers: shared hit=79
+                                                    ->  Hash Join  (cost=10.59..15.38 rows=3 width=32) (actual time=0.184..0.206 rows=34.00 loops=1)
+                                                          Output: i_13.image_id, i_14.image_id
+                                                          Hash Cond: (a_11.album_id = e_14.archive_album_id)
+                                                          Join Filter: ((ai_arc_5.image_id IS NULL) OR (ep_23.all_albums AND (pa_8.album_id IS NULL)) OR ((NOT ep_23.all_albums) AND (pa_8.album_id IS NOT NULL)))
+                                                          Buffers: shared hit=11
+                                                          ->  Nested Loop Left Join  (cost=0.00..4.69 rows=3 width=33) (actual time=0.025..0.039 rows=3.00 loops=1)
+                                                                Output: a_11.album_id, ep_23.all_albums, pa_8.album_id
+                                                                Inner Unique: true
+                                                                Join Filter: (a_11.album_id = pa_8.album_id)
+                                                                Buffers: shared hit=3
+                                                                ->  Nested Loop  (cost=0.00..3.38 rows=3 width=17) (actual time=0.014..0.027 rows=3.00 loops=1)
+                                                                      Output: a_11.album_id, ep_23.all_albums
+                                                                      Join Filter: (a_11.event_id = ep_23.event_id)
+                                                                      Buffers: shared hit=2
+                                                                      ->  Seq Scan on public.events_profiles ep_23  (cost=0.00..2.31 rows=1 width=33) (actual time=0.009..0.021 rows=1.00 loops=1)
+                                                                            Output: ep_23.event_id, ep_23.profile_id, ep_23.can_manage_event, ep_23.can_delete_event, ep_23.can_upload_and_delete_images, ep_23.can_edit, ep_23.all_images, ep_23.all_groups, ep_23.all_albums
+                                                                            Filter: (ep_23.profile_id = cur_profile_uuid('profile_id'::text))
+                                                                            Rows Removed by Filter: 4
+                                                                            Buffers: shared hit=1
+                                                                      ->  Seq Scan on public.albums a_11  (cost=0.00..1.03 rows=3 width=32) (actual time=0.004..0.005 rows=3.00 loops=1)
+                                                                            Output: a_11.event_id, a_11.album_id, a_11.label, a_11.description, a_11.representative_image
+                                                                            Buffers: shared hit=1
+                                                                ->  Materialize  (cost=0.00..1.27 rows=1 width=32) (actual time=0.004..0.004 rows=0.00 loops=3)
+                                                                      Output: pa_8.album_id, pa_8.profile_id
+                                                                      Storage: Memory  Maximum Storage: 17kB
+                                                                      Buffers: shared hit=1
+                                                                      ->  Seq Scan on public.profiles_albums pa_8  (cost=0.00..1.26 rows=1 width=32) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                                                            Output: pa_8.album_id, pa_8.profile_id
+                                                                            Filter: (pa_8.profile_id = cur_profile_uuid('profile_id'::text))
+                                                                            Rows Removed by Filter: 1
+                                                                            Buffers: shared hit=1
+                                                          ->  Hash  (cost=10.50..10.50 rows=7 width=64) (actual time=0.155..0.157 rows=34.00 loops=1)
+                                                                Output: i_13.image_id, i_14.image_id, ai_arc_5.image_id, e_14.archive_album_id
+                                                                Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                                                Buffers: shared hit=8
+                                                                ->  Nested Loop  (cost=7.88..10.50 rows=7 width=64) (actual time=0.134..0.150 rows=34.00 loops=1)
+                                                                      Output: i_13.image_id, i_14.image_id, ai_arc_5.image_id, e_14.archive_album_id
+                                                                      Join Filter: (e_14.event_id = i_13.event_id)
+                                                                      Buffers: shared hit=8
+                                                                      ->  Seq Scan on public.events e_14  (cost=0.00..1.01 rows=1 width=32) (actual time=0.014..0.014 rows=1.00 loops=1)
+                                                                            Output: e_14.event_id, e_14.name, e_14.date, e_14.url, e_14.is_public, e_14.images_count_limit, e_14.image_size_limit_bytes, e_14.rekognition_calls_limit, e_14.rekognition_calls_used, e_14.archive_album_id, e_14.favorites_album_id, e_14.unassociated_group_id, e_14.representative_image, e_14.created_at, e_14.created_by
+                                                                            Buffers: shared hit=1
+                                                                      ->  Hash Right Join  (cost=7.88..9.40 rows=7 width=80) (actual time=0.120..0.132 rows=34.00 loops=1)
+                                                                            Output: i_13.event_id, i_13.image_id, ep_22.event_id, i_14.image_id, ai_arc_5.image_id
+                                                                            Hash Cond: ((ai_arc_5.album_id = e_15.archive_album_id) AND (ai_arc_5.image_id = i_14.image_id))
+                                                                            Buffers: shared hit=7
+                                                                            ->  Seq Scan on public.albums_images ai_arc_5  (cost=0.00..1.29 rows=29 width=32) (actual time=0.006..0.007 rows=29.00 loops=1)
+                                                                                  Output: ai_arc_5.album_id, ai_arc_5.image_id
+                                                                                  Buffers: shared hit=1
+                                                                            ->  Hash  (cost=7.77..7.77 rows=7 width=80) (actual time=0.111..0.112 rows=34.00 loops=1)
+                                                                                  Output: i_13.event_id, i_13.image_id, ep_22.event_id, i_14.image_id, e_15.archive_album_id
+                                                                                  Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                                                  Buffers: shared hit=6
+                                                                                  ->  Nested Loop  (cost=5.14..7.77 rows=7 width=80) (actual time=0.092..0.104 rows=34.00 loops=1)
+                                                                                        Output: i_13.event_id, i_13.image_id, ep_22.event_id, i_14.image_id, e_15.archive_album_id
+                                                                                        Join Filter: (i_14.event_id = e_15.event_id)
+                                                                                        Buffers: shared hit=6
+                                                                                        ->  Seq Scan on public.events e_15  (cost=0.00..1.01 rows=1 width=48) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                                                                              Output: e_15.event_id, e_15.name, e_15.date, e_15.url, e_15.is_public, e_15.images_count_limit, e_15.image_size_limit_bytes, e_15.rekognition_calls_limit, e_15.rekognition_calls_used, e_15.archive_album_id, e_15.favorites_album_id, e_15.unassociated_group_id, e_15.representative_image, e_15.created_at, e_15.created_by
+                                                                                              Buffers: shared hit=1
+                                                                                        ->  Hash Join  (cost=5.14..6.67 rows=7 width=80) (actual time=0.088..0.098 rows=34.00 loops=1)
+                                                                                              Output: i_13.event_id, i_13.image_id, ep_22.event_id, i_14.event_id, i_14.image_id
+                                                                                              Hash Cond: (i_14.image_id = i_13.image_id)
+                                                                                              Buffers: shared hit=5
+                                                                                              ->  Seq Scan on public.images i_14  (cost=0.00..1.34 rows=34 width=32) (actual time=0.019..0.021 rows=34.00 loops=1)
+                                                                                                    Output: i_14.event_id, i_14.image_id, i_14.label, i_14.date_taken, i_14.file_size, i_14.high_quality_file_size, i_14.display_file_size, i_14.thumb_file_size, i_14.width, i_14.height, i_14.moment_id, i_14.description, i_14.upload_id
+                                                                                                    Buffers: shared hit=1
+                                                                                              ->  Hash  (cost=5.05..5.05 rows=7 width=48) (actual time=0.065..0.066 rows=34.00 loops=1)
+                                                                                                    Output: i_13.event_id, i_13.image_id, ep_22.event_id
+                                                                                                    Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                                                                                    Buffers: shared hit=4
+                                                                                                    ->  Hash Left Join  (cost=1.67..5.05 rows=7 width=48) (actual time=0.042..0.061 rows=34.00 loops=1)
+                                                                                                          Output: i_13.event_id, i_13.image_id, ep_22.event_id
+                                                                                                          Inner Unique: true
+                                                                                                          Hash Cond: (i_13.image_id = pi_5.image_id)
+                                                                                                          Filter: ((ep_22.all_images AND (pi_5.image_id IS NULL)) OR ((NOT ep_22.all_images) AND (pi_5.image_id IS NOT NULL)))
+                                                                                                          Buffers: shared hit=4
+                                                                                                          ->  Nested Loop  (cost=0.39..3.67 rows=34 width=49) (actual time=0.027..0.042 rows=34.00 loops=1)
+                                                                                                                Output: i_13.event_id, i_13.image_id, ep_22.event_id, ep_22.all_images
+                                                                                                                Inner Unique: true
+                                                                                                                Buffers: shared hit=3
+                                                                                                                ->  Seq Scan on public.images i_13  (cost=0.00..1.34 rows=34 width=32) (actual time=0.003..0.005 rows=34.00 loops=1)
+                                                                                                                      Output: i_13.event_id, i_13.image_id, i_13.label, i_13.date_taken, i_13.file_size, i_13.high_quality_file_size, i_13.display_file_size, i_13.thumb_file_size, i_13.width, i_13.height, i_13.moment_id, i_13.description, i_13.upload_id
+                                                                                                                      Buffers: shared hit=1
+                                                                                                                ->  Memoize  (cost=0.39..0.77 rows=1 width=33) (actual time=0.001..0.001 rows=1.00 loops=34)
+                                                                                                                      Output: ep_22.event_id, ep_22.profile_id, ep_22.all_images
+                                                                                                                      Cache Key: i_13.event_id
+                                                                                                                      Cache Mode: logical
+                                                                                                                      Hits: 33  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                                                                                                                      Buffers: shared hit=2
+                                                                                                                      ->  Index Only Scan using idx_events_profiles_composite on public.events_profiles ep_22  (cost=0.38..0.76 rows=1 width=33) (actual time=0.016..0.016 rows=1.00 loops=1)
+                                                                                                                            Output: ep_22.event_id, ep_22.profile_id, ep_22.all_images
+                                                                                                                            Index Cond: ((ep_22.event_id = i_13.event_id) AND (ep_22.profile_id = cur_profile_uuid('profile_id'::text)))
+                                                                                                                            Filter: (ep_22.all_images OR (NOT ep_22.all_images))
+                                                                                                                            Heap Fetches: 1
+                                                                                                                            Index Searches: 1
+                                                                                                                            Buffers: shared hit=2
+                                                                                                          ->  Hash  (cost=1.26..1.26 rows=1 width=32) (actual time=0.010..0.011 rows=0.00 loops=1)
+                                                                                                                Output: pi_5.image_id, pi_5.profile_id
+                                                                                                                Buckets: 1024  Batches: 1  Memory Usage: 8kB
+                                                                                                                Buffers: shared hit=1
+                                                                                                                ->  Seq Scan on public.profiles_images pi_5  (cost=0.00..1.26 rows=1 width=32) (actual time=0.010..0.010 rows=0.00 loops=1)
+                                                                                                                      Output: pi_5.image_id, pi_5.profile_id
+                                                                                                                      Filter: (pi_5.profile_id = cur_profile_uuid('profile_id'::text))
+                                                                                                                      Rows Removed by Filter: 1
+                                                                                                                      Buffers: shared hit=1
+                                                    ->  Index Scan using images_pkey on public.images i_12  (cost=0.14..0.76 rows=1 width=16) (actual time=0.004..0.004 rows=1.00 loops=34)
+                                                          Output: i_12.event_id, i_12.image_id, i_12.label, i_12.date_taken, i_12.file_size, i_12.high_quality_file_size, i_12.display_file_size, i_12.thumb_file_size, i_12.width, i_12.height, i_12.moment_id, i_12.description, i_12.upload_id
+                                                          Index Cond: (i_12.image_id = i_13.image_id)
+                                                          Filter: (i_12.event_id = cur_event_profile_uuid('event_id'::text))
+                                                          Index Searches: 34
+                                                          Buffers: shared hit=68
+                      ->  Seq Scan on public.events_profiles ep_21  (cost=0.00..3.58 rows=1 width=34) (actual time=0.007..0.031 rows=1.00 loops=33)
+                            Output: ep_21.event_id, ep_21.profile_id, ep_21.can_manage_event, ep_21.can_delete_event, ep_21.can_upload_and_delete_images, ep_21.can_edit, ep_21.all_images, ep_21.all_groups, ep_21.all_albums
+                            Filter: ((ep_21.event_id = cur_event_profile_uuid('event_id'::text)) AND (ep_21.profile_id = cur_profile_uuid('profile_id'::text)))
+                            Rows Removed by Filter: 4
+                            Buffers: shared hit=33
+                ->  Index Scan using groups_pkey on public.groups g_3  (cost=0.14..0.76 rows=1 width=32) (actual time=0.005..0.005 rows=1.00 loops=33)
+                      Output: g_3.event_id, g_3.group_id, g_3.label, g_3.representative_face
+                      Index Cond: (g_3.group_id = f_2.group_id)
+                      Filter: (g_3.event_id = cur_event_profile_uuid('event_id'::text))
+                      Index Searches: 33
+                      Buffers: shared hit=66
+          ->  Materialize  (cost=0.00..1.27 rows=1 width=32) (actual time=0.000..0.000 rows=0.00 loops=33)
+                Output: pg_2.group_id, pg_2.profile_id
+                Storage: Memory  Maximum Storage: 17kB
+                Buffers: shared hit=1
+                ->  Seq Scan on public.profiles_groups pg_2  (cost=0.00..1.26 rows=1 width=32) (actual time=0.011..0.011 rows=0.00 loops=1)
+                      Output: pg_2.group_id, pg_2.profile_id
+                      Filter: (pg_2.profile_id = cur_profile_uuid('profile_id'::text))
+                      Rows Removed by Filter: 1
+                      Buffers: shared hit=1
+  InitPlan 23
+    ->  Aggregate  (cost=12.14..12.15 rows=1 width=8) (actual time=0.242..0.249 rows=1.00 loops=1)
+          Output: count(*)
+          Buffers: shared hit=12
+          ->  Result  (cost=2.72..12.14 rows=1 width=0) (actual time=0.239..0.247 rows=1.00 loops=1)
+                One-Time Filter: (cur_profile_int('hierarchy_rank'::text) > 0)
+                Buffers: shared hit=12
+                ->  Nested Loop Semi Join  (cost=2.72..12.14 rows=1 width=0) (actual time=0.083..0.090 rows=1.00 loops=1)
+                      Join Filter: (ar.access_request_id = arg.access_request_id)
+                      Buffers: shared hit=11
+                      ->  Seq Scan on public.access_requests ar  (cost=0.00..1.01 rows=1 width=4) (actual time=0.006..0.006 rows=1.00 loops=1)
+                            Output: ar.event_id, ar.access_request_id, ar.profile_id, ar.requested_at, ar.applicant_name, ar.applicant_email, ar.applicant_phone, ar.details, ar.communication_consent, ar.is_closed, ar.closed_at, ar.closed_by, ar.closed_details, ar.applicant_profile_id
+                            Filter: (NOT ar.is_closed)
+                            Buffers: shared hit=1
+                      ->  Nested Loop  (cost=2.47..10.86 rows=1 width=8) (actual time=0.076..0.083 rows=1.00 loops=1)
+                            Output: arg.access_request_id, ar_1.access_request_id
+                            Inner Unique: true
+                            Join Filter: (arg.access_request_id = ar_1.access_request_id)
+                            Buffers: shared hit=10
+                            ->  Nested Loop Left Join  (cost=2.47..9.59 rows=1 width=4) (actual time=0.066..0.073 rows=1.00 loops=1)
+                                  Output: arg.access_request_id
+                                  Inner Unique: true
+                                  Filter: ((ep_29.all_groups AND (pg_4.group_id IS NULL)) OR ((NOT ep_29.all_groups) AND (pg_4.group_id IS NOT NULL)))
+                                  Buffers: shared hit=9
+                                  ->  Nested Loop  (cost=2.09..8.82 rows=1 width=37) (actual time=0.058..0.064 rows=1.00 loops=1)
+                                        Output: arg.access_request_id, g_6.group_id, ep_29.profile_id, ep_29.all_groups
+                                        Inner Unique: true
+                                        Join Filter: (ep_29.can_edit OR (g_6.group_id <> e_19.unassociated_group_id))
+                                        Buffers: shared hit=8
+                                        ->  Nested Loop  (cost=1.97..8.30 rows=1 width=86) (actual time=0.054..0.060 rows=1.00 loops=1)
+                                              Output: arg.access_request_id, g_6.event_id, g_6.group_id, ep_29.event_id, ep_29.profile_id, ep_29.all_groups, ep_29.can_edit, ep_28.event_id
+                                              Inner Unique: true
+                                              Buffers: shared hit=6
+                                              ->  Hash Join  (cost=1.83..7.49 rows=1 width=102) (actual time=0.042..0.048 rows=1.00 loops=1)
+                                                    Output: arg.group_id, arg.access_request_id, g_6.event_id, g_6.group_id, ep_29.event_id, ep_29.profile_id, ep_29.all_groups, ep_29.can_edit, ep_28.event_id
+                                                    Inner Unique: true
+                                                    Hash Cond: ((ep_29.event_id = g_6.event_id) AND (arg.group_id = g_6.group_id))
+                                                    Join Filter: (ep_28.can_edit OR (ANY ((g_6.group_id = (hashed SubPlan 22).col1) AND (ep_29.profile_id = (hashed SubPlan 22).col2))))
+                                                    Buffers: shared hit=4
+                                                    ->  Nested Loop  (cost=0.00..5.66 rows=1 width=71) (actual time=0.021..0.022 rows=1.00 loops=1)
+                                                          Output: arg.group_id, arg.access_request_id, ep_29.event_id, ep_29.profile_id, ep_29.all_groups, ep_29.can_edit, ep_28.event_id, ep_28.can_edit
+                                                          Inner Unique: true
+                                                          Join Filter: (ep_28.event_id = ep_29.event_id)
+                                                          Buffers: shared hit=3
+                                                          ->  Nested Loop  (cost=0.00..3.33 rows=1 width=54) (actual time=0.014..0.014 rows=1.00 loops=1)
+                                                                Output: arg.group_id, arg.access_request_id, ep_29.event_id, ep_29.profile_id, ep_29.all_groups, ep_29.can_edit
+                                                                Buffers: shared hit=2
+                                                                ->  Seq Scan on public.access_requests_groups arg  (cost=0.00..1.01 rows=1 width=20) (actual time=0.005..0.005 rows=1.00 loops=1)
+                                                                      Output: arg.access_request_id, arg.group_id, arg.approved, arg.closed_at, arg.closed_by, arg.closed_details
+                                                                      Buffers: shared hit=1
+                                                                ->  Seq Scan on public.events_profiles ep_29  (cost=0.00..2.31 rows=1 width=34) (actual time=0.008..0.009 rows=1.00 loops=1)
+                                                                      Output: ep_29.event_id, ep_29.profile_id, ep_29.can_manage_event, ep_29.can_delete_event, ep_29.can_upload_and_delete_images, ep_29.can_edit, ep_29.all_images, ep_29.all_groups, ep_29.all_albums
+                                                                      Filter: ((ep_29.all_groups OR (NOT ep_29.all_groups)) AND (ep_29.profile_id = cur_profile_uuid('profile_id'::text)))
+                                                                      Buffers: shared hit=1
+                                                          ->  Seq Scan on public.events_profiles ep_28  (cost=0.00..2.31 rows=1 width=33) (actual time=0.006..0.006 rows=1.00 loops=1)
+                                                                Output: ep_28.event_id, ep_28.profile_id, ep_28.can_manage_event, ep_28.can_delete_event, ep_28.can_upload_and_delete_images, ep_28.can_edit, ep_28.all_images, ep_28.all_groups, ep_28.all_albums
+                                                                Filter: (ep_28.profile_id = cur_profile_uuid('profile_id'::text))
+                                                                Buffers: shared hit=1
+                                                    ->  Hash  (cost=1.33..1.33 rows=33 width=32) (actual time=0.016..0.016 rows=33.00 loops=1)
+                                                          Output: g_6.event_id, g_6.group_id
+                                                          Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                                          Buffers: shared hit=1
+                                                          ->  Seq Scan on public.groups g_6  (cost=0.00..1.33 rows=33 width=32) (actual time=0.007..0.010 rows=33.00 loops=1)
+                                                                Output: g_6.event_id, g_6.group_id
+                                                                Buffers: shared hit=1
+                                                    SubPlan 22
+                                                      ->  Nested Loop  (cost=27.36..38.93 rows=18 width=32) (never executed)
+                                                            Output: f_3.group_id, ep_24.profile_id
+                                                            Inner Unique: true
+                                                            ->  Hash Join  (cost=27.21..33.98 rows=18 width=32) (never executed)
+                                                                  Output: f_4.face_id, ep_24.profile_id
+                                                                  Hash Cond: ((ep_26.profile_id = ep_27.profile_id) AND (f_4.group_id = g_4.group_id))
+                                                                  ->  Hash Join  (cost=19.33..25.35 rows=56 width=80) (never executed)
+                                                                        Output: f_4.group_id, f_4.face_id, ep_24.profile_id, ep_25.profile_id, ep_26.profile_id
+                                                                        Hash Cond: (f_4.image_id = i_15.image_id)
+                                                                        ->  Seq Scan on public.faces f_4  (cost=0.00..4.78 rows=178 width=48) (never executed)
+                                                                              Output: f_4.face_id, f_4.image_id, f_4.face_width, f_4.face_height, f_4.face_left, f_4.face_top, f_4.file_size, f_4.group_id
+                                                                        ->  Hash  (cost=19.19..19.19 rows=11 width=96) (never executed)
+                                                                              Output: i_15.image_id, ep_24.profile_id, i_16.image_id, ep_25.profile_id, i_17.image_id, ep_26.profile_id
+                                                                              ->  Hash Join  (cost=13.22..19.19 rows=11 width=96) (never executed)
+                                                                                    Output: i_15.image_id, ep_24.profile_id, i_16.image_id, ep_25.profile_id, i_17.image_id, ep_26.profile_id
+                                                                                    Inner Unique: true
+                                                                                    Hash Cond: ((i_15.event_id = ep_24.event_id) AND (ep_26.profile_id = ep_24.profile_id))
+                                                                                    ->  Hash Join  (cost=12.09..17.98 rows=11 width=96) (never executed)
+                                                                                          Output: i_15.image_id, i_15.event_id, i_16.image_id, ep_25.profile_id, i_17.image_id, ep_26.profile_id
+                                                                                          Inner Unique: true
+                                                                                          Hash Cond: (i_16.image_id = i_15.image_id)
+                                                                                          ->  Hash Join  (cost=10.33..16.19 rows=11 width=64) (never executed)
+                                                                                                Output: i_16.image_id, ep_25.profile_id, i_17.image_id, ep_26.profile_id
+                                                                                                Hash Cond: ((e_16.archive_album_id = a_12.album_id) AND (ep_25.profile_id = ep_26.profile_id))
+                                                                                                Join Filter: ((ai_arc_6.image_id IS NULL) OR (ep_26.all_albums AND (pa_9.album_id IS NULL)) OR ((NOT ep_26.all_albums) AND (pa_9.album_id IS NOT NULL)))
+                                                                                                ->  Hash Left Join  (cost=6.67..11.93 rows=27 width=80) (never executed)
+                                                                                                      Output: i_16.image_id, ep_25.profile_id, i_17.image_id, ai_arc_6.image_id, e_16.archive_album_id
+                                                                                                      Inner Unique: true
+                                                                                                      Hash Cond: ((e_17.archive_album_id = ai_arc_6.album_id) AND (i_17.image_id = ai_arc_6.image_id))
+                                                                                                      ->  Nested Loop  (cost=4.95..10.06 rows=27 width=80) (never executed)
+                                                                                                            Output: i_16.image_id, ep_25.profile_id, i_17.image_id, e_17.archive_album_id, e_16.archive_album_id
+                                                                                                            Join Filter: (i_17.event_id = e_17.event_id)
+                                                                                                            ->  Seq Scan on public.events e_17  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                                                                                                  Output: e_17.event_id, e_17.name, e_17.date, e_17.url, e_17.is_public, e_17.images_count_limit, e_17.image_size_limit_bytes, e_17.rekognition_calls_limit, e_17.rekognition_calls_used, e_17.archive_album_id, e_17.favorites_album_id, e_17.unassociated_group_id, e_17.representative_image, e_17.created_at, e_17.created_by
+                                                                                                            ->  Hash Join  (cost=4.95..8.71 rows=27 width=80) (never executed)
+                                                                                                                  Output: i_16.image_id, ep_25.profile_id, i_17.event_id, i_17.image_id, e_16.archive_album_id
+                                                                                                                  Inner Unique: true
+                                                                                                                  Hash Cond: (i_16.image_id = i_17.image_id)
+                                                                                                                  ->  Hash Left Join  (cost=3.19..6.87 rows=27 width=48) (never executed)
+                                                                                                                        Output: i_16.image_id, ep_25.profile_id, e_16.archive_album_id
+                                                                                                                        Inner Unique: true
+                                                                                                                        Hash Cond: ((i_16.image_id = pi_6.image_id) AND (ep_25.profile_id = pi_6.profile_id))
+                                                                                                                        Filter: ((ep_25.all_images AND (pi_6.image_id IS NULL)) OR ((NOT ep_25.all_images) AND (pi_6.image_id IS NOT NULL)))
+                                                                                                                        ->  Hash Join  (cost=2.16..5.12 rows=136 width=49) (never executed)
+                                                                                                                              Output: i_16.image_id, ep_25.profile_id, ep_25.all_images, e_16.archive_album_id
+                                                                                                                              Hash Cond: (i_16.event_id = ep_25.event_id)
+                                                                                                                              ->  Seq Scan on public.images i_16  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                                                                                    Output: i_16.event_id, i_16.image_id, i_16.label, i_16.date_taken, i_16.file_size, i_16.high_quality_file_size, i_16.display_file_size, i_16.thumb_file_size, i_16.width, i_16.height, i_16.moment_id, i_16.description, i_16.upload_id
+                                                                                                                              ->  Hash  (cost=2.11..2.11 rows=4 width=65) (never executed)
+                                                                                                                                    Output: ep_25.event_id, ep_25.profile_id, ep_25.all_images, e_16.event_id, e_16.archive_album_id
+                                                                                                                                    ->  Nested Loop  (cost=0.00..2.11 rows=4 width=65) (never executed)
+                                                                                                                                          Output: ep_25.event_id, ep_25.profile_id, ep_25.all_images, e_16.event_id, e_16.archive_album_id
+                                                                                                                                          Join Filter: (e_16.event_id = ep_25.event_id)
+                                                                                                                                          ->  Seq Scan on public.events e_16  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                                                                Output: e_16.event_id, e_16.name, e_16.date, e_16.url, e_16.is_public, e_16.images_count_limit, e_16.image_size_limit_bytes, e_16.rekognition_calls_limit, e_16.rekognition_calls_used, e_16.archive_album_id, e_16.favorites_album_id, e_16.unassociated_group_id, e_16.representative_image, e_16.created_at, e_16.created_by
+                                                                                                                                          ->  Seq Scan on public.events_profiles ep_25  (cost=0.00..1.05 rows=4 width=33) (never executed)
+                                                                                                                                                Output: ep_25.event_id, ep_25.profile_id, ep_25.can_manage_event, ep_25.can_delete_event, ep_25.can_upload_and_delete_images, ep_25.can_edit, ep_25.all_images, ep_25.all_groups, ep_25.all_albums
+                                                                                                                                                Filter: (ep_25.all_images OR (NOT ep_25.all_images))
+                                                                                                                        ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                                                                                              Output: pi_6.image_id, pi_6.profile_id
+                                                                                                                              ->  Seq Scan on public.profiles_images pi_6  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                                                    Output: pi_6.image_id, pi_6.profile_id
+                                                                                                                  ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                                                                                        Output: i_17.event_id, i_17.image_id
+                                                                                                                        ->  Seq Scan on public.images i_17  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                                                                              Output: i_17.event_id, i_17.image_id
+                                                                                                      ->  Hash  (cost=1.29..1.29 rows=29 width=32) (never executed)
+                                                                                                            Output: ai_arc_6.image_id, ai_arc_6.album_id
+                                                                                                            ->  Seq Scan on public.albums_images ai_arc_6  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                                                                                                                  Output: ai_arc_6.image_id, ai_arc_6.album_id
+                                                                                                ->  Hash  (cost=3.43..3.43 rows=15 width=49) (never executed)
+                                                                                                      Output: a_12.album_id, ep_26.profile_id, ep_26.all_albums, pa_9.album_id
+                                                                                                      ->  Hash Left Join  (cost=1.02..3.43 rows=15 width=49) (never executed)
+                                                                                                            Output: a_12.album_id, ep_26.profile_id, ep_26.all_albums, pa_9.album_id
+                                                                                                            Inner Unique: true
+                                                                                                            Hash Cond: ((a_12.album_id = pa_9.album_id) AND (ep_26.profile_id = pa_9.profile_id))
+                                                                                                            ->  Nested Loop  (cost=0.00..2.31 rows=15 width=33) (never executed)
+                                                                                                                  Output: a_12.album_id, ep_26.profile_id, ep_26.all_albums
+                                                                                                                  Join Filter: (a_12.event_id = ep_26.event_id)
+                                                                                                                  ->  Seq Scan on public.events_profiles ep_26  (cost=0.00..1.05 rows=5 width=33) (never executed)
+                                                                                                                        Output: ep_26.event_id, ep_26.profile_id, ep_26.can_manage_event, ep_26.can_delete_event, ep_26.can_upload_and_delete_images, ep_26.can_edit, ep_26.all_images, ep_26.all_groups, ep_26.all_albums
+                                                                                                                  ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (never executed)
+                                                                                                                        Output: a_12.event_id, a_12.album_id
+                                                                                                                        ->  Seq Scan on public.albums a_12  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                                                                                                              Output: a_12.event_id, a_12.album_id
+                                                                                                            ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                                                                                  Output: pa_9.album_id, pa_9.profile_id
+                                                                                                                  ->  Seq Scan on public.profiles_albums pa_9  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                                        Output: pa_9.album_id, pa_9.profile_id
+                                                                                          ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                                                                Output: i_15.image_id, i_15.event_id
+                                                                                                ->  Seq Scan on public.images i_15  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                                                      Output: i_15.image_id, i_15.event_id
+                                                                                    ->  Hash  (cost=1.05..1.05 rows=5 width=32) (never executed)
+                                                                                          Output: ep_24.profile_id, ep_24.event_id
+                                                                                          ->  Seq Scan on public.events_profiles ep_24  (cost=0.00..1.05 rows=5 width=32) (never executed)
+                                                                                                Output: ep_24.profile_id, ep_24.event_id
+                                                                  ->  Hash  (cost=7.11..7.11 rows=52 width=32) (never executed)
+                                                                        Output: g_4.group_id, ep_27.profile_id
+                                                                        ->  Hash Left Join  (cost=3.19..7.11 rows=52 width=32) (never executed)
+                                                                              Output: g_4.group_id, ep_27.profile_id
+                                                                              Inner Unique: true
+                                                                              Hash Cond: ((g_4.group_id = pg_3.group_id) AND (ep_27.profile_id = pg_3.profile_id))
+                                                                              Filter: ((ep_27.all_groups AND (pg_3.group_id IS NULL)) OR ((NOT ep_27.all_groups) AND (pg_3.group_id IS NOT NULL)))
+                                                                              ->  Hash Join  (cost=2.16..5.39 rows=130 width=33) (never executed)
+                                                                                    Output: g_4.group_id, ep_27.profile_id, ep_27.all_groups
+                                                                                    Hash Cond: (g_4.event_id = e_18.event_id)
+                                                                                    Join Filter: (ep_27.can_edit OR (g_4.group_id <> e_18.unassociated_group_id))
+                                                                                    ->  Seq Scan on public.groups g_4  (cost=0.00..1.33 rows=33 width=32) (never executed)
+                                                                                          Output: g_4.event_id, g_4.group_id, g_4.label, g_4.representative_face
+                                                                                    ->  Hash  (cost=2.11..2.11 rows=4 width=66) (never executed)
+                                                                                          Output: e_18.event_id, e_18.unassociated_group_id, ep_27.event_id, ep_27.profile_id, ep_27.all_groups, ep_27.can_edit
+                                                                                          ->  Nested Loop  (cost=0.00..2.11 rows=4 width=66) (never executed)
+                                                                                                Output: e_18.event_id, e_18.unassociated_group_id, ep_27.event_id, ep_27.profile_id, ep_27.all_groups, ep_27.can_edit
+                                                                                                Join Filter: (e_18.event_id = ep_27.event_id)
+                                                                                                ->  Seq Scan on public.events e_18  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                                      Output: e_18.event_id, e_18.name, e_18.date, e_18.url, e_18.is_public, e_18.images_count_limit, e_18.image_size_limit_bytes, e_18.rekognition_calls_limit, e_18.rekognition_calls_used, e_18.archive_album_id, e_18.favorites_album_id, e_18.unassociated_group_id, e_18.representative_image, e_18.created_at, e_18.created_by
+                                                                                                ->  Seq Scan on public.events_profiles ep_27  (cost=0.00..1.05 rows=4 width=34) (never executed)
+                                                                                                      Output: ep_27.event_id, ep_27.profile_id, ep_27.can_manage_event, ep_27.can_delete_event, ep_27.can_upload_and_delete_images, ep_27.can_edit, ep_27.all_images, ep_27.all_groups, ep_27.all_albums
+                                                                                                      Filter: (ep_27.all_groups OR (NOT ep_27.all_groups))
+                                                                              ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                                                    Output: pg_3.group_id, pg_3.profile_id
+                                                                                    ->  Seq Scan on public.profiles_groups pg_3  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                                          Output: pg_3.group_id, pg_3.profile_id
+                                                            ->  Index Scan using faces_pkey on public.faces f_3  (cost=0.14..0.27 rows=1 width=32) (never executed)
+                                                                  Output: f_3.face_id, f_3.image_id, f_3.face_width, f_3.face_height, f_3.face_left, f_3.face_top, f_3.file_size, f_3.group_id
+                                                                  Index Cond: (f_3.face_id = f_4.face_id)
+                                                                  Index Searches: 0
+                                              ->  Index Scan using groups_pkey on public.groups g_5  (cost=0.14..0.77 rows=1 width=16) (actual time=0.010..0.011 rows=1.00 loops=1)
+                                                    Output: g_5.event_id, g_5.group_id, g_5.label, g_5.representative_face
+                                                    Index Cond: (g_5.group_id = g_6.group_id)
+                                                    Filter: (g_5.event_id = cur_event_profile_uuid('event_id'::text))
+                                                    Index Searches: 1
+                                                    Buffers: shared hit=2
+                                        ->  Index Scan using events_pkey on public.events e_19  (cost=0.12..0.51 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                              Output: e_19.event_id, e_19.name, e_19.date, e_19.url, e_19.is_public, e_19.images_count_limit, e_19.image_size_limit_bytes, e_19.rekognition_calls_limit, e_19.rekognition_calls_used, e_19.archive_album_id, e_19.favorites_album_id, e_19.unassociated_group_id, e_19.representative_image, e_19.created_at, e_19.created_by
+                                              Index Cond: (e_19.event_id = g_6.event_id)
+                                              Index Searches: 1
+                                              Buffers: shared hit=2
+                                  ->  Index Only Scan using profiles_groups_pkey on public.profiles_groups pg_4  (cost=0.38..0.76 rows=1 width=32) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                        Output: pg_4.profile_id, pg_4.group_id
+                                        Index Cond: ((pg_4.profile_id = cur_profile_uuid('profile_id'::text)) AND (pg_4.group_id = g_6.group_id))
+                                        Heap Fetches: 0
+                                        Index Searches: 1
+                                        Buffers: shared hit=1
+                            ->  Seq Scan on public.access_requests ar_1  (cost=0.00..1.26 rows=1 width=4) (actual time=0.009..0.009 rows=1.00 loops=1)
+                                  Output: ar_1.event_id, ar_1.access_request_id, ar_1.profile_id, ar_1.requested_at, ar_1.applicant_name, ar_1.applicant_email, ar_1.applicant_phone, ar_1.details, ar_1.communication_consent, ar_1.is_closed, ar_1.closed_at, ar_1.closed_by, ar_1.closed_details, ar_1.applicant_profile_id
+                                  Filter: (ar_1.event_id = cur_event_profile_uuid('event_id'::text))
+                                  Buffers: shared hit=1
+  ->  Seq Scan on public.events_profiles ep  (cost=0.00..3.58 rows=1 width=39) (actual time=0.117..0.143 rows=1.00 loops=1)
+        Output: ep.event_id, ep.profile_id, ep.can_manage_event, ep.can_delete_event, ep.can_upload_and_delete_images, ep.can_edit, ep.all_images, ep.all_groups, ep.all_albums
+        Filter: ((ep.event_id = cur_event_profile_uuid('event_id'::text)) AND (ep.profile_id = cur_profile_uuid('profile_id'::text)))
+        Rows Removed by Filter: 4
+        Buffers: shared hit=1
+  ->  Seq Scan on public.events e  (cost=0.00..1.26 rows=1 width=48) (actual time=0.013..0.013 rows=1.00 loops=1)
+        Output: e.event_id, e.name, e.date, e.url, e.is_public, e.images_count_limit, e.image_size_limit_bytes, e.rekognition_calls_limit, e.rekognition_calls_used, e.archive_album_id, e.favorites_album_id, e.unassociated_group_id, e.representative_image, e.created_at, e.created_by
+        Filter: (e.event_id = cur_event_profile_uuid('event_id'::text))
+        Buffers: shared hit=1
+  SubPlan 3
+    ->  Nested Loop  (cost=0.00..22.96 rows=1 width=0) (actual time=0.046..0.051 rows=1.00 loops=1)
+          Inner Unique: true
+          Join Filter: ((ep_3.event_id = a_2.event_id) AND (ep_3.can_edit OR (ANY ((a_2.album_id = (hashed SubPlan 2).col1) AND (ep_4.profile_id = (hashed SubPlan 2).col2)))))
+          Buffers: shared hit=5
+          ->  Nested Loop Left Join  (cost=0.00..6.44 rows=1 width=64) (actual time=0.035..0.036 rows=1.00 loops=1)
+                Output: a_2.event_id, a_2.album_id, ep_4.event_id, ep_4.profile_id
+                Inner Unique: true
+                Filter: ((ep_4.all_albums AND (pa_1.album_id IS NULL)) OR ((NOT ep_4.all_albums) AND (pa_1.album_id IS NOT NULL)))
+                Buffers: shared hit=4
+                ->  Nested Loop  (cost=0.00..5.17 rows=1 width=65) (actual time=0.023..0.024 rows=1.00 loops=1)
+                      Output: a_2.event_id, a_2.album_id, ep_4.event_id, ep_4.profile_id, ep_4.all_albums
+                      Inner Unique: true
+                      Join Filter: (a_2.event_id = ep_4.event_id)
+                      Buffers: shared hit=3
+                      ->  Nested Loop  (cost=0.00..2.84 rows=1 width=32) (actual time=0.014..0.014 rows=1.00 loops=1)
+                            Output: a_2.event_id, a_2.album_id
+                            Buffers: shared hit=2
+                            ->  Seq Scan on public.albums a_1  (cost=0.00..1.79 rows=1 width=16) (actual time=0.010..0.010 rows=1.00 loops=1)
+                                  Output: a_1.event_id, a_1.album_id, a_1.label, a_1.description, a_1.representative_image
+                                  Filter: ((a_1.album_id = e.archive_album_id) AND (a_1.event_id = cur_event_profile_uuid('event_id'::text)))
+                                  Buffers: shared hit=1
+                            ->  Seq Scan on public.albums a_2  (cost=0.00..1.04 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=1)
+                                  Output: a_2.event_id, a_2.album_id, a_2.label, a_2.description, a_2.representative_image
+                                  Filter: (a_2.album_id = e.archive_album_id)
+                                  Buffers: shared hit=1
+                      ->  Seq Scan on public.events_profiles ep_4  (cost=0.00..2.31 rows=1 width=33) (actual time=0.008..0.008 rows=1.00 loops=1)
+                            Output: ep_4.event_id, ep_4.profile_id, ep_4.can_manage_event, ep_4.can_delete_event, ep_4.can_upload_and_delete_images, ep_4.can_edit, ep_4.all_images, ep_4.all_groups, ep_4.all_albums
+                            Filter: ((ep_4.all_albums OR (NOT ep_4.all_albums)) AND (ep_4.profile_id = cur_profile_uuid('profile_id'::text)))
+                            Buffers: shared hit=1
+                ->  Seq Scan on public.profiles_albums pa_1  (cost=0.00..1.27 rows=1 width=32) (actual time=0.011..0.011 rows=0.00 loops=1)
+                      Output: pa_1.profile_id, pa_1.album_id
+                      Filter: ((pa_1.album_id = e.archive_album_id) AND (pa_1.profile_id = cur_profile_uuid('profile_id'::text)))
+                      Rows Removed by Filter: 1
+                      Buffers: shared hit=1
+          ->  Seq Scan on public.events_profiles ep_3  (cost=0.00..2.31 rows=1 width=33) (actual time=0.010..0.010 rows=1.00 loops=1)
+                Output: ep_3.event_id, ep_3.profile_id, ep_3.can_manage_event, ep_3.can_delete_event, ep_3.can_upload_and_delete_images, ep_3.can_edit, ep_3.all_images, ep_3.all_groups, ep_3.all_albums
+                Filter: (ep_3.profile_id = cur_profile_uuid('profile_id'::text))
+                Buffers: shared hit=1
+          SubPlan 2
+            ->  Hash Join  (cost=16.33..17.81 rows=9 width=32) (never executed)
+                  Output: ai.album_id, ep_1.profile_id
+                  Hash Cond: (ai.image_id = i.image_id)
+                  ->  Seq Scan on public.albums_images ai  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                        Output: ai.album_id, ai.image_id
+                  ->  Hash  (cost=16.19..16.19 rows=11 width=48) (never executed)
+                        Output: i.image_id, ep_1.profile_id, i_1.image_id
+                        ->  Hash Join  (cost=10.33..16.19 rows=11 width=48) (never executed)
+                              Output: i.image_id, ep_1.profile_id, i_1.image_id
+                              Hash Cond: ((e_1.archive_album_id = a.album_id) AND (ep_1.profile_id = ep_2.profile_id))
+                              Join Filter: ((ai_arc.image_id IS NULL) OR (ep_2.all_albums AND (pa.album_id IS NULL)) OR ((NOT ep_2.all_albums) AND (pa.album_id IS NOT NULL)))
+                              ->  Hash Left Join  (cost=6.67..11.93 rows=27 width=80) (never executed)
+                                    Output: i.image_id, ep_1.profile_id, i_1.image_id, ai_arc.image_id, e_1.archive_album_id
+                                    Inner Unique: true
+                                    Hash Cond: ((e_2.archive_album_id = ai_arc.album_id) AND (i_1.image_id = ai_arc.image_id))
+                                    ->  Nested Loop  (cost=4.95..10.06 rows=27 width=80) (never executed)
+                                          Output: i.image_id, ep_1.profile_id, i_1.image_id, e_2.archive_album_id, e_1.archive_album_id
+                                          Join Filter: (i_1.event_id = e_2.event_id)
+                                          ->  Seq Scan on public.events e_2  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                                Output: e_2.event_id, e_2.name, e_2.date, e_2.url, e_2.is_public, e_2.images_count_limit, e_2.image_size_limit_bytes, e_2.rekognition_calls_limit, e_2.rekognition_calls_used, e_2.archive_album_id, e_2.favorites_album_id, e_2.unassociated_group_id, e_2.representative_image, e_2.created_at, e_2.created_by
+                                          ->  Hash Join  (cost=4.95..8.71 rows=27 width=80) (never executed)
+                                                Output: i.image_id, ep_1.profile_id, i_1.event_id, i_1.image_id, e_1.archive_album_id
+                                                Inner Unique: true
+                                                Hash Cond: (i.image_id = i_1.image_id)
+                                                ->  Hash Left Join  (cost=3.19..6.87 rows=27 width=48) (never executed)
+                                                      Output: i.image_id, ep_1.profile_id, e_1.archive_album_id
+                                                      Inner Unique: true
+                                                      Hash Cond: ((i.image_id = pi.image_id) AND (ep_1.profile_id = pi.profile_id))
+                                                      Filter: ((ep_1.all_images AND (pi.image_id IS NULL)) OR ((NOT ep_1.all_images) AND (pi.image_id IS NOT NULL)))
+                                                      ->  Hash Join  (cost=2.16..5.12 rows=136 width=49) (never executed)
+                                                            Output: i.image_id, ep_1.profile_id, ep_1.all_images, e_1.archive_album_id
+                                                            Hash Cond: (i.event_id = ep_1.event_id)
+                                                            ->  Seq Scan on public.images i  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                  Output: i.event_id, i.image_id, i.label, i.date_taken, i.file_size, i.high_quality_file_size, i.display_file_size, i.thumb_file_size, i.width, i.height, i.moment_id, i.description, i.upload_id
+                                                            ->  Hash  (cost=2.11..2.11 rows=4 width=65) (never executed)
+                                                                  Output: ep_1.profile_id, ep_1.event_id, ep_1.all_images, e_1.event_id, e_1.archive_album_id
+                                                                  ->  Nested Loop  (cost=0.00..2.11 rows=4 width=65) (never executed)
+                                                                        Output: ep_1.profile_id, ep_1.event_id, ep_1.all_images, e_1.event_id, e_1.archive_album_id
+                                                                        Join Filter: (e_1.event_id = ep_1.event_id)
+                                                                        ->  Seq Scan on public.events e_1  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                              Output: e_1.event_id, e_1.name, e_1.date, e_1.url, e_1.is_public, e_1.images_count_limit, e_1.image_size_limit_bytes, e_1.rekognition_calls_limit, e_1.rekognition_calls_used, e_1.archive_album_id, e_1.favorites_album_id, e_1.unassociated_group_id, e_1.representative_image, e_1.created_at, e_1.created_by
+                                                                        ->  Seq Scan on public.events_profiles ep_1  (cost=0.00..1.05 rows=4 width=33) (never executed)
+                                                                              Output: ep_1.event_id, ep_1.profile_id, ep_1.can_manage_event, ep_1.can_delete_event, ep_1.can_upload_and_delete_images, ep_1.can_edit, ep_1.all_images, ep_1.all_groups, ep_1.all_albums
+                                                                              Filter: (ep_1.all_images OR (NOT ep_1.all_images))
+                                                      ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                            Output: pi.image_id, pi.profile_id
+                                                            ->  Seq Scan on public.profiles_images pi  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                  Output: pi.image_id, pi.profile_id
+                                                ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                      Output: i_1.event_id, i_1.image_id
+                                                      ->  Seq Scan on public.images i_1  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                            Output: i_1.event_id, i_1.image_id
+                                    ->  Hash  (cost=1.29..1.29 rows=29 width=32) (never executed)
+                                          Output: ai_arc.image_id, ai_arc.album_id
+                                          ->  Seq Scan on public.albums_images ai_arc  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                                                Output: ai_arc.image_id, ai_arc.album_id
+                              ->  Hash  (cost=3.43..3.43 rows=15 width=49) (never executed)
+                                    Output: a.album_id, ep_2.profile_id, ep_2.all_albums, pa.album_id
+                                    ->  Hash Left Join  (cost=1.02..3.43 rows=15 width=49) (never executed)
+                                          Output: a.album_id, ep_2.profile_id, ep_2.all_albums, pa.album_id
+                                          Inner Unique: true
+                                          Hash Cond: ((a.album_id = pa.album_id) AND (ep_2.profile_id = pa.profile_id))
+                                          ->  Nested Loop  (cost=0.00..2.31 rows=15 width=33) (never executed)
+                                                Output: a.album_id, ep_2.profile_id, ep_2.all_albums
+                                                Join Filter: (a.event_id = ep_2.event_id)
+                                                ->  Seq Scan on public.events_profiles ep_2  (cost=0.00..1.05 rows=5 width=33) (never executed)
+                                                      Output: ep_2.event_id, ep_2.profile_id, ep_2.can_manage_event, ep_2.can_delete_event, ep_2.can_upload_and_delete_images, ep_2.can_edit, ep_2.all_images, ep_2.all_groups, ep_2.all_albums
+                                                ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (never executed)
+                                                      Output: a.event_id, a.album_id
+                                                      ->  Seq Scan on public.albums a  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                                            Output: a.event_id, a.album_id
+                                          ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                Output: pa.album_id, pa.profile_id
+                                                ->  Seq Scan on public.profiles_albums pa  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                      Output: pa.album_id, pa.profile_id
+  SubPlan 9
+    ->  Nested Loop  (cost=0.00..22.96 rows=1 width=0) (actual time=0.036..0.040 rows=1.00 loops=1)
+          Inner Unique: true
+          Join Filter: ((ep_7.event_id = a_5.event_id) AND (ep_7.can_edit OR (ANY ((a_5.album_id = (hashed SubPlan 8).col1) AND (ep_8.profile_id = (hashed SubPlan 8).col2)))))
+          Buffers: shared hit=5
+          ->  Nested Loop Left Join  (cost=0.00..6.44 rows=1 width=64) (actual time=0.028..0.029 rows=1.00 loops=1)
+                Output: a_5.event_id, a_5.album_id, ep_8.event_id, ep_8.profile_id
+                Inner Unique: true
+                Filter: ((ep_8.all_albums AND (pa_3.album_id IS NULL)) OR ((NOT ep_8.all_albums) AND (pa_3.album_id IS NOT NULL)))
+                Buffers: shared hit=4
+                ->  Nested Loop  (cost=0.00..5.17 rows=1 width=65) (actual time=0.022..0.023 rows=1.00 loops=1)
+                      Output: a_5.event_id, a_5.album_id, ep_8.event_id, ep_8.profile_id, ep_8.all_albums
+                      Inner Unique: true
+                      Join Filter: (a_5.event_id = ep_8.event_id)
+                      Buffers: shared hit=3
+                      ->  Nested Loop  (cost=0.00..2.84 rows=1 width=32) (actual time=0.014..0.014 rows=1.00 loops=1)
+                            Output: a_5.event_id, a_5.album_id
+                            Buffers: shared hit=2
+                            ->  Seq Scan on public.albums a_4  (cost=0.00..1.79 rows=1 width=16) (actual time=0.008..0.008 rows=1.00 loops=1)
+                                  Output: a_4.event_id, a_4.album_id, a_4.label, a_4.description, a_4.representative_image
+                                  Filter: ((a_4.album_id = e.favorites_album_id) AND (a_4.event_id = cur_event_profile_uuid('event_id'::text)))
+                                  Rows Removed by Filter: 1
+                                  Buffers: shared hit=1
+                            ->  Seq Scan on public.albums a_5  (cost=0.00..1.04 rows=1 width=32) (actual time=0.005..0.005 rows=1.00 loops=1)
+                                  Output: a_5.event_id, a_5.album_id, a_5.label, a_5.description, a_5.representative_image
+                                  Filter: (a_5.album_id = e.favorites_album_id)
+                                  Rows Removed by Filter: 1
+                                  Buffers: shared hit=1
+                      ->  Seq Scan on public.events_profiles ep_8  (cost=0.00..2.31 rows=1 width=33) (actual time=0.008..0.008 rows=1.00 loops=1)
+                            Output: ep_8.event_id, ep_8.profile_id, ep_8.can_manage_event, ep_8.can_delete_event, ep_8.can_upload_and_delete_images, ep_8.can_edit, ep_8.all_images, ep_8.all_groups, ep_8.all_albums
+                            Filter: ((ep_8.all_albums OR (NOT ep_8.all_albums)) AND (ep_8.profile_id = cur_profile_uuid('profile_id'::text)))
+                            Buffers: shared hit=1
+                ->  Seq Scan on public.profiles_albums pa_3  (cost=0.00..1.27 rows=1 width=32) (actual time=0.005..0.005 rows=0.00 loops=1)
+                      Output: pa_3.profile_id, pa_3.album_id
+                      Filter: ((pa_3.album_id = e.favorites_album_id) AND (pa_3.profile_id = cur_profile_uuid('profile_id'::text)))
+                      Rows Removed by Filter: 1
+                      Buffers: shared hit=1
+          ->  Seq Scan on public.events_profiles ep_7  (cost=0.00..2.31 rows=1 width=33) (actual time=0.007..0.007 rows=1.00 loops=1)
+                Output: ep_7.event_id, ep_7.profile_id, ep_7.can_manage_event, ep_7.can_delete_event, ep_7.can_upload_and_delete_images, ep_7.can_edit, ep_7.all_images, ep_7.all_groups, ep_7.all_albums
+                Filter: (ep_7.profile_id = cur_profile_uuid('profile_id'::text))
+                Buffers: shared hit=1
+          SubPlan 8
+            ->  Hash Join  (cost=16.33..17.81 rows=9 width=32) (never executed)
+                  Output: ai_1.album_id, ep_5.profile_id
+                  Hash Cond: (ai_1.image_id = i_2.image_id)
+                  ->  Seq Scan on public.albums_images ai_1  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                        Output: ai_1.album_id, ai_1.image_id
+                  ->  Hash  (cost=16.19..16.19 rows=11 width=48) (never executed)
+                        Output: i_2.image_id, ep_5.profile_id, i_3.image_id
+                        ->  Hash Join  (cost=10.33..16.19 rows=11 width=48) (never executed)
+                              Output: i_2.image_id, ep_5.profile_id, i_3.image_id
+                              Hash Cond: ((e_3.archive_album_id = a_3.album_id) AND (ep_5.profile_id = ep_6.profile_id))
+                              Join Filter: ((ai_arc_1.image_id IS NULL) OR (ep_6.all_albums AND (pa_2.album_id IS NULL)) OR ((NOT ep_6.all_albums) AND (pa_2.album_id IS NOT NULL)))
+                              ->  Hash Left Join  (cost=6.67..11.93 rows=27 width=80) (never executed)
+                                    Output: i_2.image_id, ep_5.profile_id, i_3.image_id, ai_arc_1.image_id, e_3.archive_album_id
+                                    Inner Unique: true
+                                    Hash Cond: ((e_4.archive_album_id = ai_arc_1.album_id) AND (i_3.image_id = ai_arc_1.image_id))
+                                    ->  Nested Loop  (cost=4.95..10.06 rows=27 width=80) (never executed)
+                                          Output: i_2.image_id, ep_5.profile_id, i_3.image_id, e_4.archive_album_id, e_3.archive_album_id
+                                          Join Filter: (i_3.event_id = e_4.event_id)
+                                          ->  Seq Scan on public.events e_4  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                                Output: e_4.event_id, e_4.name, e_4.date, e_4.url, e_4.is_public, e_4.images_count_limit, e_4.image_size_limit_bytes, e_4.rekognition_calls_limit, e_4.rekognition_calls_used, e_4.archive_album_id, e_4.favorites_album_id, e_4.unassociated_group_id, e_4.representative_image, e_4.created_at, e_4.created_by
+                                          ->  Hash Join  (cost=4.95..8.71 rows=27 width=80) (never executed)
+                                                Output: i_2.image_id, ep_5.profile_id, i_3.event_id, i_3.image_id, e_3.archive_album_id
+                                                Inner Unique: true
+                                                Hash Cond: (i_2.image_id = i_3.image_id)
+                                                ->  Hash Left Join  (cost=3.19..6.87 rows=27 width=48) (never executed)
+                                                      Output: i_2.image_id, ep_5.profile_id, e_3.archive_album_id
+                                                      Inner Unique: true
+                                                      Hash Cond: ((i_2.image_id = pi_1.image_id) AND (ep_5.profile_id = pi_1.profile_id))
+                                                      Filter: ((ep_5.all_images AND (pi_1.image_id IS NULL)) OR ((NOT ep_5.all_images) AND (pi_1.image_id IS NOT NULL)))
+                                                      ->  Hash Join  (cost=2.16..5.12 rows=136 width=49) (never executed)
+                                                            Output: i_2.image_id, ep_5.profile_id, ep_5.all_images, e_3.archive_album_id
+                                                            Hash Cond: (i_2.event_id = ep_5.event_id)
+                                                            ->  Seq Scan on public.images i_2  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                  Output: i_2.event_id, i_2.image_id, i_2.label, i_2.date_taken, i_2.file_size, i_2.high_quality_file_size, i_2.display_file_size, i_2.thumb_file_size, i_2.width, i_2.height, i_2.moment_id, i_2.description, i_2.upload_id
+                                                            ->  Hash  (cost=2.11..2.11 rows=4 width=65) (never executed)
+                                                                  Output: ep_5.profile_id, ep_5.event_id, ep_5.all_images, e_3.event_id, e_3.archive_album_id
+                                                                  ->  Nested Loop  (cost=0.00..2.11 rows=4 width=65) (never executed)
+                                                                        Output: ep_5.profile_id, ep_5.event_id, ep_5.all_images, e_3.event_id, e_3.archive_album_id
+                                                                        Join Filter: (e_3.event_id = ep_5.event_id)
+                                                                        ->  Seq Scan on public.events e_3  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                              Output: e_3.event_id, e_3.name, e_3.date, e_3.url, e_3.is_public, e_3.images_count_limit, e_3.image_size_limit_bytes, e_3.rekognition_calls_limit, e_3.rekognition_calls_used, e_3.archive_album_id, e_3.favorites_album_id, e_3.unassociated_group_id, e_3.representative_image, e_3.created_at, e_3.created_by
+                                                                        ->  Seq Scan on public.events_profiles ep_5  (cost=0.00..1.05 rows=4 width=33) (never executed)
+                                                                              Output: ep_5.event_id, ep_5.profile_id, ep_5.can_manage_event, ep_5.can_delete_event, ep_5.can_upload_and_delete_images, ep_5.can_edit, ep_5.all_images, ep_5.all_groups, ep_5.all_albums
+                                                                              Filter: (ep_5.all_images OR (NOT ep_5.all_images))
+                                                      ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                            Output: pi_1.image_id, pi_1.profile_id
+                                                            ->  Seq Scan on public.profiles_images pi_1  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                  Output: pi_1.image_id, pi_1.profile_id
+                                                ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                      Output: i_3.event_id, i_3.image_id
+                                                      ->  Seq Scan on public.images i_3  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                            Output: i_3.event_id, i_3.image_id
+                                    ->  Hash  (cost=1.29..1.29 rows=29 width=32) (never executed)
+                                          Output: ai_arc_1.image_id, ai_arc_1.album_id
+                                          ->  Seq Scan on public.albums_images ai_arc_1  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                                                Output: ai_arc_1.image_id, ai_arc_1.album_id
+                              ->  Hash  (cost=3.43..3.43 rows=15 width=49) (never executed)
+                                    Output: a_3.album_id, ep_6.profile_id, ep_6.all_albums, pa_2.album_id
+                                    ->  Hash Left Join  (cost=1.02..3.43 rows=15 width=49) (never executed)
+                                          Output: a_3.album_id, ep_6.profile_id, ep_6.all_albums, pa_2.album_id
+                                          Inner Unique: true
+                                          Hash Cond: ((a_3.album_id = pa_2.album_id) AND (ep_6.profile_id = pa_2.profile_id))
+                                          ->  Nested Loop  (cost=0.00..2.31 rows=15 width=33) (never executed)
+                                                Output: a_3.album_id, ep_6.profile_id, ep_6.all_albums
+                                                Join Filter: (a_3.event_id = ep_6.event_id)
+                                                ->  Seq Scan on public.events_profiles ep_6  (cost=0.00..1.05 rows=5 width=33) (never executed)
+                                                      Output: ep_6.event_id, ep_6.profile_id, ep_6.can_manage_event, ep_6.can_delete_event, ep_6.can_upload_and_delete_images, ep_6.can_edit, ep_6.all_images, ep_6.all_groups, ep_6.all_albums
+                                                ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (never executed)
+                                                      Output: a_3.event_id, a_3.album_id
+                                                      ->  Seq Scan on public.albums a_3  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                                            Output: a_3.event_id, a_3.album_id
+                                          ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                Output: pa_2.album_id, pa_2.profile_id
+                                                ->  Seq Scan on public.profiles_albums pa_2  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                      Output: pa_2.album_id, pa_2.profile_id
+  SubPlan 19
+    ->  Nested Loop  (cost=0.00..22.99 rows=1 width=0) (never executed)
+          Inner Unique: true
+          Join Filter: ((ep_19.event_id = a_10.event_id) AND (ep_19.can_edit OR (ANY ((a_10.album_id = (hashed SubPlan 18).col1) AND (ep_20.profile_id = (hashed SubPlan 18).col2)))))
+          ->  Nested Loop Left Join  (cost=0.00..6.47 rows=1 width=64) (never executed)
+                Output: a_10.event_id, a_10.album_id, ep_20.event_id, ep_20.profile_id
+                Inner Unique: true
+                Join Filter: (a_10.album_id = pa_7.album_id)
+                Filter: ((ep_20.all_albums AND (pa_7.album_id IS NULL)) OR ((NOT ep_20.all_albums) AND (pa_7.album_id IS NOT NULL)))
+                ->  Nested Loop  (cost=0.00..5.20 rows=1 width=65) (never executed)
+                      Output: a_10.event_id, a_10.album_id, ep_20.event_id, ep_20.profile_id, ep_20.all_albums
+                      Inner Unique: true
+                      Join Filter: (a_10.event_id = ep_20.event_id)
+                      ->  Nested Loop  (cost=0.00..2.87 rows=1 width=32) (never executed)
+                            Output: a_10.event_id, a_10.album_id
+                            Inner Unique: true
+                            Join Filter: (a_9.album_id = a_10.album_id)
+                            ->  Seq Scan on public.albums a_9  (cost=0.00..1.80 rows=1 width=16) (never executed)
+                                  Output: a_9.event_id, a_9.album_id, a_9.label, a_9.description, a_9.representative_image
+                                  Filter: ((a_9.album_id IS DISTINCT FROM e.archive_album_id) AND (a_9.album_id IS DISTINCT FROM e.favorites_album_id) AND (a_9.event_id = cur_event_profile_uuid('event_id'::text)))
+                            ->  Seq Scan on public.albums a_10  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                  Output: a_10.event_id, a_10.album_id, a_10.label, a_10.description, a_10.representative_image
+                      ->  Seq Scan on public.events_profiles ep_20  (cost=0.00..2.31 rows=1 width=33) (never executed)
+                            Output: ep_20.event_id, ep_20.profile_id, ep_20.can_manage_event, ep_20.can_delete_event, ep_20.can_upload_and_delete_images, ep_20.can_edit, ep_20.all_images, ep_20.all_groups, ep_20.all_albums
+                            Filter: ((ep_20.all_albums OR (NOT ep_20.all_albums)) AND (ep_20.profile_id = cur_profile_uuid('profile_id'::text)))
+                ->  Seq Scan on public.profiles_albums pa_7  (cost=0.00..1.26 rows=1 width=32) (never executed)
+                      Output: pa_7.profile_id, pa_7.album_id
+                      Filter: (pa_7.profile_id = cur_profile_uuid('profile_id'::text))
+          ->  Seq Scan on public.events_profiles ep_19  (cost=0.00..2.31 rows=1 width=33) (never executed)
+                Output: ep_19.event_id, ep_19.profile_id, ep_19.can_manage_event, ep_19.can_delete_event, ep_19.can_upload_and_delete_images, ep_19.can_edit, ep_19.all_images, ep_19.all_groups, ep_19.all_albums
+                Filter: (ep_19.profile_id = cur_profile_uuid('profile_id'::text))
+          SubPlan 18
+            ->  Hash Join  (cost=16.33..17.81 rows=9 width=32) (never executed)
+                  Output: ai_2.album_id, ep_17.profile_id
+                  Hash Cond: (ai_2.image_id = i_10.image_id)
+                  ->  Seq Scan on public.albums_images ai_2  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                        Output: ai_2.album_id, ai_2.image_id
+                  ->  Hash  (cost=16.19..16.19 rows=11 width=48) (never executed)
+                        Output: i_10.image_id, ep_17.profile_id, i_11.image_id
+                        ->  Hash Join  (cost=10.33..16.19 rows=11 width=48) (never executed)
+                              Output: i_10.image_id, ep_17.profile_id, i_11.image_id
+                              Hash Cond: ((e_11.archive_album_id = a_8.album_id) AND (ep_17.profile_id = ep_18.profile_id))
+                              Join Filter: ((ai_arc_4.image_id IS NULL) OR (ep_18.all_albums AND (pa_6.album_id IS NULL)) OR ((NOT ep_18.all_albums) AND (pa_6.album_id IS NOT NULL)))
+                              ->  Hash Left Join  (cost=6.67..11.93 rows=27 width=80) (never executed)
+                                    Output: i_10.image_id, ep_17.profile_id, i_11.image_id, ai_arc_4.image_id, e_11.archive_album_id
+                                    Inner Unique: true
+                                    Hash Cond: ((e_12.archive_album_id = ai_arc_4.album_id) AND (i_11.image_id = ai_arc_4.image_id))
+                                    ->  Nested Loop  (cost=4.95..10.06 rows=27 width=80) (never executed)
+                                          Output: i_10.image_id, ep_17.profile_id, i_11.image_id, e_12.archive_album_id, e_11.archive_album_id
+                                          Join Filter: (i_11.event_id = e_12.event_id)
+                                          ->  Seq Scan on public.events e_12  (cost=0.00..1.01 rows=1 width=48) (never executed)
+                                                Output: e_12.event_id, e_12.name, e_12.date, e_12.url, e_12.is_public, e_12.images_count_limit, e_12.image_size_limit_bytes, e_12.rekognition_calls_limit, e_12.rekognition_calls_used, e_12.archive_album_id, e_12.favorites_album_id, e_12.unassociated_group_id, e_12.representative_image, e_12.created_at, e_12.created_by
+                                          ->  Hash Join  (cost=4.95..8.71 rows=27 width=80) (never executed)
+                                                Output: i_10.image_id, ep_17.profile_id, i_11.event_id, i_11.image_id, e_11.archive_album_id
+                                                Inner Unique: true
+                                                Hash Cond: (i_10.image_id = i_11.image_id)
+                                                ->  Hash Left Join  (cost=3.19..6.87 rows=27 width=48) (never executed)
+                                                      Output: i_10.image_id, ep_17.profile_id, e_11.archive_album_id
+                                                      Inner Unique: true
+                                                      Hash Cond: ((i_10.image_id = pi_4.image_id) AND (ep_17.profile_id = pi_4.profile_id))
+                                                      Filter: ((ep_17.all_images AND (pi_4.image_id IS NULL)) OR ((NOT ep_17.all_images) AND (pi_4.image_id IS NOT NULL)))
+                                                      ->  Hash Join  (cost=2.16..5.12 rows=136 width=49) (never executed)
+                                                            Output: i_10.image_id, ep_17.profile_id, ep_17.all_images, e_11.archive_album_id
+                                                            Hash Cond: (i_10.event_id = ep_17.event_id)
+                                                            ->  Seq Scan on public.images i_10  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                                  Output: i_10.event_id, i_10.image_id, i_10.label, i_10.date_taken, i_10.file_size, i_10.high_quality_file_size, i_10.display_file_size, i_10.thumb_file_size, i_10.width, i_10.height, i_10.moment_id, i_10.description, i_10.upload_id
+                                                            ->  Hash  (cost=2.11..2.11 rows=4 width=65) (never executed)
+                                                                  Output: ep_17.profile_id, ep_17.event_id, ep_17.all_images, e_11.event_id, e_11.archive_album_id
+                                                                  ->  Nested Loop  (cost=0.00..2.11 rows=4 width=65) (never executed)
+                                                                        Output: ep_17.profile_id, ep_17.event_id, ep_17.all_images, e_11.event_id, e_11.archive_album_id
+                                                                        Join Filter: (e_11.event_id = ep_17.event_id)
+                                                                        ->  Seq Scan on public.events e_11  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                              Output: e_11.event_id, e_11.name, e_11.date, e_11.url, e_11.is_public, e_11.images_count_limit, e_11.image_size_limit_bytes, e_11.rekognition_calls_limit, e_11.rekognition_calls_used, e_11.archive_album_id, e_11.favorites_album_id, e_11.unassociated_group_id, e_11.representative_image, e_11.created_at, e_11.created_by
+                                                                        ->  Seq Scan on public.events_profiles ep_17  (cost=0.00..1.05 rows=4 width=33) (never executed)
+                                                                              Output: ep_17.event_id, ep_17.profile_id, ep_17.can_manage_event, ep_17.can_delete_event, ep_17.can_upload_and_delete_images, ep_17.can_edit, ep_17.all_images, ep_17.all_groups, ep_17.all_albums
+                                                                              Filter: (ep_17.all_images OR (NOT ep_17.all_images))
+                                                      ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                            Output: pi_4.image_id, pi_4.profile_id
+                                                            ->  Seq Scan on public.profiles_images pi_4  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                                  Output: pi_4.image_id, pi_4.profile_id
+                                                ->  Hash  (cost=1.34..1.34 rows=34 width=32) (never executed)
+                                                      Output: i_11.event_id, i_11.image_id
+                                                      ->  Seq Scan on public.images i_11  (cost=0.00..1.34 rows=34 width=32) (never executed)
+                                                            Output: i_11.event_id, i_11.image_id
+                                    ->  Hash  (cost=1.29..1.29 rows=29 width=32) (never executed)
+                                          Output: ai_arc_4.image_id, ai_arc_4.album_id
+                                          ->  Seq Scan on public.albums_images ai_arc_4  (cost=0.00..1.29 rows=29 width=32) (never executed)
+                                                Output: ai_arc_4.image_id, ai_arc_4.album_id
+                              ->  Hash  (cost=3.43..3.43 rows=15 width=49) (never executed)
+                                    Output: a_8.album_id, ep_18.profile_id, ep_18.all_albums, pa_6.album_id
+                                    ->  Hash Left Join  (cost=1.02..3.43 rows=15 width=49) (never executed)
+                                          Output: a_8.album_id, ep_18.profile_id, ep_18.all_albums, pa_6.album_id
+                                          Inner Unique: true
+                                          Hash Cond: ((a_8.album_id = pa_6.album_id) AND (ep_18.profile_id = pa_6.profile_id))
+                                          ->  Nested Loop  (cost=0.00..2.31 rows=15 width=33) (never executed)
+                                                Output: a_8.album_id, ep_18.profile_id, ep_18.all_albums
+                                                Join Filter: (a_8.event_id = ep_18.event_id)
+                                                ->  Seq Scan on public.events_profiles ep_18  (cost=0.00..1.05 rows=5 width=33) (never executed)
+                                                      Output: ep_18.event_id, ep_18.profile_id, ep_18.can_manage_event, ep_18.can_delete_event, ep_18.can_upload_and_delete_images, ep_18.can_edit, ep_18.all_images, ep_18.all_groups, ep_18.all_albums
+                                                ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (never executed)
+                                                      Output: a_8.event_id, a_8.album_id
+                                                      ->  Seq Scan on public.albums a_8  (cost=0.00..1.03 rows=3 width=32) (never executed)
+                                                            Output: a_8.event_id, a_8.album_id
+                                          ->  Hash  (cost=1.01..1.01 rows=1 width=32) (never executed)
+                                                Output: pa_6.album_id, pa_6.profile_id
+                                                ->  Seq Scan on public.profiles_albums pa_6  (cost=0.00..1.01 rows=1 width=32) (never executed)
+                                                      Output: pa_6.album_id, pa_6.profile_id
+Planning:
+  Buffers: shared hit=520
+Planning Time: 99.328 ms
+Execution Time: 5.257 ms
+
+
+================================================================================
+PERFORMANCE SUMMARY
+================================================================================
+
+Successful queries: 72
+Total time: 0.9950s
+Average time: 0.0138s
+Fastest: 0.0010s
+Slowest: 0.1160s
+
+--------------------------------------------------------------------------------
+SLOWEST VIEWS (Top 20):
+--------------------------------------------------------------------------------
+ 1. current_event_profile                                0.1160s (     1 rows)
+ 2. uploads_groups_ext                                   0.0630s (    20 rows)
+ 3. access_requests_ext                                  0.0577s (     1 rows)
+ 4. groups_ext                                           0.0502s (    33 rows)
+ 5. my_access_requests_groups_ext                        0.0483s (     0 rows)
+ 6. events_ext                                           0.0355s (     1 rows)
+ 7. access_requests_groups_ctx                           0.0341s (     1 rows)
+ 8. access_requests_ctx                                  0.0340s (     1 rows)
+ 9. my_access_requests_ext                               0.0322s (     0 rows)
+10. access_requests_details                              0.0315s (     1 rows)
+11. uploads_groups_ctx                                   0.0308s (    20 rows)
+12. access_requests_groups_ext                           0.0282s (     1 rows)
+13. albums_ext                                           0.0237s (     3 rows)
+14. images_ext                                           0.0230s (    34 rows)
+15. profiles_groups_ext                                  0.0220s (     1 rows)
+16. groups_images_ctx                                    0.0214s (   133 rows)
+17. profiles_groups_ctx                                  0.0195s (     1 rows)
+18. groups_eff                                           0.0181s (   165 rows)
+19. moments_ext                                          0.0180s (    11 rows)
+20. groups_ctx                                           0.0173s (    33 rows)
+
+================================================================================

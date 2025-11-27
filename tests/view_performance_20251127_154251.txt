@@ -1,0 +1,430 @@
+Event ID: b03392ea-8a12-5b70-bda3-e94c1dcc5dd1
+Profile ID: 89cb4967-0eba-48af-99cc-5e87407fb639
+
+Fetching all views from database...
+Found 72 views
+
+Testing: settings_ctx...
+[OK] settings_ctx: 0.0034s (1 rows)
+--------------------------------
+Testing: settings_ext...
+[OK] settings_ext: 0.0018s (1 rows)
+--------------------------------
+Testing: rekognition_usaged_ctx...
+[OK] rekognition_usaged_ctx: 0.0019s (2 rows)
+--------------------------------
+Testing: rekognition_usaged_ext...
+[OK] rekognition_usaged_ext: 0.0016s (2 rows)
+--------------------------------
+Testing: profiles_ctx...
+[OK] profiles_ctx: 0.0054s (10 rows)
+--------------------------------
+Testing: profiles_ext...
+[OK] profiles_ext: 0.0062s (10 rows)
+--------------------------------
+Testing: my_preferences...
+[OK] my_preferences: 0.0023s (47 rows)
+--------------------------------
+Testing: my_notifications_ctx...
+[OK] my_notifications_ctx: 0.0019s (13 rows)
+--------------------------------
+Testing: my_notifications_ext...
+[OK] my_notifications_ext: 0.0014s (13 rows)
+--------------------------------
+Testing: feedbacks_details...
+[OK] feedbacks_details: 0.0026s (12 rows)
+--------------------------------
+Testing: my_feedbacks_ctx...
+[OK] my_feedbacks_ctx: 0.0030s (11 rows)
+--------------------------------
+Testing: my_feedbacks_ext...
+[OK] my_feedbacks_ext: 0.0039s (11 rows)
+--------------------------------
+Testing: feedbacks_ctx...
+[OK] feedbacks_ctx: 0.0023s (12 rows)
+--------------------------------
+Testing: feedbacks_ext...
+[OK] feedbacks_ext: 0.0029s (12 rows)
+--------------------------------
+Testing: images_default_albums...
+[OK] images_default_albums: 0.0163s (5034 rows)
+--------------------------------
+Testing: groups_images...
+[OK] groups_images: 0.0977s (35103 rows)
+--------------------------------
+Testing: albums_images_actual...
+[OK] albums_images_actual: 0.0039s (294 rows)
+--------------------------------
+Testing: uploads_moments...
+[OK] uploads_moments: 0.0022s (6 rows)
+--------------------------------
+Testing: uploads_groups...
+[OK] uploads_groups: 0.0027s (20 rows)
+--------------------------------
+Testing: uploads_faces...
+[OK] uploads_faces: 0.0019s (25 rows)
+--------------------------------
+Testing: images_def...
+[OK] images_def: 0.1188s (40170 rows)
+--------------------------------
+Testing: groups_def...
+[OK] groups_def: 0.0102s (2573 rows)
+--------------------------------
+Testing: albums_def...
+[OK] albums_def: 0.0025s (71 rows)
+--------------------------------
+Testing: images_eff...
+[OK] images_eff: 0.1507s (40170 rows)
+--------------------------------
+Testing: faces_eff...
+[OK] faces_eff: 1.0197s (285962 rows)
+--------------------------------
+Testing: groups_eff...
+[OK] groups_eff: 0.3371s (2573 rows)
+--------------------------------
+Testing: moments_eff...
+[OK] moments_eff: 0.0712s (151 rows)
+--------------------------------
+Testing: albums_eff...
+[OK] albums_eff: 0.0124s (71 rows)
+--------------------------------
+Testing: events_ctx...
+[OK] events_ctx: 0.0022s (2 rows)
+--------------------------------
+Testing: images_ctx...
+[OK] images_ctx: 0.0516s (5000 rows)
+--------------------------------
+Testing: faces_ctx...
+[OK] faces_ctx: 0.2485s (35634 rows)
+--------------------------------
+Testing: groups_ctx...
+[OK] groups_ctx: 0.0207s (301 rows)
+--------------------------------
+Testing: groups_images_ctx...
+[OK] groups_images_ctx: 0.1250s (34970 rows)
+--------------------------------
+Testing: moments_ctx...
+[OK] moments_ctx: 0.0096s (12 rows)
+--------------------------------
+Testing: albums_ctx...
+[OK] albums_ctx: 0.0105s (7 rows)
+--------------------------------
+Testing: albums_images_ctx...
+[OK] albums_images_ctx: 0.0243s (284 rows)
+--------------------------------
+Testing: albums_images_actual_ctx...
+[OK] albums_images_actual_ctx: 0.0298s (284 rows)
+--------------------------------
+Testing: uploads_ctx...
+[OK] uploads_ctx: 0.0024s (0 rows)
+--------------------------------
+Testing: uploads_groups_ctx...
+[OK] uploads_groups_ctx: 0.0353s (0 rows)
+--------------------------------
+Testing: uploads_moments_ctx...
+[OK] uploads_moments_ctx: 0.0106s (0 rows)
+--------------------------------
+Testing: uploads_faces_ctx...
+[OK] uploads_faces_ctx: 0.0131s (0 rows)
+--------------------------------
+Testing: my_access_requests_ctx...
+[OK] my_access_requests_ctx: 0.0016s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ctx...
+[OK] my_access_requests_groups_ctx: 0.0009s (0 rows)
+--------------------------------
+Testing: access_requests_groups_ctx...
+[OK] access_requests_groups_ctx: 0.0273s (0 rows)
+--------------------------------
+Testing: access_requests_ctx...
+[OK] access_requests_ctx: 0.0293s (0 rows)
+--------------------------------
+Testing: events_profiles_ctx...
+[OK] events_profiles_ctx: 0.0041s (6 rows)
+--------------------------------
+Testing: profiles_images_ctx...
+[OK] profiles_images_ctx: 0.0406s (11000 rows)
+--------------------------------
+Testing: profiles_groups_ctx...
+[OK] profiles_groups_ctx: 0.0194s (0 rows)
+--------------------------------
+Testing: profiles_albums_ctx...
+[OK] profiles_albums_ctx: 0.0124s (0 rows)
+--------------------------------
+Testing: access_requests_details...
+[OK] access_requests_details: 0.0194s (1 rows)
+--------------------------------
+Testing: images_ext...
+[OK] images_ext: 0.0694s (5000 rows)
+--------------------------------
+Testing: faces_ext...
+[OK] faces_ext: 0.2222s (35634 rows)
+--------------------------------
+Testing: groups_ext...
+[OK] groups_ext: 0.2906s (301 rows)
+--------------------------------
+Testing: moments_ext...
+[OK] moments_ext: 0.0334s (12 rows)
+--------------------------------
+Testing: albums_ext...
+[OK] albums_ext: 0.0323s (7 rows)
+--------------------------------
+Testing: uploads_ext...
+[OK] uploads_ext: 0.0022s (0 rows)
+--------------------------------
+Testing: uploads_groups_ext...
+[OK] uploads_groups_ext: 0.0538s (0 rows)
+--------------------------------
+Testing: uploads_faces_ext...
+[OK] uploads_faces_ext: 0.0133s (0 rows)
+--------------------------------
+Testing: uploads_moments_ext...
+[OK] uploads_moments_ext: 0.0187s (0 rows)
+--------------------------------
+Testing: my_access_requests_ext...
+[OK] my_access_requests_ext: 0.0242s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ext...
+[OK] my_access_requests_groups_ext: 0.0398s (0 rows)
+--------------------------------
+Testing: access_requests_ext...
+[OK] access_requests_ext: 0.0530s (0 rows)
+--------------------------------
+Testing: access_requests_groups_ext...
+[OK] access_requests_groups_ext: 0.0298s (0 rows)
+--------------------------------
+Testing: events_profiles_ext...
+[OK] events_profiles_ext: 0.0028s (6 rows)
+--------------------------------
+Testing: profiles_images_ext...
+[OK] profiles_images_ext: 0.0453s (11000 rows)
+--------------------------------
+Testing: profiles_groups_ext...
+[OK] profiles_groups_ext: 0.0194s (0 rows)
+--------------------------------
+Testing: profiles_albums_ext...
+[OK] profiles_albums_ext: 0.0122s (0 rows)
+--------------------------------
+Testing: events_ext...
+[OK] events_ext: 0.1669s (2 rows)
+--------------------------------
+Testing: groups_to_access_requests_ctx...
+[OK] groups_to_access_requests_ctx: 0.1040s (0 rows)
+--------------------------------
+Testing: current_profile_events...
+[OK] current_profile_events: 0.0015s (2 rows)
+--------------------------------
+Testing: current_profile...
+[OK] current_profile: 0.0038s (1 rows)
+--------------------------------
+Testing: current_event_profile...
+[OK] current_event_profile: 0.0954s (1 rows)
+--------------------------------
+
+================================================================================
+ANALYZING SLOW VIEWS (Query Plans)
+================================================================================
+
+================================================================================
+VIEW: faces_eff
+Time: 1.0197s | Rows: 285962
+================================================================================
+Hash Join  (cost=3427.24..9683.19 rows=73585 width=49) (actual time=92.476..292.852 rows=285962.00 loops=1)
+  Output: ep.event_id, ep.profile_id, f.face_id, (((ep_1.all_images AND (pi.image_id IS NULL)) OR ((NOT ep_1.all_images) AND (pi.image_id IS NOT NULL))) AND ((ai_arc.image_id IS NULL) OR (ep_2.all_albums AND (pa.album_id IS NULL)) OR ((NOT ep_2.all_albums) AND (pa.album_id IS NOT NULL))) AND ((ep_3.all_groups AND (pg.group_id IS NULL)) OR ((NOT ep_3.all_groups) AND (pg.group_id IS NOT NULL))) AND (ep_3.can_edit OR (g.group_id <> e_2.unassociated_group_id)))
+  Hash Cond: ((ep_2.profile_id = ep_3.profile_id) AND (f.group_id = g.group_id))
+  Buffers: shared hit=1531
+  ->  Hash Join  (cost=3345.41..6130.59 rows=127548 width=146) (actual time=90.972..172.768 rows=285962.00 loops=1)
+        Output: f.face_id, f.group_id, ep.event_id, ep.profile_id, ep_1.all_images, ep_1.profile_id, pi.image_id, ai_arc.image_id, ep_2.all_albums, ep_2.profile_id, pa.album_id
+        Hash Cond: (f.image_id = i.image_id)
+        Buffers: shared hit=1522
+        ->  Seq Scan on public.faces f  (cost=0.00..1241.12 rows=35812 width=48) (actual time=0.008..4.607 rows=35812.00 loops=1)
+              Output: f.face_id, f.image_id, f.face_width, f.face_height, f.face_left, f.face_top, f.file_size, f.group_id
+              Buffers: shared hit=883
+        ->  Hash  (cost=3121.29..3121.29 rows=17929 width=162) (actual time=90.925..90.945 rows=40170.00 loops=1)
+              Output: i.image_id, ep.event_id, ep.profile_id, i_1.image_id, ep_1.all_images, ep_1.profile_id, pi.image_id, i_2.image_id, ai_arc.image_id, ep_2.all_albums, ep_2.profile_id, pa.album_id
+              Buckets: 65536 (originally 32768)  Batches: 1 (originally 1)  Memory Usage: 6727kB
+              Buffers: shared hit=639
+              ->  Hash Join  (cost=996.87..3121.29 rows=17929 width=162) (actual time=5.113..74.875 rows=40170.00 loops=1)
+                    Output: i.image_id, ep.event_id, ep.profile_id, i_1.image_id, ep_1.all_images, ep_1.profile_id, pi.image_id, i_2.image_id, ai_arc.image_id, ep_2.all_albums, ep_2.profile_id, pa.album_id
+                    Hash Cond: ((e.archive_album_id = a.album_id) AND (ep_1.profile_id = ep_2.profile_id))
+                    Buffers: shared hit=639
+                    ->  Hash Join  (cost=991.19..2296.17 rows=28451 width=145) (actual time=5.047..60.476 rows=40170.00 loops=1)
+                          Output: i.image_id, ep.event_id, ep.profile_id, i_1.image_id, ep_1.all_images, ep_1.profile_id, pi.image_id, i_2.image_id, ai_arc.image_id, e.archive_album_id
+                          Inner Unique: true
+                          Hash Cond: ((i.event_id = ep.event_id) AND (ep_1.profile_id = ep.profile_id))
+                          Buffers: shared hit=636
+                          ->  Hash Join  (cost=989.86..2057.14 rows=40170 width=129) (actual time=5.035..48.046 rows=40170.00 loops=1)
+                                Output: i.image_id, i.event_id, i_1.image_id, ep_1.all_images, ep_1.profile_id, pi.image_id, i_2.image_id, ai_arc.image_id, e.archive_album_id
+                                Inner Unique: true
+                                Hash Cond: (i_1.image_id = i.image_id)
+                                Buffers: shared hit=635
+                                ->  Hash Left Join  (cost=721.60..1683.34 rows=40170 width=97) (actual time=3.824..33.883 rows=40170.00 loops=1)
+                                      Output: i_1.image_id, ep_1.all_images, ep_1.profile_id, pi.image_id, i_2.image_id, ai_arc.image_id, e.archive_album_id
+                                      Inner Unique: true
+                                      Hash Cond: ((i_1.image_id = pi.image_id) AND (ep_1.profile_id = pi.profile_id))
+                                      Buffers: shared hit=480
+                                      ->  Hash Join  (cost=284.57..1035.41 rows=40170 width=81) (actual time=1.213..15.777 rows=40170.00 loops=1)
+                                            Output: i_1.image_id, ep_1.all_images, ep_1.profile_id, i_2.image_id, ai_arc.image_id, e.archive_album_id
+                                            Hash Cond: (i_1.event_id = ep_1.event_id)
+                                            Buffers: shared hit=318
+                                            ->  Hash Left Join  (cost=282.13..568.34 rows=5034 width=64) (actual time=1.189..7.140 rows=5034.00 loops=1)
+                                                  Output: i_1.event_id, i_1.image_id, i_2.image_id, ai_arc.image_id
+                                                  Inner Unique: true
+                                                  Hash Cond: ((e_1.archive_album_id = ai_arc.album_id) AND (i_2.image_id = ai_arc.image_id))
+                                                  Buffers: shared hit=316
+                                                  ->  Hash Join  (cost=269.31..529.09 rows=5034 width=64) (actual time=1.104..5.758 rows=5034.00 loops=1)
+                                                        Output: i_1.event_id, i_1.image_id, i_2.image_id, e_1.archive_album_id
+                                                        Inner Unique: true
+                                                        Hash Cond: (i_2.event_id = e_1.event_id)
+                                                        Buffers: shared hit=311
+                                                        ->  Hash Join  (cost=268.26..486.83 rows=5034 width=64) (actual time=1.094..4.255 rows=5034.00 loops=1)
+                                                              Output: i_1.event_id, i_1.image_id, i_2.event_id, i_2.image_id
+                                                              Inner Unique: true
+                                                              Hash Cond: (i_1.image_id = i_2.image_id)
+                                                              Buffers: shared hit=310
+                                                              ->  Seq Scan on public.images i_1  (cost=0.00..205.34 rows=5034 width=32) (actual time=0.004..0.951 rows=5034.00 loops=1)
+                                                                    Output: i_1.event_id, i_1.image_id, i_1.label, i_1.date_taken, i_1.file_size, i_1.high_quality_file_size, i_1.display_file_size, i_1.thumb_file_size, i_1.width, i_1.height, i_1.moment_id, i_1.description, i_1.upload_id
+                                                                    Buffers: shared hit=155
+                                                              ->  Hash  (cost=205.34..205.34 rows=5034 width=32) (actual time=1.071..1.073 rows=5034.00 loops=1)
+                                                                    Output: i_2.event_id, i_2.image_id
+                                                                    Buckets: 8192  Batches: 1  Memory Usage: 379kB
+                                                                    Buffers: shared hit=155
+                                                                    ->  Seq Scan on public.images i_2  (cost=0.00..205.34 rows=5034 width=32) (actual time=0.005..0.452 rows=5034.00 loops=1)
+                                                                          Output: i_2.event_id, i_2.image_id
+                                                                          Buffers: shared hit=155
+                                                        ->  Hash  (cost=1.02..1.02 rows=2 width=48) (actual time=0.006..0.007 rows=2.00 loops=1)
+                                                              Output: e_1.event_id, e_1.archive_album_id, e_1.favorites_album_id
+                                                              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                              Buffers: shared hit=1
+                                                              ->  Seq Scan on public.events e_1  (cost=0.00..1.02 rows=2 width=48) (actual time=0.004..0.004 rows=2.00 loops=1)
+                                                                    Output: e_1.event_id, e_1.archive_album_id, e_1.favorites_album_id
+                                                                    Buffers: shared hit=1
+                                                  ->  Hash  (cost=8.13..8.13 rows=313 width=32) (actual time=0.082..0.083 rows=313.00 loops=1)
+                                                        Output: ai_arc.image_id, ai_arc.album_id
+                                                        Buckets: 1024  Batches: 1  Memory Usage: 28kB
+                                                        Buffers: shared hit=5
+                                                        ->  Seq Scan on public.albums_images ai_arc  (cost=0.00..8.13 rows=313 width=32) (actual time=0.009..0.037 rows=313.00 loops=1)
+                                                              Output: ai_arc.image_id, ai_arc.album_id
+                                                              Buffers: shared hit=5
+                                            ->  Hash  (cost=2.28..2.28 rows=13 width=65) (actual time=0.022..0.023 rows=13.00 loops=1)
+                                                  Output: ep_1.all_images, ep_1.event_id, ep_1.profile_id, e.event_id, e.archive_album_id
+                                                  Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                                  Buffers: shared hit=2
+                                                  ->  Hash Join  (cost=1.04..2.28 rows=13 width=65) (actual time=0.015..0.020 rows=13.00 loops=1)
+                                                        Output: ep_1.all_images, ep_1.event_id, ep_1.profile_id, e.event_id, e.archive_album_id
+                                                        Inner Unique: true
+                                                        Hash Cond: (ep_1.event_id = e.event_id)
+                                                        Buffers: shared hit=2
+                                                        ->  Seq Scan on public.events_profiles ep_1  (cost=0.00..1.13 rows=13 width=33) (actual time=0.006..0.006 rows=13.00 loops=1)
+                                                              Output: ep_1.event_id, ep_1.profile_id, ep_1.can_manage_event, ep_1.can_delete_event, ep_1.can_upload_and_delete_images, ep_1.can_edit, ep_1.all_images, ep_1.all_groups, ep_1.all_albums
+                                                              Buffers: shared hit=1
+                                                        ->  Hash  (cost=1.02..1.02 rows=2 width=32) (actual time=0.006..0.007 rows=2.00 loops=1)
+                                                              Output: e.event_id, e.archive_album_id
+                                                              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                              Buffers: shared hit=1
+                                                              ->  Seq Scan on public.events e  (cost=0.00..1.02 rows=2 width=32) (actual time=0.004..0.004 rows=2.00 loops=1)
+                                                                    Output: e.event_id, e.archive_album_id
+                                                                    Buffers: shared hit=1
+                                      ->  Hash  (cost=272.01..272.01 rows=11001 width=32) (actual time=2.570..2.571 rows=11001.00 loops=1)
+                                            Output: pi.image_id, pi.profile_id
+                                            Buckets: 16384  Batches: 1  Memory Usage: 816kB
+                                            Buffers: shared hit=162
+                                            ->  Seq Scan on public.profiles_images pi  (cost=0.00..272.01 rows=11001 width=32) (actual time=0.014..1.020 rows=11001.00 loops=1)
+                                                  Output: pi.image_id, pi.profile_id
+                                                  Buffers: shared hit=162
+                                ->  Hash  (cost=205.34..205.34 rows=5034 width=32) (actual time=1.190..1.191 rows=5034.00 loops=1)
+                                      Output: i.image_id, i.event_id
+                                      Buckets: 8192  Batches: 1  Memory Usage: 379kB
+                                      Buffers: shared hit=155
+                                      ->  Seq Scan on public.images i  (cost=0.00..205.34 rows=5034 width=32) (actual time=0.007..0.533 rows=5034.00 loops=1)
+                                            Output: i.image_id, i.event_id
+                                            Buffers: shared hit=155
+                          ->  Hash  (cost=1.13..1.13 rows=13 width=32) (actual time=0.008..0.008 rows=13.00 loops=1)
+                                Output: ep.event_id, ep.profile_id
+                                Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                Buffers: shared hit=1
+                                ->  Seq Scan on public.events_profiles ep  (cost=0.00..1.13 rows=13 width=32) (actual time=0.003..0.005 rows=13.00 loops=1)
+                                      Output: ep.event_id, ep.profile_id
+                                      Buffers: shared hit=1
+                    ->  Hash  (cost=4.62..4.62 rows=71 width=49) (actual time=0.063..0.067 rows=71.00 loops=1)
+                          Output: a.album_id, ep_2.all_albums, ep_2.profile_id, pa.album_id
+                          Buckets: 1024  Batches: 1  Memory Usage: 13kB
+                          Buffers: shared hit=3
+                          ->  Hash Left Join  (cost=2.25..4.62 rows=71 width=49) (actual time=0.029..0.052 rows=71.00 loops=1)
+                                Output: a.album_id, ep_2.all_albums, ep_2.profile_id, pa.album_id
+                                Inner Unique: true
+                                Hash Cond: ((a.album_id = pa.album_id) AND (ep_2.profile_id = pa.profile_id))
+                                Buffers: shared hit=3
+                                ->  Hash Join  (cost=1.23..3.21 rows=71 width=33) (actual time=0.020..0.032 rows=71.00 loops=1)
+                                      Output: a.album_id, ep_2.all_albums, ep_2.profile_id
+                                      Hash Cond: (ep_2.event_id = a.event_id)
+                                      Buffers: shared hit=2
+                                      ->  Seq Scan on public.events_profiles ep_2  (cost=0.00..1.13 rows=13 width=33) (actual time=0.004..0.005 rows=13.00 loops=1)
+                                            Output: ep_2.event_id, ep_2.profile_id, ep_2.can_manage_event, ep_2.can_delete_event, ep_2.can_upload_and_delete_images, ep_2.can_edit, ep_2.all_images, ep_2.all_groups, ep_2.all_albums
+                                            Buffers: shared hit=1
+                                      ->  Hash  (cost=1.10..1.10 rows=10 width=32) (actual time=0.013..0.013 rows=10.00 loops=1)
+                                            Output: a.event_id, a.album_id
+                                            Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                            Buffers: shared hit=1
+                                            ->  Seq Scan on public.albums a  (cost=0.00..1.10 rows=10 width=32) (actual time=0.009..0.010 rows=10.00 loops=1)
+                                                  Output: a.event_id, a.album_id
+                                                  Buffers: shared hit=1
+                                ->  Hash  (cost=1.01..1.01 rows=1 width=32) (actual time=0.007..0.008 rows=1.00 loops=1)
+                                      Output: pa.album_id, pa.profile_id
+                                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                      Buffers: shared hit=1
+                                      ->  Seq Scan on public.profiles_albums pa  (cost=0.00..1.01 rows=1 width=32) (actual time=0.005..0.006 rows=1.00 loops=1)
+                                            Output: pa.album_id, pa.profile_id
+                                            Buffers: shared hit=1
+  ->  Hash  (cost=49.26..49.26 rows=2171 width=66) (actual time=1.485..1.491 rows=2573.00 loops=1)
+        Output: g.group_id, e_2.unassociated_group_id, ep_3.all_groups, ep_3.can_edit, ep_3.profile_id, pg.group_id
+        Buckets: 4096  Batches: 1  Memory Usage: 239kB
+        Buffers: shared hit=9
+        ->  Hash Left Join  (cost=3.46..49.26 rows=2171 width=66) (actual time=0.085..0.952 rows=2573.00 loops=1)
+              Output: g.group_id, e_2.unassociated_group_id, ep_3.all_groups, ep_3.can_edit, ep_3.profile_id, pg.group_id
+              Inner Unique: true
+              Hash Cond: ((g.group_id = pg.group_id) AND (ep_3.profile_id = pg.profile_id))
+              Buffers: shared hit=9
+              ->  Hash Join  (cost=2.44..36.83 rows=2171 width=50) (actual time=0.072..0.550 rows=2573.00 loops=1)
+                    Output: g.group_id, e_2.unassociated_group_id, ep_3.all_groups, ep_3.can_edit, ep_3.profile_id
+                    Hash Cond: (g.event_id = e_2.event_id)
+                    Buffers: shared hit=8
+                    ->  Seq Scan on public.groups g  (cost=0.00..9.34 rows=334 width=32) (actual time=0.038..0.059 rows=334.00 loops=1)
+                          Output: g.event_id, g.group_id, g.label, g.representative_face
+                          Buffers: shared hit=6
+                    ->  Hash  (cost=2.28..2.28 rows=13 width=66) (actual time=0.029..0.032 rows=13.00 loops=1)
+                          Output: e_2.unassociated_group_id, e_2.event_id, ep_3.all_groups, ep_3.can_edit, ep_3.event_id, ep_3.profile_id
+                          Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                          Buffers: shared hit=2
+                          ->  Hash Join  (cost=1.04..2.28 rows=13 width=66) (actual time=0.021..0.027 rows=13.00 loops=1)
+                                Output: e_2.unassociated_group_id, e_2.event_id, ep_3.all_groups, ep_3.can_edit, ep_3.event_id, ep_3.profile_id
+                                Inner Unique: true
+                                Hash Cond: (ep_3.event_id = e_2.event_id)
+                                Buffers: shared hit=2
+                                ->  Seq Scan on public.events_profiles ep_3  (cost=0.00..1.13 rows=13 width=34) (actual time=0.006..0.006 rows=13.00 loops=1)
+                                      Output: ep_3.event_id, ep_3.profile_id, ep_3.can_manage_event, ep_3.can_delete_event, ep_3.can_upload_and_delete_images, ep_3.can_edit, ep_3.all_images, ep_3.all_groups, ep_3.all_albums
+                                      Buffers: shared hit=1
+                                ->  Hash  (cost=1.02..1.02 rows=2 width=32) (actual time=0.011..0.012 rows=2.00 loops=1)
+                                      Output: e_2.unassociated_group_id, e_2.event_id
+                                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                      Buffers: shared hit=1
+                                      ->  Seq Scan on public.events e_2  (cost=0.00..1.02 rows=2 width=32) (actual time=0.007..0.008 rows=2.00 loops=1)
+                                            Output: e_2.unassociated_group_id, e_2.event_id
+                                            Buffers: shared hit=1
+              ->  Hash  (cost=1.01..1.01 rows=1 width=32) (actual time=0.010..0.011 rows=1.00 loops=1)
+                    Output: pg.group_id, pg.profile_id
+                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                    Buffers: shared hit=1
+                    ->  Seq Scan on public.profiles_groups pg  (cost=0.00..1.01 rows=1 width=32) (actual time=0.006..0.007 rows=1.00 loops=1)
+                          Output: pg.group_id, pg.profile_id
+                          Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=185
+Planning Time: 7.021 ms
+Execution Time: 305.296 ms
+
+
+================================================================================
+VIEW: groups_eff
+Time: 0.3371s | Rows: 2573
+================================================================================

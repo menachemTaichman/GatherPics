@@ -1,0 +1,248 @@
+Event ID: 75cb6635-879d-4386-b023-366444dc0fb2
+Profile ID: 89cb4967-0eba-48af-99cc-5e87407fb639
+
+Fetching all views from database...
+Found 72 views
+
+Testing: groups_images...
+✓ groups_images: 0.0028s (133 rows)
+--------------------------------
+Testing: my_preferences...
+✓ my_preferences: 0.0038s (47 rows)
+--------------------------------
+Testing: feedbacks_details...
+✓ feedbacks_details: 0.0024s (12 rows)
+--------------------------------
+Testing: current_profile_events...
+✓ current_profile_events: 0.0020s (1 rows)
+--------------------------------
+Testing: current_profile...
+✓ current_profile: 0.0055s (1 rows)
+--------------------------------
+Testing: albums_images_actual...
+✓ albums_images_actual: 0.0042s (10 rows)
+--------------------------------
+Testing: uploads_groups...
+✓ uploads_groups: 0.0044s (20 rows)
+--------------------------------
+Testing: uploads_moments...
+✓ uploads_moments: 0.0040s (6 rows)
+--------------------------------
+Testing: uploads_faces...
+✓ uploads_faces: 0.0020s (25 rows)
+--------------------------------
+Testing: access_requests_details...
+✓ access_requests_details: 0.0249s (1 rows)
+--------------------------------
+Testing: current_event_profile...
+✓ current_event_profile: 0.0933s (1 rows)
+--------------------------------
+Testing: access_requests_ctx...
+✓ access_requests_ctx: 0.0314s (1 rows)
+--------------------------------
+Testing: access_requests_ext...
+✓ access_requests_ext: 0.0503s (1 rows)
+--------------------------------
+Testing: access_requests_groups_ctx...
+✓ access_requests_groups_ctx: 0.0267s (1 rows)
+--------------------------------
+Testing: access_requests_groups_ext...
+✓ access_requests_groups_ext: 0.0269s (1 rows)
+--------------------------------
+Testing: albums_ctx...
+✓ albums_ctx: 0.0095s (3 rows)
+--------------------------------
+Testing: albums_def...
+✓ albums_def: 0.0020s (15 rows)
+--------------------------------
+Testing: albums_eff...
+✓ albums_eff: 0.0089s (15 rows)
+--------------------------------
+Testing: albums_ext...
+✓ albums_ext: 0.0231s (3 rows)
+--------------------------------
+Testing: albums_images_actual_ctx...
+✓ albums_images_actual_ctx: 0.0151s (10 rows)
+--------------------------------
+Testing: albums_images_ctx...
+✓ albums_images_ctx: 0.0134s (29 rows)
+--------------------------------
+Testing: events_ctx...
+✓ events_ctx: 0.0017s (1 rows)
+--------------------------------
+Testing: events_ext...
+✓ events_ext: 0.0297s (1 rows)
+--------------------------------
+Testing: events_profiles_ctx...
+✓ events_profiles_ctx: 0.0033s (4 rows)
+--------------------------------
+Testing: events_profiles_ext...
+✓ events_profiles_ext: 0.0036s (4 rows)
+--------------------------------
+Testing: faces_ctx...
+✓ faces_ctx: 0.0106s (178 rows)
+--------------------------------
+Testing: faces_eff...
+✓ faces_eff: 0.0116s (890 rows)
+--------------------------------
+Testing: faces_ext...
+✓ faces_ext: 0.0097s (178 rows)
+--------------------------------
+Testing: feedbacks_ctx...
+✓ feedbacks_ctx: 0.0019s (12 rows)
+--------------------------------
+Testing: feedbacks_ext...
+✓ feedbacks_ext: 0.0029s (12 rows)
+--------------------------------
+Testing: groups_ctx...
+✓ groups_ctx: 0.0184s (33 rows)
+--------------------------------
+Testing: groups_def...
+✓ groups_def: 0.0022s (165 rows)
+--------------------------------
+Testing: groups_eff...
+✓ groups_eff: 0.0179s (165 rows)
+--------------------------------
+Testing: groups_ext...
+✓ groups_ext: 0.0514s (33 rows)
+--------------------------------
+Testing: groups_images_ctx...
+✓ groups_images_ctx: 0.0284s (133 rows)
+--------------------------------
+Testing: groups_to_access_requests_ctx...
+✓ groups_to_access_requests_ctx: 0.0113s (0 rows)
+--------------------------------
+Testing: images_ctx...
+✓ images_ctx: 0.0065s (34 rows)
+--------------------------------
+Testing: images_def...
+✓ images_def: 0.0028s (170 rows)
+--------------------------------
+Testing: images_default_albums...
+✓ images_default_albums: 0.0024s (34 rows)
+--------------------------------
+Testing: images_eff...
+✓ images_eff: 0.0060s (170 rows)
+--------------------------------
+Testing: images_ext...
+✓ images_ext: 0.0337s (34 rows)
+--------------------------------
+Testing: moments_ctx...
+✓ moments_ctx: 0.0109s (11 rows)
+--------------------------------
+Testing: moments_eff...
+✓ moments_eff: 0.0125s (55 rows)
+--------------------------------
+Testing: moments_ext...
+✓ moments_ext: 0.0185s (11 rows)
+--------------------------------
+Testing: my_access_requests_ctx...
+✓ my_access_requests_ctx: 0.0021s (0 rows)
+--------------------------------
+Testing: my_access_requests_ext...
+✓ my_access_requests_ext: 0.0227s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ctx...
+✓ my_access_requests_groups_ctx: 0.0021s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ext...
+✓ my_access_requests_groups_ext: 0.0379s (0 rows)
+--------------------------------
+Testing: my_feedbacks_ctx...
+✓ my_feedbacks_ctx: 0.0033s (11 rows)
+--------------------------------
+Testing: my_feedbacks_ext...
+✓ my_feedbacks_ext: 0.0029s (11 rows)
+--------------------------------
+Testing: my_notifications_ctx...
+✓ my_notifications_ctx: 0.0016s (13 rows)
+--------------------------------
+Testing: my_notifications_ext...
+✓ my_notifications_ext: 0.0020s (13 rows)
+--------------------------------
+Testing: profiles_albums_ctx...
+✓ profiles_albums_ctx: 0.0149s (1 rows)
+--------------------------------
+Testing: profiles_albums_ext...
+✓ profiles_albums_ext: 0.0141s (1 rows)
+--------------------------------
+Testing: profiles_ctx...
+✓ profiles_ctx: 0.0034s (4 rows)
+--------------------------------
+Testing: profiles_ext...
+✓ profiles_ext: 0.0040s (4 rows)
+--------------------------------
+Testing: profiles_groups_ctx...
+✓ profiles_groups_ctx: 0.0261s (1 rows)
+--------------------------------
+Testing: profiles_groups_ext...
+✓ profiles_groups_ext: 0.0294s (1 rows)
+--------------------------------
+Testing: profiles_images_ctx...
+✓ profiles_images_ctx: 0.0093s (1 rows)
+--------------------------------
+Testing: profiles_images_ext...
+✓ profiles_images_ext: 0.0085s (1 rows)
+--------------------------------
+Testing: rekognition_usaged_ctx...
+✓ rekognition_usaged_ctx: 0.0026s (2 rows)
+--------------------------------
+Testing: rekognition_usaged_ext...
+✓ rekognition_usaged_ext: 0.0016s (2 rows)
+--------------------------------
+Testing: settings_ctx...
+✓ settings_ctx: 0.0027s (1 rows)
+--------------------------------
+Testing: settings_ext...
+✓ settings_ext: 0.0024s (1 rows)
+--------------------------------
+Testing: uploads_ctx...
+✓ uploads_ctx: 0.0035s (3 rows)
+--------------------------------
+Testing: uploads_ext...
+✓ uploads_ext: 0.0020s (3 rows)
+--------------------------------
+Testing: uploads_faces_ctx...
+✓ uploads_faces_ctx: 0.0147s (25 rows)
+--------------------------------
+Testing: uploads_faces_ext...
+✓ uploads_faces_ext: 0.0163s (25 rows)
+--------------------------------
+Testing: uploads_groups_ctx...
+✓ uploads_groups_ctx: 0.0349s (20 rows)
+--------------------------------
+Testing: uploads_groups_ext...
+✓ uploads_groups_ext: 0.0699s (20 rows)
+--------------------------------
+Testing: uploads_moments_ctx...
+✓ uploads_moments_ctx: 0.0113s (6 rows)
+--------------------------------
+Testing: uploads_moments_ext...
+✓ uploads_moments_ext: 0.0189s (6 rows)
+--------------------------------
+
+================================================================================
+PERFORMANCE SUMMARY
+================================================================================
+
+Successful queries: 72
+Total time: 1.0198s
+Average time: 0.0142s
+Fastest: 0.0016s
+Slowest: 0.0933s
+
+--------------------------------------------------------------------------------
+SLOWEST VIEWS (Top 10):
+--------------------------------------------------------------------------------
+ 1. current_event_profile                                0.0933s (     1 rows)
+ 2. uploads_groups_ext                                   0.0699s (    20 rows)
+ 3. groups_ext                                           0.0514s (    33 rows)
+ 4. access_requests_ext                                  0.0503s (     1 rows)
+ 5. my_access_requests_groups_ext                        0.0379s (     0 rows)
+ 6. uploads_groups_ctx                                   0.0349s (    20 rows)
+ 7. images_ext                                           0.0337s (    34 rows)
+ 8. access_requests_ctx                                  0.0314s (     1 rows)
+ 9. events_ext                                           0.0297s (     1 rows)
+10. profiles_groups_ext                                  0.0294s (     1 rows)
+
+================================================================================

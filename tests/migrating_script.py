@@ -70,6 +70,9 @@ DEFERRED_FK_COLUMNS = {
 # Columns that don't exist in PostgreSQL schema (removed/moved to other tables)
 EXCLUDED_COLUMNS = {
     'events': ['min_rank_to_create_event'],  # This column is in settings table in PostgreSQL
+    'events_profiles_images': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
+    'events_profiles_groups': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
+    'events_profiles_albums': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
 }
 
 # IDs to skip per table (rows already inserted by initial schema migration)
@@ -78,6 +81,14 @@ SKIP_IDS = {
         '89cb4967-0eba-48af-99cc-5e87407fb639',  # Developer profile inserted in 0001_initial_schema.py
     },
     # Add more tables/IDs as needed
+}
+
+# Table name mappings - maps old SQLite table names to new PostgreSQL table names
+# Used when table names have changed between SQLite and PostgreSQL schemas
+TABLE_MAPPING = {
+    'events_profiles_images': 'profiles_images',
+    'events_profiles_groups': 'profiles_groups',
+    'events_profiles_albums': 'profiles_albums',
 }
 
 # Column name mappings - maps old SQLite column names to new PostgreSQL column names
@@ -175,7 +186,9 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         table_name: Name of the table to migrate
         exclude_columns: List of column names to exclude from migration (for deferred FKs)
     """
-    print(f"Migrating table: {table_name}...")
+    # Get PostgreSQL table name (may be different from SQLite name)
+    pg_table_name = TABLE_MAPPING.get(table_name, table_name)
+    print(f"Migrating table: {table_name} -> {pg_table_name}...")
     
     # Get all rows from SQLite
     sqlite_cursor.execute(f'SELECT * FROM {table_name}')
@@ -238,28 +251,28 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         placeholders = ', '.join(['%s'] * len(column_names))
         columns = ', '.join(column_names)
         # Use OVERRIDING SYSTEM VALUE for identity columns if needed
-        if table_name in IDENTITY_COLUMN_TABLES:
-            identity_col = IDENTITY_COLUMN_TABLES[table_name]
+        if pg_table_name in IDENTITY_COLUMN_TABLES:
+            identity_col = IDENTITY_COLUMN_TABLES[pg_table_name]
             if identity_col in column_names:
                 # Use OVERRIDING SYSTEM VALUE to allow inserting into identity columns
                 # PostgreSQL syntax: INSERT INTO table_name (cols) OVERRIDING SYSTEM VALUE VALUES (...)
                 # OVERRIDING SYSTEM VALUE comes after the column list, before VALUES
-                insert_sql = f'INSERT INTO {table_name} ({columns}) OVERRIDING SYSTEM VALUE VALUES ({placeholders})'
+                insert_sql = f'INSERT INTO {pg_table_name} ({columns}) OVERRIDING SYSTEM VALUE VALUES ({placeholders})'
             else:
-                insert_sql = f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'
+                insert_sql = f'INSERT INTO {pg_table_name} ({columns}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'
         else:
             # Use ON CONFLICT DO NOTHING to skip duplicates gracefully
-            insert_sql = f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'
+            insert_sql = f'INSERT INTO {pg_table_name} ({columns}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'
         
         try:
             # Get count before insert
-            pg_cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
+            pg_cursor.execute(f'SELECT COUNT(*) FROM {pg_table_name}')
             count_before = pg_cursor.fetchone()[0]
             
             
             # For identity columns, we can't use ON CONFLICT, so handle conflicts by catching errors
-            if table_name in IDENTITY_COLUMN_TABLES:
-                identity_col = IDENTITY_COLUMN_TABLES[table_name]
+            if pg_table_name in IDENTITY_COLUMN_TABLES:
+                identity_col = IDENTITY_COLUMN_TABLES[pg_table_name]
                 if identity_col in column_names:
                     # Insert row by row to handle conflicts gracefully
                     inserted_count = 0
@@ -291,16 +304,16 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                 pg_conn.commit()  # Commit the batch
             
             # If this table has an identity column, reset the sequence to the max value
-            if table_name in IDENTITY_COLUMN_TABLES:
-                identity_col = IDENTITY_COLUMN_TABLES[table_name]
+            if pg_table_name in IDENTITY_COLUMN_TABLES:
+                identity_col = IDENTITY_COLUMN_TABLES[pg_table_name]
                 if identity_col in column_names:
                     # Get the max value of the identity column
-                    pg_cursor.execute(f'SELECT COALESCE(MAX({identity_col}), 0) FROM {table_name}')
+                    pg_cursor.execute(f'SELECT COALESCE(MAX({identity_col}), 0) FROM {pg_table_name}')
                     max_id = pg_cursor.fetchone()[0]
                     # Find the actual sequence name for this identity column
                     pg_cursor.execute("""
                         SELECT pg_get_serial_sequence(%s, %s)
-                    """, (table_name, identity_col))
+                    """, (pg_table_name, identity_col))
                     sequence_result = pg_cursor.fetchone()
                     if sequence_result and sequence_result[0]:
                         sequence_name = sequence_result[0]  # Use full qualified name (schema.sequence)
@@ -309,7 +322,7 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                         pg_conn.commit()
             
             # Get count after insert to calculate how many were actually inserted
-            pg_cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
+            pg_cursor.execute(f'SELECT COUNT(*) FROM {pg_table_name}')
             count_after = pg_cursor.fetchone()[0]
             rows_inserted = count_after - count_before
             rows_skipped = len(converted_rows) - rows_inserted
@@ -331,11 +344,13 @@ def update_deferred_fk_columns(sqlite_cursor, pg_cursor, table_name, fk_column, 
     Args:
         sqlite_cursor: SQLite database cursor
         pg_cursor: PostgreSQL database cursor
-        table_name: Name of the table to update
+        table_name: Name of the table to update (SQLite name)
         fk_column: Name of the foreign key column to update
         primary_key_column: Name of the primary key column for matching rows
     """
-    print(f"  Updating {table_name}.{fk_column}...")
+    # Get PostgreSQL table name (may be different from SQLite name)
+    pg_table_name = TABLE_MAPPING.get(table_name, table_name)
+    print(f"  Updating {pg_table_name}.{fk_column}...")
     
     # Get all rows with their FK values from SQLite
     sqlite_cursor.execute(f'SELECT {primary_key_column}, {fk_column} FROM {table_name}')
@@ -348,7 +363,7 @@ def update_deferred_fk_columns(sqlite_cursor, pg_cursor, table_name, fk_column, 
     updated_count = 0
     for pk_value, fk_value in rows:
         if fk_value is not None:
-            update_sql = f'UPDATE {table_name} SET {fk_column} = %s WHERE {primary_key_column} = %s'
+            update_sql = f'UPDATE {pg_table_name} SET {fk_column} = %s WHERE {primary_key_column} = %s'
             pg_cursor.execute(update_sql, (fk_value, pk_value))
             updated_count += 1
     

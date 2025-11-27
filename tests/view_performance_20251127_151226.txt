@@ -1,0 +1,745 @@
+Event ID: 75cb6635-879d-4386-b023-366444dc0fb2
+Profile ID: 89cb4967-0eba-48af-99cc-5e87407fb639
+
+Fetching all views from database...
+Found 72 views
+
+Testing: groups_images...
+✓ groups_images: 0.0031s (133 rows)
+--------------------------------
+Testing: my_preferences...
+✓ my_preferences: 0.0043s (47 rows)
+--------------------------------
+Testing: feedbacks_details...
+✓ feedbacks_details: 0.0041s (12 rows)
+--------------------------------
+Testing: current_profile_events...
+✓ current_profile_events: 0.0014s (1 rows)
+--------------------------------
+Testing: current_profile...
+❌ current_profile: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: albums_images_actual...
+✓ albums_images_actual: 0.0049s (10 rows)
+--------------------------------
+Testing: uploads_groups...
+✓ uploads_groups: 0.0042s (20 rows)
+--------------------------------
+Testing: uploads_moments...
+✓ uploads_moments: 0.0027s (6 rows)
+--------------------------------
+Testing: uploads_faces...
+✓ uploads_faces: 0.0026s (25 rows)
+--------------------------------
+Testing: access_requests_details...
+✓ access_requests_details: 0.0292s (1 rows)
+--------------------------------
+Testing: current_event_profile...
+❌ current_event_profile: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: access_requests_ctx...
+❌ access_requests_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: access_requests_ext...
+❌ access_requests_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: access_requests_groups_ctx...
+❌ access_requests_groups_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: access_requests_groups_ext...
+❌ access_requests_groups_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: albums_ctx...
+✓ albums_ctx: 0.0086s (3 rows)
+--------------------------------
+Testing: albums_def...
+✓ albums_def: 0.0018s (15 rows)
+--------------------------------
+Testing: albums_eff...
+✓ albums_eff: 0.0074s (15 rows)
+--------------------------------
+Testing: albums_ext...
+✓ albums_ext: 0.0253s (3 rows)
+--------------------------------
+Testing: albums_images_actual_ctx...
+✓ albums_images_actual_ctx: 0.0129s (10 rows)
+--------------------------------
+Testing: albums_images_ctx...
+✓ albums_images_ctx: 0.0117s (29 rows)
+--------------------------------
+Testing: events_ctx...
+✓ events_ctx: 0.0022s (1 rows)
+--------------------------------
+Testing: events_ext...
+✓ events_ext: 0.0331s (1 rows)
+--------------------------------
+Testing: events_profiles_ctx...
+❌ events_profiles_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: events_profiles_ext...
+❌ events_profiles_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: faces_ctx...
+✓ faces_ctx: 0.0115s (178 rows)
+--------------------------------
+Testing: faces_eff...
+✓ faces_eff: 0.0098s (890 rows)
+--------------------------------
+Testing: faces_ext...
+✓ faces_ext: 0.0107s (178 rows)
+--------------------------------
+Testing: feedbacks_ctx...
+❌ feedbacks_ctx: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: feedbacks_ext...
+❌ feedbacks_ext: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: groups_ctx...
+✓ groups_ctx: 0.0225s (33 rows)
+--------------------------------
+Testing: groups_def...
+✓ groups_def: 0.0025s (165 rows)
+--------------------------------
+Testing: groups_eff...
+✓ groups_eff: 0.0219s (165 rows)
+--------------------------------
+Testing: groups_ext...
+✓ groups_ext: 0.0580s (33 rows)
+--------------------------------
+Testing: groups_images_ctx...
+✓ groups_images_ctx: 0.0271s (133 rows)
+--------------------------------
+Testing: groups_to_access_requests_ctx...
+✓ groups_to_access_requests_ctx: 0.0088s (0 rows)
+--------------------------------
+Testing: images_ctx...
+✓ images_ctx: 0.0057s (34 rows)
+--------------------------------
+Testing: images_def...
+✓ images_def: 0.0027s (170 rows)
+--------------------------------
+Testing: images_default_albums...
+✓ images_default_albums: 0.0018s (34 rows)
+--------------------------------
+Testing: images_eff...
+✓ images_eff: 0.0039s (170 rows)
+--------------------------------
+Testing: images_ext...
+✓ images_ext: 0.0267s (34 rows)
+--------------------------------
+Testing: moments_ctx...
+✓ moments_ctx: 0.0102s (11 rows)
+--------------------------------
+Testing: moments_eff...
+✓ moments_eff: 0.0083s (55 rows)
+--------------------------------
+Testing: moments_ext...
+✓ moments_ext: 0.0147s (11 rows)
+--------------------------------
+Testing: my_access_requests_ctx...
+✓ my_access_requests_ctx: 0.0017s (0 rows)
+--------------------------------
+Testing: my_access_requests_ext...
+✓ my_access_requests_ext: 0.0214s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ctx...
+✓ my_access_requests_groups_ctx: 0.0015s (0 rows)
+--------------------------------
+Testing: my_access_requests_groups_ext...
+❌ my_access_requests_groups_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: my_feedbacks_ctx...
+❌ my_feedbacks_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+                                                              ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: my_feedbacks_ext...
+❌ my_feedbacks_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+                                                              ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: my_notifications_ctx...
+✓ my_notifications_ctx: 0.0020s (13 rows)
+--------------------------------
+Testing: my_notifications_ext...
+✓ my_notifications_ext: 0.0012s (13 rows)
+--------------------------------
+Testing: profiles_albums_ctx...
+❌ profiles_albums_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_albums_ext...
+❌ profiles_albums_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_ctx...
+❌ profiles_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_ext...
+❌ profiles_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_groups_ctx...
+❌ profiles_groups_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_groups_ext...
+❌ profiles_groups_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_images_ctx...
+❌ profiles_images_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: profiles_images_ext...
+❌ profiles_images_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+--------------------------------
+Testing: rekognition_usaged_ctx...
+❌ rekognition_usaged_ctx: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: rekognition_usaged_ext...
+❌ rekognition_usaged_ext: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: settings_ctx...
+❌ settings_ctx: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: settings_ext...
+❌ settings_ext: ERROR - Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_ctx...
+❌ uploads_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_ext...
+❌ uploads_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_faces_ctx...
+❌ uploads_faces_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_faces_ext...
+❌ uploads_faces_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_groups_ctx...
+❌ uploads_groups_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_groups_ext...
+❌ uploads_groups_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_moments_ctx...
+❌ uploads_moments_ctx: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+Testing: uploads_moments_ext...
+❌ uploads_moments_ext: ERROR - Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+--------------------------------
+
+================================================================================
+PERFORMANCE SUMMARY
+================================================================================
+
+Successful queries: 39
+Total time: 0.4340s
+Average time: 0.0111s
+Fastest: 0.0012s
+Slowest: 0.0580s
+
+--------------------------------------------------------------------------------
+SLOWEST VIEWS (Top 10):
+--------------------------------------------------------------------------------
+ 1. groups_ext                                           0.0580s (    33 rows)
+ 2. events_ext                                           0.0331s (     1 rows)
+ 3. access_requests_details                              0.0292s (     1 rows)
+ 4. groups_images_ctx                                    0.0271s (   133 rows)
+ 5. images_ext                                           0.0267s (    34 rows)
+ 6. albums_ext                                           0.0253s (     3 rows)
+ 7. groups_ctx                                           0.0225s (    33 rows)
+ 8. groups_eff                                           0.0219s (   165 rows)
+ 9. my_access_requests_ext                               0.0214s (     0 rows)
+10. moments_ext                                          0.0147s (    11 rows)
+
+❌ Failed queries: 33
+  current_profile: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  current_event_profile: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  access_requests_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  access_requests_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  access_requests_groups_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  access_requests_groups_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  events_profiles_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  events_profiles_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  feedbacks_ctx: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  feedbacks_ext: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  my_access_requests_groups_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  my_feedbacks_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+                                                              ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  my_feedbacks_ext: Internal error: operator does not exist: uuid = text
+LINE 1: SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+                                                              ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT is_public::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  profiles_albums_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_albums_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_groups_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_groups_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_images_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  profiles_images_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ...ECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+                                                                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT hierarchy_rank::TEXT FROM profiles WHERE profile_id = $1
+CONTEXT:  PL/pgSQL function cur_profile(text) line 26 at EXECUTE
+PL/pgSQL function cur_profile_int(text) line 5 at assignment
+
+  rekognition_usaged_ctx: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  rekognition_usaged_ext: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  settings_ctx: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  settings_ext: Internal error: operator does not exist: text = uuid
+LINE 1: profile_id_val = (SELECT developer_id FROM settings WHERE id...
+                       ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1)
+CONTEXT:  PL/pgSQL function cur_profile(text) line 18 at IF
+PL/pgSQL function cur_profile_bool(text) line 5 at assignment
+
+  uploads_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_faces_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_faces_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_groups_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_groups_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_moments_ctx: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+  uploads_moments_ext: Internal error: operator does not exist: uuid = text
+LINE 1: ..._images::TEXT FROM events_profiles WHERE event_id = $1 AND p...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  SELECT can_upload_and_delete_images::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2
+CONTEXT:  PL/pgSQL function cur_event_profile(text) line 19 at EXECUTE
+PL/pgSQL function cur_event_profile_bool(text) line 5 at assignment
+
+
+================================================================================

@@ -986,8 +986,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const isRepresentative = (faceId) => groupEntity?.representative_face === faceId;
 
                     const uploadGroupRelation = upload?.groups?.[group.id];
-                    const totalFacesCount = uploadGroupRelation?.group_faces_count || groupEntity?.faces_count || 0;
-                    const uploadFacesCount = uploadGroupRelation?.group_upload_faces_count || 0;
+                    const totalFacesCount = uploadGroupRelation?.faces_count || groupEntity?.faces_count || 0;
+                    const uploadFacesCount = uploadGroupRelation?.upload_faces_count || 0;
 
                     return (
                       <div key={group.id} className="border rounded-lg overflow-hidden" data-group-id={group.id}>
@@ -1182,8 +1182,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     const isRepresentative = (imageId) => momentEntity?.representative_image === imageId;
 
                     const uploadMomentRelation = upload?.moments?.[moment.id];
-                    const totalImagesCount = uploadMomentRelation?.moment_images_count || momentEntity?.images_count || 0;
-                    const uploadImagesCount = uploadMomentRelation?.moment_upload_images_count || 0;
+                    const totalImagesCount = uploadMomentRelation?.images_count || momentEntity?.images_count || 0;
+                    const uploadImagesCount = uploadMomentRelation?.upload_images_count || 0;
 
                     return (
                       <div key={moment.id} className="border rounded-lg overflow-hidden" data-moment-id={moment.id}>

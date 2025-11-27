@@ -40,7 +40,7 @@ steps = [
             
             -- Special computed field: is_current_developer
             IF key = 'is_developer' THEN
-                IF profile_id_val = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
+                IF profile_id_val::UUID = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
                     RETURN 'true';
                 ELSE
                     RETURN 'false';
@@ -48,7 +48,7 @@ steps = [
             END IF;
             
             BEGIN
-                EXECUTE format('SELECT %I::TEXT FROM profiles WHERE profile_id = $1', key)
+                EXECUTE format('SELECT %I::TEXT FROM profiles WHERE profile_id = $1::UUID', key)
                 INTO result_val
                 USING profile_id_val;
             END;
@@ -91,7 +91,7 @@ steps = [
             END IF;
             
             BEGIN
-                EXECUTE format('SELECT %I::TEXT FROM events_profiles WHERE event_id = $1 AND profile_id = $2', key)
+                EXECUTE format('SELECT %I::TEXT FROM events_profiles WHERE event_id = $1::UUID AND profile_id = $2::UUID', key)
                 INTO result_val
                 USING event_id_val, profile_id_val;
             END;
