@@ -116,10 +116,10 @@ class GeneralModels(BaseModels):
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
         if self.db.profile_context['profile_id'] != profile_id:
-            accessible_profiles = self.db.STRUCTURE()['profiles']['accessible_table']
+            ctx_profiles = 'profiles_ctx'
         else:
-            accessible_profiles = 'current_profile'
-        query = f'SELECT password FROM {accessible_profiles} WHERE profile_id = %s'
+            ctx_profiles = 'current_profile_ctx'
+        query = f'SELECT password FROM {ctx_profiles} WHERE profile_id = %s'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
         if not result:
             raise Forbidden('Profile not found')
@@ -182,7 +182,7 @@ class GeneralModels(BaseModels):
 
     def get_public_access_code(self, profile_id: str) -> str:
         """Get the public access code for a profile."""
-        query = f'SELECT public_access_code FROM accessible_profiles WHERE profile_id = %s'
+        query = f'SELECT public_access_code FROM profiles_ctx WHERE profile_id = %s'
         result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
         if not result:
             raise Forbidden('Profile not found')
@@ -312,7 +312,7 @@ class GeneralModels(BaseModels):
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
         fields = self.db.get_view_fields('events')
-        query = f'SELECT {fields} FROM accessible_events WHERE url = %s'
+        query = f'SELECT {fields} FROM events_ext WHERE url = %s'
         event = self.db.execute_query(query, (url,), return_format=ReturnFormat.DICT)
         if not event:
             return self.db.execute_query("SELECT event_id FROM events WHERE url = %s", (url,), return_format=ReturnFormat.DICT)

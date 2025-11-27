@@ -11,14 +11,10 @@ steps = [
     # Step 1: Create trigger functions for INSTEAD OF triggers on views
     step(
         """
-        -- Function for accessible_settings UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_settings_update()
+        -- Function for settings_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_settings_ctx_update()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NOT cur_profile_bool('is_developer') THEN
-                RAISE EXCEPTION 'Permission denied: only developer can update settings';
-            END IF;
-
             UPDATE settings SET
                 image_size_limit_bytes = NEW.image_size_limit_bytes,
                 images_count_limit = NEW.images_count_limit,
@@ -30,14 +26,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_rekognition_usaged INSERT
-        CREATE OR REPLACE FUNCTION trg_accessible_rekognition_usaged_insert()
+        -- Function for rekognition_usaged_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_rekognition_usaged_ctx_insert()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NOT cur_profile_bool('is_developer') THEN
-                RAISE EXCEPTION 'Permission denied: only developer can insert rekognition usage';
-            END IF;
-
             INSERT INTO rekognition_usaged (
                 event_id,
                 event_label,
@@ -59,8 +51,8 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events INSERT
-        CREATE OR REPLACE FUNCTION trg_accessible_events_insert()
+        -- Function for events_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_events_ctx_insert()
         RETURNS TRIGGER AS $$
         BEGIN
             IF NOT cur_profile_bool('can_create_events') THEN
@@ -90,7 +82,7 @@ steps = [
                 COALESCE(NEW.image_size_limit_bytes, 0),
                 NEW.representative_image,
                 COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
-                cur_profile('profile_id'),
+                cur_profile_uuid('profile_id'),
                 (SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1)
             );
 
@@ -105,22 +97,22 @@ steps = [
                 all_groups,
                 all_albums
             )
-            VALUES (cur_profile('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+            VALUES (cur_profile_uuid('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
             ON CONFLICT (event_id, profile_id) DO NOTHING;
             
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_events_update()
+        -- Function for events_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_events_ctx_update()
         RETURNS TRIGGER AS $$
         DECLARE
             can_manage BOOLEAN;
         BEGIN
             SELECT can_manage_event INTO can_manage
             FROM events_profiles
-            WHERE profile_id = cur_profile('profile_id') AND event_id = OLD.event_id;
+            WHERE profile_id = cur_profile_uuid('profile_id') AND event_id = OLD.event_id;
             
             IF can_manage IS NOT TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot manage event';
@@ -149,15 +141,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events DELETE
-        CREATE OR REPLACE FUNCTION trg_accessible_events_delete()
+        -- Function for events_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_events_ctx_delete()
         RETURNS TRIGGER AS $$
         DECLARE
             can_delete BOOLEAN;
         BEGIN
             SELECT can_delete_event INTO can_delete
             FROM events_profiles
-            WHERE event_id = OLD.event_id AND profile_id = cur_profile('profile_id');
+            WHERE event_id = OLD.event_id AND profile_id = cur_profile_uuid('profile_id');
             
             IF can_delete IS NOT TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete event';
@@ -189,7 +181,7 @@ steps = [
                 label = NEW.label,
                 email = NEW.email,
                 password = NEW.password
-            WHERE profile_id = cur_profile('profile_id');
+            WHERE profile_id = cur_profile_uuid('profile_id');
             
             RETURN NEW;
         END;
@@ -197,40 +189,40 @@ steps = [
         """,
         """
         DROP FUNCTION IF EXISTS trg_current_profile_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_events_delete() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_events_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_events_insert() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_rekognition_usaged_insert() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_settings_update() CASCADE;
+        DROP FUNCTION IF EXISTS trg_events_ctx_delete() CASCADE;
+        DROP FUNCTION IF EXISTS trg_events_ctx_update() CASCADE;
+        DROP FUNCTION IF EXISTS trg_events_ctx_insert() CASCADE;
+        DROP FUNCTION IF EXISTS trg_rekognition_usaged_ctx_insert() CASCADE;
+        DROP FUNCTION IF EXISTS trg_settings_ctx_update() CASCADE;
         """
     ),
     # Step 2: Attach INSTEAD OF triggers to views (first batch)
     step(
         """
-        DROP TRIGGER IF EXISTS trg_accessible_settings_update ON accessible_settings;
-        CREATE TRIGGER trg_accessible_settings_update
-            INSTEAD OF UPDATE ON accessible_settings
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_settings_update();
+        DROP TRIGGER IF EXISTS trg_settings_ctx_update ON settings_ctx;
+        CREATE TRIGGER trg_settings_ctx_update
+            INSTEAD OF UPDATE ON settings_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_settings_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_rekognition_usaged_insert ON accessible_rekognition_usaged;
-        CREATE TRIGGER trg_accessible_rekognition_usaged_insert
-            INSTEAD OF INSERT ON accessible_rekognition_usaged
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_rekognition_usaged_insert();
+        DROP TRIGGER IF EXISTS trg_rekognition_usaged_ctx_insert ON rekognition_usaged_ctx;
+        CREATE TRIGGER trg_rekognition_usaged_ctx_insert
+            INSTEAD OF INSERT ON rekognition_usaged_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_rekognition_usaged_ctx_insert();
 
-        DROP TRIGGER IF EXISTS trg_accessible_events_insert ON accessible_events;
-        CREATE TRIGGER trg_accessible_events_insert
-            INSTEAD OF INSERT ON accessible_events
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_events_insert();
+        DROP TRIGGER IF EXISTS trg_events_ctx_insert ON events_ctx;
+        CREATE TRIGGER trg_events_ctx_insert
+            INSTEAD OF INSERT ON events_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_events_ctx_insert();
 
-        DROP TRIGGER IF EXISTS trg_accessible_events_update ON accessible_events;
-        CREATE TRIGGER trg_accessible_events_update
-            INSTEAD OF UPDATE ON accessible_events
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_events_update();
+        DROP TRIGGER IF EXISTS trg_events_ctx_update ON events_ctx;
+        CREATE TRIGGER trg_events_ctx_update
+            INSTEAD OF UPDATE ON events_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_events_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_events_delete ON accessible_events;
-        CREATE TRIGGER trg_accessible_events_delete
-            INSTEAD OF DELETE ON accessible_events
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_events_delete();
+        DROP TRIGGER IF EXISTS trg_events_ctx_delete ON events_ctx;
+        CREATE TRIGGER trg_events_ctx_delete
+            INSTEAD OF DELETE ON events_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_events_ctx_delete();
 
         DROP TRIGGER IF EXISTS trg_current_profile_update ON current_profile;
         CREATE TRIGGER trg_current_profile_update
@@ -239,18 +231,18 @@ steps = [
         """,
         """
         DROP TRIGGER IF EXISTS trg_current_profile_update ON current_profile;
-        DROP TRIGGER IF EXISTS trg_accessible_events_delete ON accessible_events;
-        DROP TRIGGER IF EXISTS trg_accessible_events_update ON accessible_events;
-        DROP TRIGGER IF EXISTS trg_accessible_events_insert ON accessible_events;
-        DROP TRIGGER IF EXISTS trg_accessible_rekognition_usaged_insert ON accessible_rekognition_usaged;
-        DROP TRIGGER IF EXISTS trg_accessible_settings_update ON accessible_settings;
+        DROP TRIGGER IF EXISTS trg_events_ctx_delete ON events_ctx;
+        DROP TRIGGER IF EXISTS trg_events_ctx_update ON events_ctx;
+        DROP TRIGGER IF EXISTS trg_events_ctx_insert ON events_ctx;
+        DROP TRIGGER IF EXISTS trg_rekognition_usaged_ctx_insert ON rekognition_usaged_ctx;
+        DROP TRIGGER IF EXISTS trg_settings_ctx_update ON settings_ctx;
         """
     ),
     # Step 3: More trigger functions for views
     step(
         """
-        -- Function for accessible_profiles INSERT
-        CREATE OR REPLACE FUNCTION trg_accessible_profiles_insert()
+        -- Function for profiles_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_profiles_ctx_insert()
         RETURNS TRIGGER AS $$
         DECLARE
             min_rank INTEGER;
@@ -269,11 +261,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile dose not have permission to manage create events permissions';
             END IF;
             
-            IF NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
-                RAISE EXCEPTION 'Permission denied: cannot create profile to a different event than the current profile';
-            END IF;
-            
-            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible) THEN
+            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM current_profile_events) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
 
@@ -293,17 +281,14 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_profiles UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_profiles_update()
+        -- Function for profiles_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_profiles_ctx_update()
         RETURNS TRIGGER AS $$
         DECLARE
             min_rank INTEGER;
         BEGIN
-            IF OLD.profile_id NOT IN (
-                SELECT profile_id FROM accessible_profiles ap
-                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable
-            ) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
+            IF NOT OLD.is_editable THEN
+                RAISE EXCEPTION 'Permission denied: the profile is not editable';
             END IF;
             
             min_rank := (SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1);
@@ -316,11 +301,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile dose not have permission to manage create events permissions';
             END IF;
             
-            IF NEW.restricted_to_event IS NOT NULL AND cur_profile('restricted_to_event') <> COALESCE(NEW.restricted_to_event, '') THEN
-                RAISE EXCEPTION 'Permission denied: cannot update profile to a different event than the current profile';
-            END IF;
-            
-            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT ae.event_id FROM accessible_events ae WHERE ae.is_accessible) THEN
+            IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM current_profile_events) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
 
@@ -339,15 +320,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_profiles DELETE
-        CREATE OR REPLACE FUNCTION trg_accessible_profiles_delete()
+        -- Function for profiles_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_profiles_ctx_delete()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF OLD.profile_id NOT IN (
-                SELECT profile_id FROM accessible_profiles ap
-                WHERE ap.profile_id = OLD.profile_id AND ap.is_editable
-            ) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
+            IF NOT OLD.is_editable THEN
+                RAISE EXCEPTION 'Permission denied: the profile is not editable';
             END IF;
             
             IF EXISTS (SELECT 1 FROM events_profiles ep WHERE ep.profile_id = OLD.profile_id) THEN
@@ -364,7 +342,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_my_preferences_update()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_profile('profile_id') <> OLD.profile_id THEN
+            IF cur_profile_uuid('profile_id') IS DISTINCT FROM OLD.profile_id THEN
                 RAISE EXCEPTION 'Permission denied: cannot update preferences for another profile';
             END IF;
 
@@ -376,28 +354,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_notifications INSERT
-        CREATE OR REPLACE FUNCTION trg_accessible_notifications_insert()
+        -- Function for my_notifications_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_my_notifications_ctx_update()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM accessible_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-
-            INSERT INTO notifications (profile_id, message, created_at, read, type, data)
-            VALUES (NEW.profile_id, NEW.message, COALESCE(NEW.created_at, CURRENT_TIMESTAMP), COALESCE(NEW.read, FALSE), NEW.type, NEW.data);
-            
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        -- Function for accessible_my_notifications UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_my_notifications_update()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF cur_profile('profile_id') <> OLD.profile_id THEN
-                RAISE EXCEPTION 'Permission denied: the notification is not accessible';
-            END IF;
 
             UPDATE notifications SET
                 read = COALESCE(NEW.read, read),
@@ -408,13 +368,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_notifications DELETE
-        CREATE OR REPLACE FUNCTION trg_accessible_my_notifications_delete()
+        -- Function for my_notifications_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_my_notifications_ctx_delete()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_profile('profile_id') <> OLD.profile_id THEN
-                RAISE EXCEPTION 'Permission denied: the notification is not accessible';
-            END IF;
 
             DELETE FROM notifications WHERE notification_id = OLD.notification_id;
             
@@ -423,74 +380,71 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_accessible_my_notifications_delete() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_my_notifications_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_notifications_insert() CASCADE;
+        DROP FUNCTION IF EXISTS trg_my_notifications_ctx_delete() CASCADE;
+        DROP FUNCTION IF EXISTS trg_my_notifications_ctx_update() CASCADE;
         DROP FUNCTION IF EXISTS trg_my_preferences_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_profiles_delete() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_profiles_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_profiles_insert() CASCADE;
+        DROP FUNCTION IF EXISTS trg_profiles_ctx_delete() CASCADE;
+        DROP FUNCTION IF EXISTS trg_profiles_ctx_update() CASCADE;
+        DROP FUNCTION IF EXISTS trg_profiles_ctx_insert() CASCADE;
         """
     ),
     # Step 4: Attach more triggers to views
     step(
         """
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_insert ON accessible_profiles;
-        CREATE TRIGGER trg_accessible_profiles_insert
-            INSTEAD OF INSERT ON accessible_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_profiles_insert();
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_insert ON profiles_ctx;
+        CREATE TRIGGER trg_profiles_ctx_insert
+            INSTEAD OF INSERT ON profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_profiles_ctx_insert();
 
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_update ON accessible_profiles;
-        CREATE TRIGGER trg_accessible_profiles_update
-            INSTEAD OF UPDATE ON accessible_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_profiles_update();
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_update ON profiles_ctx;
+        CREATE TRIGGER trg_profiles_ctx_update
+            INSTEAD OF UPDATE ON profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_profiles_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_delete ON accessible_profiles;
-        CREATE TRIGGER trg_accessible_profiles_delete
-            INSTEAD OF DELETE ON accessible_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_profiles_delete();
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_delete ON profiles_ctx;
+        CREATE TRIGGER trg_profiles_ctx_delete
+            INSTEAD OF DELETE ON profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_profiles_ctx_delete();
 
         DROP TRIGGER IF EXISTS trg_my_preferences_update ON my_preferences;
         CREATE TRIGGER trg_my_preferences_update
             INSTEAD OF UPDATE ON my_preferences
             FOR EACH ROW EXECUTE FUNCTION trg_my_preferences_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_notifications_insert ON accessible_notifications;
-        CREATE TRIGGER trg_accessible_notifications_insert
-            INSTEAD OF INSERT ON accessible_notifications
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_notifications_insert();
+        DROP TRIGGER IF EXISTS trg_my_notifications_ctx_update ON my_notifications_ctx;
+        CREATE TRIGGER trg_my_notifications_ctx_update
+            INSTEAD OF UPDATE ON my_notifications_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_my_notifications_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_my_notifications_update ON accessible_my_notifications;
-        CREATE TRIGGER trg_accessible_my_notifications_update
-            INSTEAD OF UPDATE ON accessible_my_notifications
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_my_notifications_update();
-
-        DROP TRIGGER IF EXISTS trg_accessible_my_notifications_delete ON accessible_my_notifications;
-        CREATE TRIGGER trg_accessible_my_notifications_delete
-            INSTEAD OF DELETE ON accessible_my_notifications
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_my_notifications_delete();
+        DROP TRIGGER IF EXISTS trg_my_notifications_ctx_delete ON my_notifications_ctx;
+        CREATE TRIGGER trg_my_notifications_ctx_delete
+            INSTEAD OF DELETE ON my_notifications_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_my_notifications_ctx_delete();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_accessible_my_notifications_delete ON accessible_my_notifications;
-        DROP TRIGGER IF EXISTS trg_accessible_my_notifications_update ON accessible_my_notifications;
-        DROP TRIGGER IF EXISTS trg_accessible_notifications_insert ON accessible_notifications;
+        DROP TRIGGER IF EXISTS trg_my_notifications_ctx_delete ON my_notifications_ctx;
+        DROP TRIGGER IF EXISTS trg_my_notifications_ctx_update ON my_notifications_ctx;
         DROP TRIGGER IF EXISTS trg_my_preferences_update ON my_preferences;
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_delete ON accessible_profiles;
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_update ON accessible_profiles;
-        DROP TRIGGER IF EXISTS trg_accessible_profiles_insert ON accessible_profiles;
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_delete ON profiles_ctx;
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_update ON profiles_ctx;
+        DROP TRIGGER IF EXISTS trg_profiles_ctx_insert ON profiles_ctx;
         """
     ),
     # Step 5: Feedback trigger functions
     step(
         """
-        -- Function for accessible_my_feedbacks INSERT
-        CREATE OR REPLACE FUNCTION trg_accessible_my_feedbacks_insert()
+        -- Function for my_feedbacks_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_my_feedbacks_ctx_insert()
         RETURNS TRIGGER AS $$
         DECLARE
             new_feedback_id INTEGER;
         BEGIN
-            IF NEW.profile_id <> cur_profile('profile_id') THEN
+            IF NEW.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') THEN
                 RAISE EXCEPTION 'Permission denied: cannot create feedback for another profile';
+            END IF;
+            
+            IF cur_profile_bool('is_public') THEN
+                RAISE EXCEPTION 'Permission denied: public profiles cannot create feedback';
             END IF;
 
             INSERT INTO feedbacks (
@@ -543,17 +497,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_feedbacks UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_my_feedbacks_update()
+        -- Function for my_feedbacks_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_my_feedbacks_ctx_update()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF OLD.profile_id <> cur_profile('profile_id') THEN
-                RAISE EXCEPTION 'Permission denied: cannot update feedback for another profile';
-            END IF;
-            
-            IF cur_profile_bool('is_public') THEN
-                RAISE EXCEPTION 'Permission denied: the feedback is not accessible';
-            END IF;
             
             IF OLD.is_closed = TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot update closed feedback';
@@ -570,17 +517,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_feedbacks DELETE
-        CREATE OR REPLACE FUNCTION trg_accessible_my_feedbacks_delete()
+        -- Function for my_feedbacks_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_my_feedbacks_ctx_delete()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF OLD.profile_id <> cur_profile('profile_id') THEN
-                RAISE EXCEPTION 'Permission denied: cannot delete feedback for another profile';
-            END IF;
-            
-            IF cur_profile_bool('is_public') THEN
-                RAISE EXCEPTION 'Permission denied: the feedback is not accessible';
-            END IF;
             
             IF OLD.is_closed = TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete closed feedback';
@@ -592,13 +532,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_feedbacks UPDATE
-        CREATE OR REPLACE FUNCTION trg_accessible_feedbacks_update()
+        -- Function for feedbacks_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_feedbacks_ctx_update()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NOT cur_profile_bool('is_developer') THEN
-                RAISE EXCEPTION 'Permission denied: only developer can update feedbacks';
-            END IF;
 
             UPDATE feedbacks SET
                 type = NEW.type,
@@ -606,7 +543,7 @@ steps = [
                 is_closed = NEW.is_closed,
                 solved = NEW.solved,
                 closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
-                closed_by = cur_profile('profile_id'),
+                closed_by = cur_profile_uuid('profile_id'),
                 closed_details = NEW.closed_details
             WHERE feedback_id = OLD.feedback_id;
 
@@ -636,13 +573,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_feedbacks DELETE
-        CREATE OR REPLACE FUNCTION trg_accessible_feedbacks_delete()
+        -- Function for feedbacks_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_feedbacks_ctx_delete()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NOT cur_profile_bool('is_developer') THEN
-                RAISE EXCEPTION 'Permission denied: only developer can delete feedbacks';
-            END IF;
 
             DELETE FROM feedbacks WHERE feedback_id = OLD.feedback_id;
             
@@ -651,76 +585,72 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_accessible_feedbacks_delete() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_feedbacks_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_my_feedbacks_delete() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_my_feedbacks_update() CASCADE;
-        DROP FUNCTION IF EXISTS trg_accessible_my_feedbacks_insert() CASCADE;
+        DROP FUNCTION IF EXISTS trg_feedbacks_ctx_delete() CASCADE;
+        DROP FUNCTION IF EXISTS trg_feedbacks_ctx_update() CASCADE;
+        DROP FUNCTION IF EXISTS trg_my_feedbacks_ctx_delete() CASCADE;
+        DROP FUNCTION IF EXISTS trg_my_feedbacks_ctx_update() CASCADE;
+        DROP FUNCTION IF EXISTS trg_my_feedbacks_ctx_insert() CASCADE;
         """
     ),
     # Step 6: Attach feedback triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_insert ON accessible_my_feedbacks;
-        CREATE TRIGGER trg_accessible_my_feedbacks_insert
-            INSTEAD OF INSERT ON accessible_my_feedbacks
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_my_feedbacks_insert();
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_insert ON my_feedbacks_ctx;
+        CREATE TRIGGER trg_my_feedbacks_ctx_insert
+            INSTEAD OF INSERT ON my_feedbacks_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_my_feedbacks_ctx_insert();
 
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_update ON accessible_my_feedbacks;
-        CREATE TRIGGER trg_accessible_my_feedbacks_update
-            INSTEAD OF UPDATE ON accessible_my_feedbacks
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_my_feedbacks_update();
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_update ON my_feedbacks_ctx;
+        CREATE TRIGGER trg_my_feedbacks_ctx_update
+            INSTEAD OF UPDATE ON my_feedbacks_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_my_feedbacks_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_delete ON accessible_my_feedbacks;
-        CREATE TRIGGER trg_accessible_my_feedbacks_delete
-            INSTEAD OF DELETE ON accessible_my_feedbacks
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_my_feedbacks_delete();
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_delete ON my_feedbacks_ctx;
+        CREATE TRIGGER trg_my_feedbacks_ctx_delete
+            INSTEAD OF DELETE ON my_feedbacks_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_my_feedbacks_ctx_delete();
 
-        DROP TRIGGER IF EXISTS trg_accessible_feedbacks_update ON accessible_feedbacks;
-        CREATE TRIGGER trg_accessible_feedbacks_update
-            INSTEAD OF UPDATE ON accessible_feedbacks
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_feedbacks_update();
+        DROP TRIGGER IF EXISTS trg_feedbacks_ctx_update ON feedbacks_ctx;
+        CREATE TRIGGER trg_feedbacks_ctx_update
+            INSTEAD OF UPDATE ON feedbacks_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_feedbacks_ctx_update();
 
-        DROP TRIGGER IF EXISTS trg_accessible_feedbacks_delete ON accessible_feedbacks;
-        CREATE TRIGGER trg_accessible_feedbacks_delete
-            INSTEAD OF DELETE ON accessible_feedbacks
-            FOR EACH ROW EXECUTE FUNCTION trg_accessible_feedbacks_delete();
+        DROP TRIGGER IF EXISTS trg_feedbacks_ctx_delete ON feedbacks_ctx;
+        CREATE TRIGGER trg_feedbacks_ctx_delete
+            INSTEAD OF DELETE ON feedbacks_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_feedbacks_ctx_delete();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_accessible_feedbacks_delete ON accessible_feedbacks;
-        DROP TRIGGER IF EXISTS trg_accessible_feedbacks_update ON accessible_feedbacks;
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_delete ON accessible_my_feedbacks;
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_update ON accessible_my_feedbacks;
-        DROP TRIGGER IF EXISTS trg_accessible_my_feedbacks_insert ON accessible_my_feedbacks;
+        DROP TRIGGER IF EXISTS trg_feedbacks_ctx_delete ON feedbacks_ctx;
+        DROP TRIGGER IF EXISTS trg_feedbacks_ctx_update ON feedbacks_ctx;
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_delete ON my_feedbacks_ctx;
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_update ON my_feedbacks_ctx;
+        DROP TRIGGER IF EXISTS trg_my_feedbacks_ctx_insert ON my_feedbacks_ctx;
         """
     ),
     # Step 7: events_profiles trigger functions
     step(
         """
-        -- Function for accessible_events_profiles INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_events_profiles()
+        -- Function for events_profiles_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_events_profiles_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
             IF NEW.profile_id NOT IN (
-                SELECT profile_id FROM accessible_profiles ap WHERE ap.is_editable
+                SELECT profile_id FROM profiles_ctx WHERE is_editable
             ) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
             
-            IF NEW.all_images AND NOT cur_event_profile_bool('all_images') THEN
-                RAISE EXCEPTION 'Permission denied: cannot create profile with all_images=1 if current profile does not have all_images=1';
+            IF NEW.all_images AND cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
+                RAISE EXCEPTION 'Permission denied: cannot create profile with all_images if current profile does not have all_images';
             END IF;
             
             IF NEW.all_groups AND NOT cur_event_profile('all_groups') THEN
-                RAISE EXCEPTION 'Permission denied: cannot create profile with all_groups=1 if current profile does not have all_groups=1';
+                RAISE EXCEPTION 'Permission denied: cannot create profile with all_groups if current profile does not have all_groups';
             END IF;
             
-            IF NEW.all_albums AND NOT cur_event_profile_bool('all_albums') THEN
-                RAISE EXCEPTION 'Permission denied: cannot create profile with all_albums=1 if current profile does not have all_albums=1';
+            IF NEW.all_albums AND cur_event_profile_bool('all_albums') IS DISTINCT FROM TRUE THEN
+                RAISE EXCEPTION 'Permission denied: cannot create profile with all_albums if current profile does not have all_albums';
             END IF;
 
             INSERT INTO events_profiles (
@@ -736,7 +666,7 @@ steps = [
             )
             VALUES (
                 NEW.profile_id,
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 COALESCE(NEW.can_manage_event, FALSE),
                 COALESCE(NEW.can_delete_event, FALSE),
                 COALESCE(NEW.can_upload_and_delete_images, FALSE),
@@ -747,29 +677,26 @@ steps = [
             );
 
             IF NEW.all_images THEN
-                INSERT INTO events_profiles_images (event_id, profile_id, image_id)
-                SELECT epi.event_id, NEW.profile_id, epi.image_id
-                FROM events_profiles_images epi
-                WHERE epi.event_id = cur_event_profile('event_id')
-                AND epi.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_images (profile_id, image_id)
+                SELECT NEW.profile_id, pi.image_id
+                FROM profiles_images pi
+                WHERE pi.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
 
             IF NEW.all_groups THEN
-                INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
-                SELECT epg.event_id, NEW.profile_id, epg.group_id
-                FROM events_profiles_groups epg
-                WHERE epg.event_id = cur_event_profile('event_id')
-                AND epg.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_groups (profile_id, group_id)
+                SELECT NEW.profile_id, pg.group_id
+                FROM profiles_groups pg
+                WHERE pg.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
             
             IF NEW.all_albums THEN
-                INSERT INTO events_profiles_albums (event_id, profile_id, album_id)
-                SELECT epa.event_id, NEW.profile_id, epa.album_id
-                FROM events_profiles_albums epa
-                WHERE epa.event_id = cur_event_profile('event_id')
-                AND epa.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_albums (profile_id, album_id)
+                SELECT NEW.profile_id, pa.album_id
+                FROM profiles_albums pa
+                WHERE pa.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
             
@@ -777,27 +704,19 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_events_profiles()
+        -- Function for events_profiles_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_events_profiles_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF NEW.all_images AND NOT OLD.all_images AND NOT cur_event_profile_bool('all_images') THEN
+            IF NEW.all_images AND NOT OLD.all_images AND cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1';
             END IF;
             
-            IF NEW.all_groups AND NOT OLD.all_groups AND NOT cur_event_profile_bool('all_groups') THEN
+            IF NEW.all_groups AND NOT OLD.all_groups AND cur_event_profile_bool('all_groups') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1';
             END IF;
             
-            IF NEW.all_albums AND NOT OLD.all_albums AND NOT cur_event_profile_bool('all_albums') THEN
+            IF NEW.all_albums AND NOT OLD.all_albums AND cur_event_profile_bool('all_albums') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1';
             END IF;
 
@@ -810,51 +729,45 @@ steps = [
                 all_images = NEW.all_images,
                 all_groups = NEW.all_groups,
                 all_albums = NEW.all_albums
-            WHERE event_id = cur_event_profile('event_id')
+            WHERE event_id = cur_event_profile_uuid('event_id')
             AND profile_id = OLD.profile_id;
 
             IF OLD.all_images AND NOT NEW.all_images THEN
-                DELETE FROM events_profiles_images 
-                WHERE event_id = cur_event_profile('event_id')
-                AND profile_id = OLD.profile_id;
+                DELETE FROM profiles_images 
+                WHERE profile_id = OLD.profile_id;
             END IF;
 
             IF NOT OLD.all_images AND NEW.all_images THEN
-                INSERT INTO events_profiles_images (event_id, profile_id, image_id)
-                SELECT epi.event_id, OLD.profile_id, epi.image_id
-                FROM events_profiles_images epi
-                WHERE epi.event_id = cur_event_profile('event_id')
-                AND epi.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_images (profile_id, image_id)
+                SELECT OLD.profile_id, pi.image_id
+                FROM profiles_images pi
+                WHERE pi.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
 
             IF OLD.all_groups AND NOT NEW.all_groups THEN
-                DELETE FROM events_profiles_groups 
-                WHERE event_id = cur_event_profile('event_id')
-                AND profile_id = OLD.profile_id;
+                DELETE FROM profiles_groups 
+                WHERE profile_id = OLD.profile_id;
             END IF;
 
             IF NOT OLD.all_groups AND NEW.all_groups THEN
-                INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
-                SELECT epg.event_id, OLD.profile_id, epg.group_id
-                FROM events_profiles_groups epg
-                WHERE epg.event_id = cur_event_profile('event_id')
-                AND epg.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_groups (profile_id, group_id)
+                SELECT OLD.profile_id, pg.group_id
+                FROM profiles_groups pg
+                WHERE pg.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
 
             IF OLD.all_albums AND NOT NEW.all_albums THEN
-                DELETE FROM events_profiles_albums 
-                WHERE event_id = cur_event_profile('event_id')
-                AND profile_id = OLD.profile_id;
+                DELETE FROM profiles_albums 
+                WHERE profile_id = OLD.profile_id;
             END IF;
 
             IF NOT OLD.all_albums AND NEW.all_albums THEN
-                INSERT INTO events_profiles_albums (event_id, profile_id, album_id)
-                SELECT epa.event_id, OLD.profile_id, epa.album_id
-                FROM events_profiles_albums epa
-                WHERE epa.event_id = cur_event_profile('event_id')
-                AND epa.profile_id = cur_profile('profile_id')
+                INSERT INTO profiles_albums (profile_id, album_id)
+                SELECT OLD.profile_id, pa.album_id
+                FROM profiles_albums pa
+                WHERE pa.profile_id = cur_profile_uuid('profile_id')
                 ON CONFLICT DO NOTHING;
             END IF;
             
@@ -862,18 +775,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_events_profiles()
+        -- Function for events_profiles_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_events_profiles_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-
             DELETE FROM events_profiles WHERE event_id = cur_event_profile('event_id') AND profile_id = OLD.profile_id;
             
             RETURN OLD;
@@ -881,179 +786,130 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_accessible_events_profiles() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_events_profiles() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_events_profiles() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_events_profiles_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_events_profiles_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_events_profiles_ctx() CASCADE;
         """
     ),
     # Step 8: Attach events_profiles triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles ON accessible_events_profiles;
-        CREATE TRIGGER trg_insert_accessible_events_profiles
-            INSTEAD OF INSERT ON accessible_events_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_events_profiles();
+        DROP TRIGGER IF EXISTS trg_insert_events_profiles_ctx ON events_profiles_ctx;
+        CREATE TRIGGER trg_insert_events_profiles_ctx
+            INSTEAD OF INSERT ON events_profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_events_profiles_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_events_profiles ON accessible_events_profiles;
-        CREATE TRIGGER trg_update_accessible_events_profiles
-            INSTEAD OF UPDATE ON accessible_events_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_events_profiles();
+        DROP TRIGGER IF EXISTS trg_update_events_profiles_ctx ON events_profiles_ctx;
+        CREATE TRIGGER trg_update_events_profiles_ctx
+            INSTEAD OF UPDATE ON events_profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_events_profiles_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles ON accessible_events_profiles;
-        CREATE TRIGGER trg_delete_accessible_events_profiles
-            INSTEAD OF DELETE ON accessible_events_profiles
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_events_profiles();
+        DROP TRIGGER IF EXISTS trg_delete_events_profiles_ctx ON events_profiles_ctx;
+        CREATE TRIGGER trg_delete_events_profiles_ctx
+            INSTEAD OF DELETE ON events_profiles_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_events_profiles_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles ON accessible_events_profiles;
-        DROP TRIGGER IF EXISTS trg_update_accessible_events_profiles ON accessible_events_profiles;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles ON accessible_events_profiles;
+        DROP TRIGGER IF EXISTS trg_delete_events_profiles_ctx ON events_profiles_ctx;
+        DROP TRIGGER IF EXISTS trg_update_events_profiles_ctx ON events_profiles_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_events_profiles_ctx ON events_profiles_ctx;
         """
     ),
-    # Step 9: More view trigger functions (events_profiles_images, events_profiles_groups, events_profiles_albums)
+    # Step 9: More view trigger functions (profiles_images, profiles_groups, profiles_albums)
     step(
         """
-        -- Function for accessible_events_profiles_images INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_events_profiles_images()
+        -- Function for profiles_images_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_profiles_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
+            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
             
-            IF NEW.image_id NOT IN (SELECT image_id FROM accessible_images) THEN
+            IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the image is not accessible';
             END IF;
 
-            INSERT INTO events_profiles_images (event_id, profile_id, image_id)
-            VALUES (cur_event_profile('event_id'), NEW.profile_id, NEW.image_id)
+            INSERT INTO profiles_images (profile_id, image_id)
+            VALUES (NEW.profile_id, NEW.image_id)
             ON CONFLICT DO NOTHING;
             
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles_images DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_events_profiles_images()
+        -- Function for profiles_images_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_profiles_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF OLD.image_id NOT IN (SELECT image_id FROM accessible_images) THEN
-                RAISE EXCEPTION 'Permission denied: the image is not accessible';
-            END IF;
-
-            DELETE FROM events_profiles_images
-            WHERE event_id = cur_event_profile('event_id')
-            AND profile_id = OLD.profile_id
+            DELETE FROM profiles_images
+            WHERE profile_id = OLD.profile_id
             AND image_id = OLD.image_id;
             
             RETURN OLD;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles_groups INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_events_profiles_groups()
+        -- Function for profiles_groups_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_profiles_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
             
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
+            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
             
-            IF NEW.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
+            IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
 
-            INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
-            VALUES (cur_event_profile('event_id'), NEW.profile_id, NEW.group_id)
+            INSERT INTO profiles_groups (profile_id, group_id)
+            VALUES (NEW.profile_id, NEW.group_id)
             ON CONFLICT DO NOTHING;
             
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles_groups DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_events_profiles_groups()
+        -- Function for profiles_groups_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_profiles_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF OLD.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
-                RAISE EXCEPTION 'Permission denied: the group is not accessible';
-            END IF;
-
-            DELETE FROM events_profiles_groups
-            WHERE event_id = cur_event_profile('event_id')
-            AND profile_id = OLD.profile_id
+            DELETE FROM profiles_groups
+            WHERE profile_id = OLD.profile_id
             AND group_id = OLD.group_id;
             
             RETURN OLD;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles_albums INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_events_profiles_albums()
+        -- Function for profiles_albums_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_profiles_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
             
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
+            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
             
-            IF NEW.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
+            IF NEW.album_id NOT IN (SELECT album_id FROM albums_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the album is not accessible';
             END IF;
 
-            INSERT INTO events_profiles_albums (event_id, profile_id, album_id)
-            VALUES (cur_event_profile('event_id'), NEW.profile_id, NEW.album_id)
+            INSERT INTO profiles_albums (profile_id, album_id)
+            VALUES (NEW.profile_id, NEW.album_id)
             ON CONFLICT DO NOTHING;
             
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_events_profiles_albums DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_events_profiles_albums()
+        -- Function for profiles_albums_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_profiles_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id NOT IN (SELECT profile_id FROM accessible_events_profiles) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF OLD.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
-            END IF;
-
-            DELETE FROM events_profiles_albums
-            WHERE event_id = cur_event_profile('event_id')
-            AND profile_id = OLD.profile_id
+            DELETE FROM profiles_albums
+            WHERE profile_id = OLD.profile_id
             AND album_id = OLD.album_id;
             
             RETURN OLD;
@@ -1061,76 +917,76 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_accessible_events_profiles_albums() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_events_profiles_albums() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_events_profiles_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_events_profiles_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_events_profiles_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_events_profiles_images() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_profiles_albums_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_profiles_albums_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_profiles_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_profiles_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_profiles_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_profiles_images_ctx() CASCADE;
         """
     ),
-    # Step 10: Attach events_profiles_images/groups/albums triggers
+    # Step 10: Attach profiles_images/groups/albums triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_images ON accessible_events_profiles_images;
-        CREATE TRIGGER trg_insert_accessible_events_profiles_images
-            INSTEAD OF INSERT ON accessible_events_profiles_images
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_events_profiles_images();
+        DROP TRIGGER IF EXISTS trg_insert_profiles_images_ctx ON profiles_images_ctx;
+        CREATE TRIGGER trg_insert_profiles_images_ctx
+            INSTEAD OF INSERT ON profiles_images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_profiles_images_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_images ON accessible_events_profiles_images;
-        CREATE TRIGGER trg_delete_accessible_events_profiles_images
-            INSTEAD OF DELETE ON accessible_events_profiles_images
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_events_profiles_images();
+        DROP TRIGGER IF EXISTS trg_delete_profiles_images_ctx ON profiles_images_ctx;
+        CREATE TRIGGER trg_delete_profiles_images_ctx
+            INSTEAD OF DELETE ON profiles_images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_profiles_images_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_groups ON accessible_events_profiles_groups;
-        CREATE TRIGGER trg_insert_accessible_events_profiles_groups
-            INSTEAD OF INSERT ON accessible_events_profiles_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_events_profiles_groups();
+        DROP TRIGGER IF EXISTS trg_insert_profiles_groups_ctx ON profiles_groups_ctx;
+        CREATE TRIGGER trg_insert_profiles_groups_ctx
+            INSTEAD OF INSERT ON profiles_groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_profiles_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_groups ON accessible_events_profiles_groups;
-        CREATE TRIGGER trg_delete_accessible_events_profiles_groups
-            INSTEAD OF DELETE ON accessible_events_profiles_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_events_profiles_groups();
+        DROP TRIGGER IF EXISTS trg_delete_profiles_groups_ctx ON profiles_groups_ctx;
+        CREATE TRIGGER trg_delete_profiles_groups_ctx
+            INSTEAD OF DELETE ON profiles_groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_profiles_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_albums ON accessible_events_profiles_albums;
-        CREATE TRIGGER trg_insert_accessible_events_profiles_albums
-            INSTEAD OF INSERT ON accessible_events_profiles_albums
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_events_profiles_albums();
+        DROP TRIGGER IF EXISTS trg_insert_profiles_albums_ctx ON profiles_albums_ctx;
+        CREATE TRIGGER trg_insert_profiles_albums_ctx
+            INSTEAD OF INSERT ON profiles_albums_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_profiles_albums_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_albums ON accessible_events_profiles_albums;
-        CREATE TRIGGER trg_delete_accessible_events_profiles_albums
-            INSTEAD OF DELETE ON accessible_events_profiles_albums
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_events_profiles_albums();
+        DROP TRIGGER IF EXISTS trg_delete_profiles_albums_ctx ON profiles_albums_ctx;
+        CREATE TRIGGER trg_delete_profiles_albums_ctx
+            INSTEAD OF DELETE ON profiles_albums_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_profiles_albums_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_albums ON accessible_events_profiles_albums;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_albums ON accessible_events_profiles_albums;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_groups ON accessible_events_profiles_groups;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_groups ON accessible_events_profiles_groups;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_events_profiles_images ON accessible_events_profiles_images;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_events_profiles_images ON accessible_events_profiles_images;
+        DROP TRIGGER IF EXISTS trg_delete_profiles_albums_ctx ON profiles_albums_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_profiles_albums_ctx ON profiles_albums_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_profiles_groups_ctx ON profiles_groups_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_profiles_groups_ctx ON profiles_groups_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_profiles_images_ctx ON profiles_images_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_profiles_images_ctx ON profiles_images_ctx;
         """
     ),
     # Step 11: Faces, images, groups, moments, albums trigger functions
     step(
         """
-        -- Function for accessible_faces INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_faces()
+        -- Function for faces_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_faces_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to upload images';
             END IF;
             
-            IF NEW.image_id NOT IN (SELECT image_id FROM accessible_images) THEN
+            IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the image is not accessible';
             END IF;
             
-            IF NEW.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
+            IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
 
@@ -1157,23 +1013,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_faces UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_faces()
+        -- Function for faces_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_faces_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
             
-            IF OLD.face_id NOT IN (SELECT face_id FROM accessible_faces) THEN
-                RAISE EXCEPTION 'Permission denied: the face is not accessible';
-            END IF;
-            
-            IF NEW.group_id IS NOT NULL AND NEW.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
+            IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the target group is not accessible';
             END IF;
 
@@ -1183,20 +1031,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_faces DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_faces()
+        -- Function for faces_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_faces_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-            
-            IF OLD.face_id NOT IN (SELECT face_id FROM accessible_faces) THEN
-                RAISE EXCEPTION 'Permission denied: the face is not accessible';
             END IF;
 
             DELETE FROM faces WHERE face_id = OLD.face_id;
@@ -1205,15 +1045,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_images INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_images()
+        -- Function for images_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to upload images';
             END IF;
 
@@ -1231,7 +1071,7 @@ steps = [
             )
             VALUES (
                 NEW.image_id,
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 NEW.date_taken,
                 NEW.label,
                 COALESCE(NEW.file_size, 0),
@@ -1242,9 +1082,9 @@ steps = [
                 NEW.upload_id
             );
 
-            IF NOT cur_event_profile_bool('all_images') THEN
-                INSERT INTO events_profiles_images (event_id, profile_id, image_id)
-                VALUES (cur_event_profile('event_id'), cur_profile('profile_id'), NEW.image_id)
+            IF cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
+                INSERT INTO profiles_images (profile_id, image_id)
+                VALUES (cur_profile_uuid('profile_id'), NEW.image_id)
                 ON CONFLICT DO NOTHING;
             END IF;
             
@@ -1252,15 +1092,11 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_images UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_images()
+        -- Function for images_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
@@ -1273,15 +1109,11 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_images DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_images()
+        -- Function for images_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to delete images';
             END IF;
 
@@ -1292,68 +1124,68 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_accessible_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_faces() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_faces() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_faces() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_faces_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_faces_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_faces_ctx() CASCADE;
         """
     ),
     # Step 12: Attach faces and images triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_faces ON accessible_faces;
-        CREATE TRIGGER trg_insert_accessible_faces
-            INSTEAD OF INSERT ON accessible_faces
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_faces();
+        DROP TRIGGER IF EXISTS trg_insert_faces_ctx ON faces_ctx;
+        CREATE TRIGGER trg_insert_faces_ctx
+            INSTEAD OF INSERT ON faces_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_faces_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_faces ON accessible_faces;
-        CREATE TRIGGER trg_update_accessible_faces
-            INSTEAD OF UPDATE ON accessible_faces
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_faces();
+        DROP TRIGGER IF EXISTS trg_update_faces_ctx ON faces_ctx;
+        CREATE TRIGGER trg_update_faces_ctx
+            INSTEAD OF UPDATE ON faces_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_faces_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_faces ON accessible_faces;
-        CREATE TRIGGER trg_delete_accessible_faces
-            INSTEAD OF DELETE ON accessible_faces
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_faces();
+        DROP TRIGGER IF EXISTS trg_delete_faces_ctx ON faces_ctx;
+        CREATE TRIGGER trg_delete_faces_ctx
+            INSTEAD OF DELETE ON faces_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_faces_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_images ON accessible_images;
-        CREATE TRIGGER trg_insert_accessible_images
-            INSTEAD OF INSERT ON accessible_images
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_images();
+        DROP TRIGGER IF EXISTS trg_insert_images_ctx ON images_ctx;
+        CREATE TRIGGER trg_insert_images_ctx
+            INSTEAD OF INSERT ON images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_images_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_images ON accessible_images;
-        CREATE TRIGGER trg_update_accessible_images
-            INSTEAD OF UPDATE ON accessible_images
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_images();
+        DROP TRIGGER IF EXISTS trg_update_images_ctx ON images_ctx;
+        CREATE TRIGGER trg_update_images_ctx
+            INSTEAD OF UPDATE ON images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_images_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_images ON accessible_images;
-        CREATE TRIGGER trg_delete_accessible_images
-            INSTEAD OF DELETE ON accessible_images
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_images();
+        DROP TRIGGER IF EXISTS trg_delete_images_ctx ON images_ctx;
+        CREATE TRIGGER trg_delete_images_ctx
+            INSTEAD OF DELETE ON images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_images_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_accessible_images ON accessible_images;
-        DROP TRIGGER IF EXISTS trg_update_accessible_images ON accessible_images;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_images ON accessible_images;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_faces ON accessible_faces;
-        DROP TRIGGER IF EXISTS trg_update_accessible_faces ON accessible_faces;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_faces ON accessible_faces;
+        DROP TRIGGER IF EXISTS trg_delete_images_ctx ON images_ctx;
+        DROP TRIGGER IF EXISTS trg_update_images_ctx ON images_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_images_ctx ON images_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_faces_ctx ON faces_ctx;
+        DROP TRIGGER IF EXISTS trg_update_faces_ctx ON faces_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_faces_ctx ON faces_ctx;
         """
     ),
     # Step 13: Groups, moments, albums trigger functions
     step(
         """
-        -- Function for accessible_groups INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_groups()
+        -- Function for groups_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
@@ -1365,7 +1197,7 @@ steps = [
             )
             VALUES (
                 NEW.group_id,
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.representative_face
             );
@@ -1374,20 +1206,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_groups UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_groups()
+        -- Function for groups_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-            
-            IF OLD.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
-                RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
 
             UPDATE groups SET label = NEW.label, representative_face = NEW.representative_face
@@ -1397,20 +1221,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_groups DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_groups()
+        -- Function for groups_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-            
-            IF OLD.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
-                RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
 
             DELETE FROM groups WHERE group_id = OLD.group_id;
@@ -1419,15 +1235,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_moments INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_moments()
+        -- Function for moments_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_moments_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
@@ -1442,7 +1258,7 @@ steps = [
             )
             VALUES (
                 NEW.moment_id,
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.description,
                 NEW.start_date,
@@ -1454,20 +1270,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_moments UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_moments()
+        -- Function for moments_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_moments_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-
-            IF OLD.moment_id NOT IN (SELECT moment_id FROM accessible_moments) THEN
-                RAISE EXCEPTION 'Permission denied: the moment is not accessible';
             END IF;
 
             UPDATE moments SET
@@ -1482,20 +1290,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_moments DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_moments()
+        -- Function for moments_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_moments_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-
-            IF OLD.moment_id NOT IN (SELECT moment_id FROM accessible_moments) THEN
-                RAISE EXCEPTION 'Permission denied: the moment is not accessible';
             END IF;
 
             DELETE FROM moments WHERE moment_id = OLD.moment_id;
@@ -1504,15 +1304,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_albums INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_albums()
+        -- Function for albums_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
             
@@ -1525,7 +1325,7 @@ steps = [
             )
             VALUES (
                 NEW.album_id,
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.description,
                 NEW.representative_image
@@ -1535,20 +1335,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_albums UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_albums()
+        -- Function for albums_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-            
-            IF OLD.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
             END IF;
 
             UPDATE albums SET
@@ -1561,20 +1353,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_albums DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_albums()
+        -- Function for albums_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-
-            IF OLD.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
             END IF;
 
             DELETE FROM albums WHERE album_id = OLD.album_id;
@@ -1583,23 +1367,23 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_albums_images INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_albums_images()
+        -- Function for albums_images_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_albums_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            IF NEW.image_id NOT IN (SELECT image_id FROM accessible_images) THEN
+            IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the image is not accessible';
             END IF;
 
-            IF NEW.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
+            IF NEW.album_id NOT IN (SELECT album_id FROM albums_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the album is not accessible';
             END IF;
 
@@ -1611,24 +1395,12 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_albums_images DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_albums_images()
+        -- Function for albums_images_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_albums_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_edit') THEN
+            IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
-            END IF;
-
-            IF OLD.image_id NOT IN (SELECT image_id FROM accessible_images) THEN
-                RAISE EXCEPTION 'Permission denied: the image is not accessible';
-            END IF;
-
-            IF OLD.album_id NOT IN (SELECT album_id FROM accessible_albums) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
             END IF;
 
             DELETE FROM albums_images
@@ -1639,103 +1411,103 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_accessible_albums_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_albums_images() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_albums() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_albums() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_albums() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_moments() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_moments() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_moments() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_groups() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_albums_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_albums_images_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_albums_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_albums_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_albums_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_moments_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_moments_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_moments_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_groups_ctx() CASCADE;
         """
     ),
     # Step 14: Attach groups, moments, albums triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_groups ON accessible_groups;
-        CREATE TRIGGER trg_insert_accessible_groups
-            INSTEAD OF INSERT ON accessible_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_groups();
+        DROP TRIGGER IF EXISTS trg_insert_groups_ctx ON groups_ctx;
+        CREATE TRIGGER trg_insert_groups_ctx
+            INSTEAD OF INSERT ON groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_groups ON accessible_groups;
-        CREATE TRIGGER trg_update_accessible_groups
-            INSTEAD OF UPDATE ON accessible_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_groups();
+        DROP TRIGGER IF EXISTS trg_update_groups_ctx ON groups_ctx;
+        CREATE TRIGGER trg_update_groups_ctx
+            INSTEAD OF UPDATE ON groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_groups ON accessible_groups;
-        CREATE TRIGGER trg_delete_accessible_groups
-            INSTEAD OF DELETE ON accessible_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_groups();
+        DROP TRIGGER IF EXISTS trg_delete_groups_ctx ON groups_ctx;
+        CREATE TRIGGER trg_delete_groups_ctx
+            INSTEAD OF DELETE ON groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_moments ON accessible_moments;
-        CREATE TRIGGER trg_insert_accessible_moments
-            INSTEAD OF INSERT ON accessible_moments
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_moments();
+        DROP TRIGGER IF EXISTS trg_insert_moments_ctx ON moments_ctx;
+        CREATE TRIGGER trg_insert_moments_ctx
+            INSTEAD OF INSERT ON moments_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_moments_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_moments ON accessible_moments;
-        CREATE TRIGGER trg_update_accessible_moments
-            INSTEAD OF UPDATE ON accessible_moments
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_moments();
+        DROP TRIGGER IF EXISTS trg_update_moments_ctx ON moments_ctx;
+        CREATE TRIGGER trg_update_moments_ctx
+            INSTEAD OF UPDATE ON moments_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_moments_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_moments ON accessible_moments;
-        CREATE TRIGGER trg_delete_accessible_moments
-            INSTEAD OF DELETE ON accessible_moments
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_moments();
+        DROP TRIGGER IF EXISTS trg_delete_moments_ctx ON moments_ctx;
+        CREATE TRIGGER trg_delete_moments_ctx
+            INSTEAD OF DELETE ON moments_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_moments_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_albums ON accessible_albums;
-        CREATE TRIGGER trg_insert_accessible_albums
-            INSTEAD OF INSERT ON accessible_albums
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_albums();
+        DROP TRIGGER IF EXISTS trg_insert_albums_ctx ON albums_ctx;
+        CREATE TRIGGER trg_insert_albums_ctx
+            INSTEAD OF INSERT ON albums_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_albums_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_albums ON accessible_albums;
-        CREATE TRIGGER trg_update_accessible_albums
-            INSTEAD OF UPDATE ON accessible_albums
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_albums();
+        DROP TRIGGER IF EXISTS trg_update_albums_ctx ON albums_ctx;
+        CREATE TRIGGER trg_update_albums_ctx
+            INSTEAD OF UPDATE ON albums_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_albums_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_albums ON accessible_albums;
-        CREATE TRIGGER trg_delete_accessible_albums
-            INSTEAD OF DELETE ON accessible_albums
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_albums();
+        DROP TRIGGER IF EXISTS trg_delete_albums_ctx ON albums_ctx;
+        CREATE TRIGGER trg_delete_albums_ctx
+            INSTEAD OF DELETE ON albums_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_albums_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_albums_images ON accessible_albums_images;
-        CREATE TRIGGER trg_insert_accessible_albums_images
-            INSTEAD OF INSERT ON accessible_albums_images
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_albums_images();
+        DROP TRIGGER IF EXISTS trg_insert_albums_images_ctx ON albums_images_ctx;
+        CREATE TRIGGER trg_insert_albums_images_ctx
+            INSTEAD OF INSERT ON albums_images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_albums_images_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_albums_images ON accessible_albums_images;
-        CREATE TRIGGER trg_delete_accessible_albums_images
-            INSTEAD OF DELETE ON accessible_albums_images
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_albums_images();
+        DROP TRIGGER IF EXISTS trg_delete_albums_images_ctx ON albums_images_ctx;
+        CREATE TRIGGER trg_delete_albums_images_ctx
+            INSTEAD OF DELETE ON albums_images_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_albums_images_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_accessible_albums_images ON accessible_albums_images;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_albums_images ON accessible_albums_images;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_albums ON accessible_albums;
-        DROP TRIGGER IF EXISTS trg_update_accessible_albums ON accessible_albums;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_albums ON accessible_albums;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_moments ON accessible_moments;
-        DROP TRIGGER IF EXISTS trg_update_accessible_moments ON accessible_moments;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_moments ON accessible_moments;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_groups ON accessible_groups;
-        DROP TRIGGER IF EXISTS trg_update_accessible_groups ON accessible_groups;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_groups ON accessible_groups;
+        DROP TRIGGER IF EXISTS trg_delete_albums_images_ctx ON albums_images_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_albums_images_ctx ON albums_images_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_albums_ctx ON albums_ctx;
+        DROP TRIGGER IF EXISTS trg_update_albums_ctx ON albums_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_albums_ctx ON albums_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_moments_ctx ON moments_ctx;
+        DROP TRIGGER IF EXISTS trg_update_moments_ctx ON moments_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_moments_ctx ON moments_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_groups_ctx ON groups_ctx;
+        DROP TRIGGER IF EXISTS trg_update_groups_ctx ON groups_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_groups_ctx ON groups_ctx;
         """
     ),
     # Step 15: Uploads and access_requests trigger functions
     step(
         """
-        -- Function for accessible_uploads INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_uploads()
+        -- Function for uploads_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_uploads_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot upload and delete images';
             END IF;
 
@@ -1753,8 +1525,8 @@ steps = [
                 notes
             )
             VALUES (
-                cur_event_profile('event_id'),
-                cur_profile('profile_id'),
+                cur_event_profile_uuid('event_id'),
+                cur_profile_uuid('profile_id'),
                 COALESCE(NEW.started_at, CURRENT_TIMESTAMP),
                 NEW.completed_at,
                 COALESCE(NEW.status, 'pending'),
@@ -1771,23 +1543,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_uploads UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_uploads()
+        -- Function for uploads_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_uploads_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id <> cur_profile('profile_id') THEN
+            IF OLD.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') THEN
                 RAISE EXCEPTION 'Permission denied: the upload is not editable';
             END IF;
             
-            IF OLD.upload_id NOT IN (SELECT upload_id FROM accessible_uploads) THEN
-                RAISE EXCEPTION 'Permission denied: the upload is not accessible';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot upload and delete images';
             END IF;
 
@@ -1806,25 +1570,16 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_uploads DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_uploads()
+        -- Function for uploads_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_uploads_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF NOT cur_event_profile_bool('can_upload_and_delete_images') THEN
+            IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot upload and delete images';
             END IF;
             
-            IF OLD.upload_id NOT IN (SELECT upload_id FROM accessible_uploads) THEN
-                RAISE EXCEPTION 'Permission denied: the upload is not accessible';
-            END IF;
-            
-            IF OLD.profile_id <> cur_profile('profile_id') AND OLD.profile_id NOT IN (
-                SELECT profile_id FROM accessible_events_profiles
-                WHERE event_id = cur_event_profile('event_id') AND profile_id = OLD.profile_id
+            IF OLD.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') AND OLD.profile_id NOT IN (
+                SELECT profile_id FROM events_profiles_ctx
             ) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
@@ -1836,33 +1591,33 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_accessible_uploads() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_uploads() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_uploads() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_uploads_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_uploads_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_uploads_ctx() CASCADE;
         """
     ),
     # Step 16: Attach uploads triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_uploads ON accessible_uploads;
-        CREATE TRIGGER trg_insert_accessible_uploads
-            INSTEAD OF INSERT ON accessible_uploads
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_uploads();
+        DROP TRIGGER IF EXISTS trg_insert_uploads_ctx ON uploads_ctx;
+        CREATE TRIGGER trg_insert_uploads_ctx
+            INSTEAD OF INSERT ON uploads_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_uploads_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_uploads ON accessible_uploads;
-        CREATE TRIGGER trg_update_accessible_uploads
-            INSTEAD OF UPDATE ON accessible_uploads
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_uploads();
+        DROP TRIGGER IF EXISTS trg_update_uploads_ctx ON uploads_ctx;
+        CREATE TRIGGER trg_update_uploads_ctx
+            INSTEAD OF UPDATE ON uploads_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_uploads_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_uploads ON accessible_uploads;
-        CREATE TRIGGER trg_delete_accessible_uploads
-            INSTEAD OF DELETE ON accessible_uploads
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_uploads();
+        DROP TRIGGER IF EXISTS trg_delete_uploads_ctx ON uploads_ctx;
+        CREATE TRIGGER trg_delete_uploads_ctx
+            INSTEAD OF DELETE ON uploads_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_uploads_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_accessible_uploads ON accessible_uploads;
-        DROP TRIGGER IF EXISTS trg_update_accessible_uploads ON accessible_uploads;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_uploads ON accessible_uploads;
+        DROP TRIGGER IF EXISTS trg_delete_uploads_ctx ON uploads_ctx;
+        DROP TRIGGER IF EXISTS trg_update_uploads_ctx ON uploads_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_uploads_ctx ON uploads_ctx;
         """
     ),
     # Step 17: Critical BEFORE/AFTER table triggers
@@ -1905,7 +1660,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_ensure_profiles_unique()
         RETURNS TRIGGER AS $$
         DECLARE
-            exclude_id TEXT := NULL;
+            exclude_id UUID := NULL;
         BEGIN
             IF TG_OP = 'UPDATE' THEN
                 exclude_id := OLD.profile_id;
@@ -1914,7 +1669,7 @@ steps = [
                 SELECT 1 FROM profiles
                 WHERE LOWER(label) = LOWER(NEW.label)
                 AND (
-                    COALESCE(restricted_to_event, '') = COALESCE(NEW.restricted_to_event, '')
+                    restricted_to_event IS NOT DISTINCT FROM NEW.restricted_to_event
                     OR restricted_to_event IS NULL
                 )
                 AND (TG_OP = 'INSERT' OR profile_id <> exclude_id)
@@ -1960,9 +1715,9 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_ensure_defaults_in_event_insert()
         RETURNS TRIGGER AS $$
         DECLARE
-            v_archive_album_id TEXT := gen_random_uuid();
-            v_favorites_album_id TEXT := gen_random_uuid();
-            v_unassociated_group_id TEXT := gen_random_uuid();
+            v_archive_album_id UUID := gen_random_uuid();
+            v_favorites_album_id UUID := gen_random_uuid();
+            v_unassociated_group_id UUID := gen_random_uuid();
         BEGIN
             INSERT INTO events_profiles (
                 event_id,
@@ -2081,15 +1836,18 @@ steps = [
     # Step 19: Access requests trigger functions
     step(
         """
-        -- Function for accessible_my_access_requests INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_my_access_requests()
+        -- Function for my_access_requests_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF NEW.profile_id <> cur_profile('profile_id') OR (NEW.applicant_profile_id IS NOT NULL AND NEW.applicant_profile_id <> cur_profile('profile_id')) THEN
+            IF
+                NEW.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id')
+                OR (NEW.applicant_profile_id IS NOT NULL AND NEW.applicant_profile_id IS DISTINCT FROM cur_profile_uuid('profile_id'))
+            THEN
                 RAISE EXCEPTION 'Permission denied: cannot create access request for another profile';
             END IF;
             
@@ -2109,7 +1867,7 @@ steps = [
                 communication_consent
             )
             VALUES (
-                cur_event_profile('event_id'),
+                cur_event_profile_uuid('event_id'),
                 NEW.profile_id,
                 COALESCE(NEW.requested_at, CURRENT_TIMESTAMP),
                 CASE WHEN cur_profile_bool('is_public') THEN NEW.applicant_name ELSE NULL END,
@@ -2124,18 +1882,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_access_requests UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_my_access_requests()
+        -- Function for my_access_requests_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id <> cur_profile('profile_id') OR cur_profile('is_public') THEN
-                RAISE EXCEPTION 'Permission denied: the access request is not accessible';
-            END IF;
-            
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: cannot update closed access request';
             END IF;
@@ -2149,18 +1899,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_access_requests DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_my_access_requests()
+        -- Function for my_access_requests_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.profile_id <> cur_profile('profile_id') OR cur_profile('is_public') THEN
-                RAISE EXCEPTION 'Permission denied: the access request is not accessible';
-            END IF;
-            
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete closed access request';
             END IF;
@@ -2171,15 +1913,15 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_access_requests_groups INSERT
-        CREATE OR REPLACE FUNCTION trg_insert_accessible_my_access_requests_groups()
+        -- Function for my_access_requests_groups_ctx INSERT
+        CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
             IF cur_event_profile('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
-            IF cur_profile('profile_id') <> (SELECT ar.profile_id FROM access_requests ar WHERE NEW.access_request_id = ar.access_request_id) THEN
+            IF cur_profile_uuid('profile_id') IS DISTINCT FROM (SELECT ar.profile_id FROM access_requests ar WHERE NEW.access_request_id = ar.access_request_id) THEN
                 RAISE EXCEPTION 'Permission denied: the access request is not accessible';
             END IF;
             
@@ -2214,15 +1956,15 @@ steps = [
                     FROM notifications n
                     WHERE n.type = 'access_request'
                     AND n.profile_id = p.profile_id
-                    AND (n.data->>'access_request_id')::TEXT = NEW.access_request_id::TEXT
-                    AND (n.data->>'event_id')::TEXT = cur_event_profile('event_id')
+                    AND (n.data->>'access_request_id')::INTEGER = NEW.access_request_id::INTEGER
+                    AND (n.data->>'event_id')::UUID = cur_event_profile_uuid('event_id')
                 )
                 AND EXISTS (
                     SELECT 1
                     FROM groups_accessibility ga
                     WHERE ga.group_id = NEW.group_id
                     AND ga.profile_id = p.profile_id
-                    AND ga.event_id = cur_event_profile('event_id')
+                    AND ga.event_id = cur_event_profile_uuid('event_id')
                     AND ga.is_accessible
                 );
             
@@ -2230,15 +1972,11 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_my_access_requests_groups DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_my_access_requests_groups()
+        -- Function for my_access_requests_groups_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_my_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF cur_profile('profile_id') <> (SELECT ar.profile_id FROM access_requests ar WHERE OLD.access_request_id = ar.access_request_id) THEN
+            IF cur_profile_uuid('profile_id') IS DISTINCT FROM (SELECT ar.profile_id FROM access_requests ar WHERE OLD.access_request_id = ar.access_request_id) THEN
                 RAISE EXCEPTION 'Permission denied: the access request is not accessible';
             END IF;
             
@@ -2252,18 +1990,10 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_access_requests UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_access_requests()
+        -- Function for access_requests_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.access_request_id NOT IN (SELECT access_request_id FROM accessible_access_requests) THEN
-                RAISE EXCEPTION 'Permission denied: the access request is not accessible';
-            END IF;
-            
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: the access request is closed';
             END IF;
@@ -2275,38 +2005,22 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_access_requests DELETE
-        CREATE OR REPLACE FUNCTION trg_delete_accessible_access_requests()
+        -- Function for access_requests_ctx DELETE
+        CREATE OR REPLACE FUNCTION trg_delete_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.access_request_id NOT IN (SELECT access_request_id FROM accessible_access_requests) THEN
-                RAISE EXCEPTION 'Permission denied: the access request is not accessible';
-            END IF;
-
             DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id;
             
             RETURN OLD;
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function for accessible_access_requests_groups UPDATE
-        CREATE OR REPLACE FUNCTION trg_update_accessible_access_requests_groups()
+        -- Function for access_requests_groups_ctx UPDATE
+        CREATE OR REPLACE FUNCTION trg_update_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
         DECLARE
             applicant_profile_id TEXT := (SELECT applicant_profile_id FROM access_requests WHERE access_request_id = OLD.access_request_id);
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
-                RAISE EXCEPTION 'Permission denied: event not found';
-            END IF;
-            
-            IF OLD.access_request_id NOT IN (SELECT access_request_id FROM accessible_access_requests) THEN
-                RAISE EXCEPTION 'Permission denied: the access request is not accessible';
-            END IF;
-            
             IF (SELECT is_closed FROM access_requests WHERE access_request_id = OLD.access_request_id) THEN
                 RAISE EXCEPTION 'Permission denied: the access request is closed';
             END IF;
@@ -2315,19 +2029,24 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the access request group is closed';
             END IF;
             
-            IF NEW.approved IS TRUE AND OLD.group_id NOT IN (SELECT group_id FROM accessible_groups) THEN
+            IF NEW.approved IS TRUE AND OLD.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
 
             IF NEW.approved IS TRUE THEN
-                IF (SELECT all_groups FROM accessible_events_profiles WHERE profile_id = applicant_profile_id AND event_id = cur_event_profile('event_id')) IS FALSE THEN
-                    INSERT INTO events_profiles_groups (event_id, profile_id, group_id)
-                    VALUES (cur_event_profile('event_id'), applicant_profile_id, OLD.group_id)
+                IF (
+                    SELECT all_groups
+                    FROM events_profiles_ctx
+                    WHERE
+                        profile_id = applicant_profile_id
+                ) IS DISTINCT FROM TRUE
+                THEN
+                    INSERT INTO profiles_groups (profile_id, group_id)
+                    VALUES (applicant_profile_id, OLD.group_id)
                     ON CONFLICT DO NOTHING;
                 ELSE
-                    DELETE FROM events_profiles_groups
-                    WHERE event_id = cur_event_profile('event_id')
-                    AND profile_id = applicant_profile_id
+                    DELETE FROM profiles_groups
+                    WHERE profile_id = applicant_profile_id
                     AND group_id = OLD.group_id;
                 END IF;
             END IF;
@@ -2335,7 +2054,7 @@ steps = [
             UPDATE access_requests_groups SET
                 approved = NEW.approved,
                 closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
-                closed_by = cur_profile('profile_id')
+                closed_by = cur_profile_uuid('profile_id')
             WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
 
             PERFORM ensure_access_requests_closed_func(OLD.access_request_id, NEW.closed_at);
@@ -2345,68 +2064,68 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_update_accessible_access_requests_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_access_requests() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_access_requests() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_my_access_requests_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_my_access_requests_groups() CASCADE;
-        DROP FUNCTION IF EXISTS trg_delete_accessible_my_access_requests() CASCADE;
-        DROP FUNCTION IF EXISTS trg_update_accessible_my_access_requests() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_accessible_my_access_requests() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_access_requests_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_access_requests_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_access_requests_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_my_access_requests_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_my_access_requests_groups_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_my_access_requests_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_update_my_access_requests_ctx() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_my_access_requests_ctx() CASCADE;
         """
     ),
     # Step 20: Attach access requests triggers
     step(
         """
-        DROP TRIGGER IF EXISTS trg_insert_accessible_my_access_requests ON accessible_my_access_requests;
-        CREATE TRIGGER trg_insert_accessible_my_access_requests
-            INSTEAD OF INSERT ON accessible_my_access_requests
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_my_access_requests();
+        DROP TRIGGER IF EXISTS trg_insert_my_access_requests_ctx ON my_access_requests_ctx;
+        CREATE TRIGGER trg_insert_my_access_requests_ctx
+            INSTEAD OF INSERT ON my_access_requests_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_my_access_requests_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_my_access_requests ON accessible_my_access_requests;
-        CREATE TRIGGER trg_update_accessible_my_access_requests
-            INSTEAD OF UPDATE ON accessible_my_access_requests
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_my_access_requests();
+        DROP TRIGGER IF EXISTS trg_update_my_access_requests_ctx ON my_access_requests_ctx;
+        CREATE TRIGGER trg_update_my_access_requests_ctx
+            INSTEAD OF UPDATE ON my_access_requests_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_my_access_requests_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_my_access_requests ON accessible_my_access_requests;
-        CREATE TRIGGER trg_delete_accessible_my_access_requests
-            INSTEAD OF DELETE ON accessible_my_access_requests
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_my_access_requests();
+        DROP TRIGGER IF EXISTS trg_delete_my_access_requests_ctx ON my_access_requests_ctx;
+        CREATE TRIGGER trg_delete_my_access_requests_ctx
+            INSTEAD OF DELETE ON my_access_requests_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_my_access_requests_ctx();
 
-        DROP TRIGGER IF EXISTS trg_insert_accessible_my_access_requests_groups ON accessible_my_access_requests_groups;
-        CREATE TRIGGER trg_insert_accessible_my_access_requests_groups
-            INSTEAD OF INSERT ON accessible_my_access_requests_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_accessible_my_access_requests_groups();
+        DROP TRIGGER IF EXISTS trg_insert_my_access_requests_groups_ctx ON my_access_requests_groups_ctx;
+        CREATE TRIGGER trg_insert_my_access_requests_groups_ctx
+            INSTEAD OF INSERT ON my_access_requests_groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_my_access_requests_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_my_access_requests_groups ON accessible_my_access_requests_groups;
-        CREATE TRIGGER trg_delete_accessible_my_access_requests_groups
-            INSTEAD OF DELETE ON accessible_my_access_requests_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_my_access_requests_groups();
+        DROP TRIGGER IF EXISTS trg_delete_my_access_requests_groups_ctx ON my_access_requests_groups_ctx;
+        CREATE TRIGGER trg_delete_my_access_requests_groups_ctx
+            INSTEAD OF DELETE ON my_access_requests_groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_my_access_requests_groups_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_access_requests ON accessible_access_requests;
-        CREATE TRIGGER trg_update_accessible_access_requests
-            INSTEAD OF UPDATE ON accessible_access_requests
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_access_requests();
+        DROP TRIGGER IF EXISTS trg_update_access_requests_ctx ON access_requests_ctx;
+        CREATE TRIGGER trg_update_access_requests_ctx
+            INSTEAD OF UPDATE ON access_requests_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_access_requests_ctx();
 
-        DROP TRIGGER IF EXISTS trg_delete_accessible_access_requests ON accessible_access_requests;
-        CREATE TRIGGER trg_delete_accessible_access_requests
-            INSTEAD OF DELETE ON accessible_access_requests
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_accessible_access_requests();
+        DROP TRIGGER IF EXISTS trg_delete_access_requests_ctx ON access_requests_ctx;
+        CREATE TRIGGER trg_delete_access_requests_ctx
+            INSTEAD OF DELETE ON access_requests_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_access_requests_ctx();
 
-        DROP TRIGGER IF EXISTS trg_update_accessible_access_requests_groups ON accessible_access_requests_groups;
-        CREATE TRIGGER trg_update_accessible_access_requests_groups
-            INSTEAD OF UPDATE ON accessible_access_requests_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_update_accessible_access_requests_groups();
+        DROP TRIGGER IF EXISTS trg_update_access_requests_groups_ctx ON access_requests_groups_ctx;
+        CREATE TRIGGER trg_update_access_requests_groups_ctx
+            INSTEAD OF UPDATE ON access_requests_groups_ctx
+            FOR EACH ROW EXECUTE FUNCTION trg_update_access_requests_groups_ctx();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_update_accessible_access_requests_groups ON accessible_access_requests_groups;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_access_requests ON accessible_access_requests;
-        DROP TRIGGER IF EXISTS trg_update_accessible_access_requests ON accessible_access_requests;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_my_access_requests_groups ON accessible_my_access_requests_groups;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_my_access_requests_groups ON accessible_my_access_requests_groups;
-        DROP TRIGGER IF EXISTS trg_delete_accessible_my_access_requests ON accessible_my_access_requests;
-        DROP TRIGGER IF EXISTS trg_update_accessible_my_access_requests ON accessible_my_access_requests;
-        DROP TRIGGER IF EXISTS trg_insert_accessible_my_access_requests ON accessible_my_access_requests;
+        DROP TRIGGER IF EXISTS trg_update_access_requests_groups_ctx ON access_requests_groups_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_access_requests_ctx ON access_requests_ctx;
+        DROP TRIGGER IF EXISTS trg_update_access_requests_ctx ON access_requests_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_my_access_requests_groups_ctx ON my_access_requests_groups_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_my_access_requests_groups_ctx ON my_access_requests_groups_ctx;
+        DROP TRIGGER IF EXISTS trg_delete_my_access_requests_ctx ON my_access_requests_ctx;
+        DROP TRIGGER IF EXISTS trg_update_my_access_requests_ctx ON my_access_requests_ctx;
+        DROP TRIGGER IF EXISTS trg_insert_my_access_requests_ctx ON my_access_requests_ctx;
         """
     ),
     # Step 21: More BEFORE/AFTER table trigger functions
@@ -2435,7 +2154,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_ensure_profiles_publicity()
         RETURNS TRIGGER AS $$
         DECLARE
-            old_id TEXT := NULL;
+            old_id UUID := NULL;
         BEGIN
             IF TG_OP = 'UPDATE' THEN
                 old_id := OLD.profile_id;
@@ -2500,7 +2219,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_ensure_profiles_can_upload_validity()
         RETURNS TRIGGER AS $$
         DECLARE
-            old_id TEXT := NULL;
+            old_id UUID := NULL;
         BEGIN
             IF TG_OP = 'UPDATE' THEN
                 old_id := OLD.profile_id;
@@ -2515,8 +2234,8 @@ steps = [
             END IF;
             
             IF TG_OP = 'UPDATE' AND NEW.can_upload_and_delete_images AND EXISTS (
-                SELECT 1 FROM events_profiles_groups
-                WHERE event_id = cur_event_profile('event_id') AND profile_id = old_id
+                SELECT 1 FROM profiles_groups
+                WHERE profile_id = old_id
             ) THEN
                 RAISE EXCEPTION 'Policy error: profile with upload permissions cannot be restricted to groups';
             END IF;
@@ -2525,13 +2244,13 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function to ensure profiles can upload validity for events_profiles_groups
+        -- Function to ensure profiles can upload validity for profiles_groups
         CREATE OR REPLACE FUNCTION trg_ensure_profiles_can_upload_validity_profile_groups()
         RETURNS TRIGGER AS $$
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM events_profiles
-                WHERE event_id = cur_event_profile('event_id')
+                WHERE event_id = cur_event_profile_uuid('event_id')
                 AND profile_id = NEW.profile_id
                 AND can_upload_and_delete_images
             ) THEN
@@ -2565,7 +2284,7 @@ steps = [
                 SELECT e.unassociated_group_id
                 FROM groups g
                 INNER JOIN events e ON g.event_id = e.event_id
-                WHERE g.event_id = cur_event_profile('event_id') AND g.group_id = e.unassociated_group_id
+                WHERE g.event_id = cur_event_profile_uuid('event_id') AND g.group_id = e.unassociated_group_id
             ) THEN
                 RAISE EXCEPTION 'Policy error: cannot edit unassociated group permissions';
             END IF;
@@ -2575,14 +2294,14 @@ steps = [
         $$ LANGUAGE plpgsql;
 
         -- Helper function to ensure access requests closed
-        CREATE OR REPLACE FUNCTION ensure_access_requests_closed_func(p_access_request_id TEXT DEFAULT NULL, p_closed_at TIMESTAMP DEFAULT NULL)
+        CREATE OR REPLACE FUNCTION ensure_access_requests_closed_func(p_access_request_id INTEGER DEFAULT NULL, p_closed_at TIMESTAMP DEFAULT NULL)
         RETURNS VOID AS $$
         BEGIN
             UPDATE access_requests SET
                 is_closed = TRUE,
                 closed_at = COALESCE(p_closed_at, CURRENT_TIMESTAMP),
-                closed_by = cur_profile('profile_id')
-            WHERE event_id = cur_event_profile('event_id')
+                closed_by = cur_profile_uuid('profile_id')
+            WHERE event_id = cur_event_profile_uuid('event_id')
             AND access_request_id = COALESCE(p_access_request_id, access_request_id)
             AND NOT EXISTS (
                 SELECT 1 FROM access_requests_groups arg
@@ -2598,7 +2317,7 @@ steps = [
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM faces f WHERE f.group_id = OLD.group_id
-            ) AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id THEN
+            ) AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete group with faces';
             END IF;
             
@@ -2631,7 +2350,7 @@ steps = [
             IF TG_OP = 'DELETE' AND (
                 OLD.album_id = (SELECT archive_album_id FROM events WHERE event_id = OLD.event_id)
                 OR OLD.album_id = (SELECT favorites_album_id FROM events WHERE event_id = OLD.event_id)
-            ) AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id THEN
+            ) AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete default albums';
             END IF;
             
@@ -2644,13 +2363,15 @@ steps = [
         RETURNS TRIGGER AS $$
         BEGIN
             IF TG_OP = 'UPDATE' AND OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
-                AND (OLD.group_id <> NEW.group_id OR OLD.label <> NEW.label
-                    OR COALESCE(OLD.representative_face, '') <> COALESCE(NEW.representative_face, '')) THEN
+                AND (
+                    OLD.group_id IS DISTINCT FROM NEW.group_id
+                    OR OLD.label IS DISTINCT FROM NEW.label
+                    OR OLD.representative_face IS DISTINCT FROM NEW.representative_face) THEN
                 RAISE EXCEPTION 'Policy error: cannot update default group';
             END IF;
             
             IF TG_OP = 'DELETE' AND OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
-                AND COALESCE((SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1), '') <> OLD.event_id THEN
+                AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete default group';
             END IF;
             
@@ -2663,7 +2384,7 @@ steps = [
         DROP FUNCTION IF EXISTS trg_ensure_default_albums() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_complete_deletion_access_requests() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_complete_deletion_faces_in_group() CASCADE;
-        DROP FUNCTION IF EXISTS ensure_access_requests_closed_func(TEXT, TIMESTAMP) CASCADE;
+        DROP FUNCTION IF EXISTS ensure_access_requests_closed_func(INTEGER, TIMESTAMP) CASCADE;
         DROP FUNCTION IF EXISTS trg_insert_ensure_groups_unassociated_permissions() CASCADE;
         DROP FUNCTION IF EXISTS trg_revoke_refresh_tokens_when_profile_password_updated() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_profiles_can_upload_validity_profile_groups() CASCADE;
@@ -2722,9 +2443,9 @@ steps = [
             BEFORE UPDATE ON events_profiles
             FOR EACH ROW EXECUTE FUNCTION trg_ensure_profiles_can_upload_validity();
 
-        DROP TRIGGER IF EXISTS trg_ensure_profiles_can_upload_validity_profile_groups_insert ON events_profiles_groups;
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_can_upload_validity_profile_groups_insert ON profiles_groups;
         CREATE TRIGGER trg_ensure_profiles_can_upload_validity_profile_groups_insert
-            BEFORE INSERT ON events_profiles_groups
+            BEFORE INSERT ON profiles_groups
             FOR EACH ROW EXECUTE FUNCTION trg_ensure_profiles_can_upload_validity_profile_groups();
 
         DROP TRIGGER IF EXISTS trg_revoke_refresh_tokens_when_profile_password_updated ON profiles;
@@ -2732,9 +2453,9 @@ steps = [
             AFTER UPDATE ON profiles
             FOR EACH ROW EXECUTE FUNCTION trg_revoke_refresh_tokens_when_profile_password_updated();
 
-        DROP TRIGGER IF EXISTS trg_insert_ensure_groups_unassociated_permissions ON events_profiles_groups;
+        DROP TRIGGER IF EXISTS trg_insert_ensure_groups_unassociated_permissions ON profiles_groups;
         CREATE TRIGGER trg_insert_ensure_groups_unassociated_permissions
-            BEFORE INSERT ON events_profiles_groups
+            BEFORE INSERT ON profiles_groups
             FOR EACH ROW EXECUTE FUNCTION trg_insert_ensure_groups_unassociated_permissions();
 
         DROP TRIGGER IF EXISTS trg_ensure_complete_deletion_faces_in_group ON groups;
@@ -2774,9 +2495,9 @@ steps = [
         DROP TRIGGER IF EXISTS trg_update_ensure_default_albums ON albums;
         DROP TRIGGER IF EXISTS trg_ensure_complete_deletion_access_requests ON profiles;
         DROP TRIGGER IF EXISTS trg_ensure_complete_deletion_faces_in_group ON groups;
-        DROP TRIGGER IF EXISTS trg_insert_ensure_groups_unassociated_permissions ON events_profiles_groups;
+        DROP TRIGGER IF EXISTS trg_insert_ensure_groups_unassociated_permissions ON profiles_groups;
         DROP TRIGGER IF EXISTS trg_revoke_refresh_tokens_when_profile_password_updated ON profiles;
-        DROP TRIGGER IF EXISTS trg_ensure_profiles_can_upload_validity_profile_groups_insert ON events_profiles_groups;
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_can_upload_validity_profile_groups_insert ON profiles_groups;
         DROP TRIGGER IF EXISTS trg_update_ensure_profiles_can_upload_validity ON events_profiles;
         DROP TRIGGER IF EXISTS trg_insert_ensure_profiles_can_upload_validity ON events_profiles;
         DROP TRIGGER IF EXISTS trg_update_ensure_profiles_public_access_code ON profiles;
@@ -2799,7 +2520,7 @@ steps = [
                 UPDATE access_requests_groups SET
                     approved = TRUE,
                     closed_at = CURRENT_TIMESTAMP,
-                    closed_by = cur_profile('profile_id')
+                    closed_by = cur_profile_uuid('profile_id')
                 WHERE (
                     SELECT ar.applicant_profile_id FROM access_requests ar
                     WHERE access_requests_groups.access_request_id = ar.access_request_id
@@ -2813,23 +2534,28 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function to insert events_profiles_groups ensure access requests groups validity
-        CREATE OR REPLACE FUNCTION trg_insert_events_profiles_groups_ensure_access_requests_groups_validity()
+        -- Function to insert profiles_groups ensure access requests groups validity
+        CREATE OR REPLACE FUNCTION trg_insert_profiles_groups_ensure_access_requests_groups_validity()
         RETURNS TRIGGER AS $$
         BEGIN
             IF
-                (SELECT all_groups FROM accessible_events_profiles WHERE profile_id = NEW.profile_id AND event_id = cur_event_profile('event_id')) IS FALSE
+                (
+                    SELECT all_groups
+                    FROM events_profiles_ctx
+                    WHERE
+                        profile_id = NEW.profile_id
+                ) IS DISTINCT FROM TRUE
             THEN
                 UPDATE access_requests_groups SET
                     approved = TRUE,
                     closed_at = CURRENT_TIMESTAMP,
-                    closed_by = cur_profile('profile_id')
+                    closed_by = cur_profile_uuid('profile_id')
                 WHERE
                     group_id = NEW.group_id
                     AND (
-                    SELECT ar.applicant_profile_id
-                    FROM access_requests ar
-                    WHERE ar.access_request_id = access_requests_groups.access_request_id
+                        SELECT ar.applicant_profile_id
+                        FROM access_requests ar
+                        WHERE ar.access_request_id = access_requests_groups.access_request_id
                     ) = NEW.profile_id
                     AND approved IS NULL;
 
@@ -2840,17 +2566,22 @@ steps = [
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Function to delete events_profiles_groups ensure access requests groups validity
-        CREATE OR REPLACE FUNCTION trg_delete_events_profiles_groups_ensure_access_requests_groups_validity()
+        -- Function to delete profiles_groups ensure access requests groups validity
+        CREATE OR REPLACE FUNCTION trg_delete_profiles_groups_ensure_access_requests_groups_validity()
         RETURNS TRIGGER AS $$
         BEGIN
             IF
-                (SELECT all_groups FROM accessible_events_profiles WHERE profile_id = OLD.profile_id AND event_id = cur_event_profile('event_id')) IS TRUE
+                (
+                    SELECT all_groups
+                    FROM events_profiles_ctx
+                    WHERE
+                        profile_id = OLD.profile_id
+                ) IS DISTINCT FROM FALSE
             THEN
                 UPDATE access_requests_groups SET
                     approved = TRUE,
                     closed_at = CURRENT_TIMESTAMP,
-                    closed_by = cur_profile('profile_id')
+                    closed_by = cur_profile_uuid('profile_id')
                 WHERE (
                     OLD.profile_id = (
                         SELECT ar.applicant_profile_id
@@ -2868,8 +2599,8 @@ steps = [
         $$ LANGUAGE plpgsql;
         """,
         """
-        DROP FUNCTION IF EXISTS trg_delete_events_profiles_groups_ensure_access_requests_groups_validity() CASCADE;
-        DROP FUNCTION IF EXISTS trg_insert_events_profiles_groups_ensure_access_requests_groups_validity() CASCADE;
+        DROP FUNCTION IF EXISTS trg_delete_profiles_groups_ensure_access_requests_groups_validity() CASCADE;
+        DROP FUNCTION IF EXISTS trg_insert_profiles_groups_ensure_access_requests_groups_validity() CASCADE;
         DROP FUNCTION IF EXISTS trg_update_profile_ensure_access_requests_groups_validity() CASCADE;
         """
     ),
@@ -2881,19 +2612,19 @@ steps = [
             AFTER UPDATE ON events_profiles
             FOR EACH ROW EXECUTE FUNCTION trg_update_profile_ensure_access_requests_groups_validity();
 
-        DROP TRIGGER IF EXISTS trg_insert_events_profiles_groups_ensure_access_requests_groups_validity ON events_profiles_groups;
-        CREATE TRIGGER trg_insert_events_profiles_groups_ensure_access_requests_groups_validity
-            AFTER INSERT ON events_profiles_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_insert_events_profiles_groups_ensure_access_requests_groups_validity();
+        DROP TRIGGER IF EXISTS trg_insert_profiles_groups_ensure_access_requests_groups_validity ON profiles_groups;
+        CREATE TRIGGER trg_insert_profiles_groups_ensure_access_requests_groups_validity
+            AFTER INSERT ON profiles_groups
+            FOR EACH ROW EXECUTE FUNCTION trg_insert_profiles_groups_ensure_access_requests_groups_validity();
 
-        DROP TRIGGER IF EXISTS trg_delete_events_profiles_groups_ensure_access_requests_groups_validity ON events_profiles_groups;
-        CREATE TRIGGER trg_delete_events_profiles_groups_ensure_access_requests_groups_validity
-            AFTER DELETE ON events_profiles_groups
-            FOR EACH ROW EXECUTE FUNCTION trg_delete_events_profiles_groups_ensure_access_requests_groups_validity();
+        DROP TRIGGER IF EXISTS trg_delete_profiles_groups_ensure_access_requests_groups_validity ON profiles_groups;
+        CREATE TRIGGER trg_delete_profiles_groups_ensure_access_requests_groups_validity
+            AFTER DELETE ON profiles_groups
+            FOR EACH ROW EXECUTE FUNCTION trg_delete_profiles_groups_ensure_access_requests_groups_validity();
         """,
         """
-        DROP TRIGGER IF EXISTS trg_delete_events_profiles_groups_ensure_access_requests_groups_validity ON events_profiles_groups;
-        DROP TRIGGER IF EXISTS trg_insert_events_profiles_groups_ensure_access_requests_groups_validity ON events_profiles_groups;
+        DROP TRIGGER IF EXISTS trg_delete_profiles_groups_ensure_access_requests_groups_validity ON profiles_groups;
+        DROP TRIGGER IF EXISTS trg_insert_profiles_groups_ensure_access_requests_groups_validity ON profiles_groups;
         DROP TRIGGER IF EXISTS trg_update_profile_ensure_access_requests_groups_validity ON events_profiles;
         """
     ),

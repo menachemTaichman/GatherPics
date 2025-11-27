@@ -18,21 +18,7 @@ import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
-
-function formatDate(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return 'N/A';
-  }
-}
+import { formatDate } from '../../utils/dateUtils';
 
 function toNumber(value) {
   const numeric = Number(value);

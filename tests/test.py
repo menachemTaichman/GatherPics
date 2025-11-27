@@ -14,187 +14,188 @@ event = Event(event_id, profile_id=profile_id)
 db = event.models.db
 general_db = general_models.db
 
-def drop_views_triggers_and_indexes(db: DB):
-    # get all views, triggers and indexes from the db itseilf, drop them, import them again
-    views = db.execute_query("SELECT table_name FROM information_schema.views WHERE table_schema = 'public'")
-    triggers = db.execute_query("SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public'")
-    indexes = db.execute_query("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname NOT LIKE 'pg_%'")
+# # TODO: remove swlite methods
+# def drop_views_triggers_and_indexes(db: DB):
+#     # get all views, triggers and indexes from the db itseilf, drop them, import them again
+#     views = db.execute_query("SELECT table_name FROM information_schema.views WHERE table_schema = 'public'")
+#     triggers = db.execute_query("SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public'")
+#     indexes = db.execute_query("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname NOT LIKE 'pg_%'")
 
-    for view in views:
-        try:
-            view_name = view[0] if isinstance(view, tuple) else view
-            db.execute_query(f'DROP VIEW IF EXISTS {view_name} CASCADE')
-        except Exception as e:
-            print(f'Error dropping view {view_name}: {e}')
+#     for view in views:
+#         try:
+#             view_name = view[0] if isinstance(view, tuple) else view
+#             db.execute_query(f'DROP VIEW IF EXISTS {view_name} CASCADE')
+#         except Exception as e:
+#             print(f'Error dropping view {view_name}: {e}')
 
-    for trigger in triggers:
-        try:
-            trigger_name = trigger[0] if isinstance(trigger, tuple) else trigger
-            # PostgreSQL requires table name for DROP TRIGGER
-            # We'll need to get the table name from information_schema
-            trigger_info = db.execute_query(f"SELECT event_object_table FROM information_schema.triggers WHERE trigger_name = '{trigger_name}' AND trigger_schema = 'public' LIMIT 1")
-            if trigger_info:
-                table_name = trigger_info[0][0] if isinstance(trigger_info[0], tuple) else trigger_info[0]
-                db.execute_query(f'DROP TRIGGER IF EXISTS {trigger_name} ON {table_name} CASCADE')
-        except Exception as e:
-            print(f'Error dropping trigger {trigger_name}: {e}')
+#     for trigger in triggers:
+#         try:
+#             trigger_name = trigger[0] if isinstance(trigger, tuple) else trigger
+#             # PostgreSQL requires table name for DROP TRIGGER
+#             # We'll need to get the table name from information_schema
+#             trigger_info = db.execute_query(f"SELECT event_object_table FROM information_schema.triggers WHERE trigger_name = '{trigger_name}' AND trigger_schema = 'public' LIMIT 1")
+#             if trigger_info:
+#                 table_name = trigger_info[0][0] if isinstance(trigger_info[0], tuple) else trigger_info[0]
+#                 db.execute_query(f'DROP TRIGGER IF EXISTS {trigger_name} ON {table_name} CASCADE')
+#         except Exception as e:
+#             print(f'Error dropping trigger {trigger_name}: {e}')
 
-    for index in indexes:
-        try:
-            index_name = index[0] if isinstance(index, tuple) else index
-            db.execute_query(f'DROP INDEX IF EXISTS {index_name} CASCADE')
-        except Exception as e:
-            print(f'Error dropping index {index_name}: {e}')
+#     for index in indexes:
+#         try:
+#             index_name = index[0] if isinstance(index, tuple) else index
+#             db.execute_query(f'DROP INDEX IF EXISTS {index_name} CASCADE')
+#         except Exception as e:
+#             print(f'Error dropping index {index_name}: {e}')
 
-def create_views_triggers_and_indexes(db: DB):
+# def create_views_triggers_and_indexes(db: DB):
 
-    # import them again
-    for view_name, view_query in db.VIEWS().items():
-        db.execute_query(f'CREATE VIEW IF NOT EXISTS {view_name} AS {view_query}')
+#     # import them again
+#     for view_name, view_query in db.VIEWS().items():
+#         db.execute_query(f'CREATE VIEW IF NOT EXISTS {view_name} AS {view_query}')
 
-    for trigger_name, trigger_query in db.TRIGGERS().items():
-        db.execute_query(f'CREATE TRIGGER IF NOT EXISTS {trigger_name} {trigger_query}')
+#     for trigger_name, trigger_query in db.TRIGGERS().items():
+#         db.execute_query(f'CREATE TRIGGER IF NOT EXISTS {trigger_name} {trigger_query}')
 
-    for index_name, index_query in db.INDEXES().items():
-        db.execute_query(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
+#     for index_name, index_query in db.INDEXES().items():
+#         db.execute_query(f'CREATE INDEX IF NOT EXISTS {index_name} ON {index_query}')
 
-def recreate_views_triggers_and_indexes(db: DB):
-    drop_views_triggers_and_indexes(db)
-    create_views_triggers_and_indexes(db)
+# def recreate_views_triggers_and_indexes(db: DB):
+#     drop_views_triggers_and_indexes(db)
+#     create_views_triggers_and_indexes(db)
 
-def recreate_tables_with_data(db: DB):
-    TABLES = db.TABLES()
+# def recreate_tables_with_data(db: DB):
+#     TABLES = db.TABLES()
 
-    creation_order = []
-    cyclic_pairs = []
+#     creation_order = []
+#     cyclic_pairs = []
 
-    creation_order = [
-        'events',
-        'profiles',
-        'events_profiles',
-        'profiles_preferences',
-        'refresh_tokens',
-        'notifications',
-        'feedbacks',
-        'settings',
-        'groups',
-        'faces',
-        'albums',
-        'images',
-        'moments',
-        'albums_images',
-        'events_profiles_images',
-        'events_profiles_albums',
-        'events_profiles_groups',
-        'uploads',
-        'access_requests',
-        'access_requests_groups',
-    ]
+#     creation_order = [
+#         'events',
+#         'profiles',
+#         'events_profiles',
+#         'profiles_preferences',
+#         'refresh_tokens',
+#         'notifications',
+#         'feedbacks',
+#         'settings',
+#         'groups',
+#         'faces',
+#         'albums',
+#         'images',
+#         'moments',
+#         'albums_images',
+#         'events_profiles_images',
+#         'events_profiles_albums',
+#         'events_profiles_groups',
+#         'uploads',
+#         'access_requests',
+#         'access_requests_groups',
+#     ]
 
-    # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
-    cyclic_pairs = [
-        ('moments', 'images', 'representative_image'),
-        ('groups', 'faces', 'representative_face')
-    ]
+#     # צמדים עם תלות הדדית: (טבלה ראשונה, טבלה שנייה, שם השדה הבעייתי בטבלה הראשונה)
+#     cyclic_pairs = [
+#         ('moments', 'images', 'representative_image'),
+#         ('groups', 'faces', 'representative_face')
+#     ]
 
-    # ------------------------------------------------------
+#     # ------------------------------------------------------
 
-    drop_views_triggers_and_indexes(db)
-    # PostgreSQL doesn't support disabling foreign keys like SQLite
-    # Foreign key constraints are always enforced, so we'll need to handle this differently
-    # For now, we'll just comment this out as it's not directly translatable
-    # db.execute_query('SET session_replication_role = replica;')  # Disable triggers temporarily
+#     drop_views_triggers_and_indexes(db)
+#     # PostgreSQL doesn't support disabling foreign keys like SQLite
+#     # Foreign key constraints are always enforced, so we'll need to handle this differently
+#     # For now, we'll just comment this out as it's not directly translatable
+#     # db.execute_query('SET session_replication_role = replica;')  # Disable triggers temporarily
 
-    # שלב 1️⃣ – גיבוי כל הטבלאות
-    print("📦 גיבוי כל הטבלאות...")
-    for table_name in creation_order:
-        backup_table = f"{table_name}_backup"
-        db.execute_query(f"DROP TABLE IF EXISTS {backup_table}")
-        db.execute_query(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}")
-        print(f"  ✅ גובהה {table_name} → {backup_table}")
+#     # שלב 1️⃣ – גיבוי כל הטבלאות
+#     print("📦 גיבוי כל הטבלאות...")
+#     for table_name in creation_order:
+#         backup_table = f"{table_name}_backup"
+#         db.execute_query(f"DROP TABLE IF EXISTS {backup_table}")
+#         db.execute_query(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}")
+#         print(f"  ✅ גובהה {table_name} → {backup_table}")
 
-    # שלב 2️⃣ – יצירה מחדש של כל הטבלאות
-    print("\n🧱 יצירת טבלאות חדשות...")
-    for table_name in creation_order:
-        ddl = TABLES[table_name]
-        db.execute_query(f"DROP TABLE IF EXISTS {table_name}")
-        db.execute_query(f"CREATE TABLE {table_name} ({ddl})")
-        print(f"  ✅ נוצרה טבלה חדשה {table_name}")
+#     # שלב 2️⃣ – יצירה מחדש של כל הטבלאות
+#     print("\n🧱 יצירת טבלאות חדשות...")
+#     for table_name in creation_order:
+#         ddl = TABLES[table_name]
+#         db.execute_query(f"DROP TABLE IF EXISTS {table_name}")
+#         db.execute_query(f"CREATE TABLE {table_name} ({ddl})")
+#         print(f"  ✅ נוצרה טבלה חדשה {table_name}")
 
-    # עוזר כללי להעתקת נתונים בין טבלאות לפי עמודות משותפות
-    def copy_common_columns(src, dst):
-        old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{src}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{dst}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
-        common = [c for c in old_cols if c in new_cols]
-        if not common:
-            print(f"  ⚠️ אין עמודות משותפות בין {src} ל-{dst}")
-            return
-        cols = ', '.join(common)
-        db.execute_query(f"INSERT INTO {dst}({cols}) SELECT {cols} FROM {src}")
+#     # עוזר כללי להעתקת נתונים בין טבלאות לפי עמודות משותפות
+#     def copy_common_columns(src, dst):
+#         old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{src}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+#         new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{dst}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+#         common = [c for c in old_cols if c in new_cols]
+#         if not common:
+#             print(f"  ⚠️ אין עמודות משותפות בין {src} ל-{dst}")
+#             return
+#         cols = ', '.join(common)
+#         db.execute_query(f"INSERT INTO {dst}({cols}) SELECT {cols} FROM {src}")
 
-    # שלב 3️⃣ – שחזור נתונים (כולל טיפול בצמדים)
-    print("\n📤 שחזור נתונים...")
+#     # שלב 3️⃣ – שחזור נתונים (כולל טיפול בצמדים)
+#     print("\n📤 שחזור נתונים...")
 
-    handled = set()
-    for a, b, problematic in cyclic_pairs:
-        print(f"  🔁 טיפול בצמד {a} ↔ {b} (שדה בעייתי: {problematic})")
+#     handled = set()
+#     for a, b, problematic in cyclic_pairs:
+#         print(f"  🔁 טיפול בצמד {a} ↔ {b} (שדה בעייתי: {problematic})")
 
-        # העתקה של טבלה A בלי השדה הבעייתי
-        old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}_backup' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
-        new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
-        common_cols = [c for c in old_cols if c in new_cols and c != problematic]
-        if common_cols:
-            cols = ', '.join(common_cols)
-            db.execute_query(f"INSERT INTO {a}({cols}) SELECT {cols} FROM {a}_backup")
-            print(f"    ✅ {a}: הועתקו כל השדות למעט {problematic}")
+#         # העתקה של טבלה A בלי השדה הבעייתי
+#         old_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}_backup' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+#         new_cols = [r[0] for r in db.execute_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{a}' AND table_schema = 'public' ORDER BY ordinal_position;", return_format=ReturnFormat.LIST_TUPLES)]
+#         common_cols = [c for c in old_cols if c in new_cols and c != problematic]
+#         if common_cols:
+#             cols = ', '.join(common_cols)
+#             db.execute_query(f"INSERT INTO {a}({cols}) SELECT {cols} FROM {a}_backup")
+#             print(f"    ✅ {a}: הועתקו כל השדות למעט {problematic}")
 
-        # העתקה של טבלה B כרגיל
-        copy_common_columns(f"{b}_backup", b)
-        print(f"    ✅ {b}: הועתקו כל הנתונים")
+#         # העתקה של טבלה B כרגיל
+#         copy_common_columns(f"{b}_backup", b)
+#         print(f"    ✅ {b}: הועתקו כל הנתונים")
 
-        # עדכון שדה בעייתי אחרי שטבלת B קיימת
-        # PostgreSQL doesn't have rowid, so we need to use the primary key
-        # Get the primary key column name
-        pk_col = db.execute_query(f"""
-            SELECT column_name 
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu 
-                ON tc.constraint_name = kcu.constraint_name
-            WHERE tc.table_name = '{a}' 
-                AND tc.constraint_type = 'PRIMARY KEY'
-                AND tc.table_schema = 'public'
-            LIMIT 1
-        """, return_format=ReturnFormat.VALUE)
-        if pk_col:
-            db.execute_query(f"""
-                UPDATE {a}
-                SET {problematic} = (
-                    SELECT {problematic}
-                    FROM {a}_backup
-                    WHERE {a}_backup.{pk_col} = {a}.{pk_col}
-                )
-            """)
-        print(f"    🔄 {a}: עודכן השדה {problematic}")
+#         # עדכון שדה בעייתי אחרי שטבלת B קיימת
+#         # PostgreSQL doesn't have rowid, so we need to use the primary key
+#         # Get the primary key column name
+#         pk_col = db.execute_query(f"""
+#             SELECT column_name 
+#             FROM information_schema.table_constraints tc
+#             JOIN information_schema.key_column_usage kcu 
+#                 ON tc.constraint_name = kcu.constraint_name
+#             WHERE tc.table_name = '{a}' 
+#                 AND tc.constraint_type = 'PRIMARY KEY'
+#                 AND tc.table_schema = 'public'
+#             LIMIT 1
+#         """, return_format=ReturnFormat.VALUE)
+#         if pk_col:
+#             db.execute_query(f"""
+#                 UPDATE {a}
+#                 SET {problematic} = (
+#                     SELECT {problematic}
+#                     FROM {a}_backup
+#                     WHERE {a}_backup.{pk_col} = {a}.{pk_col}
+#                 )
+#             """)
+#         print(f"    🔄 {a}: עודכן השדה {problematic}")
 
-        handled |= {a, b}
+#         handled |= {a, b}
 
-    # שאר הטבלאות (שלא בצמדים)
-    for table_name in creation_order:
-        if table_name in handled:
-            continue
-        print(f"  🔁 משחזר {table_name}...")
-        copy_common_columns(f"{table_name}_backup", table_name)
+#     # שאר הטבלאות (שלא בצמדים)
+#     for table_name in creation_order:
+#         if table_name in handled:
+#             continue
+#         print(f"  🔁 משחזר {table_name}...")
+#         copy_common_columns(f"{table_name}_backup", table_name)
 
-    # שלב 4️⃣ – מחיקת טבלאות הגיבוי
-    print("\n🧹 מחיקת טבלאות הגיבוי...")
-    for table_name in creation_order:
-        db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
-    # PostgreSQL doesn't support enabling foreign keys like SQLite
-    # Foreign key constraints are always enforced
-    # db.execute_query('SET session_replication_role = DEFAULT;')  # Re-enable triggers
-    create_views_triggers_and_indexes(db)
+#     # שלב 4️⃣ – מחיקת טבלאות הגיבוי
+#     print("\n🧹 מחיקת טבלאות הגיבוי...")
+#     for table_name in creation_order:
+#         db.execute_query(f"DROP TABLE IF EXISTS {table_name}_backup")
+#     # PostgreSQL doesn't support enabling foreign keys like SQLite
+#     # Foreign key constraints are always enforced
+#     # db.execute_query('SET session_replication_role = DEFAULT;')  # Re-enable triggers
+#     create_views_triggers_and_indexes(db)
 
-    print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
+#     print("\n🎉 סיום תהליך יצירה מחדש של כל הטבלאות עם טיפול אוטומטי בתלויות הדדיות")
 
 def test_gets_methods(entities_tables: list, ids: dict, relations: list):
     for table in entities_tables:
@@ -310,33 +311,3 @@ group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
 other_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
 result = event.models.check_accessibility(other_profile_id, 'groups', [group_id])
 print(result)
-
-class Timeit:
-    def __init__(self, name: str):
-        self.name = name
-    
-    def __enter__(self):
-        self.start = time.time()
-    
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.end = time.time()
-        print(f'{self.name} took {self.end - self.start} seconds')
-
-
-views = [
-    'accessible_images',
-    'accessible_faces',
-    'accessible_albums',
-    'accessible_moments',
-    'accessible_groups',
-    'accessible_groups_images',
-    'accessible_albums_images',
-    'accessible_uploads',
-
-]
-
-for view in views:
-    with Timeit(view):
-        result = event.models.db.execute_query(f'SELECT * FROM {view};', return_format=ReturnFormat.LIST_DICTS)
-        print(len(result))
-        print('--------------------------------')

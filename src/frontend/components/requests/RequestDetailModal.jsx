@@ -10,23 +10,7 @@ import { getRepresentativeUrl, useEventId, useApplyScopes } from '../../utils/st
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function getGroupStatus(groupData) {
   const approved = groupData.approved;
@@ -400,7 +384,7 @@ export default function RequestDetailModal({
           lines.push(`Requested by: ${requestData.profile_label || requestData.applicant_name || 'N/A'}`);
           lines.push(`Email: ${requestData.applicant_email}`);
           if (requestData.applicant_phone) lines.push(`Phone: ${requestData.applicant_phone}`);
-          lines.push(`Requested At: ${formatDateTime(requestData.requested_at)}`);
+          lines.push(`Requested At: ${formatDateTimeLocale(requestData.requested_at)}`);
           // People access header
           if ((approvedGroupIds && approvedGroupIds.length) || (deniedGroupIds && deniedGroupIds.length)) {
             lines.push('');
@@ -637,7 +621,7 @@ export default function RequestDetailModal({
                   <div className="flex items-center space-x-3">
                     <Clock className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{formatDateTime(requestData.requested_at)}</p>
+                      <p className="text-sm font-medium text-gray-900">{formatDateTimeLocale(requestData.requested_at)}</p>
                       <p className="text-xs text-gray-500">Requested At</p>
                     </div>
                   </div>

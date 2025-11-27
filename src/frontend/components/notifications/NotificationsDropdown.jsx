@@ -10,6 +10,7 @@ import { openFromNotification } from '../../utils/notificationNavigator';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const { showToast } = useToast();
@@ -238,7 +239,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
                 >
                   <div className="text-sm text-gray-900 line-clamp-2">{n.message}</div>
                   <div className="mt-1 text-xs text-gray-500">
-                    {formatDateTime(n.created_at)}
+                    {formatDateTimeLocale(n.created_at)}
                   </div>
                 </button>
                 <div className="flex items-center gap-1">
@@ -272,17 +273,4 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     document.body
   ) : null;
 }
-
-function formatDateTime(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
-
 

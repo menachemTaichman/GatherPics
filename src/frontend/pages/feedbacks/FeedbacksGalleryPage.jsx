@@ -16,23 +16,7 @@ import useFeedbackViewerController from '../../hooks/useFeedbackViewerController
 import { TopNavigationBar } from '../../components/layout';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function FeedbacksGalleryPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
@@ -318,7 +302,7 @@ export default function FeedbacksGalleryPage() {
               sortable: true,
               align: 'left',
               cellClassName: 'text-gray-600',
-              renderCell: (feedback) => formatDateTime(feedback.created_at),
+              renderCell: (feedback) => formatDateTimeLocale(feedback.created_at),
             },
             {
               key: 'type',

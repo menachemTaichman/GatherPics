@@ -8,35 +8,7 @@ import { useApplyScopes } from '../../utils/storeUtils';
 import { useDataStore } from '../../utils/dataManager';
 import { momentsAPI } from '../../utils/apiService';
 import { ImageComponent } from '../../hooks/useImage.jsx';
-
-function formatTimeOnly(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
-
-function formatDate(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils';
 
 const MomentCard = forwardRef(({
   moment,

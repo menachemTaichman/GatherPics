@@ -6,6 +6,14 @@ This script:
 3. Drops and recreates 'photo_app_db'
 4. Runs Yoyo migrations to create schema
 5. Migrates data from SQLite to PostgreSQL
+6. Converts timestamps from SQLite timezone to Israel timezone (Asia/Jerusalem)
+
+Timezone Configuration:
+- SQLITE_TIMEZONE: The timezone used in the old SQLite database (default: 'UTC')
+  If your SQLite database used a different timezone, update this value.
+- POSTGRES_TIMEZONE: Target timezone for PostgreSQL (default: 'Asia/Jerusalem')
+  The database will be configured to use this timezone, and all timestamps
+  will be converted to this timezone during migration.
 
 Usage: python migrating_script.py
 """
@@ -18,7 +26,16 @@ from psycopg2.extras import execute_batch
 from psycopg2 import errors as psycopg2_errors
 from dotenv import load_dotenv
 from yoyo import read_migrations, get_backend
+from datetime import datetime, timezone
 from src.core import DATA_ROOT
+
+# Try to import dateutil for timezone support, fallback to UTC if not available
+try:
+    from dateutil import tz
+    HAS_DATEUTIL = True
+except ImportError:
+    HAS_DATEUTIL = False
+    print("Warning: python-dateutil not installed. Using UTC for timezone conversions.")
 
 # Load environment variables
 load_dotenv()
@@ -117,15 +134,42 @@ IDENTITY_COLUMN_TABLES = {
     'access_requests': 'access_request_id',
 }
 
+# Timestamp columns that need timezone conversion
+# Maps table name to list of timestamp column names
+TIMESTAMP_COLUMNS = {
+    'rekognition_usaged': ['created_at'],
+    'events': ['created_at'],
+    'refresh_tokens': ['issued_at', 'expires_at', 'revoked_at'],
+    'notifications': ['created_at', 'read_at'],
+    'feedbacks': ['created_at', 'closed_at'],
+    'images': ['date_taken'],
+    'moments': ['start_date', 'end_date'],
+    'uploads': ['started_at', 'completed_at'],
+    'access_requests': ['requested_at', 'closed_at'],
+    'access_requests_groups': ['closed_at'],
+}
+
+# Timezone configuration
+# SQLite timestamps are typically stored in UTC or local time
+# We'll convert them to Israel timezone (Asia/Jerusalem)
+SQLITE_TIMEZONE = 'Asia/Jerusalem'  # SQLite stored timestamps in Israel timezone
+POSTGRES_TIMEZONE = 'Asia/Jerusalem'  # Target timezone for PostgreSQL
+
 def get_postgres_conn(database='postgres'):
-    """Get PostgreSQL connection."""
-    return psycopg2.connect(
+    """Get PostgreSQL connection with timezone configured."""
+    conn = psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
         user=DB_USER,
         password=DB_PASSWORD,
         database=database
     )
+    # Set timezone to Israel timezone
+    if database != 'postgres':  # Don't set timezone for postgres database (used for admin operations)
+        with conn.cursor() as cursor:
+            cursor.execute(f"SET timezone = '{POSTGRES_TIMEZONE}'")
+        conn.commit()
+    return conn
 
 def reset_database():
     """Reset PostgreSQL database - drop and recreate."""
@@ -166,6 +210,21 @@ def run_migrations():
     )
     migrations = read_migrations('migrations')
     backend.apply_migrations(backend.to_apply(migrations))
+    
+    # Set timezone for the database after migrations
+    print("Setting database timezone to Asia/Jerusalem...")
+    conn = get_postgres_conn(DB_NAME)
+    try:
+        with conn.cursor() as cursor:
+            # Set timezone for the session
+            cursor.execute(f"SET timezone = '{POSTGRES_TIMEZONE}'")
+            # Optionally set default timezone for the database (affects new connections)
+            cursor.execute(f"ALTER DATABASE {DB_NAME} SET timezone = '{POSTGRES_TIMEZONE}'")
+        conn.commit()
+        print("Database timezone configured!")
+    finally:
+        conn.close()
+    
     print("Migrations complete!")
 
 def convert_boolean_value(value, field_name, table_name):
@@ -175,6 +234,106 @@ def convert_boolean_value(value, field_name, table_name):
             return None
         return bool(value)  # Convert 0/1 to False/True
     return value
+
+def convert_timestamp_value(value, field_name, table_name):
+    """Convert SQLite timestamp to PostgreSQL timestamp with timezone conversion.
+    
+    SQLite timestamps are typically stored as strings in ISO format or as Unix timestamps.
+    We convert them from SQLITE_TIMEZONE to POSTGRES_TIMEZONE (Israel timezone).
+    """
+    if value is None:
+        return None
+    
+    # Check if this is a timestamp column
+    if table_name not in TIMESTAMP_COLUMNS:
+        return value
+    if field_name not in TIMESTAMP_COLUMNS[table_name]:
+        return value
+    
+    try:
+        # SQLite timestamps can be stored as:
+        # 1. ISO format strings: '2023-01-01 12:00:00' or '2023-01-01T12:00:00'
+        # 2. Unix timestamps (integers/floats)
+        # 3. Already datetime objects (if using datetime adapter)
+        
+        if isinstance(value, (int, float)):
+            # Unix timestamp - convert to datetime in UTC
+            if HAS_DATEUTIL:
+                dt = datetime.fromtimestamp(value, tz=tz.gettz(SQLITE_TIMEZONE))
+            else:
+                dt = datetime.fromtimestamp(value, tz=timezone.utc)
+        elif isinstance(value, str):
+            # Try parsing as ISO format
+            # Handle various formats
+            formats = [
+                '%Y-%m-%d %H:%M:%S',
+                '%Y-%m-%d %H:%M:%S.%f',
+                '%Y-%m-%dT%H:%M:%S',
+                '%Y-%m-%dT%H:%M:%S.%f',
+                '%Y-%m-%dT%H:%M:%S%z',
+                '%Y-%m-%dT%H:%M:%S.%f%z',
+            ]
+            dt = None
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(value, fmt)
+                    break
+                except ValueError:
+                    continue
+            
+            if dt is None:
+                # If parsing failed, try dateutil parser as fallback (if available)
+                if HAS_DATEUTIL:
+                    from dateutil.parser import parse
+                    dt = parse(value)
+                else:
+                    # Last resort: try to parse as simple date
+                    try:
+                        dt = datetime.strptime(value.split()[0], '%Y-%m-%d')
+                    except (ValueError, IndexError):
+                        raise ValueError(f"Could not parse timestamp: {value}")
+            
+            # If no timezone info, assume it's in SQLITE_TIMEZONE
+            if dt.tzinfo is None:
+                if HAS_DATEUTIL:
+                    dt = dt.replace(tzinfo=tz.gettz(SQLITE_TIMEZONE))
+                else:
+                    dt = dt.replace(tzinfo=timezone.utc)
+        elif isinstance(value, datetime):
+            # Already a datetime object
+            dt = value
+            # If no timezone info, assume it's in SQLITE_TIMEZONE
+            if dt.tzinfo is None:
+                if HAS_DATEUTIL:
+                    dt = dt.replace(tzinfo=tz.gettz(SQLITE_TIMEZONE))
+                else:
+                    dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            # Unknown type, return as-is
+            return value
+        
+        # Convert from SQLITE_TIMEZONE to POSTGRES_TIMEZONE
+        # If timezones are the same, just return the value as-is (no conversion needed)
+        if SQLITE_TIMEZONE == POSTGRES_TIMEZONE:
+            # Same timezone - just return as naive datetime (no conversion)
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+        
+        if HAS_DATEUTIL:
+            # Convert to UTC first
+            dt_utc = dt.astimezone(tz.UTC)
+            # Then convert to target timezone
+            dt_target = dt_utc.astimezone(tz.gettz(POSTGRES_TIMEZONE))
+            # Return as naive datetime (representing local time in target timezone)
+            return dt_target.replace(tzinfo=None)
+        else:
+            # Without dateutil, we can't do proper timezone conversion
+            # Just convert to UTC and return (user should install python-dateutil for proper conversion)
+            dt_utc = dt.astimezone(timezone.utc)
+            return dt_utc.replace(tzinfo=None)
+        
+    except Exception as e:
+        print(f"    Warning: Failed to convert timestamp {field_name}={value} in {table_name}: {e}")
+        return value  # Return original value if conversion fails
 
 def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=None):
     """Migrate a single table from SQLite to PostgreSQL.
@@ -242,7 +401,9 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         for i, value in enumerate(row):
             if i not in exclude_indices:
                 col_name = col_index_to_name[i]
+                # First convert boolean, then timestamp (timestamp conversion handles non-timestamp values)
                 converted_value = convert_boolean_value(value, col_name, table_name)
+                converted_value = convert_timestamp_value(converted_value, col_name, table_name)
                 converted_row.append(converted_value)
         converted_rows.append(tuple(converted_row))
     

@@ -10,6 +10,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { useApplyScopes } from '../../utils/storeUtils';
 import CloseFeedbackModal from './CloseFeedbackModal';
 import ConfirmDelete from '../modals/ConfirmDelete';
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function FeedbackDetailModal({ 
   isOpen, 
@@ -239,7 +240,7 @@ export default function FeedbackDetailModal({
                   )}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {new Date(feedback.created_at).toLocaleString()}
+                  {formatDateTimeLocale(feedback.created_at)}
                   {totalFeedbacks > 1 && (
                     <span className="ml-2">• {currentIndex + 1} of {totalFeedbacks}</span>
                   )}
@@ -548,7 +549,7 @@ export default function FeedbackDetailModal({
                   <div className="flex items-center space-x-2 text-sm">
                     <Calendar className="w-4 h-4 text-gray-400" />
                     <span className="text-gray-600">Closed at:</span>
-                    <span className="text-gray-900">{new Date(feedback.closed_at).toLocaleString()}</span>
+                    <span className="text-gray-900">{formatDateTimeLocale(feedback.closed_at)}</span>
                   </div>
                   {feedback.closed_by_label && (
                     <div className="flex items-center space-x-2 text-sm">

@@ -11,25 +11,10 @@ import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useModalStore } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
+import { formatDateTime } from '../../utils/dateUtils';
+
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
-
-function formatDateTime(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
 
 function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshImages, onSave, moments, onClose, onToast, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;

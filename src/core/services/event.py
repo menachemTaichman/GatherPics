@@ -48,9 +48,8 @@ class Event():
         if not self.models.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
-        for image_id in image_ids:
-            if not self.models.is_image_deletable(image_id):
-                raise Forbidden(f"Profile not allowed to delete {image_id}")
+        if not self.models.is_accessible('images', image_ids):
+            raise Forbidden(f"Some of the images are not accessible to the profile")
 
         parents = {}
         deleted_groups = set()

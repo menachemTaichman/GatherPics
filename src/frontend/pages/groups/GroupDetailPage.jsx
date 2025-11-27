@@ -611,7 +611,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     // Use placeholders if group is a placeholder
     if (group.isPlaceholder) return placeholderImages;
     
-    // If showCrops, return faces sorted by their image's date_taken
+    // If showCrops, return faces sorted by their image's properties based on sortBy
     if (showCrops) {
       const store = useDataStore.getState();
       const storeImages = store.entities?.[eventId]?.images || {};
@@ -619,11 +619,18 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       const sorted = [...groupFaces].sort((a, b) => {
         const imgA = storeImages[a.image_id];
         const imgB = storeImages[b.image_id];
-        const dateA = imgA?.date_taken || '';
-        const dateB = imgB?.date_taken || '';
-        return sortOrder === 'asc' 
-          ? dateA.localeCompare(dateB)
-          : dateB.localeCompare(dateA);
+        
+        let comparison = 0;
+        
+        if (sortBy === 'date') {
+          const dateA = imgA?.date_taken ? new Date(imgA.date_taken).getTime() : 0;
+          const dateB = imgB?.date_taken ? new Date(imgB.date_taken).getTime() : 0;
+          comparison = dateA - dateB;
+        } else if (sortBy === 'name') {
+          comparison = (imgA?.id || imgA?.label || '').localeCompare(imgB?.id || imgB?.label || '');
+        }
+        
+        return sortOrder === 'asc' ? comparison : -comparison;
       });
       
       return sorted;
@@ -657,10 +664,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       images = filterImages(allImages, allGroups, filterMode, onlySelected);
     }
     
-    const out = sortImages(images, 'date', sortOrder);
+    const out = sortImages(images, sortBy, sortOrder);
     
     return out;
-  }, [group?.id, group?.isPlaceholder, relatedImages, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected, includeArchived]);
+  }, [group?.id, group?.isPlaceholder, relatedImages, sortBy, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected, includeArchived]);
 
   // Update refs array when sortedImages changes
   useEffect(() => {

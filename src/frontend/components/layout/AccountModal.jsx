@@ -20,6 +20,7 @@ import { RequestFormModal } from '../requests';
 import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function AccountModal({ hideButton = false }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -552,7 +553,7 @@ export default function AccountModal({ hideButton = false }) {
                                           </span>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                          {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {new Date(request.requested_at).toLocaleDateString()}
+                                          {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {formatDate(request.requested_at)}
                                         </p>
                                       </div>
                                     </div>
@@ -641,7 +642,7 @@ export default function AccountModal({ hideButton = false }) {
                                         </span>
                                       </div>
                                       <p className="text-xs text-gray-500">
-                                        {feedback.type === 0 ? 'Bug Report' : 'Suggestion'} • {new Date(feedback.created_at).toLocaleDateString()}
+                                        {feedback.type === 0 ? 'Bug Report' : 'Suggestion'} • {formatDate(feedback.created_at)}
                                       </p>
                                     </div>
                                   </div>

@@ -14,20 +14,7 @@ import { useEventsGeneralList } from '../utils/dataManager';
 import { eventsAPI, API_BASE } from '../utils/apiService';
 import { ImageComponent } from '../hooks/useImage.jsx';
 import { useRTL } from '../hooks/useRTL';
-
-function formatDateDDMMYYYY(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return dateString;
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateDDMMYYYY } from '../utils/dateUtils';
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);

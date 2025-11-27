@@ -10,6 +10,12 @@ __depends__ = {'0002_functions'}
 steps = [
     step(
         """
+        -- refresh_tokens
+        
+        CREATE OR REPLACE VIEW refresh_tokens_ctx AS
+        SELECT rt.*
+        FROM refresh_tokens rt;
+        
         -- settings
         
         CREATE OR REPLACE VIEW settings_ctx AS
@@ -75,6 +81,9 @@ steps = [
         ON pp.preference_group = dp.preference_group
         AND pp.preference_key = dp.preference_key
         WHERE pp.profile_id = cur_profile_uuid('profile_id');
+
+        CREATE OR REPLACE VIEW my_preferences_ctx AS
+        SELECT * FROM my_preferences;
 
         -- notifications
         
@@ -760,7 +769,7 @@ steps = [
                 SUM(i.file_size) AS original_size,
                 SUM(i.high_quality_file_size) AS high_quality_size,
                 SUM(i.file_size + i.high_quality_file_size + i.display_file_size + i.thumb_file_size) AS total_size,
-                MAX(i.file_size) AS max_original_size
+                MAX(i.file_size) AS max_image_size
             FROM images_eff ie
             INNER JOIN images i ON ie.image_id = i.image_id
             INNER JOIN events_profiles ep ON
@@ -825,7 +834,7 @@ steps = [
             COALESCE(img_stats.original_size, 0) AS total_original_size,
             COALESCE(img_stats.high_quality_size, 0) AS total_high_quality_size,
             COALESCE(img_stats.total_size, 0) + COALESCE(fs.size, 0) AS total_size,
-            COALESCE(img_stats.max_original_size, 0) AS max_original_size
+            COALESCE(img_stats.max_image_size, 0) AS max_image_size
         FROM events_ctx ec
         LEFT JOIN images_stats_base isb ON ec.event_id = isb.event_id
         LEFT JOIN images_stats img_stats ON ec.event_id = img_stats.event_id
@@ -945,8 +954,30 @@ steps = [
         JOIN events e ON e.event_id = ep.event_id
         WHERE ep.event_id = cur_event_profile_uuid('event_id')
         AND ep.profile_id = cur_profile_uuid('profile_id');
+
+        CREATE OR REPLACE VIEW current_profile_events_ctx AS
+        SELECT * FROM current_profile_events;
+
+        CREATE OR REPLACE VIEW current_profile_ctx AS
+        SELECT * FROM current_profile;
+
+        CREATE OR REPLACE VIEW current_event_profile_ctx AS
+        SELECT * FROM current_event_profile;
+
+        CREATE OR REPLACE VIEW current_profile_events_ext AS
+        SELECT * FROM current_profile_events_ctx;
+
+        CREATE OR REPLACE VIEW current_profile_ext AS
+        SELECT * FROM current_profile_ctx;
+
+        CREATE OR REPLACE VIEW current_event_profile_ext AS
+        SELECT * FROM current_event_profile_ctx;
         """,
         """
+        DROP VIEW IF EXISTS current_event_profile_ext CASCADE;
+        DROP VIEW IF EXISTS current_profile_ext CASCADE;
+        DROP VIEW IF EXISTS current_event_profile_ctx CASCADE;
+        DROP VIEW IF EXISTS current_profile_ctx CASCADE;
         DROP VIEW IF EXISTS current_event_profile CASCADE;
         DROP VIEW IF EXISTS current_profile CASCADE;
         DROP VIEW IF EXISTS current_profile_events CASCADE;
@@ -1012,6 +1043,7 @@ steps = [
         DROP VIEW IF EXISTS feedbacks_details CASCADE;
         DROP VIEW IF EXISTS my_notifications_ext CASCADE;
         DROP VIEW IF EXISTS my_notifications_ctx CASCADE;
+        DROP VIEW IF EXISTS my_preferences_ctx CASCADE;
         DROP VIEW IF EXISTS my_preferences CASCADE;
         DROP VIEW IF EXISTS profiles_ext CASCADE;
         DROP VIEW IF EXISTS profiles_ctx CASCADE;
@@ -1019,6 +1051,7 @@ steps = [
         DROP VIEW IF EXISTS rekognition_usaged_ctx CASCADE;
         DROP VIEW IF EXISTS settings_ext CASCADE;
         DROP VIEW IF EXISTS settings_ctx CASCADE;
+        DROP VIEW IF EXISTS refresh_tokens_ctx CASCADE;
         """
     ),
 ]

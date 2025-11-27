@@ -10,6 +10,7 @@ import { getCurrentProfile } from '../../utils/profileService';
 import diagnosticsCapture from '../../utils/diagnosticsCapture';
 import { useApplyScopes } from '../../utils/storeUtils';
 import { useMyFeedbackById } from '../../utils/dataManager';
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function FeedbackFormModal({ 
   isOpen, 
@@ -459,14 +460,7 @@ export default function FeedbackFormModal({
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Response from Team</h4>
                   {effectiveFeedback.closed_at && (
                     <p className="text-xs text-gray-600 mb-2">
-                      Closed on {new Date(effectiveFeedback.closed_at).toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true
-                      })}
+                      Closed on {formatDateTimeLocale(effectiveFeedback.closed_at)}
                     </p>
                   )}
                   {effectiveFeedback.closed_details ? (

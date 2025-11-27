@@ -57,7 +57,7 @@ class BaseModels(ABC):
         for child in childs:
             relation_table = child[0]
             if only_accessible:
-                relation_table = self.db.STRUCTURE()[relation_table]['accessible_table']
+                relation_table = f'{relation_table}_ctx'
             query = f'SELECT EXISTS(SELECT 1 FROM {relation_table} WHERE {id_field} = %s)'
             results = self.db.execute_query(query, (entity_id,))
             if results[0][0]:
@@ -65,12 +65,21 @@ class BaseModels(ABC):
         
         return True
 
-    def is_accessible(self, table: str, entity_id: str) -> bool:
-        accessible_table = self.db.STRUCTURE()[table]['accessible_table']
+    def is_accessible(self, table: str, entity_ids: str | list[str]) -> bool:
+        """Check if entities are accessible.
+        Args:
+            table: table name
+            entity_ids: list of entity ids or single entity id
+        Returns:
+            True if all entities are accessible, False if not
+        """
+        ctx_table = f'{table}_ctx'
         id_field = self.db.get_id_field(table)
-        query = f'SELECT EXISTS(SELECT 1 FROM {accessible_table} WHERE {id_field} = %s)'
-        results = self.db.execute_query(query, (entity_id,))
-        return bool(results[0][0])
+        if not isinstance(entity_ids, list):
+            entity_ids = [entity_ids]
+        query = f'SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})'
+        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.VALUE)
+        return results == len(entity_ids)
 
     def get_entities(self, table: str, entity_ids: List[str | int] | str | int | None = None, *, include_details: bool = False) -> dict[str, Dict[str, Any]] | Dict[str, Any]:
         """Get entities from a table.
@@ -82,7 +91,7 @@ class BaseModels(ABC):
             dict of entities with entity ids as keys and entity data as values
             if single item is provided, return the entity data
         """
-        accessible_table = self.db.STRUCTURE()[table]['accessible_table']
+        ext_table = f'{table}_ext'
         fields = self.db.get_view_fields(table, include_details=include_details)
         where_clause = ''
         single_item = False
@@ -98,7 +107,7 @@ class BaseModels(ABC):
 
         query = f"""
             SELECT {fields}
-            FROM {accessible_table}
+            FROM {ext_table}
             {where_clause}
         """
         results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.DICT_DICTS)
@@ -151,14 +160,15 @@ class BaseModels(ABC):
         """
         relation_table, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
         exclusive = relation_table == child_table
-        accessible_relation = self.db.STRUCTURE()[relation_table]['accessible_table']
-        accessible_child = self.db.STRUCTURE()[child_table]['accessible_table']
+        ctx_relation = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
 
         if return_ids:
+            child_data_table = f'{child_table}_ctx'
             fields = f'c.{child_id_field}'
             return_format = ReturnFormat.LIST_VALUES
         else:
+            child_data_table = f'{child_table}_ext'
             fields = view_fields
             return_format = ReturnFormat.DICT_DICTS
 
@@ -169,7 +179,7 @@ class BaseModels(ABC):
             else:
                 where_clause = f'(c.{id_field} <> %s OR c.{id_field} IS NULL)'
         else:
-            join_clause = f' LEFT JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
+            join_clause = f' LEFT JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
             if within:
                 where_clause = f'r.{child_id_field} IS NOT NULL'
             else:
@@ -181,7 +191,7 @@ class BaseModels(ABC):
             child_ids = []
 
         query = f"""SELECT {fields}
-        FROM {accessible_child} c
+        FROM {child_data_table} c
         {join_clause}
         WHERE {where_clause}
         """
@@ -190,7 +200,7 @@ class BaseModels(ABC):
         if relation_table_fields and not return_ids:
             valid_child_ids = list(valid_childs.keys())
             query = f"""SELECT {relation_table_fields}
-            FROM {accessible_relation} r
+            FROM {ctx_relation} r
             WHERE r.{id_field} = %s
             AND r.{child_id_field} IN ({','.join(['%s'] * len(valid_child_ids))})
             """
@@ -234,7 +244,7 @@ class BaseModels(ABC):
         for parent in parents:
             id_field = self.db.get_id_field(parent)
             relation, child, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
-            accessible_relation = self.db.STRUCTURE()[relation]['accessible_table']
+            ctx_relation = f'{relation}_ctx'
             
             if return_format == ReturnFormat.LIST_TUPLES:
                 fields = f'r.{id_field}, r.{child_id_field}'
@@ -242,7 +252,7 @@ class BaseModels(ABC):
                 fields = f'DISTINCT r.{id_field}'
             query = f"""
                 SELECT {fields}
-                FROM {accessible_relation} r
+                FROM {ctx_relation} r
                 WHERE r.{child_id_field} IN ({','.join(['%s'] * len(params))})
                 AND r.{id_field} IS NOT NULL
             """
@@ -339,8 +349,8 @@ class BaseModels(ABC):
         Returns:
             list of deleted entity ids
         """
-        accessible_table = self.db.STRUCTURE()[table]['accessible_table']
-        query = f'SELECT {self.db.get_id_field(table)} FROM {accessible_table}'
+        ctx_table = f'{table}_ctx'
+        query = f'SELECT {self.db.get_id_field(table)} FROM {ctx_table}'
         entity_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
         self.delete(table, entity_ids)
         return entity_ids
@@ -364,7 +374,7 @@ class BaseModels(ABC):
 
         relation_table, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
         exclusive = relation_table == child_table
-        accessible_relation_table = self.db.STRUCTURE()[relation_table]['accessible_table']
+        ctx_relation_table = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
 
         within = operation in [REMOVE, UPDATE]
@@ -386,9 +396,9 @@ class BaseModels(ABC):
                 added_data = ',' + ','.join([f'{k} = NULL' for k in data.keys()])
 
             if operation == ADD:
-                query = f'UPDATE {accessible_relation_table} SET {id_field} = %s{added_data} WHERE {child_id_field} IN ({placeholders})'
+                query = f'UPDATE {ctx_relation_table} SET {id_field} = %s{added_data} WHERE {child_id_field} IN ({placeholders})'
             elif operation == REMOVE:
-                query = f'UPDATE {accessible_relation_table} SET {id_field} = NULL{added_data} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
+                query = f'UPDATE {ctx_relation_table} SET {id_field} = NULL{added_data} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
             self.db.execute_query(query, params)
         else:
             if operation == ADD:
@@ -404,17 +414,17 @@ class BaseModels(ABC):
                     if data:
                         params.extend(data.values())
 
-                query = f'INSERT INTO {accessible_relation_table} ({id_field}, {child_id_field}{added_data_clause}) VALUES {values_clause} ON CONFLICT DO NOTHING'
+                query = f'INSERT INTO {ctx_relation_table} ({id_field}, {child_id_field}{added_data_clause}) VALUES {values_clause} ON CONFLICT DO NOTHING'
                 self.db.execute_query(query, params)
             elif operation == REMOVE:
                 params.extend([entity_id, *valid_child_ids])
-                query = f'DELETE FROM {accessible_relation_table} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
+                query = f'DELETE FROM {ctx_relation_table} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
                 self.db.execute_query(query, params)
             elif operation == UPDATE:
                 if data:
                     updated_data_clause = ','.join([f'{k} = %s' for k in data.keys()])
                     params = [*data.values(), entity_id, *valid_child_ids]
-                    query = f'UPDATE {accessible_relation_table} SET {updated_data_clause} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
+                    query = f'UPDATE {ctx_relation_table} SET {updated_data_clause} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
                     self.db.execute_query(query, params)
 
         return valid_child_ids, detached_parents

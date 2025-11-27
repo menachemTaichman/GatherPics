@@ -54,12 +54,12 @@ class EventModels(BaseModels):
         if representative_id:
             return representative_id
         
-        accessible_child = self.db.STRUCTURE()[child]['accessible_table']
-        accessible_relation = self.db.STRUCTURE()[relation]['accessible_table']
+        ctx_child = f'{child}_ctx'
+        ctx_relation = f'{relation}_ctx'
         join_clause = ''
         parent = 'c'
         if relation != child:
-            join_clause = f'INNER JOIN {accessible_relation} r ON c.{child_id_field} = r.{child_id_field}'
+            join_clause = f'INNER JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field}'
             parent = 'r'
 
         # Determine size fields based on child table type
@@ -70,7 +70,7 @@ class EventModels(BaseModels):
             size_expr = 'c.width * c.height'
 
         query = f"""SELECT c.{child_id_field}
-        FROM {accessible_child} c
+        FROM {ctx_child} c
         {join_clause}
         WHERE {parent}.{id_field} = %s
         ORDER BY {size_expr} DESC
@@ -145,10 +145,10 @@ class EventModels(BaseModels):
         Returns:
             dict of all images with image ids as keys and images data (date_taken, moment_id, is_archived) as values
         """
-        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
+        ctx_images = 'images_ctx'
         query = f"""
             SELECT i.image_id, i.date_taken, i.moment_id, i.is_archived
-            FROM {accessible_images} i
+            FROM {ctx_images} i
         """
         return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
 
@@ -162,23 +162,23 @@ class EventModels(BaseModels):
         if not image_ids:
             return {}
 
-        accessible_moments = self.db.STRUCTURE()['moments']['accessible_table']
-        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
+        ctx_moments = 'moments_ctx'
+        ctx_images = 'images_ctx'
 
         placeholders = ','.join('%s' for _ in image_ids)
         query = f"""
             WITH matched AS (
                 SELECT i.image_id, m.moment_id
-                FROM {accessible_images} AS i
-                JOIN {accessible_moments} AS m
+                FROM {ctx_images} AS i
+                JOIN {ctx_moments} AS m
                 ON i.date_taken BETWEEN m.start_date AND m.end_date
                 WHERE i.image_id IN ({placeholders})
             )
-            UPDATE {accessible_images}
+            UPDATE {ctx_images}
             SET moment_id = (
                 SELECT m.moment_id
                 FROM matched AS m
-                WHERE m.image_id = {accessible_images}.image_id
+                WHERE m.image_id = {ctx_images}.image_id
                 LIMIT 1
             )
             WHERE image_id IN ({placeholders})
@@ -190,7 +190,7 @@ class EventModels(BaseModels):
 
         result_query = f"""
             SELECT image_id, moment_id
-            FROM {accessible_images}
+            FROM {ctx_images}
             WHERE image_id IN ({placeholders})
             AND moment_id IS NOT NULL
         """
@@ -216,7 +216,7 @@ class EventModels(BaseModels):
         affected_uploads_to_moments = {}
         query = f"""
             SELECT DISTINCT ai.upload_id, ai.moment_id
-            FROM accessible_images ai
+            FROM images_ctx ai
             WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
             AND ai.moment_id IS NOT NULL
         """
@@ -226,8 +226,8 @@ class EventModels(BaseModels):
 
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
-        accessible_images = self.db.STRUCTURE()['images']['accessible_table']
-        query = f'UPDATE {accessible_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})'
+        ctx_images = 'images_ctx'
+        query = f'UPDATE {ctx_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})'
         self.db.execute_query(query, valid_image_ids)
         
         updated_uploads_to_moments = {}
@@ -264,7 +264,7 @@ class EventModels(BaseModels):
         affected_uploads_to_moments = {}
         query = f"""
             SELECT DISTINCT ai.upload_id, ai.moment_id
-            FROM accessible_images ai
+            FROM images_ctx ai
             WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
             AND ai.moment_id IS NOT NULL
             AND ai.moment_id <> %s
@@ -301,27 +301,6 @@ class EventModels(BaseModels):
         """Get the number of images in the event."""
         return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = %s', (self.db.event_id,), return_format=ReturnFormat.VALUE)
 
-    def is_image_deletable(self, image_id: str) -> bool:
-        """Check if an image is deletable.
-        Args:
-            image_id: image id
-        Returns:
-            True if image is deletable, False if not
-        """
-        if not self.is_accessible('images', image_id):
-            return False
-        
-        query = f"""
-            SELECT COUNT(*) FROM accessible_faces WHERE image_id = %s
-        """
-        accessible_faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
-        query = f"""
-            SELECT COUNT(*) FROM faces WHERE image_id = %s
-        """
-        faces = self.db.execute_query(query, (image_id,), return_format=ReturnFormat.VALUE)
-
-        return faces ==  accessible_faces
-
     # -------- Groups helpers --------
     def get_last_group_num(self) -> int:
         """Get the last group number."""
@@ -342,7 +321,7 @@ class EventModels(BaseModels):
         Returns:
             list of face ids if found, None if not found
         """
-        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']        
+        ctx_faces = 'faces_ctx'        
         # Handle multiple images
         if not image_ids:
             return []
@@ -352,7 +331,7 @@ class EventModels(BaseModels):
 
         image_placeholders = ','.join(['%s'] * len(image_ids))
         query = f"""
-            SELECT f.face_id FROM {accessible_faces} f 
+            SELECT f.face_id FROM {ctx_faces} f 
             WHERE f.image_id IN ({image_placeholders}) 
             AND f.group_id = %s
         """
@@ -373,16 +352,16 @@ class EventModels(BaseModels):
 
         group_id_placeholders = ','.join(['%s'] * len(group_ids))
         image_placeholders = ','.join(['%s'] * len(base_image_ids))
-        accessible_groups = self.db.STRUCTURE()['groups']['accessible_table']
-        accessible_faces = self.db.STRUCTURE()['faces']['accessible_table']
+        ctx_groups = 'groups_ext'
+        ctx_faces = 'faces_ctx'
 
         query = f'''
             SELECT g.group_id, g.label, g.images_count, g.active_images_count
-            FROM {accessible_groups} g
-            JOIN {accessible_faces} f ON g.group_id = f.group_id
+            FROM {ctx_groups} g
+            JOIN {ctx_faces} f ON g.group_id = f.group_id
             WHERE f.image_id IN ({image_placeholders})
             AND g.group_id NOT IN ({group_id_placeholders})
-            GROUP BY g.group_id, g.label
+            GROUP BY g.group_id, g.label, g.images_count, g.active_images_count
             HAVING COUNT(f.face_id) > 0
             ORDER BY COUNT(DISTINCT f.image_id) DESC, g.label ASC
         '''
@@ -406,7 +385,7 @@ class EventModels(BaseModels):
         affected_uploads_to_groups = {}
         query = f"""
             SELECT DISTINCT auf.upload_id, auf.group_id
-            FROM accessible_uploads_faces auf
+            FROM uploads_faces_ctx auf
             WHERE auf.face_id IN ({','.join(['%s'] * len(face_ids))})
             AND auf.group_id <> %s
         """
@@ -525,26 +504,21 @@ class EventModels(BaseModels):
         Returns:
             list of accessible ids, list of inaccessible ids
         """
-        permissions = {
-            'images': ('images_accessibility_base', 'images_accessibility', 'accessible_images'),
-            'albums': ('albums_accessibility_base', 'albums_accessibility', 'accessible_albums'),
-            'groups': ('groups_accessibility_base', 'groups_accessibility', 'accessible_groups'),
-        }
-        
-        specify, actual, accessible_table = permissions.get(entity)
-        if not specify:
+
+        if entity not in ['images', 'albums', 'groups']:
             raise ValueError(f"Invalid entity: {entity}")
 
         if not self.is_accessible('events_profiles', profile_id):
             raise Forbidden("The profile is not accessible")
 
         id_field = self.db.get_id_field(entity)
+        ctx_table = f'{entity}_ctx'
         query = f"""
             SELECT
                 s.{id_field},
                 s.is_accessible
-                FROM {specify} s
-                INNER JOIN {accessible_table} at ON s.{id_field} = at.{id_field}
+                FROM {entity}_def s
+                INNER JOIN {ctx_table} at ON s.{id_field} = at.{id_field}
                 WHERE s.{id_field} IN ({','.join(['%s'] * len(ids))})
                 AND s.profile_id = %s
         """
@@ -559,9 +533,9 @@ class EventModels(BaseModels):
             SELECT
                 a.{id_field},
                 a.is_accessible
-                FROM {actual} a
+                FROM {entity}_eff a
                 WHERE a.{id_field} IN ({','.join(['%s'] * len(ids))})
-                AND a.event_id = cur_event_profile('event_id')
+                AND a.event_id = cur_event_profile_uuid('event_id')
                 AND a.profile_id = %s
         """
         result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
@@ -643,7 +617,7 @@ class EventModels(BaseModels):
         for group_id in group_ids:
             values += (request_id, group_id)
         query = f"""
-            INSERT INTO accessible_my_access_requests_groups
+            INSERT INTO my_access_requests_groups_ctx
             (access_request_id, group_id)
             VALUES {values_clause};
         """

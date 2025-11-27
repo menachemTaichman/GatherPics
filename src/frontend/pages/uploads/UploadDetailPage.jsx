@@ -23,22 +23,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { usePermissions } from '../../hooks/usePermissions';
 
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
@@ -677,7 +662,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   <div className="flex-1">
                     <h1 className="text-3xl font-bold text-gray-900">Upload Details</h1>
                     <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-gray-600 mt-1">
-                      <span className="text-xs">{upload?.started_at ? formatDateTime(upload.started_at) : 'Loading...'}</span>
+                      <span className="text-xs">{upload?.started_at ? formatDateTimeLocale(upload.started_at) : 'Loading...'}</span>
                       {upload && upload.profile_label && (
                         <>
                           <span className="text-gray-400">•</span>

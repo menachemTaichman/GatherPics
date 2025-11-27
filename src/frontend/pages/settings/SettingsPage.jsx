@@ -13,23 +13,7 @@ import { ScrollableTable } from '../../components/common';
 import { useEventsGeneralList, useDataStore } from '../../utils/dataManager';
 import { useApplyScopes } from '../../utils/storeUtils';
 import { APP_CONFIG } from '../../config/appConfig';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -377,7 +361,7 @@ export default function SettingsPage() {
       align: 'left',
       renderCell: (usage) => (
         <span className="text-gray-600">
-          {usage.created_at ? formatDateTime(usage.created_at) : '-'}
+          {usage.created_at ? formatDateTimeLocale(usage.created_at) : '-'}
         </span>
       ),
     },

@@ -25,37 +25,9 @@ import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useImageHighlight } from '../../hooks/useImageHighlight';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
+import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils';
 
 const EMPTY_ARRAY = Object.freeze([]);
-
-function formatTimeOnly(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
-
-function formatDate(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  } catch {
-    return dateString;
-  }
-}
 
 export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const location = useLocation();

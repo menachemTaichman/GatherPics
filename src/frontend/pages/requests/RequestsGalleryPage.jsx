@@ -14,23 +14,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useRequestViewerController from '../../hooks/useRequestViewerController';
 import { ScrollableTable } from '../../components/common';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function getRequestStatus(request) {
   const status = request.status || 'pending';
@@ -347,7 +331,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 label: 'Requested',
                 sortable: true,
                 align: 'left',
-                renderCell: (request) => formatDateTime(request.requested_at),
+                renderCell: (request) => formatDateTimeLocale(request.requested_at),
               },
               {
                 key: 'profile_label',

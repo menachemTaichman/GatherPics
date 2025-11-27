@@ -51,7 +51,6 @@ class DB:
             'settings': {
                 'auto_increment': True,
                 'primary_key': 'id',
-                'accessible_table': 'accessible_settings',
                 'fields': [
                     'image_size_limit_bytes',
                     'images_count_limit',
@@ -62,7 +61,6 @@ class DB:
             'rekognition_usaged': {
                 'auto_increment': True,
                 'primary_key': 'usage_id',
-                'accessible_table': 'accessible_rekognition_usaged',
                 'fields': [
                     'usage_id',
                     'event_id',
@@ -75,7 +73,6 @@ class DB:
             },
             'events': {
                 'primary_key': 'event_id',
-                'accessible_table': 'accessible_events',
                 'fields': [
                     'name',
                     'date',
@@ -120,7 +117,6 @@ class DB:
             },
             'profiles': {
                 'primary_key': 'profile_id',
-                'accessible_table': 'accessible_profiles',
                 'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name'],
                 'relations': {
                     'events': {
@@ -140,7 +136,6 @@ class DB:
             },
             'current_profile': {
                 'primary_key': 'profile_id',
-                'accessible_table': 'current_profile',
                 'fields': [
                     'profile_id',
                     'label',
@@ -172,7 +167,6 @@ class DB:
             },
             'current_event_profile': {
                 'primary_key': 'event_id',
-                'accessible_table': 'current_event_profile',
                 'fields': [
                     'can_manage_event',
                     'can_delete_event',
@@ -192,19 +186,16 @@ class DB:
             },
             'my_preferences': {
                 'primary_key': ['profile_id', 'preference_group', 'preference_key'],
-                'accessible_table': 'my_preferences',
                 'fields': ['preference_value'],
             },
             'refresh_tokens': {
                 'auto_increment': True,
                 'primary_key': 'token_id',
-                'accessible_table': 'refresh_tokens',
                 'fields': ['profile_id', 'token', 'issued_at', 'expires_at', 'user_agent', 'ip_address', 'revoked', 'revoked_at'],
             },
             'notifications': {
                 'auto_increment': True,
                 'primary_key': 'notification_id',
-                'accessible_table': 'accessible_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
                 'serializable': {
                     'data': dict,
@@ -213,13 +204,11 @@ class DB:
             'my_notifications': {
                 'original_table': 'notifications',
                 'primary_key': 'notification_id',
-                'accessible_table': 'accessible_my_notifications',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
             },
             'feedbacks': {
                 'auto_increment': True,
                 'primary_key': 'feedback_id',
-                'accessible_table': 'accessible_feedbacks',
                 'fields': [
                     'profile_id',
                     'sender_name',
@@ -251,7 +240,6 @@ class DB:
             'my_feedbacks': {
                 'original_table': 'feedbacks',
                 'primary_key': 'feedback_id',
-                'accessible_table': 'accessible_my_feedbacks',
                 'fields': [
                     'communication_consent',
                     'title',
@@ -268,17 +256,15 @@ class DB:
             },
             'events_profiles': {
                 'primary_key': ['profile_id'],
-                'accessible_table': 'accessible_events_profiles',
                 'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
                 'relations': {
-                    'images': {'relation_table': 'events_profiles_images', 'fields_needed': ['date_taken']},
-                    'groups': {'relation_table': 'events_profiles_groups', 'fields_needed': ['label']},
-                    'albums': {'relation_table': 'events_profiles_albums', 'fields_needed': ['label']},
+                    'images': {'relation_table': 'profiles_images', 'fields_needed': ['date_taken']},
+                    'groups': {'relation_table': 'profiles_groups', 'fields_needed': ['label']},
+                    'albums': {'relation_table': 'profiles_albums', 'fields_needed': ['label']},
                 }
             },
             'images': {
                 'primary_key': 'image_id',
-                'accessible_table': 'accessible_images',
                 'fields': [
                     'date_taken',
                     'is_archived',
@@ -301,12 +287,10 @@ class DB:
             },
             'faces': {
                 'primary_key': 'face_id',
-                'accessible_table': 'accessible_faces',
                 'fields': ['image_id', 'group_id'],
             },
             'groups': {
                 'primary_key': 'group_id',
-                'accessible_table': 'accessible_groups',
                 'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image'],
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
@@ -316,7 +300,6 @@ class DB:
             },
             'moments': {
                 'primary_key': 'moment_id',
-                'accessible_table': 'accessible_moments',
                 'fields': ['label', 'description', 'start_date', 'end_date', 'images_count', 'active_images_count', 'representative_image'],
                 'representative': {'field': 'representative_image', 'table': 'images'},
                 'relations': {
@@ -325,7 +308,6 @@ class DB:
             },
             'albums': {
                 'primary_key': 'album_id',
-                'accessible_table': 'accessible_albums',
                 'fields': ['label', 'description', 'images_count', 'active_images_count', 'representative_image'],
                 'representative': {'field': 'representative_image', 'table': 'images'},
                 'relations': {
@@ -335,7 +317,6 @@ class DB:
             'uploads': {
                 'auto_increment': True,
                 'primary_key': 'upload_id',
-                'accessible_table': 'accessible_uploads',
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id']},
@@ -358,7 +339,6 @@ class DB:
             'access_requests': {
                 'auto_increment': True,
                 'primary_key': 'access_request_id',
-                'accessible_table': 'accessible_access_requests',
                 'fields': [
                     'profile_id',
                     'requested_at',
@@ -392,13 +372,11 @@ class DB:
             },
             'access_requests_groups': {
                 'primary_key': ['access_request_id', 'group_id'],
-                'accessible_table': 'accessible_access_requests_groups',
                 'fields': ['approved', 'closed_at', 'closed_by'],
             },
             'my_access_requests': {
                 'original_table': 'access_requests',
                 'primary_key': 'access_request_id',
-                'accessible_table': 'accessible_my_access_requests',
                 'fields': [
                     'profile_id',
                     'requested_at',
@@ -429,59 +407,47 @@ class DB:
             'my_access_requests_groups': {
                 'original_table': 'access_requests_groups',
                 'primary_key': ['access_request_id', 'group_id'],
-                'accessible_table': 'accessible_my_access_requests_groups',
                 'fields': ['approved', 'closed_at', 'closed_by'],
             },
             'albums_images_actual': {
                 'original_table': 'albums_images',
                 'primary_key': ['album_id', 'image_id'],
-                'accessible_table': 'accessible_albums_images_actual',
             },
 
             # Relations tables
             'current_profile_events': {
                 'original_table': 'events_profiles',
                 'primary_key': ['profile_id', 'event_id'],
-                'accessible_table': 'current_profile_events',
             },
             # TODO: fix and remove this table
             'events_profiles2': {
                 'original_table': 'events_profiles',
                 'primary_key': ['event_id', 'profile_id'],
-                'accessible_table': 'accessible_events_profiles',
                 'fields': [],
             },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
-                'accessible_table': 'accessible_groups_images',
             },
             'albums_images': {
                 'primary_key': ['album_id', 'image_id'],
-                'accessible_table': 'accessible_albums_images',
             },
-            'events_profiles_images': {
+            'profiles_images': {
                 'primary_key': ['profile_id', 'image_id'],
-                'accessible_table': 'accessible_events_profiles_images',
             },
-            'events_profiles_groups': {
+            'profiles_groups': {
                 'primary_key': ['profile_id', 'group_id'],
-                'accessible_table': 'accessible_events_profiles_groups',
             },
-            'events_profiles_albums': {
+            'profiles_albums': {
                 'primary_key': ['profile_id', 'album_id'],
-                'accessible_table': 'accessible_events_profiles_albums',
             },
             'uploads_groups': {
                 'primary_key': ['upload_id', 'group_id'],
-                'accessible_table': 'accessible_uploads_groups',
             },
             'uploads_moments': {
                 'primary_key': ['upload_id', 'moment_id'],
-                'accessible_table': 'accessible_uploads_moments',
             },
             'uploads_faces': {
                 'primary_key': ['upload_id', 'face_id'],
-                'accessible_table': 'accessible_uploads_faces',
             },
         }
     
@@ -833,7 +799,7 @@ class DB:
         if not values:
             return []
 
-        target = self.STRUCTURE()[table].get("accessible_table", table)
+        target = f"{table}_ctx"
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
         return_format = ReturnFormat.LIST_TUPLES if isinstance(p_keys, list) else ReturnFormat.LIST_VALUES
@@ -863,7 +829,7 @@ class DB:
         if not data:
             return []
 
-        target = self.STRUCTURE()[table].get("accessible_table", table)
+        target = f"{table}_ctx"
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 
@@ -879,7 +845,7 @@ class DB:
         if not fields:
             return []
 
-        target = self.STRUCTURE()[table].get("accessible_table", table)
+        target = f"{table}_ctx"
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 
@@ -893,7 +859,7 @@ class DB:
 
     def delete(self, table: str, where: dict) -> list:
         """Delete rows matching WHERE clause and return their primary keys (if defined)."""
-        target = self.STRUCTURE()[table].get("accessible_table", table)
+        target = f"{table}_ctx"
         p_keys = self.STRUCTURE()[table].get("primary_key")
         returning = ", ".join(p_keys) if isinstance(p_keys, list) else p_keys
 

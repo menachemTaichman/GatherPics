@@ -14,23 +14,7 @@ import { UploadFormModal } from '../../components/uploads';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { ScrollableTable } from '../../components/common';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function UploadsGallery({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
@@ -198,7 +182,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                     sortable: true,
                     align: 'left',
                     cellClassName: 'text-gray-900',
-                    renderCell: (upload) => formatDateTime(upload.started_at),
+                    renderCell: (upload) => formatDateTimeLocale(upload.started_at),
                   },
                   {
                     key: 'profile_label',

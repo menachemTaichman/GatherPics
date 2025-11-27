@@ -5,20 +5,7 @@ import { useImageComponent } from '../../hooks/useImage.jsx';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { generateImageAltText } from '../../utils/accessibility';
-
-function formatTime(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatTime } from '../../utils/dateUtils';
 
 const SingleImageTile = forwardRef(function SingleImageTile({
   image,

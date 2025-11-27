@@ -12,23 +12,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 
 import { EditMomentImagesModal } from './';
 import { ConfirmDelete } from '../modals';
-
-function formatDateTime(dateString) {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -700,7 +684,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       />
                       {moment.start_date && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.start_date)}
+                          {formatDateTimeLocale(moment.start_date)}
                         </div>
                       )}
                     </div>
@@ -717,7 +701,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       />
                       {moment.end_date && (
                         <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTime(moment.end_date)}
+                          {formatDateTimeLocale(moment.end_date)}
                         </div>
                       )}
                     </div>

@@ -7,23 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { feedbacksAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useFeedbackById } from '../../utils/dataManager';
-
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return dateString;
-  }
-}
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function CloseFeedbackModal({ 
   isOpen, 
@@ -78,7 +62,7 @@ export default function CloseFeedbackModal({
           lines.push(`Feedback ${solved ? 'Resolved' : 'Closed'}`);
           if (feedback.title) lines.push(`Title: ${feedback.title}`);
           if (feedback.sender_name) lines.push(`From: ${feedback.sender_name}`);
-          if (feedback.created_at) lines.push(`Submitted: ${formatDateTime(feedback.created_at)}`);
+          if (feedback.created_at) lines.push(`Submitted: ${formatDateTimeLocale(feedback.created_at)}`);
           if (feedback.type !== undefined) {
             lines.push(`Type: ${feedback.type === 0 ? 'Bug Report' : 'Suggestion'}`);
           }
