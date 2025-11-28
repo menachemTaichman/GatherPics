@@ -96,7 +96,7 @@ class BaseModels(ABC):
         where_clause = ''
         single_item = False
 
-        if isinstance(entity_ids, str) or isinstance(entity_ids, int):
+        if not (entity_ids is None or isinstance(entity_ids, list)):
             entity_ids = [entity_ids]
             single_item = True
         

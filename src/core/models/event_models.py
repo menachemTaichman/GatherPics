@@ -145,10 +145,9 @@ class EventModels(BaseModels):
         Returns:
             dict of all images with image ids as keys and images data (date_taken, moment_id, is_archived) as values
         """
-        ctx_images = 'images_ctx'
         query = f"""
             SELECT i.image_id, i.date_taken, i.moment_id, i.is_archived
-            FROM {ctx_images} i
+            FROM images_ext i
         """
         return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
 

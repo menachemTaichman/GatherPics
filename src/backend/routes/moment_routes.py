@@ -63,7 +63,7 @@ def create_moment(event_id):
     data = request.json or {}
     
     try:
-        allowed_fields = {'label', 'description', 'start', 'end', 'representative_image'}
+        allowed_fields = {'label', 'description', 'start_date', 'end_date', 'representative_image'}
         sanitized = {k: v for k, v in data.items() if k in allowed_fields}
         if sanitized:
             moment_id = event.models.add('moments', sanitized)
@@ -94,7 +94,7 @@ def update_moment(event_id, moment_id):
         
     data = request.json or {}
     try:
-        allowed_fields = {'label', 'description', 'start', 'end', 'representative_image'}
+        allowed_fields = {'label', 'description', 'start_date', 'end_date', 'representative_image'}
         sanitized = {k: v for k, v in data.items() if k in allowed_fields}
         if sanitized:
             event.models.edit('moments', moment_id, sanitized)

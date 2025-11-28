@@ -36,7 +36,7 @@ function createEmptyEventDraft(uploadsLimits = null) {
     name: '',
     url: '',
     date: '',
-    is_public: 0, // Internal state uses 0/1, but will be converted to true/false when sending to backend
+    is_public: Boolean(0), // Internal state uses 0/1, but will be converted to true/false when sending to backend
     images_count_limit: uploadsLimits?.images_count_limit ?? 0,
     image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
     rekognition_calls_limit: uploadsLimits?.rekognition_calls_limit ?? 0,
@@ -154,7 +154,7 @@ export default function EditEventModal({
       name: evt.name || '',
       url: evt.url || '',
       date: normalizeDateForInput(evt.date),
-      is_public: Boolean(evt.is_public) ? 1 : 0,
+      is_public: Boolean(evt.is_public),
       images_count_limit:
         evt.images_count_limit !== null && evt.images_count_limit !== undefined
           ? Number(evt.images_count_limit)
@@ -378,7 +378,7 @@ export default function EditEventModal({
 
   const handleEventToggle = useCallback(
     (field, checked) => {
-      handleEventFieldChange(field, checked ? 1 : 0);
+      handleEventFieldChange(field, Boolean(checked));
     },
     [handleEventFieldChange]
   );
@@ -548,34 +548,28 @@ export default function EditEventModal({
 
   const handleModalKeys = useCallback(
     (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      if (e.key !== 'Enter' || e.shiftKey) return false;
-
-      const tagName = e.target.tagName?.toLowerCase();
-      const inputType = e.target.type?.toLowerCase?.();
-      const isInteractiveInput =
-        tagName === 'input' ||
-        tagName === 'textarea' ||
-        tagName === 'select';
-
-      if (!isInteractiveInput) {
-        return false;
-      }
-
-      if (tagName === 'input' && (inputType === 'checkbox' || inputType === 'radio')) {
-        return false;
-      }
-
-      if (!canSaveEvent) {
-        e.preventDefault();
-        enterSubmitRef.current = false;
+      // Allow all normal input behavior for input, textarea, and select elements
+      const targetTagName = e.target.tagName?.toLowerCase();
+      if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+        // For Enter key, save the event (only if there are changes and no conflicts)
+        if (e.key === 'Enter' && !eventSaving && !nameConflict && !urlConflict && canSaveEvent) {
+          e.preventDefault();
+          e.stopPropagation();
+          enterSubmitRef.current = true;
+          handleEventSave('enter-key');
+          return true;
+        }
+        // For ESC key, return false to let useModalFocus handle closing the modal
+        if (e.key === 'Escape') {
+          return false;
+        }
+        // Return true to signal that we're handling this, preventing useModalFocus from stopping it
         return true;
       }
 
-      enterSubmitRef.current = true;
-      return false;
+      return false; // Let default modal behavior handle it (ESC to close)
     },
-    [canSaveEvent]
+    [canSaveEvent, nameConflict, urlConflict, eventSaving, handleEventSave]
   );
 
   const handleFormSubmit = useCallback(

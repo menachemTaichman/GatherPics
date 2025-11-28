@@ -47,8 +47,8 @@ export default function CloseFeedbackModal({
     setLoading(true);
     try {
       await feedbacksAPI.update(feedbackId, {
-        is_closed: 1,
-        solved: solved ? 1 : 0,
+        is_closed: Boolean(1),
+        solved: Boolean(solved),
         closed_details: closeDetails.trim() || null
       });
       

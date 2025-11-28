@@ -149,7 +149,7 @@ def create_event():
     sanitized['name'] = name
     sanitized['url'] = url
     sanitized['date'] = sanitized.get('date') or None
-    sanitized['is_public'] = 1 if sanitized.get('is_public') else 0
+    sanitized['is_public'] = True if sanitized.get('is_public') else False
 
     images_limit = sanitized.get('images_count_limit')
     if images_limit not in (None, ''):

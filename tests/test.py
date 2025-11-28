@@ -306,6 +306,12 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+test_event_id = '1d031875-9444-4c7b-a2d3-a5ec54f64e45'
+test_event = Event(test_event_id, profile_id)
+# result = event.models.get_entities('moments')
+
+result = general_models.process_new_images(test_event_id, assign_moments=True)
+
 a = 1
 group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
 other_profile_id = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'

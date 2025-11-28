@@ -994,6 +994,7 @@ steps = [
                 face_id,
                 image_id,
                 group_id,
+                file_size,
                 face_width,
                 face_height,
                 face_left,
@@ -1003,6 +1004,7 @@ steps = [
                 NEW.face_id,
                 NEW.image_id,
                 NEW.group_id,
+                COALESCE(NEW.file_size, 0),
                 COALESCE(NEW.face_width, 0),
                 COALESCE(NEW.face_height, 0),
                 COALESCE(NEW.face_left, 0),
@@ -1063,6 +1065,9 @@ steps = [
                 date_taken,
                 label,
                 file_size,
+                high_quality_file_size,
+                display_file_size,
+                thumb_file_size,
                 width,
                 height,
                 description,
@@ -1075,6 +1080,9 @@ steps = [
                 NEW.date_taken,
                 NEW.label,
                 COALESCE(NEW.file_size, 0),
+                COALESCE(NEW.high_quality_file_size, 0),
+                COALESCE(NEW.display_file_size, 0),
+                COALESCE(NEW.thumb_file_size, 0),
                 COALESCE(NEW.width, 0),
                 COALESCE(NEW.height, 0),
                 NEW.description,
@@ -1102,7 +1110,10 @@ steps = [
 
             UPDATE images SET
                 description = NEW.description,
-                moment_id = NEW.moment_id
+                moment_id = NEW.moment_id,
+                high_quality_file_size = NEW.high_quality_file_size,
+                display_file_size = NEW.display_file_size,
+                thumb_file_size = NEW.thumb_file_size
             WHERE image_id = OLD.image_id;
             
             RETURN NEW;

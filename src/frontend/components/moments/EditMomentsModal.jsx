@@ -12,7 +12,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 
 import { EditMomentImagesModal } from './';
 import { ConfirmDelete } from '../modals';
-import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { formatDateTimeLocale, formatDateDDMMYYYY, parseDatabaseTimestamp } from '../../utils/dateUtils';
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -155,13 +155,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       ((String(m.id || m.moment_id).startsWith('temp-')) || m.images === undefined)
     );
     
-    if (momentsWithTimeRange.length > 0) {
+      if (momentsWithTimeRange.length > 0) {
       // Save the non-temporary moments first
       if (momentsToSave.length > 0) {
         for (const moment of momentsToSave) {
           // Filter out image-related fields before calling onSave
           const { id, moment_id, image_ids, images, ...momentData } = moment;
-          await onSave({ ...momentData, moment_id: id || moment_id });
+          const normalizedData = normalizeMomentForSave(momentData);
+          await onSave({ ...normalizedData, moment_id: id || moment_id });
         }
       }
       
@@ -178,7 +179,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       for (const moment of momentsToSave) {
         // Filter out image-related fields before calling onSave
         const { id, moment_id, images, image_ids, ...momentData } = moment;
-        await onSave({ ...momentData, moment_id: id || moment_id });
+        const normalizedData = normalizeMomentForSave(momentData);
+        await onSave({ ...normalizedData, moment_id: id || moment_id });
       }
     }
     
@@ -198,16 +200,29 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       let savedMoment;
       if (String(moment.id || moment.moment_id).startsWith('temp-')) {
         const { id, moment_id, image_ids, images, ...momentData } = moment;
-        const result = await momentsAPI.create(momentData, eventUrl);
+        const normalizedData = normalizeMomentForSave(momentData);
+        const result = await momentsAPI.create(normalizedData, eventUrl);
         
         // Changes are automatically applied by apiService interceptor
         const createdMomentId = result.moment_id;
         
-        // Wait for store to update
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Wait for store to update - poll up to 5 times with increasing delays
+        let attempts = 0;
+        while (attempts < 5) {
+          await new Promise(resolve => setTimeout(resolve, 50 * (attempts + 1)));
+          const store = useDataStore.getState();
+          savedMoment = store.entities?.[eventId]?.moments?.[createdMomentId];
+          if (savedMoment) break;
+          attempts++;
+        }
         
-        const store = useDataStore.getState();
-        savedMoment = store.entities?.[eventId]?.moments?.[createdMomentId];
+        // If still not found, try to get it from the response changes
+        if (!savedMoment && result.changes) {
+          const momentChange = result.changes.find(ch => ch.entity === 'moment' && ch.items && ch.items[createdMomentId]);
+          if (momentChange && momentChange.items[createdMomentId]) {
+            savedMoment = { id: createdMomentId, ...momentChange.items[createdMomentId] };
+          }
+        }
         
         if (savedMoment) {
           // Replace the temporary moment with the saved one
@@ -231,10 +246,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
               scrollContainerRef.current.scrollBy({ top: scrollOffset, behavior: 'smooth' });
             }
           }, 100);
+        } else {
+          // If moment still not found, log error but don't fail - the store should update eventually
+          console.warn('Created moment not found in store after creation:', createdMomentId);
         }
       } else {
         const { id, moment_id, image_ids, images, ...momentData } = moment;
-        await momentsAPI.update(id || moment_id, momentData, eventUrl);
+        const normalizedData = normalizeMomentForSave(momentData);
+        await momentsAPI.update(id || moment_id, normalizedData, eventUrl);
         
         // Changes are automatically applied by apiService interceptor
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -352,8 +371,79 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
+  // Convert datetime-local format (YYYY-MM-DDTHH:mm) to backend format (YYYY-MM-DD HH:mm)
+  const convertToBackendFormat = (value) => {
+    if (!value) return null;
+    // If already in backend format (has space instead of T), return as is
+    if (value.includes(' ')) return value;
+    // Convert from datetime-local format (YYYY-MM-DDTHH:mm) to backend format (YYYY-MM-DD HH:mm)
+    return value.replace('T', ' ');
+  };
+
+  // Convert backend format (YYYY-MM-DD HH:mm or GMT format) to datetime-local format (YYYY-MM-DDTHH:mm)
+  const convertToInputFormat = (value) => {
+    if (!value) return '';
+    // If already in datetime-local format (has T), return as is
+    if (value.includes('T') && !value.includes('GMT')) {
+      return value.slice(0, 16);
+    }
+    
+    // Parse GMT format or other backend formats using parseDatabaseTimestamp
+    const date = parseDatabaseTimestamp(value);
+    if (date && !Number.isNaN(date.getTime())) {
+      // Convert to datetime-local format: YYYY-MM-DDTHH:mm
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    
+    // Fallback: try to convert from backend format (YYYY-MM-DD HH:mm) to datetime-local format
+    if (value.includes(' ')) {
+      return value.replace(' ', 'T').slice(0, 16);
+    }
+    
+    return '';
+  };
+
+  // Format date for display in dd/mm/yyyy HH:mm format
+  const formatDateForDisplay = (value) => {
+    if (!value) return '';
+    const date = parseDatabaseTimestamp(value);
+    if (!date || Number.isNaN(date.getTime())) return value;
+    
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
+
   const updateMoment = (moment_id, updates) => {
-    setEditingMoments(prev => prev.map(m => (m.id || m.moment_id) === moment_id ? { ...m, ...updates, id: m.id || moment_id } : m));
+    // Convert datetime-local format to backend format for date fields
+    const normalizedUpdates = { ...updates };
+    if (normalizedUpdates.start_date !== undefined) {
+      normalizedUpdates.start_date = convertToBackendFormat(normalizedUpdates.start_date);
+    }
+    if (normalizedUpdates.end_date !== undefined) {
+      normalizedUpdates.end_date = convertToBackendFormat(normalizedUpdates.end_date);
+    }
+    
+    setEditingMoments(prev => prev.map(m => {
+      if ((m.id || m.moment_id) === moment_id) {
+        const updated = { ...m, ...normalizedUpdates, id: m.id || m.moment_id };
+        // Remove any start/end fields if they exist (should only have start_date/end_date)
+        delete updated.start;
+        delete updated.end;
+        return updated;
+      }
+      return m;
+    }));
+    
     // Mark this moment as changed
     setChangedMoments(prev => new Set([...prev, moment_id]));
     
@@ -372,16 +462,44 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     }
   };
 
+  // Normalize moment data before saving - convert start/end to start_date/end_date and format dates
+  const normalizeMomentForSave = (moment) => {
+    const normalized = { ...moment };
+    
+    // Convert start/end to start_date/end_date if they exist
+    if (normalized.start !== undefined) {
+      normalized.start_date = convertToBackendFormat(normalized.start);
+      delete normalized.start;
+    }
+    if (normalized.end !== undefined) {
+      normalized.end_date = convertToBackendFormat(normalized.end);
+      delete normalized.end;
+    }
+    
+    // Ensure start_date and end_date are in backend format
+    if (normalized.start_date) {
+      normalized.start_date = convertToBackendFormat(normalized.start_date);
+    }
+    if (normalized.end_date) {
+      normalized.end_date = convertToBackendFormat(normalized.end_date);
+    }
+    
+    return normalized;
+  };
+
   const handleEditImages = (moment) => {
     setEditingImagesForMoment(moment);
   };
 
   const addMoment = () => {
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 3600 * 1000);
+    
     const newMoment = {
       moment_id: `temp-${Date.now()}-${tempMomentCounter}`,
       label: 'New Moment',
-      start: new Date().toISOString().slice(0, 16),
-      end: new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 16),
+      start_date: now.toISOString().slice(0, 16).replace('T', ' '),
+      end_date: oneHourLater.toISOString().slice(0, 16).replace('T', ' '),
       description: ''
     };
     
@@ -678,15 +796,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-start-${moment.id || moment.moment_id}`}
                         name={`moment-start-${moment.id || moment.moment_id}`}
-                        value={moment.start_date}
+                        value={convertToInputFormat(moment.start_date || moment.start)}
                         onChange={(e) => updateMoment(moment.id || moment.moment_id, { start_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.start_date && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTimeLocale(moment.start_date)}
-                        </div>
-                      )}
                     </div>
                     
                     <div className="flex-1">
@@ -695,15 +808,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-end-${moment.id || moment.moment_id}`}
                         name={`moment-end-${moment.id || moment.moment_id}`}
-                        value={moment.end_date}
+                        value={convertToInputFormat(moment.end_date || moment.end)}
                         onChange={(e) => updateMoment(moment.id || moment.moment_id, { end_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
-                      {moment.end_date && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {formatDateTimeLocale(moment.end_date)}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

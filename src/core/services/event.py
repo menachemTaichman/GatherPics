@@ -168,6 +168,7 @@ class Event():
             save_image(
                 crop_img, crop_path, format='WEBP', quality=90, optimize=True
             )
+            face_file_size = os.path.getsize(crop_path)
             return {
                 "image_id": image_id,
                 "face_width": bbox['width'],
@@ -175,7 +176,8 @@ class Event():
                 "face_left": bbox['left'],
                 "face_top": bbox['top'],
                 "face_id": face_id,
-                "group_id": unassociated_group_id
+                "group_id": unassociated_group_id,
+                "file_size": face_file_size
             }
 
         def _cluster_and_group_faces(face_ids: list[str], minimal_group_size: int, unassociated_group_id: str):
@@ -240,18 +242,28 @@ class Event():
                 save_image(
                     high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True
                 )
+                high_quality_file_size = os.path.getsize(high_quality_path)
                 # Save display (2048px, webp, quality=90)
                 display_img = resize_image(original_img, display_size)
                 display_path = os.path.join(self.display_dir, f"{image_id}.webp")
                 save_image(
                     display_img, display_path, format='WEBP', quality=90, optimize=True
                 )
+                display_file_size = os.path.getsize(display_path)
                 # Save thumb (512px, webp, quality=80)
                 thumb_img = resize_image(original_img, thumb_size)
                 thumb_path = os.path.join(self.thumb_dir, f"{image_id}.webp")
                 save_image(
                     thumb_img, thumb_path, format='WEBP', quality=80, optimize=True
                 )
+                thumb_file_size = os.path.getsize(thumb_path)
+                
+                # Update image record with file sizes
+                self.models.edit('images', image_id, {
+                    'high_quality_file_size': high_quality_file_size,
+                    'display_file_size': display_file_size,
+                    'thumb_file_size': thumb_file_size
+                })
                 # Save original (copy)
                 original_save_path = os.path.join(self.original_dir, image_id + '.jpg')
                 shutil.copy2(image_path, original_save_path)
@@ -361,8 +373,8 @@ class Event():
             _send_progress('faces', 0, 1, 'Adding faces to database...')
             if all_faces:
                 _log("Adding faces to database...")
-                all_faces_values = [[face['face_id'], face['image_id'], face['face_width'], face['face_height'], face['face_left'], face['face_top'], face['group_id']] for face in all_faces]
-                self.models.add_many('faces', ['face_id', 'image_id', 'face_width', 'face_height', 'face_left', 'face_top', 'group_id'], all_faces_values)
+                all_faces_values = [[face['face_id'], face['image_id'], face['face_width'], face['face_height'], face['face_left'], face['face_top'], face['group_id'], face['file_size']] for face in all_faces]
+                self.models.add_many('faces', ['face_id', 'image_id', 'face_width', 'face_height', 'face_left', 'face_top', 'group_id', 'file_size'], all_faces_values)
                 _send_progress('clustering', 0, 1, 'Clustering faces...')
                 _log("Clustering faces...")
 

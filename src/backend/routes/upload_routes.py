@@ -3,10 +3,9 @@ from werkzeug.utils import secure_filename
 import os
 import queue
 import threading
-import json
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_general_models, Forbidden, DatabaseError, json_dumps_safe
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 
@@ -349,7 +348,7 @@ def process_images_stream(event_id):
                             'result': result,
                             'changes': changes
                         }
-                        yield f"data: {json.dumps(final_response)}\n\n"
+                        yield f"data: {json_dumps_safe(final_response)}\n\n"
                         processing_completed = True
                         break
                         
@@ -358,11 +357,11 @@ def process_images_stream(event_id):
                             'step': 'error',
                             'message': progress.get('message', 'Unknown error')
                         }
-                        yield f"data: {json.dumps(error_response)}\n\n"
+                        yield f"data: {json_dumps_safe(error_response)}\n\n"
                         break
                         
                     else:
-                        yield f"data: {json.dumps(progress)}\n\n"
+                        yield f"data: {json_dumps_safe(progress)}\n\n"
                         
                 except queue.Empty:
                     yield ": keepalive\n\n"
