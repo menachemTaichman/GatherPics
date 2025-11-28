@@ -287,7 +287,7 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
     # Create output filename if not provided
     if output_file is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"tests/view_performance_{timestamp}.txt"
+        output_file = f"tests/db/view_performance_{timestamp}.txt"
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)

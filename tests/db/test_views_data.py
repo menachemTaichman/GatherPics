@@ -17,7 +17,7 @@ from src.core.models.general_models import GeneralModels
 from src.core.services.event import Event
 from src.core.models.event_models import EventModels
 from src.core.database.db import DB, ReturnFormat
-from tests.test_all_views_performance import main as test_views_performance
+from tests.db.test_views_performance import main as test_views_performance
 
 
 class TestDBPerformance(unittest.TestCase):

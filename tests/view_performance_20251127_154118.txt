@@ -1,7 +1,0 @@
-Event ID: b03392ea-8a12-5b70-bda3-e94c1dcc5dd1
-Profile ID: 89cb4967-0eba-48af-99cc-5e87407fb639
-
-Fetching all views from database...
-Found 72 views
-
-Testing: settings_ctx...
