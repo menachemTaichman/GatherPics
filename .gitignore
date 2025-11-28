@@ -22,3 +22,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Mock service data
+tests/mocks/rekognition_data.json

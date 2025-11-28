@@ -13,12 +13,27 @@ class AWSRekognitionHelper:
             load_dotenv()
         
         try:
-            self.client = boto3.client(
-            'rekognition',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                region_name=os.getenv('AWS_REGION')
-            )
+            # Use custom mock client in development (moto doesn't support Rekognition collections)
+            if os.getenv('ENVIRONMENT') == 'DEVELOPMENT':
+                # Import mock client from tests.mocks
+                import sys
+                from pathlib import Path
+                # Add project root to path to enable tests.mocks import
+                project_root = Path(__file__).parent.parent.parent.parent
+                if str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
+                
+                from tests.mocks.mock_rekognition import get_mock_rekognition_client  # noqa: E501
+                self.client = get_mock_rekognition_client()
+            else:
+                aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+                aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+                self.client = boto3.client(
+                    'rekognition',
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    region_name=os.getenv('AWS_REGION')
+                )
         except Exception as e:
             print(f"Error initializing AWS Rekognition client: {e}")
             raise
