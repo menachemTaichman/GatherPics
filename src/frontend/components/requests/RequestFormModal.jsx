@@ -500,10 +500,6 @@ export default function RequestFormModal({
         showToast('Email is required for new profiles', 'error');
         return;
       }
-      if (!formData.communication_consent) {
-        showToast('Communication consent is required for new profiles', 'error');
-        return;
-      }
     }
     
 
@@ -516,7 +512,7 @@ export default function RequestFormModal({
         applicant_phone: formData.applicant_phone.trim() || null,
         details: formData.details.trim() || null,
         applicant_profile_id: formData.requestType === 'own' ? formData.applicant_profile_id : null,
-        communication_consent: formData.communication_consent ? 1 : 0
+        communication_consent: formData.communication_consent
       };
 
       if (request) {
@@ -1036,7 +1032,7 @@ export default function RequestFormModal({
                       </div>
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          I would like to receive email updates about this request {formData.requestType === 'new' ? '*' : ''}
+                          I would like to receive email updates about this request
                         </span>
                         <p className="text-xs text-gray-600 mt-0.5">
                           You'll receive email notifications about your request status.
@@ -1140,7 +1136,7 @@ export default function RequestFormModal({
                   <button
                     type="submit"
                     onClick={handleSubmit}
-                    disabled={loading || selectedGroups.size === 0 || (formData.requestType === 'new' && !formData.communication_consent)}
+                    disabled={loading || selectedGroups.size === 0}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
                   >
                     {loading && (

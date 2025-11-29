@@ -226,5 +226,27 @@ steps = [
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_uuid(TEXT)"
     ),
+    step(
+        """
+        -- Function to set temporary transaction context (called from Python)
+        CREATE OR REPLACE FUNCTION set_transaction_context(key TEXT, value TEXT) RETURNS VOID AS $$
+        BEGIN
+            PERFORM set_config('app.transaction_context.' || key, COALESCE(value, ''), false);
+        END;
+        $$ LANGUAGE plpgsql STABLE;
+        """,
+        "DROP FUNCTION IF EXISTS set_transaction_context(TEXT, TEXT)"
+    ),
+    step(
+        """
+        -- Function to get temporary transaction context (used in views)
+        CREATE OR REPLACE FUNCTION cur_transaction(key TEXT) RETURNS TEXT AS $$
+        BEGIN
+            RETURN current_setting('app.transaction_context.' || key, true);
+        END;
+        $$ LANGUAGE plpgsql STABLE;
+        """,
+        "DROP FUNCTION IF EXISTS cur_transaction(TEXT)"
+    ),
 ]
 

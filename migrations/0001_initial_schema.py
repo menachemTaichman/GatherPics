@@ -105,7 +105,7 @@ steps = [
             read BOOLEAN NOT NULL DEFAULT FALSE,
             read_at TIMESTAMP,
             type TEXT,
-            data TEXT
+            data JSONB
         );
         
         -- feedbacks

@@ -226,7 +226,7 @@ def create_feedback():
             'message': data['message'],
             'title': data.get('title'),
             'type': data.get('type', 0),
-            'communication_consent': data.get('communication_consent', 0),
+            'communication_consent': data.get('communication_consent', False),
         }
         
         if data.get('sender_name'):

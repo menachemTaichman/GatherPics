@@ -32,16 +32,16 @@ def toggle_read(notification_id):
     """Mark a specific notification as read."""
     general_models = get_general_models()
     try:
-        read = request.json.get('read', 1)
+        read = request.json.get('read', True)
         if read is None:
             return jsonify({'error': 'read is required'}), 400
-        if read not in [0, 1]:
-            return jsonify({'error': 'read must be 0 or 1'}), 400
+        if not isinstance(read, bool):
+            return jsonify({'error': 'read must be a boolean (true or false)'}), 400
         
         data = {
             'read': read,
         }
-        if read == 1:
+        if read:
             data['read_at'] = datetime.now().isoformat()
         else:
             data['read_at'] = None

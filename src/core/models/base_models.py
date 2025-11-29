@@ -73,7 +73,8 @@ class BaseModels(ABC):
         Returns:
             True if all entities are accessible, False if not
         """
-        ctx_table = f'{table}_ctx'
+        original_table = self.db.get_original_table(table)
+        ctx_table = f'{original_table}_ctx'
         id_field = self.db.get_id_field(table)
         if not isinstance(entity_ids, list):
             entity_ids = [entity_ids]
@@ -198,9 +199,12 @@ class BaseModels(ABC):
         
         valid_childs = self.db.execute_query(query, (entity_id, *child_ids), return_format=return_format)
         if relation_table_fields and not return_ids:
+            if not valid_childs:
+                return valid_childs, {}
             valid_child_ids = list(valid_childs.keys())
+            ext_relation = f'{relation_table}_ext'
             query = f"""SELECT {relation_table_fields}
-            FROM {ctx_relation} r
+            FROM {ext_relation} r
             WHERE r.{id_field} = %s
             AND r.{child_id_field} IN ({','.join(['%s'] * len(valid_child_ids))})
             """
@@ -371,6 +375,9 @@ class BaseModels(ABC):
         ADD = ChildOperation.ADD
         REMOVE = ChildOperation.REMOVE
         UPDATE = ChildOperation.UPDATE
+
+        if not child_ids:
+            return [], {}
 
         relation_table, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
         exclusive = relation_table == child_table

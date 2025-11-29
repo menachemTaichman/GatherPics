@@ -120,7 +120,7 @@ class DB:
                 'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name'],
                 'relations': {
                     'events': {
-                        'relation_table': 'events_profiles2',
+                        'relation_table': 'events_profiles',
                         'fields_needed': ['event_id'],
                         'relation_table_fields': [
                             'can_delete_event',
@@ -255,6 +255,12 @@ class DB:
                 }
             },
             'events_profiles': {
+                'primary_key': ['event_id', 'profile_id'],
+                'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
+            },
+            # within the event for view only
+            'events_profiles_ctx': {
+                'original_table': 'events_profiles',
                 'primary_key': ['profile_id'],
                 'fields': ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_groups', 'all_albums'],
                 'relations': {
@@ -418,12 +424,6 @@ class DB:
             'current_profile_events': {
                 'original_table': 'events_profiles',
                 'primary_key': ['profile_id', 'event_id'],
-            },
-            # TODO: fix and remove this table
-            'events_profiles2': {
-                'original_table': 'events_profiles',
-                'primary_key': ['event_id', 'profile_id'],
-                'fields': [],
             },
             'groups_images': {
                 'primary_key': ['group_id', 'image_id'],
@@ -705,10 +705,12 @@ class DB:
                 cursor.execute(query, params)
                 has_resultset = cursor.description is not None
                 if has_resultset:
+                    columns = [desc[0] for desc in cursor.description]
                     rows = cursor.fetchall()
                 else:
                     row_count = cursor.rowcount
                     rows = []
+                    columns = []
                 conn.commit()
                 cursor.close()
         
@@ -729,7 +731,6 @@ class DB:
                     raise DatabaseError(f"Internal error: {error_message}") from e
         
         if has_resultset:
-            columns = [desc[0] for desc in cursor.description]
 
             if return_format is None:
                 return_format = ReturnFormat.LIST_TUPLES

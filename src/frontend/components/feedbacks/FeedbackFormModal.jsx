@@ -143,7 +143,7 @@ export default function FeedbackFormModal({
           title: formData.title.trim(),
           type: formData.type,
           message: formData.message.trim(),
-          communication_consent: formData.communication_consent ? 1 : 0,
+          communication_consent: Boolean(formData.communication_consent),
           include_metadata: formData.include_metadata
         };
 
@@ -367,7 +367,7 @@ export default function FeedbackFormModal({
                           <label className={`relative inline-flex items-center ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
                             <input
                               type="checkbox"
-                              checked={formData.communication_consent}
+                              checked={Boolean(formData.communication_consent)}
                               onChange={(e) => handleChange('communication_consent', e.target.checked)}
                               disabled={loading}
                               className="sr-only peer"
@@ -477,7 +477,7 @@ export default function FeedbackFormModal({
                   <label className={`relative inline-flex items-center ${(loading || isViewOnly) ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
                     <input
                       type="checkbox"
-                      checked={formData.communication_consent}
+                      checked={Boolean(formData.communication_consent)}
                       onChange={(e) => handleChange('communication_consent', e.target.checked)}
                       disabled={loading || isViewOnly}
                       className="sr-only peer"

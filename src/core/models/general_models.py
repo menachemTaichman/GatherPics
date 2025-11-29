@@ -50,8 +50,13 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    def duplicate_profile(self, profile_id: str) -> str:
-        """Duplicate a profile."""
+    def duplicate_profile(self, profile_id: str) -> tuple[str, list[str]]:
+        """
+        Duplicate a profile.
+        Returns:
+            new_profile_id: id of the new profile
+            incomplete_events: list of events that could not be duplicated
+        """
         profile = self.get_entities('profiles', profile_id)
         if not profile:
             raise Forbidden('Profile not found')
@@ -87,8 +92,8 @@ class GeneralModels(BaseModels):
                 event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.ADD, data=event_relation)
                 childs = ['images', 'albums', 'groups']
                 for child in childs:
-                    child_ids = event.models.get_childs('events_profiles', profile_id, child, return_ids=True)
-                    event.models.edit_childs('events_profiles', new_profile_id, child, child_ids, operation=ChildOperation.ADD)
+                    child_ids = event.models.get_childs('events_profiles_ctx', profile_id, child, return_ids=True)
+                    event.models.edit_childs('events_profiles_ctx', new_profile_id, child, child_ids, operation=ChildOperation.ADD)
             except Forbidden as e:
                 incomplete_events.append(event_id)
                 try:
@@ -98,20 +103,26 @@ class GeneralModels(BaseModels):
 
         return new_profile_id, incomplete_events
     
-    def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None):
+    def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None) -> bool:
         """
         Delete a profile.
         If only_remove_from_event_id is provided, the profile will be removed from the event with the given id.
+        If the profile is restricted to an event, it will be deleted from the event and the general profile.
+        Returns:
+            True if the profile was deleted completely, False if it was only removed from the event.
         """
         profile = self.get_entities('profiles', profile_id)
         restricted_to_event_id = profile.get('restricted_to_event')
-        if not only_remove_from_event_id or restricted_to_event_id:
-            self.delete('profiles', profile_id)
-            return
+        event_id = only_remove_from_event_id or restricted_to_event_id
+        if event_id:
+            event = self.get_event(event_id)
+            event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
 
-        if only_remove_from_event_id:
-            event = self.get_event(only_remove_from_event_id)
-            event.models.edit_childs('events', only_remove_from_event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+        complete_delete = not only_remove_from_event_id or restricted_to_event_id is not None
+        if complete_delete:
+            self.delete('profiles', profile_id)
+
+        return complete_delete
         
     def get_profile_password(self, profile_id: str) -> str:
         """Get the password for a profile."""
@@ -243,19 +254,12 @@ class GeneralModels(BaseModels):
             data = {field: requester_event_profile[field] for field in relation_fields}
             event.models.edit_childs('events', event_id, 'profiles', [applicant_profile_id], operation=ChildOperation.ADD, data=data)
             for child in ['images', 'albums', 'groups']:
-                requester_profile_childs = event.models.get_childs('events_profiles', requester_profile_id, child)
-                event.models.edit_childs('events_profiles', applicant_profile_id, child, requester_profile_childs, operation=ChildOperation.ADD)
+                requester_profile_childs = event.models.get_childs('events_profiles_ctx', requester_profile_id, child)
+                event.models.edit_childs('events_profiles_ctx', applicant_profile_id, child, requester_profile_childs, operation=ChildOperation.ADD)
 
             event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         
         event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
-        if applicant_profile_id:
-            self.add('notifications', {
-                'profile_id': applicant_profile_id,
-                'message': 'Your access request was processed',
-                'type': 'my_access_request',
-                'data': {'access_request_id': access_request_id, 'event_id': event.event_id}
-            })
 
         return applicant_profile_id
 
@@ -436,7 +440,7 @@ class GeneralModels(BaseModels):
         Returns:
             list of notification ids that were marked as read
         """
-        query = 'SELECT notification_id FROM my_notifications WHERE NOT read'
+        query = 'SELECT notification_id FROM my_notifications_ctx WHERE NOT read'
         notification_ids = self.db.execute_query(query, (), return_format=ReturnFormat.LIST_VALUES)
-        self.edit('my_notifications', notification_ids, {'read': 1, 'read_at': read_at})
+        self.edit('my_notifications', notification_ids, {'read': True, 'read_at': read_at})
         return notification_ids

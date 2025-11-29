@@ -6,7 +6,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
 import { profilesAPI, requestsAPI, feedbacksAPI } from '../../utils/apiService';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile, setCurrentProfile } from '../../utils/profileService';
 import { useMyRequestsList, useMyFeedbacksList } from '../../utils/dataManager';
@@ -25,11 +25,19 @@ import { formatDate } from '../../utils/dateUtils';
 export default function AccountModal({ hideButton = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
-  const { eventUrl } = useParams();
+  const params = useParams();
+  const location = useLocation();
+  
+  // Get eventUrl from params, or extract from pathname as fallback
+  // Route structure: /:eventUrl/* or /:eventUrl
+  const eventUrlFromParams = params.eventUrl;
+  const eventUrlFromPath = location.pathname.split('/').filter(Boolean)[0];
+  const eventUrl = eventUrlFromParams || (eventUrlFromPath && !['dashboard', 'about'].includes(eventUrlFromPath) ? eventUrlFromPath : undefined);
+  
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const { urlHelpers } = useEventUrls(eventUrl);
-  const permissions = usePermissions();
+  const permissions = usePermissions(eventUrl);
   const { logout, isAuthenticated, openLoginModal } = useAuth();
   
   // Profile management state
@@ -485,8 +493,18 @@ export default function AccountModal({ hideButton = false }) {
 
                     {/* My Requests Section - only show if there are requests or new requests are enabled */}
                     {(() => {
+                      // Requests are per-event, so only show if we have an eventId from URL
+                      if (!eventId) {
+                        return null;
+                      }
+                      
                       const isPublic = Boolean(currentProfile?.is_public);
-                      const enableNewRequests = permissions.enable_new_requests;
+                      
+                      // Check enable_new_requests only for the event in the URL
+                      const enableNewRequests = permissions.enable_new_requests || Boolean(
+                        currentProfile?.events?.[eventId]?.enable_new_requests
+                      );
+                      
                       const hasRequests = userRequests.length > 0;
                       const shouldShow = enableNewRequests || (!isPublic && hasRequests);
                       

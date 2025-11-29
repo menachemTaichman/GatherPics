@@ -489,7 +489,7 @@ steps = [
                 CURRENT_TIMESTAMP,
                 FALSE,
                 'feedback',
-                new_feedback_id::TEXT
+                json_build_object('feedback_id', new_feedback_id)
             FROM settings
             WHERE settings.id = 1;
             
@@ -562,7 +562,7 @@ steps = [
                     CURRENT_TIMESTAMP,
                     FALSE,
                     'my_feedback',
-                    OLD.feedback_id::TEXT
+                    json_build_object('feedback_id', OLD.feedback_id)
                 FROM feedbacks
                 INNER JOIN profiles p ON feedbacks.profile_id = p.profile_id
                 WHERE feedback_id = OLD.feedback_id
@@ -645,7 +645,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: cannot create profile with all_images if current profile does not have all_images';
             END IF;
             
-            IF NEW.all_groups AND NOT cur_event_profile('all_groups') THEN
+            IF NEW.all_groups AND cur_event_profile_bool('all_groups') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot create profile with all_groups if current profile does not have all_groups';
             END IF;
             
@@ -709,15 +709,15 @@ steps = [
         RETURNS TRIGGER AS $$
         BEGIN
             IF NEW.all_images AND NOT OLD.all_images AND cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
-                RAISE EXCEPTION 'Permission denied: cannot set profile all_images=1 if current profile does not have all_images=1';
+                RAISE EXCEPTION 'Permission denied: cannot set profile all_images if current profile does not have all_images';
             END IF;
             
             IF NEW.all_groups AND NOT OLD.all_groups AND cur_event_profile_bool('all_groups') IS DISTINCT FROM TRUE THEN
-                RAISE EXCEPTION 'Permission denied: cannot set profile all_groups=1 if current profile does not have all_groups=1';
+                RAISE EXCEPTION 'Permission denied: cannot set profile all_groups if current profile does not have all_groups';
             END IF;
             
             IF NEW.all_albums AND NOT OLD.all_albums AND cur_event_profile_bool('all_albums') IS DISTINCT FROM TRUE THEN
-                RAISE EXCEPTION 'Permission denied: cannot set profile all_albums=1 if current profile does not have all_albums=1';
+                RAISE EXCEPTION 'Permission denied: cannot set profile all_albums if current profile does not have all_albums';
             END IF;
 
             UPDATE events_profiles
@@ -779,7 +779,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_delete_events_profiles_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            DELETE FROM events_profiles WHERE event_id = cur_event_profile('event_id') AND profile_id = OLD.profile_id;
+            DELETE FROM events_profiles WHERE event_id = cur_event_profile_uuid('event_id') AND profile_id = OLD.profile_id;
             
             RETURN OLD;
         END;
@@ -974,7 +974,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_faces_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1051,7 +1051,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1192,7 +1192,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1250,7 +1250,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_moments_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1319,7 +1319,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_albums_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1382,7 +1382,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_albums_images_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1514,7 +1514,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_uploads_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1851,7 +1851,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1887,7 +1887,8 @@ steps = [
                 NEW.details,
                 CASE WHEN NOT cur_profile_bool('is_public') THEN NEW.applicant_profile_id ELSE NULL END,
                 COALESCE(CASE WHEN cur_profile_bool('is_public') THEN TRUE ELSE NEW.communication_consent END, FALSE)
-            );
+            )
+            RETURNING access_request_id INTO NEW.access_request_id;
             
             RETURN NEW;
         END;
@@ -1928,7 +1929,7 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF cur_event_profile('event_id') IS NULL THEN
+            IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
             END IF;
             
@@ -1942,7 +1943,7 @@ steps = [
 
             INSERT INTO access_requests_groups (access_request_id, group_id)
             SELECT NEW.access_request_id, cgtra.group_id
-            FROM current_groups_to_request_access cgtra
+            FROM groups_to_access_requests_ctx cgtra
             WHERE cgtra.group_id = NEW.group_id
             ON CONFLICT DO NOTHING;
 
@@ -1956,11 +1957,11 @@ steps = [
                 p.profile_id,
                 'A new access request was created',
                 'access_request',
-                json_build_object('access_request_id', NEW.access_request_id, 'event_id', cur_event_profile('event_id'))
+                json_build_object('access_request_id', NEW.access_request_id, 'event_id', cur_event_profile_uuid('event_id'))
             FROM events_profiles ep
             INNER JOIN profiles p ON ep.profile_id = p.profile_id
             WHERE
-                ep.event_id = cur_event_profile('event_id')
+                ep.event_id = cur_event_profile_uuid('event_id')
                 AND p.hierarchy_rank > 0
                 AND NOT EXISTS (
                     SELECT 1
@@ -1972,7 +1973,7 @@ steps = [
                 )
                 AND EXISTS (
                     SELECT 1
-                    FROM groups_accessibility ga
+                    FROM groups_eff ga
                     WHERE ga.group_id = NEW.group_id
                     AND ga.profile_id = p.profile_id
                     AND ga.event_id = cur_event_profile_uuid('event_id')
@@ -2030,9 +2031,13 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_update_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
         DECLARE
-            applicant_profile_id TEXT := (SELECT applicant_profile_id FROM access_requests WHERE access_request_id = OLD.access_request_id);
+            applicant_profile_id UUID := (SELECT applicant_profile_id FROM access_requests WHERE access_request_id = OLD.access_request_id);
+            was_closed BOOLEAN;
+            v_event_id UUID;
         BEGIN
-            IF (SELECT is_closed FROM access_requests WHERE access_request_id = OLD.access_request_id) THEN
+            was_closed := (SELECT is_closed FROM access_requests WHERE access_request_id = OLD.access_request_id);
+            
+            IF was_closed THEN
                 RAISE EXCEPTION 'Permission denied: the access request is closed';
             END IF;
             
@@ -2069,6 +2074,33 @@ steps = [
             WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
 
             PERFORM ensure_access_requests_closed_func(OLD.access_request_id, NEW.closed_at);
+            
+            -- Create notification when request is updated (even partially) if applicant_profile_id exists
+            IF applicant_profile_id IS NOT NULL THEN
+                SELECT event_id INTO v_event_id
+                FROM access_requests
+                WHERE access_request_id = OLD.access_request_id;
+                
+                INSERT INTO notifications (
+                    profile_id,
+                    message,
+                    type,
+                    data
+                )
+                SELECT
+                    applicant_profile_id,
+                    'Your access request was processed',
+                    'my_access_request',
+                    json_build_object('access_request_id', OLD.access_request_id, 'event_id', v_event_id)
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM notifications n
+                    WHERE n.type = 'my_access_request'
+                    AND n.profile_id = applicant_profile_id
+                    AND (n.data->>'access_request_id')::INTEGER = OLD.access_request_id
+                    AND (n.data->>'event_id')::UUID = v_event_id
+                );
+            END IF;
             
             RETURN NEW;
         END;

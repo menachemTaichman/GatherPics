@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { profilesAPI, eventsAPI } from '../../utils/apiService';
+import { profilesAPI, eventsAPI, getEventUrlById } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
 import { getPreference, setPreference } from '../../utils/settings';
 import { EditProfileModal } from '../../components/profiles';
@@ -10,7 +10,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { usePermissions } from '../../hooks/usePermissions';
 import { getCurrentProfile } from '../../utils/profileService';
 import { useEventProfilesList, useProfilesList, useDataStore, useEventsGeneralList } from '../../utils/dataManager';
-import { useApplyScopes, useEventId } from '../../utils/storeUtils';
+import { useApplyScopes, useEventId, getEventUrlFromId } from '../../utils/storeUtils';
 import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
@@ -455,7 +455,20 @@ export default function ProfilesGalleryPage() {
     if (!profileToDelete) return;
 
     try {
-      await profilesAPI.delete(profileToDelete.id, eventUrl);
+      // If profile is restricted to an event, use event-specific delete endpoint
+      let targetEventUrl = eventUrl;
+      const restrictedEventId = profileToDelete.restricted_to_event;
+      
+      if (restrictedEventId) {
+        // Get event URL from event ID (same logic as EditProfileModal)
+        targetEventUrl = getEventUrlFromId(restrictedEventId, eventId, eventUrl);
+        // If not found in store, try to fetch it from API
+        if (!targetEventUrl) {
+          targetEventUrl = await getEventUrlById(restrictedEventId);
+        }
+      }
+      
+      await profilesAPI.delete(profileToDelete.id, targetEventUrl);
       showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
     } catch (error) {
       console.error('Failed to delete profile:', error);
@@ -1106,9 +1119,13 @@ export default function ProfilesGalleryPage() {
           urlHelpers={urlHelpers}
           isCreating={isCreatingNewProfile}
           initialEventId={filterEventId !== FILTER_ALL_EVENTS ? filterEventId : null}
-          onSave={() => {
+          onSave={(createdProfile) => {
             // Changes are automatically applied by apiService interceptor
             setIsCreatingNewProfile(false);
+            // Update selectedProfile with created profile if provided
+            if (createdProfile && createdProfile.id) {
+              setSelectedProfile(createdProfile);
+            }
           }}
         />
       )}

@@ -1382,7 +1382,7 @@ export const notificationsAPI = {
     const response = await api.patch(`/api/notifications/my/mark-all-read`);
     return response.data || {};
   },
-  markRead: async (notificationId, read = 1) => {
+  markRead: async (notificationId, read = true) => {
     const response = await api.patch(`/api/notifications/my/${notificationId}/read`, { read });
     return response.data || {};
   },

@@ -147,7 +147,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
 
   const handleToggleRead = async (id, currentReadState) => {
     try {
-      const newReadState = currentReadState ? 0 : 1;
+      const newReadState = !currentReadState;
       await notificationsAPI.markRead(id, newReadState);
     } catch (e) {
       showToast(t('notifications.failedToUpdate'), 'error');
@@ -229,7 +229,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
                     // Mark as read when notification is clicked
                     if (!n.read) {
                       try {
-                        await notificationsAPI.markRead(n.id, 1);
+                        await notificationsAPI.markRead(n.id, true);
                       } catch (e) {
                         // Silently fail - not critical
                       }

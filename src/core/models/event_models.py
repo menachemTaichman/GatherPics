@@ -452,16 +452,18 @@ class EventModels(BaseModels):
         """
         if entity not in ['images', 'albums', 'groups']:
             raise ValueError(f"Invalid entity: {entity}")
-        profile = self.get_entities('events_profiles', profile_id)
+        _, profile = self.get_childs('events', self.db.event_id, 'profiles', [profile_id])
         if not profile:
             return []
+        
+        profile = profile[profile_id]
 
         add = set_accessible
         if bool(profile[f'all_{entity}']):
             add = not add
 
         operation = ChildOperation.ADD if add else ChildOperation.REMOVE
-        valid_ids, _ = self.edit_childs('events_profiles', profile_id, child=entity, child_ids=ids, operation=operation)
+        valid_ids, _ = self.edit_childs('events_profiles_ctx', profile_id, child=entity, child_ids=ids, operation=operation)
         return valid_ids, add
 
     def toggle_access_request(self, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None):
@@ -478,7 +480,7 @@ class EventModels(BaseModels):
             raise Forbidden(f"Access request not found for id {access_request_id}")
         
         edited = False
-        for response, group_ids in {1: approved_group_ids, 0: denied_group_ids}.items():
+        for response, group_ids in {True: approved_group_ids, False: denied_group_ids}.items():
             if not group_ids:
                 continue
             data = {'approved': response, 'closed_at': datetime.now()}
@@ -507,7 +509,7 @@ class EventModels(BaseModels):
         if entity not in ['images', 'albums', 'groups']:
             raise ValueError(f"Invalid entity: {entity}")
 
-        if not self.is_accessible('events_profiles', profile_id):
+        if not self.is_accessible('events_profiles_ctx', profile_id):
             raise Forbidden("The profile is not accessible")
 
         id_field = self.db.get_id_field(entity)
@@ -584,7 +586,7 @@ class EventModels(BaseModels):
                 cgta.group_id,
                 g.label,
                 g.representative_face
-            FROM current_groups_to_request_access cgta
+            FROM groups_to_access_requests_ctx cgta
             INNER JOIN groups g ON cgta.group_id = g.group_id
         """
         return self.db.execute_query(query, return_format=ReturnFormat.LIST_DICTS)
@@ -597,7 +599,7 @@ class EventModels(BaseModels):
             True if group is to request access, False if not
         """
         query = f"""
-            SELECT * FROM current_groups_to_request_access WHERE group_id = %s
+            SELECT * FROM groups_to_access_requests_ctx WHERE group_id = %s
         """
         return bool(self.db.execute_query(query, (group_id,), return_format=ReturnFormat.VALUE))
 
@@ -609,16 +611,23 @@ class EventModels(BaseModels):
         Returns:
             access request id
         """
+        if not group_ids:
+            raise ValueError("group_ids parameter is required")
+        
         request_id = self.add('my_access_requests', data)
 
+        # Set transaction context and insert groups in a single query
         values_clause = ','.join([f'(%s, %s)' for _ in range(len(group_ids))])
         values = ()
         for group_id in group_ids:
             values += (request_id, group_id)
+        
         query = f"""
+            SELECT set_transaction_context('temp_access_request_id', '{request_id}');
             INSERT INTO my_access_requests_groups_ctx
             (access_request_id, group_id)
             VALUES {values_clause};
         """
         self.db.execute_query(query, values)
+        
         return request_id

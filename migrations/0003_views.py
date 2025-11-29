@@ -361,7 +361,8 @@ steps = [
         
         CREATE OR REPLACE VIEW events_ctx AS
         SELECT
-            e.*
+            e.*,
+            (ep.profile_id IS NOT NULL) AS is_editable
         FROM events e
         LEFT JOIN events_profiles ep ON e.event_id = ep.event_id
         WHERE
@@ -477,8 +478,11 @@ steps = [
             ar.*
         FROM access_requests ar
         WHERE
-            ar.event_id = cur_event_profile_uuid('event_id')
-            AND ar.applicant_profile_id = cur_profile_uuid('profile_id');
+            (
+                ar.event_id = cur_event_profile_uuid('event_id')
+                AND ar.applicant_profile_id = cur_profile_uuid('profile_id')
+            )
+            OR ar.access_request_id = cur_transaction('temp_access_request_id')::INTEGER;
 
         CREATE OR REPLACE VIEW my_access_requests_groups_ctx AS
         SELECT
@@ -511,7 +515,10 @@ steps = [
             ep.*
         FROM events_profiles ep
         INNER JOIN profiles_ctx pc ON ep.profile_id = pc.profile_id
-        WHERE ep.event_id = cur_event_profile_uuid('event_id');
+        INNER JOIN events_ctx ec ON ep.event_id = ec.event_id
+        WHERE
+            ec.is_editable
+            AND ep.event_id = COALESCE(cur_event_profile_uuid('event_id'), ep.event_id);
         
         CREATE OR REPLACE VIEW profiles_images_ctx AS
         SELECT pi.*

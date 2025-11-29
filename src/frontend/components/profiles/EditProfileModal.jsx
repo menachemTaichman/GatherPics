@@ -254,10 +254,11 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
       const currentValue = editingProfile[field];
       const initialValue = initialEventSpecificState[field];
       
-      const normalizedCurrent = currentValue === null || currentValue === undefined ? null : currentValue;
-      const normalizedInitial = initialValue === null || initialValue === undefined ? null : initialValue;
+      // Normalize to boolean, but treat undefined/null as false
+      const normalizedCurrent = currentValue === undefined || currentValue === null ? false : Boolean(currentValue);
+      const normalizedInitial = initialValue === undefined || initialValue === null ? false : Boolean(initialValue);
       
-      if (String(normalizedCurrent || '') !== String(normalizedInitial || '')) {
+      if (normalizedCurrent !== normalizedInitial) {
         return true;
       }
     }
@@ -291,12 +292,20 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
       const currentValue = editingProfile[field];
       const initialValue = initialProfileState[field];
       
-      // Normalize values for comparison (handle null/undefined)
-      const normalizedCurrent = currentValue === null || currentValue === undefined ? null : currentValue;
-      const normalizedInitial = initialValue === null || initialValue === undefined ? null : initialValue;
-      
-      if (String(normalizedCurrent || '') !== String(normalizedInitial || '')) {
-        return true;
+      // For boolean fields, compare as booleans
+      if (field === 'can_create_events' || field === 'is_public') {
+        const normalizedCurrent = currentValue === undefined || currentValue === null ? false : Boolean(currentValue);
+        const normalizedInitial = initialValue === undefined || initialValue === null ? false : Boolean(initialValue);
+        if (normalizedCurrent !== normalizedInitial) {
+          return true;
+        }
+      } else {
+        // For other fields, compare as strings (handles null/undefined)
+        const normalizedCurrent = currentValue === null || currentValue === undefined ? null : String(currentValue);
+        const normalizedInitial = initialValue === null || initialValue === undefined ? null : String(initialValue);
+        if (normalizedCurrent !== normalizedInitial) {
+          return true;
+        }
       }
     }
     
@@ -427,6 +436,56 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
     }
   }, [isOpen, profile?.id, isCreating]);
 
+  // Function to initialize editing state from profile data (reusable for opening and after creation)
+  const initializeEditingState = useCallback((profileData, eventProfileData = null) => {
+    // Merge profile data
+    const mergedProfile = profileData;
+    const eventData = eventProfileData || {};
+    
+    // Create initial editing state
+    const initialEditingState = {
+      id: mergedProfile.id || mergedProfile.profile_id,
+      label: mergedProfile.label || '',
+      email: mergedProfile.email || '',
+      password: undefined, // Don't include password when editing
+      hierarchy_rank: mergedProfile.hierarchy_rank || 0,
+      can_create_events: Boolean(mergedProfile.can_create_events),
+      can_upload_and_delete_images: Boolean(eventData.can_upload_and_delete_images ?? mergedProfile.can_upload_and_delete_images),
+      can_edit: Boolean(eventData.can_edit ?? mergedProfile.can_edit),
+      all_images: Boolean(eventData.all_images ?? mergedProfile.all_images),
+      all_groups: Boolean(eventData.all_groups ?? mergedProfile.all_groups),
+      all_albums: Boolean(eventData.all_albums ?? mergedProfile.all_albums),
+      is_public: Boolean(mergedProfile.is_public),
+      can_manage_event: Boolean(eventData.can_manage_event ?? mergedProfile.can_manage_event),
+      can_delete_event: Boolean(eventData.can_delete_event ?? mergedProfile.can_delete_event),
+      restricted_to_event: mergedProfile.restricted_to_event || null,
+      restricted_to_event_name: mergedProfile.restricted_to_event_name || null
+    };
+    
+    setEditingProfile(initialEditingState);
+    setInitialProfileState(initialEditingState);
+    setNameConflict(false);
+    
+    // Initialize profile events from mergedProfile
+    const initialEvents = Array.isArray(mergedProfile.events) ? [...mergedProfile.events] : [];
+    setProfileEvents(initialEvents);
+    
+    // Use restricted event if current profile is restricted, otherwise use initialEventId or eventId from URL
+    const targetEventId = isCurrentProfileRestricted 
+      ? currentProfileRestrictedEventId 
+      : (initialEventId || eventId || null);
+    setSelectedEventId(targetEventId);
+    setInitialSelectedEventId(targetEventId);
+    
+    // Initialize event search term
+    setEventSearchTerm('');
+    setShowEventDropdown(false);
+    
+    // Reset add event selection
+    setSelectedEventToAdd('');
+    setEventToRemove(null);
+  }, [initialEventId, eventId, isCurrentProfileRestricted, currentProfileRestrictedEventId]);
+
   // Initialize editing state from merged profile data (only once when modal opens)
   useEffect(() => {
     // When creating, profile is a template object, so check isCreating first
@@ -449,15 +508,15 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
         email: '',
         password: '',
         hierarchy_rank: profile?.hierarchy_rank || 0,
-        can_create_events: 0,
-        can_upload_and_delete_images: Boolean(profile?.can_upload_and_delete_images) ? 1 : 0,
-        can_edit: Boolean(profile?.can_edit) ? 1 : 0,
-        all_images: Boolean(profile?.all_images) ? 1 : 0,
-        all_groups: Boolean(profile?.all_groups) ? 1 : 0,
-        all_albums: Boolean(profile?.all_albums) ? 1 : 0,
-        is_public: Boolean(profile?.is_public) ? 1 : 0,
-        can_manage_event: 0,
-        can_delete_event: 0,
+        can_create_events: false,
+        can_upload_and_delete_images: Boolean(profile?.can_upload_and_delete_images),
+        can_edit: Boolean(profile?.can_edit),
+        all_images: Boolean(profile?.all_images),
+        all_groups: Boolean(profile?.all_groups),
+        all_albums: Boolean(profile?.all_albums),
+        is_public: Boolean(profile?.is_public),
+        can_manage_event: false,
+        can_delete_event: false,
         restricted_to_event: defaultRestrictedEventId,
         restricted_to_event_name: defaultRestrictedEventName
       };
@@ -481,46 +540,19 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
         setRestrictionSearchTerm('');
       }
     } else if (isOpen && profile && !isCreating) {
+      // Prevent re-initialization if we've already initialized with this profile ID
+      // (e.g., after creating a profile, we initialize manually, then useEffect runs again)
+      const profileId = profile?.id || profile?.profile_id;
+      if (editingProfile?.id && String(editingProfile.id) === String(profileId)) {
+        return;
+      }
+      
       // Use the merged profile for initial data, but only set it once
       const initialProfile = generalProfile ? { ...profile, ...generalProfile } : profile;
       // Get event-specific data from eventProfile if available
       const eventProfileData = eventProfile || {};
-      const initialEditingState = {
-        id: initialProfile.id || initialProfile.profile_id,
-        label: initialProfile.label || '',
-        email: initialProfile.email || '',
-        password: undefined, // Don't include password when editing
-        hierarchy_rank: initialProfile.hierarchy_rank || 0,
-        can_create_events: Boolean(initialProfile.can_create_events) ? 1 : 0,
-        can_upload_and_delete_images: Boolean(eventProfileData.can_upload_and_delete_images ?? initialProfile.can_upload_and_delete_images) ? 1 : 0,
-        can_edit: Boolean(eventProfileData.can_edit ?? initialProfile.can_edit) ? 1 : 0,
-        all_images: Boolean(eventProfileData.all_images ?? initialProfile.all_images) ? 1 : 0,
-        all_groups: Boolean(eventProfileData.all_groups ?? initialProfile.all_groups) ? 1 : 0,
-        all_albums: Boolean(eventProfileData.all_albums ?? initialProfile.all_albums) ? 1 : 0,
-        is_public: Boolean(initialProfile.is_public) ? 1 : 0,
-        can_manage_event: Boolean(eventProfileData.can_manage_event ?? initialProfile.can_manage_event) ? 1 : 0,
-        can_delete_event: Boolean(eventProfileData.can_delete_event ?? initialProfile.can_delete_event) ? 1 : 0,
-        restricted_to_event: initialProfile.restricted_to_event || null,
-        restricted_to_event_name: initialProfile.restricted_to_event_name || null
-      };
-      setEditingProfile(initialEditingState);
-      setInitialProfileState(initialEditingState);
-      setNameConflict(false);
-      // Initialize profile events from generalProfile
-      const initialEvents = Array.isArray(initialProfile.events) ? [...initialProfile.events] : [];
-      setProfileEvents(initialEvents);
-      // Use restricted event if current profile is restricted, otherwise use initialEventId or eventId from URL
-      const targetEventId = isCurrentProfileRestricted 
-        ? currentProfileRestrictedEventId 
-        : (initialEventId || eventId || null);
-      setSelectedEventId(targetEventId);
-      setInitialSelectedEventId(targetEventId);
-      // Initialize event search term
-      setEventSearchTerm('');
-      setShowEventDropdown(false);
-      // Reset add event selection
-      setSelectedEventToAdd('');
-      setEventToRemove(null);
+      // Use the extracted function to initialize editing state
+      initializeEditingState(initialProfile, eventProfileData);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, profile?.id, initialEventId, isCreating]); // Only re-initialize when modal opens or profile ID changes (generalProfile intentionally excluded to prevent input resets)
@@ -712,13 +744,13 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
     
     if (selectedEventId && eventProfile) {
       const eventSpecificData = {
-        can_upload_and_delete_images: Boolean(eventProfile.can_upload_and_delete_images) ? 1 : 0,
-        can_edit: Boolean(eventProfile.can_edit) ? 1 : 0,
-        all_images: Boolean(eventProfile.all_images) ? 1 : 0,
-        all_groups: Boolean(eventProfile.all_groups) ? 1 : 0,
-        all_albums: Boolean(eventProfile.all_albums) ? 1 : 0,
-        can_manage_event: Boolean(eventProfile.can_manage_event) ? 1 : 0,
-        can_delete_event: Boolean(eventProfile.can_delete_event) ? 1 : 0,
+        can_upload_and_delete_images: Boolean(eventProfile.can_upload_and_delete_images),
+        can_edit: Boolean(eventProfile.can_edit),
+        all_images: Boolean(eventProfile.all_images),
+        all_groups: Boolean(eventProfile.all_groups),
+        all_albums: Boolean(eventProfile.all_albums),
+        can_manage_event: Boolean(eventProfile.can_manage_event),
+        can_delete_event: Boolean(eventProfile.can_delete_event),
       };
       
       // Set initial state if we don't have it yet, or if eventId changed (meaning we had fallback state)
@@ -741,13 +773,13 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
       const currentProfile = editingProfileRef.current;
       if (currentProfile) {
         const fallbackInitialState = {
-          can_upload_and_delete_images: Boolean(currentProfile.can_upload_and_delete_images) ? 1 : 0,
-          can_edit: Boolean(currentProfile.can_edit) ? 1 : 0,
-          all_images: Boolean(currentProfile.all_images) ? 1 : 0,
-          all_groups: Boolean(currentProfile.all_groups) ? 1 : 0,
-          all_albums: Boolean(currentProfile.all_albums) ? 1 : 0,
-          can_manage_event: Boolean(currentProfile.can_manage_event) ? 1 : 0,
-          can_delete_event: Boolean(currentProfile.can_delete_event) ? 1 : 0,
+          can_upload_and_delete_images: Boolean(currentProfile.can_upload_and_delete_images),
+          can_edit: Boolean(currentProfile.can_edit),
+          all_images: Boolean(currentProfile.all_images),
+          all_groups: Boolean(currentProfile.all_groups),
+          all_albums: Boolean(currentProfile.all_albums),
+          can_manage_event: Boolean(currentProfile.can_manage_event),
+          can_delete_event: Boolean(currentProfile.can_delete_event),
         };
         
         setInitialEventSpecificState(fallbackInitialState);
@@ -756,13 +788,13 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
     } else if (!selectedEventId) {
       // Reset event-specific fields when no event is selected
       const resetData = {
-        can_upload_and_delete_images: 0,
-        can_edit: 0,
-        all_images: 0,
-        all_groups: 0,
-        all_albums: 0,
-        can_manage_event: 0,
-        can_delete_event: 0,
+        can_upload_and_delete_images: false,
+        can_edit: false,
+        all_images: false,
+        all_groups: false,
+        all_albums: false,
+        can_manage_event: false,
+        can_delete_event: false,
       };
       
       setEditingProfile(prev => ({
@@ -906,8 +938,28 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
         // Create new profile - combine general and event data
         const createData = { ...generalProfileData, ...eventProfileData };
         const targetEventUrl = selectedEventId ? getEventUrlFromId(selectedEventId) : eventUrl;
-        await profilesAPI.create(createData, targetEventUrl || eventUrl);
+        const createdProfile = await profilesAPI.create(createData, targetEventUrl || eventUrl);
         showToast(`Profile "${editingProfile.label}" created successfully`, 'success');
+        
+        // After creation, get profile from store (API interceptor should have added it)
+        const createdProfileId = createdProfile?.id || createdProfile?.profile_id;
+        if (createdProfileId) {
+          const store = useDataStore.getState();
+          const generalProfileFromStore = store.entities?.general?.profiles?.[createdProfileId];
+          const eventProfileFromStore = selectedEventId 
+            ? store.entities?.event_profiles?.[`${selectedEventId}:${createdProfileId}`]
+            : null;
+          
+          if (generalProfileFromStore) {
+            // Use the extracted function to initialize editing state (switch to edit mode)
+            initializeEditingState(generalProfileFromStore, eventProfileFromStore);
+            
+            // Notify parent to update props
+            if (onSave) {
+              onSave(generalProfileFromStore);
+            }
+          }
+        }
       } else {
         // Update existing profile
         // Combine general and event data - _update_profile handles separation
@@ -930,12 +982,13 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
         }
         
         showToast('Profile updated successfully', 'success');
+        
+        // Changes are automatically applied by apiService interceptor
+        if (onSave) onSave();
+        
+        // Close modal when updating
+        onClose();
       }
-      
-      // Changes are automatically applied by apiService interceptor
-      
-      if (onSave) onSave();
-      onClose();
     } catch (error) {
       console.error(`Failed to ${isCreating ? 'create' : 'update'} profile:`, error);
       const rawErrorMsg = error.response?.data?.error || error.message || '';
@@ -966,12 +1019,20 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
   // Get selected event name for display
   const selectedEventName = useMemo(() => {
     if (!selectedEventId) return '';
-    const event = eventsList.find(e => {
+    // First try to find in eventsList (profile's events)
+    let event = eventsList.find(e => {
       const evtId = e.event_id || e.id;
       return evtId && String(evtId) === String(selectedEventId);
     });
+    // If not found and creating, try allEventsList
+    if (!event && isCreating) {
+      event = allEventsList.find(e => {
+        const evtId = e.event_id || e.id;
+        return evtId && String(evtId) === String(selectedEventId);
+      });
+    }
     return event?.name || 'Untitled Event';
-  }, [selectedEventId, eventsList]);
+  }, [selectedEventId, eventsList, allEventsList, isCreating]);
 
   // Update restriction search term when restricted event changes
   useEffect(() => {
@@ -1797,7 +1858,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
                         <input
                           type="checkbox"
                           checked={Boolean(editingProfile.is_public)}
-                          onChange={(e) => handleFieldChange('is_public', e.target.checked ? 1 : 0)}
+                          onChange={(e) => handleFieldChange('is_public', Boolean(e.target.checked))}
                           className="sr-only peer"
                           disabled={disablePublicToggle}
                         />
@@ -1886,6 +1947,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
               )}
 
               {/* Specific Event Authorizations Section */}
+              {!(isCreating && !initialEventId) && (
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -1924,75 +1986,82 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
                     )}
                     {/* Event Combobox */}
                     {!isCurrentProfileRestricted && (
-                    <div className="relative" ref={eventInputRef}>
-                      <div className="relative">
-                        <input
-                          ref={eventInputElementRef}
-                          type="text"
-                          value={eventSearchTerm}
-                          onChange={(e) => {
-                            setEventSearchTerm(e.target.value);
-                            setShowEventDropdown(true);
-                          }}
-                          onFocus={() => {
-                            // Clear the input if it shows the display name, so user can type freely
-                            if (eventSearchTerm === selectedEventName) {
-                              setEventSearchTerm('');
-                            }
-                            setShowEventDropdown(true);
-                          }}
-                          onKeyDown={handleEventInputKeyDown}
-                          placeholder={!eventId ? "Select Event" : "Search events..."}
-                          disabled={hasEventSpecificChanges}
-                          className={`px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 ${
-                            hasEventSpecificChanges ? 'opacity-60 cursor-not-allowed' : ''
-                          }`}
-                          title={hasEventSpecificChanges ? 'Please save or cancel changes before switching events' : undefined}
-                        />
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      {showEventDropdown && (
-                        <div
-                          ref={eventDropdownRef}
-                          className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
-                        >
-                          {selectableOptions.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              {eventSearchTerm ? 'No events found' : 'No events available'}
+                      isCreating && initialEventId && selectedEventId ? (
+                        // When creating with initialEventId, show event name as plain text (read-only)
+                        <div className="px-3 py-1.5 text-sm text-gray-900 w-64">
+                          {selectedEventName}
+                        </div>
+                      ) : (
+                        <div className="relative" ref={eventInputRef}>
+                          <div className="relative">
+                            <input
+                              ref={eventInputElementRef}
+                              type="text"
+                              value={eventSearchTerm}
+                              onChange={(e) => {
+                                setEventSearchTerm(e.target.value);
+                                setShowEventDropdown(true);
+                              }}
+                              onFocus={() => {
+                                // Clear the input if it shows the display name, so user can type freely
+                                if (eventSearchTerm === selectedEventName) {
+                                  setEventSearchTerm('');
+                                }
+                                setShowEventDropdown(true);
+                              }}
+                              onKeyDown={handleEventInputKeyDown}
+                              placeholder={!eventId ? "Select Event" : "Search events..."}
+                              disabled={hasEventSpecificChanges}
+                              className={`px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 ${
+                                hasEventSpecificChanges ? 'opacity-60 cursor-not-allowed' : ''
+                              }`}
+                              title={hasEventSpecificChanges ? 'Please save or cancel changes before switching events' : undefined}
+                            />
+                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                          </div>
+                          {showEventDropdown && (
+                            <div
+                              ref={eventDropdownRef}
+                              className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
+                            >
+                              {selectableOptions.length === 0 ? (
+                                <div className="px-3 py-2 text-sm text-gray-500">
+                                  {eventSearchTerm ? 'No events found' : 'No events available'}
+                                </div>
+                              ) : (
+                                selectableOptions.map((option, index) => {
+                                  const isSelected = option.id && String(option.id) === String(selectedEventId);
+                                  const isHighlighted = index === highlightedIndex;
+                                  const isClear = option.isClear;
+                                  const isDisabled = hasEventSpecificChanges && option.id !== selectedEventId;
+                                  return (
+                                    <button
+                                      key={option.id || (isClear ? 'clear-event' : 'select-event')}
+                                      type="button"
+                                      onClick={() => handleEventSelect(option.id)}
+                                      disabled={isDisabled}
+                                      className={`w-full text-left px-3 py-2 text-sm ${
+                                        isDisabled
+                                          ? 'opacity-50 cursor-not-allowed text-gray-400'
+                                          : isHighlighted 
+                                            ? 'bg-blue-100 text-blue-900' 
+                                            : isSelected 
+                                              ? 'bg-blue-50 text-blue-700' 
+                                              : isClear
+                                                ? 'text-red-600 hover:bg-red-50'
+                                                : 'text-gray-700 hover:bg-gray-100'
+                                      }`}
+                                      title={isDisabled ? 'Please save or cancel changes before switching events' : undefined}
+                                    >
+                                      {option.name}
+                                    </button>
+                                  );
+                                })
+                              )}
                             </div>
-                          ) : (
-                            selectableOptions.map((option, index) => {
-                              const isSelected = option.id && String(option.id) === String(selectedEventId);
-                              const isHighlighted = index === highlightedIndex;
-                              const isClear = option.isClear;
-                              const isDisabled = hasEventSpecificChanges && option.id !== selectedEventId;
-                              return (
-                                <button
-                                  key={option.id || (isClear ? 'clear-event' : 'select-event')}
-                                  type="button"
-                                  onClick={() => handleEventSelect(option.id)}
-                                  disabled={isDisabled}
-                                  className={`w-full text-left px-3 py-2 text-sm ${
-                                    isDisabled
-                                      ? 'opacity-50 cursor-not-allowed text-gray-400'
-                                      : isHighlighted 
-                                        ? 'bg-blue-100 text-blue-900' 
-                                        : isSelected 
-                                          ? 'bg-blue-50 text-blue-700' 
-                                          : isClear
-                                            ? 'text-red-600 hover:bg-red-50'
-                                            : 'text-gray-700 hover:bg-gray-100'
-                                  }`}
-                                  title={isDisabled ? 'Please save or cancel changes before switching events' : undefined}
-                                >
-                                  {option.name}
-                                </button>
-                              );
-                            })
                           )}
                         </div>
-                      )}
-                    </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -2025,7 +2094,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
                             <input
                               type="checkbox"
                               checked={Boolean(editingProfile.can_manage_event)}
-                              onChange={(e) => handleFieldChange('can_manage_event', e.target.checked ? 1 : 0)}
+                              onChange={(e) => handleFieldChange('can_manage_event', Boolean(e.target.checked))}
                               className="sr-only peer"
                               disabled={disableEventManagementToggles || !canGrantCanManageEvent}
                             />
@@ -2060,7 +2129,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
                             <input
                               type="checkbox"
                               checked={Boolean(editingProfile.can_delete_event)}
-                              onChange={(e) => handleFieldChange('can_delete_event', e.target.checked ? 1 : 0)}
+                              onChange={(e) => handleFieldChange('can_delete_event', Boolean(e.target.checked))}
                               className="sr-only peer"
                               disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
                             />
@@ -2279,6 +2348,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
                   </div>
                 )}
               </div>
+              )}
 
               {/* Specific Access - Images (only show for existing profiles and when event is selected) */}
               {!isCreating && selectedEventId && (

@@ -271,17 +271,17 @@ def get_event_profile(event_id, profile_id):
         'type': 'RELATION_SET',
         'relation': 'profile.images',
         'parentId': profile_id,
-        'entities': event.models.get_childs('events_profiles', profile_id, 'images')
+        'entities': event.models.get_childs('events_profiles_ctx', profile_id, 'images')
     },{
         'type': 'RELATION_SET',
         'relation': 'profile.albums',
         'parentId': profile_id,
-        'entities': event.models.get_childs('events_profiles', profile_id, 'albums')
+        'entities': event.models.get_childs('events_profiles_ctx', profile_id, 'albums')
     },{
         'type': 'RELATION_SET',
         'relation': 'profile.groups',
         'parentId': profile_id,
-        'entities': event.models.get_childs('events_profiles', profile_id, 'groups')
+        'entities': event.models.get_childs('events_profiles_ctx', profile_id, 'groups')
     }]
     return jsonify({"changes": changes})
 
@@ -301,7 +301,7 @@ def create_event_profile(event_id):
 
         profile_id = general_models.add('profiles', general_data)
         event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
-        profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
+        profiles, event_profiles = event.models.get_childs('events', event_id, 'profiles', [profile_id])
         changes = [{
             'type': 'UPSERT',
             'entity': 'profile',
@@ -336,18 +336,18 @@ def delete_event_profile(event_id, profile_id):
     """Delete an event profile."""
     general_models = get_general_models()
     try:
-        restricted_to_event_id = general_models.get_entities('profiles', profile_id).get('restricted_to_event')
-        general_models.delete_profile(profile_id, event_id)
+        complete_delete = general_models.delete_profile(profile_id, event_id)
         changes = [{
             'type': 'REMOVE',
             'entity': 'event_profile',
             'ids': [profile_id]
         }]
-        if restricted_to_event_id:
+        if complete_delete:
             changes.append({
                 'type': 'REMOVE',
                 'entity': 'profile',
-                'ids': [profile_id]
+                'ids': [profile_id],
+                'event_id': 'general'
             })
         return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
     except Forbidden as e:
@@ -722,7 +722,7 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
             ]
             event_data = {k: v for k, v in data.items() if k in event_fields}
             event = get_event(event_id)
-            event.models.edit('events_profiles', profile_id, event_data)
+            event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
             profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
             changes = [{
                 'type': 'UPSERT',
@@ -765,13 +765,13 @@ def _edit_event_profile_childs(event_id: str, profile_id: str, child: str, child
 
     try:
         operation = ChildOperation.ADD if add else ChildOperation.REMOVE
-        affected_ids, _ = event.models.edit_childs('events_profiles', profile_id, child, child_ids, operation=operation)
+        affected_ids, _ = event.models.edit_childs('events_profiles_ctx', profile_id, child, child_ids, operation=operation)
         if add:
             changes = [{
                 'type': 'RELATION_ADD',
                 'relation': f'profile.{child}',
                 'parentId': profile_id,
-                'entities': event.models.get_childs('events_profiles', profile_id, child, child_ids)
+                'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
             }]
         else:
             changes = [{
@@ -807,7 +807,7 @@ def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child
                 'type': 'RELATION_ADD',
                 'relation': f'profile.{child}',
                 'parentId': profile_id,
-                'entities': event.models.get_childs('events_profiles', profile_id, child, child_ids)
+                'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
             }]
         else:
             changes = [{
