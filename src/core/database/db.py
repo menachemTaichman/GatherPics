@@ -806,7 +806,7 @@ class DB:
         return_format = ReturnFormat.LIST_TUPLES if isinstance(p_keys, list) else ReturnFormat.LIST_VALUES
 
         keys = list(fields)
-        row_placeholders = f"({", ".join(["%s"] * len(keys))})"
+        row_placeholders = f"({', '.join(['%s'] * len(keys))})"
         value_placeholders = ", ".join([row_placeholders] * len(values))
         sql = f"INSERT INTO {target} ({', '.join(keys)}) VALUES {value_placeholders}"
         sql += f" RETURNING {returning}"

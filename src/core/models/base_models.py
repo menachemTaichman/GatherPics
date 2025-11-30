@@ -78,7 +78,7 @@ class BaseModels(ABC):
         id_field = self.db.get_id_field(table)
         if not isinstance(entity_ids, list):
             entity_ids = [entity_ids]
-        query = f'SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})'
+        query = f"SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})"
         results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.VALUE)
         return results == len(entity_ids)
 
@@ -102,7 +102,7 @@ class BaseModels(ABC):
             single_item = True
         
         if entity_ids:
-            where_clause += f'WHERE {self.db.get_id_field(table)} IN ({','.join(['%s'] * len(entity_ids))})'
+            where_clause += f"WHERE {self.db.get_id_field(table)} IN ({','.join(['%s'] * len(entity_ids))})"
         else:
             entity_ids = []
 
@@ -187,7 +187,7 @@ class BaseModels(ABC):
                 where_clause = f'r.{child_id_field} IS NULL'
 
         if child_ids is not None:
-            where_clause += f' AND c.{child_id_field} IN ({','.join(['%s'] * len(child_ids))})'
+            where_clause += f" AND c.{child_id_field} IN ({','.join(['%s'] * len(child_ids))})"
         else:
             child_ids = []
 

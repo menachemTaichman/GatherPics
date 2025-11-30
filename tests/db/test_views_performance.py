@@ -449,10 +449,12 @@ def main(event_id: str = None, profile_id: str = None, output_file: str = None, 
                     # Only show plan if it wasn't already printed during the test
                     if result.get('plan') and result['view'] not in plans_already_printed:
                         print(f"    Query Plan:")
-                        for line in result['plan'].split('\n')[:20]:  # Show first 20 lines
+                        plan_lines = result['plan'].split('\n')
+                        for line in plan_lines[:20]:  # Show first 20 lines
                             print(f"      {line}")
-                        if len(result['plan'].split('\n')) > 20:
-                            print(f"      ... ({len(result['plan'].split('\n')) - 20} more lines)")
+                        if len(plan_lines) > 20:
+                            remaining_lines = len(plan_lines) - 20
+                            print(f"      ... ({remaining_lines} more lines)")
             
             if other_failed:
                 print(f"\n[ERROR] Failed queries: {len(other_failed)}")

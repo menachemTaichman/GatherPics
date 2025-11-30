@@ -226,7 +226,7 @@ class EventModels(BaseModels):
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
         ctx_images = 'images_ctx'
-        query = f'UPDATE {ctx_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})'
+        query = f"UPDATE {ctx_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})"
         self.db.execute_query(query, valid_image_ids)
         
         updated_uploads_to_moments = {}
