@@ -50,40 +50,69 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    def duplicate_profile(self, profile_id: str) -> tuple[str, list[str]]:
+    def generate_unique_password(self, label: str) -> str:
+        """Generate a unique password for a profile."""
+        password = secrets.token_urlsafe(6)
+        attemp = 0
+        max_attemp = 10
+        while self.is_exists('profiles', {'password': password, 'label': label}) and attemp < max_attemp:
+            attemp += 1
+            password = secrets.token_urlsafe(6)
+        
+        if attemp >= max_attemp:
+            raise DatabaseError('Failed to generate a unique password. Please try again or with a different name')
+        
+        return password
+
+    def duplicate_profile(self, profile_id: str, overrides: dict | None = None) -> tuple[str, str, str, list[str]]:
         """
         Duplicate a profile.
         Returns:
             new_profile_id: id of the new profile
+            label: label of the new profile
+            password: password of the new profile
             incomplete_events: list of events that could not be duplicated
         """
         profile = self.get_entities('profiles', profile_id)
         if not profile:
             raise Forbidden('Profile not found')
-        new_profile_label = f"Copy of {profile['label']}"
-        pattern = f"{new_profile_label} [0-9].*"
-        query = f"""
-            SELECT MAX(CAST(SUBSTRING(label FROM LENGTH(%s) + 2) AS INTEGER)) AS last_profile_num
-            FROM profiles
-            WHERE label ~ %s
-        """
-        last_profile_num = self.db.execute_query(
-            query,
-            [new_profile_label, pattern],
-            return_format=ReturnFormat.VALUE
-        )
-        if last_profile_num:
-            new_profile_label = f"{new_profile_label} {last_profile_num + 1}"
-        new_password = secrets.token_urlsafe(6)
+            
+        if 'label' in overrides.keys():
+            label = overrides['label']
+        else:
+            label = f"Copy of {profile['label']}"
+            pattern = f"{label} [0-9].*"
+            query = f"""
+                SELECT MAX(CAST(SUBSTRING(label FROM LENGTH(%s) + 2) AS INTEGER)) AS last_profile_num
+                FROM profiles
+                WHERE label ~ %s
+            """
+            last_profile_num = self.db.execute_query(
+                query,
+                [label, pattern],
+                return_format=ReturnFormat.VALUE
+            )
+            if last_profile_num:
+                label = f"{label} {last_profile_num + 1}"
         
+        if 'password' in overrides.keys():
+            password = overrides['password']
+        else:
+            password = self.generate_unique_password(label)
+
+        hierarchy_rank = overrides.get('hierarchy_rank', profile['hierarchy_rank'])
+        can_create_events = overrides.get('can_create_events', profile['can_create_events'])
+        restricted_to_event = overrides.get('restricted_to_event', profile['restricted_to_event'])
+        is_public = overrides.get('is_public', profile['is_public'])
+
         incomplete_events = []
         new_profile_id = self.add('profiles', {
-            'label': new_profile_label,
-            'password': new_password,
-            'hierarchy_rank': profile['hierarchy_rank'],
-            'can_create_events': profile['can_create_events'],
-            'restricted_to_event': profile['restricted_to_event'],
-            'is_public': profile['is_public'],
+            'label': label,
+            'password': password,
+            'hierarchy_rank': hierarchy_rank,
+            'can_create_events': can_create_events,
+            'restricted_to_event': restricted_to_event,
+            'is_public': is_public,
         })
         _, event_profiles = self.get_childs('profiles', profile_id, 'events')
         for event_id, event_relation in event_profiles.items():
@@ -101,7 +130,7 @@ class GeneralModels(BaseModels):
                 except Forbidden as e:
                     pass
 
-        return new_profile_id, incomplete_events
+        return new_profile_id, label, password, incomplete_events
     
     def delete_profile(self, profile_id: str, only_remove_from_event_id: str | None = None) -> bool:
         """
@@ -204,11 +233,21 @@ class GeneralModels(BaseModels):
         """Revoke public access code for a profile."""
         self.edit('profiles', profile_id, {'public_access_code': None})
     
-    def toggle_access_request(self, event_id: str, access_request_id: str, approved_group_ids: list[str] | None = None, denied_group_ids: list[str] | None = None, closed_details: str | None = None, profile_name: str | None = None) -> str | None:
+    def toggle_access_request(
+        self,
+        event_id: str,
+        access_request_id: str,
+        approved_group_ids: list[str] | None = None,
+        denied_group_ids: list[str] | None = None,
+        closed_details: str | None = None,
+        profile_name: str | None = None
+    ) -> tuple[str | None, str | None, str | None]:
         """
         Toggle an access request.
         Returns:
             applicant_profile_id if new profile is created, None otherwise
+            label: label of the new profile
+            password: password of the new profile
         """
         event = self.get_event(event_id)
         if not approved_group_ids and not denied_group_ids:
@@ -219,49 +258,26 @@ class GeneralModels(BaseModels):
             raise Forbidden('Access request not found')
         
         applicant_profile_id = None
+        label = None
+        password = None
         if approved_group_ids and not access_request['applicant_profile_id']:
-            label = profile_name or access_request['applicant_name']
-            email = access_request['applicant_email']
-            password = secrets.token_urlsafe(6)
-            attemp = 0
-            max_attemp = 10
-            while self.is_exists('profiles', {'password': password, 'label': label}) and attemp < max_attemp:
-                attemp += 1
-                password = secrets.token_urlsafe(6)
-            if attemp == max_attemp:
-                raise DatabaseError('Failed to generate a unique password. Please try again with a different name')
-            
-            data = {
-                'label': label,
-                'password': password,
-                'hierarchy_rank': 0,
-                'email': email,
-                'restricted_to_event': event_id
-            }
-            applicant_profile_id = self.add('profiles', data)
             requester_profile_id = access_request['profile_id']
-            requester_profile, requester_event_profile = self.get_childs('events', event_id, 'profiles', [requester_profile_id])
-            requester_event_profile = requester_event_profile[requester_profile_id]
-            relation_fields = [
-                'can_delete_event',
-                'can_manage_event',
-                'can_upload_and_delete_images',
-                'all_images',
-                'all_groups',
-                'all_albums',
-                'can_edit',
-            ]
-            data = {field: requester_event_profile[field] for field in relation_fields}
-            event.models.edit_childs('events', event_id, 'profiles', [applicant_profile_id], operation=ChildOperation.ADD, data=data)
-            for child in ['images', 'albums', 'groups']:
-                requester_profile_childs = event.models.get_childs('events_profiles_ctx', requester_profile_id, child)
-                event.models.edit_childs('events_profiles_ctx', applicant_profile_id, child, requester_profile_childs, operation=ChildOperation.ADD)
+            overrides = {
+                'label': profile_name or access_request['applicant_name'],
+                'email': access_request['applicant_email'],
+                'hierarchy_rank': 0,
+                'is_public': False,
+            }
 
+            applicant_profile_id, label, password, incomplete_events = self.duplicate_profile(requester_profile_id, overrides)
+            if event_id in incomplete_events:
+                raise DatabaseError('Failed to create new profile')
+            
             event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
         
         event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
 
-        return applicant_profile_id
+        return applicant_profile_id, label, password
 
     # Event management
     def get_uploads_limits(self) -> dict:

@@ -72,13 +72,13 @@ def duplicate_profile(profile_id):
     """Duplicate a general profile."""
     general_models = get_general_models()
     try:
-        new_profile_id, incomplete_events = general_models.duplicate_profile(profile_id)
+        new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id)
         changes = [{
             'type': 'UPSERT',
             'entity': 'profile',
             'items': general_models.get_entities('profiles', [new_profile_id]),
         }]
-        return jsonify({"success": True, "new_profile_id": new_profile_id, "incomplete_events": incomplete_events, "changes": changes})
+        return jsonify({"success": True, "new_profile_id": new_profile_id, "label": label, "password": password, "incomplete_events": incomplete_events, "changes": changes})
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
     except DBPolicyError as e:

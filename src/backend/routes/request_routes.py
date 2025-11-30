@@ -281,7 +281,7 @@ def toggle_request(event_id, request_id):
         profile_name = data.get('profileName')
         
         general_models = get_general_models()
-        applicant_profile_id = general_models.toggle_access_request(
+        applicant_profile_id, label, password = general_models.toggle_access_request(
             event_id, 
             request_id,
             approved_group_ids=approved_group_ids,
@@ -318,11 +318,9 @@ def toggle_request(event_id, request_id):
                 'entity': 'profile',
                 'items': event.models.get_entities('profiles', [applicant_profile_id])
             })
-            label = general_models.get_entities('profiles', applicant_profile_id).get('label')
-            password = general_models.get_profile_password(applicant_profile_id)
             return jsonify({'success': True, 'changes': changes, 'new_profile': {'label': label, 'password': password}})
         
-        return jsonify({'success': True, 'changes': changes})
+        return jsonify({'success': True, 'changes': changes, 'new_profile': {'label': label, 'password': password}})
         
     except Forbidden as e:
         return jsonify({"error": str(e)}), 403
