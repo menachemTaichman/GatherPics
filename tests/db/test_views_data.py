@@ -39,10 +39,9 @@ class TestDBPerformance(unittest.TestCase):
         # Follow the exact process from trg_accessible_events_delete trigger:
         # 1. Set event context
         # 2. Check if another event is in deletion
-        # 3. Set event_in_deletion
+        # 3. Set transaction context for event deletion
         # 4. Delete profiles where restricted_to_event = event_id
         # 5. Delete from events table
-        # 6. Clear event_in_deletion
         gm = GeneralModels(profile_id=cls.PROFILE_ID)
         db = gm.db
         
@@ -68,16 +67,14 @@ class TestDBPerformance(unittest.TestCase):
                         conn.commit()
                         
                         # Check if another event is in deletion
-                        cursor.execute("SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1")
+                        cursor.execute("SELECT cur_transaction('temp_event_in_deletion')")
                         result = cursor.fetchone()
                         event_in_deletion = result[0] if result else None
                         if event_in_deletion:
-                            print(f"Warning: Another event ({event_in_deletion}) is in deletion. Clearing it...")
-                            cursor.execute("UPDATE settings SET event_in_deletion = NULL WHERE id = 1")
-                            conn.commit()
+                            print(f"Warning: Another event ({event_in_deletion}) is in deletion.")
                         
-                        # Set event_in_deletion
-                        cursor.execute("UPDATE settings SET event_in_deletion = %s WHERE id = 1", (cls.EVENT_ID,))
+                        # Set transaction context for event deletion
+                        cursor.execute("SELECT set_transaction_context('temp_event_in_deletion', %s)", (str(cls.EVENT_ID),))
                         conn.commit()
                         
                         # Delete in proper order to avoid foreign key violations
@@ -178,10 +175,6 @@ class TestDBPerformance(unittest.TestCase):
                         # Delete from events table (last)
                         cursor.execute("DELETE FROM events WHERE event_id = %s", (cls.EVENT_ID,))
                         conn.commit()
-                        
-                        # Clear event_in_deletion
-                        cursor.execute("UPDATE settings SET event_in_deletion = NULL WHERE id = 1")
-                        conn.commit()
                 
                 # Also call Event.delete_event to clean up files and rekognition collection
                 try:
@@ -191,14 +184,6 @@ class TestDBPerformance(unittest.TestCase):
                         
                 print(f"Deleted existing event: {cls.EVENT_ID}")
         except Exception as e:
-            # If something fails, try to clear event_in_deletion
-            try:
-                with db.get_connection() as conn:
-                    with conn.cursor() as cursor:
-                        cursor.execute("UPDATE settings SET event_in_deletion = NULL WHERE id = 1")
-                        conn.commit()
-            except:
-                pass
             # Check if event still exists - if not, we're good
             try:
                 still_exists = db.execute_query(

@@ -1,13 +1,52 @@
 from flask import Blueprint, jsonify, request, Response, stream_with_context
-from werkzeug.utils import secure_filename
 import os
 import queue
 import threading
+import re
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, get_general_models, Forbidden, DatabaseError, json_dumps_safe
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
+
+def sanitize_filename(filename):
+    """
+    Sanitize filename while preserving spaces.
+    Removes dangerous characters but keeps spaces for better readability.
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Sanitized filename safe for filesystem use
+    """
+    if not filename:
+        return ''
+    
+    # Remove any path components (directory separators)
+    filename = os.path.basename(filename)
+    
+    # Remove null bytes and control characters
+    filename = filename.replace('\x00', '')
+    filename = ''.join(char for char in filename if ord(char) >= 32 or char in ['\t', '\n', '\r'])
+    
+    # Remove dangerous characters: / \ : * ? " < > |
+    # Keep spaces and other safe characters
+    filename = re.sub(r'[<>:"/\\|?*]', '', filename)
+    
+    # Remove leading/trailing spaces and dots (Windows doesn't like these)
+    filename = filename.strip(' .')
+    
+    # Limit length (most filesystems have limits)
+    if len(filename) > 255:
+        name, ext = os.path.splitext(filename)
+        filename = name[:255 - len(ext)] + ext
+    
+    # If empty after sanitization, use a default name
+    if not filename:
+        filename = 'image'
+    
+    return filename
 
 @upload_bp.route("/images", methods=["POST"])
 @require_auth
@@ -44,7 +83,7 @@ def upload_images(event_id):
                 if not file.filename.lower().endswith(('.jpg', '.jpeg')):
                     continue
                 
-                filename = secure_filename(file.filename)
+                filename = sanitize_filename(file.filename)
                 filepath = os.path.join(event.to_process_dir, filename)
                 
                 base, ext = os.path.splitext(filename)
@@ -168,7 +207,7 @@ def upload_files_only(event_id):
                 if not file.filename.lower().endswith(('.jpg', '.jpeg')):
                     continue
                 
-                filename = secure_filename(file.filename)
+                filename = sanitize_filename(file.filename)
                 filepath = os.path.join(event.to_process_dir, filename)
                 
                 base, ext = os.path.splitext(filename)

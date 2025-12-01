@@ -64,7 +64,7 @@ class GeneralModels(BaseModels):
         
         return password
 
-    def duplicate_profile(self, profile_id: str, overrides: dict | None = None) -> tuple[str, str, str, list[str]]:
+    def duplicate_profile(self, profile_id: str, overrides: dict = {}) -> tuple[str, str, str, list[str]]:
         """
         Duplicate a profile.
         Returns:
@@ -80,20 +80,7 @@ class GeneralModels(BaseModels):
         if 'label' in overrides.keys():
             label = overrides['label']
         else:
-            label = f"Copy of {profile['label']}"
-            pattern = f"{label} [0-9].*"
-            query = f"""
-                SELECT MAX(CAST(SUBSTRING(label FROM LENGTH(%s) + 2) AS INTEGER)) AS last_profile_num
-                FROM profiles
-                WHERE label ~ %s
-            """
-            last_profile_num = self.db.execute_query(
-                query,
-                [label, pattern],
-                return_format=ReturnFormat.VALUE
-            )
-            if last_profile_num:
-                label = f"{label} {last_profile_num + 1}"
+            label = self.get_unique_label('profiles', f"Copy", f"of {profile['label']}", separator=' ', brackets=False)
         
         if 'password' in overrides.keys():
             password = overrides['password']
@@ -320,14 +307,9 @@ class GeneralModels(BaseModels):
             raise Forbidden('Profile does not have permission to delete this event')
 
         Event.delete_event(event_id)
-        # TODO: use transaction
-        try:
-            self.delete('events', event_id)
-            self.db.execute_query('ANALYZE;')
-
-        except Exception as e:
-            self.db.execute_query('UPDATE settings SET event_in_deletion = NULL WHERE id = 1')
-            raise e
+        self.db.execute_query("SELECT set_transaction_context('temp_event_in_deletion', %s)", (event_id,))
+        self.delete('events', event_id)
+        self.db.execute_query('ANALYZE;')
     
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""

@@ -29,6 +29,8 @@ steps = [
         -- Function for rekognition_usaged_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_rekognition_usaged_ctx_insert()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_usage_id INTEGER;
         BEGIN
             INSERT INTO rekognition_usaged (
                 event_id,
@@ -45,7 +47,10 @@ steps = [
                 NEW.profile_label,
                 NEW.calls_count,
                 COALESCE(NEW.created_at, CURRENT_TIMESTAMP)
-            );
+            )
+            RETURNING usage_id INTO new_usage_id;
+            
+            NEW.usage_id := new_usage_id;
             
             RETURN NEW;
         END;
@@ -54,6 +59,8 @@ steps = [
         -- Function for events_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_events_ctx_insert()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_event_id UUID;
         BEGIN
             IF NOT cur_profile_bool('can_create_events') THEN
                 RAISE EXCEPTION 'Permission denied: cannot create event';
@@ -73,7 +80,7 @@ steps = [
                 rekognition_calls_limit
             )
             VALUES (
-                NEW.event_id,
+                COALESCE(NEW.event_id, gen_random_uuid()),
                 NEW.name,
                 NEW.date,
                 NEW.url,
@@ -84,7 +91,10 @@ steps = [
                 COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
                 cur_profile_uuid('profile_id'),
                 (SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1)
-            );
+            )
+            RETURNING event_id INTO new_event_id;
+
+            NEW.event_id := new_event_id;
 
             INSERT INTO events_profiles (
                 profile_id,
@@ -155,15 +165,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: cannot delete event';
             END IF;
             
-            IF (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS NOT NULL THEN
-                RAISE EXCEPTION 'Policy error: other event is in deletion. Try again later';
-            END IF;
-
-            UPDATE settings SET event_in_deletion = OLD.event_id WHERE id = 1;
-            
-            DELETE FROM profiles WHERE restricted_to_event = OLD.event_id;
             DELETE FROM events WHERE event_id = OLD.event_id;
-            UPDATE settings SET event_in_deletion = NULL WHERE id = 1;
             
             RETURN OLD;
         END;
@@ -246,6 +248,7 @@ steps = [
         RETURNS TRIGGER AS $$
         DECLARE
             min_rank INTEGER;
+            new_profile_id UUID;
         BEGIN
             min_rank := (SELECT min_rank_to_create_event FROM settings WHERE id = 1 LIMIT 1);
             
@@ -267,7 +270,7 @@ steps = [
 
             INSERT INTO profiles (profile_id, label, email, password, hierarchy_rank, can_create_events, restricted_to_event, is_public)
             VALUES (
-                NEW.profile_id,
+                COALESCE(NEW.profile_id, gen_random_uuid()),
                 NEW.label,
                 NEW.email,
                 NEW.password,
@@ -275,7 +278,10 @@ steps = [
                 COALESCE(NEW.can_create_events, FALSE),
                 NEW.restricted_to_event,
                 COALESCE(NEW.is_public, FALSE)
-            );
+            )
+            RETURNING profile_id INTO new_profile_id;
+            
+            NEW.profile_id := new_profile_id;
             
             RETURN NEW;
         END;
@@ -474,6 +480,8 @@ steps = [
                 NEW.diagnostics
             )
             RETURNING feedback_id INTO new_feedback_id;
+        
+            NEW.feedback_id := new_feedback_id;
         
             INSERT INTO notifications (
                 profile_id,
@@ -973,6 +981,8 @@ steps = [
         -- Function for faces_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_faces_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_face_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1001,7 +1011,7 @@ steps = [
                 face_top
             )
             VALUES (
-                NEW.face_id,
+                COALESCE(NEW.face_id, gen_random_uuid()),
                 NEW.image_id,
                 NEW.group_id,
                 COALESCE(NEW.file_size, 0),
@@ -1009,7 +1019,10 @@ steps = [
                 COALESCE(NEW.face_height, 0),
                 COALESCE(NEW.face_left, 0),
                 COALESCE(NEW.face_top, 0)
-            );
+            )
+            RETURNING face_id INTO new_face_id;
+            
+            NEW.face_id := new_face_id;
             
             RETURN NEW;
         END;
@@ -1050,6 +1063,8 @@ steps = [
         -- Function for images_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_image_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1075,7 +1090,7 @@ steps = [
                 upload_id
             )
             VALUES (
-                NEW.image_id,
+                COALESCE(NEW.image_id, gen_random_uuid()),
                 cur_event_profile_uuid('event_id'),
                 NEW.date_taken,
                 NEW.label,
@@ -1088,7 +1103,10 @@ steps = [
                 NEW.description,
                 NEW.moment_id,
                 NEW.upload_id
-            );
+            )
+            RETURNING image_id INTO new_image_id;
+            
+            NEW.image_id := new_image_id;
 
             IF cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
                 INSERT INTO profiles_images (profile_id, image_id)
@@ -1191,6 +1209,8 @@ steps = [
         -- Function for groups_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_group_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1207,11 +1227,14 @@ steps = [
                 representative_face
             )
             VALUES (
-                NEW.group_id,
+                COALESCE(NEW.group_id, gen_random_uuid()),
                 cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.representative_face
-            );
+            )
+            RETURNING group_id INTO new_group_id;
+            
+            NEW.group_id := new_group_id;
             
             RETURN NEW;
         END;
@@ -1249,6 +1272,8 @@ steps = [
         -- Function for moments_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_moments_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_moment_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1268,14 +1293,17 @@ steps = [
                 representative_image
             )
             VALUES (
-                NEW.moment_id,
+                COALESCE(NEW.moment_id, gen_random_uuid()),
                 cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.description,
                 NEW.start_date,
                 NEW.end_date,
                 NEW.representative_image
-            );
+            )
+            RETURNING moment_id INTO new_moment_id;
+            
+            NEW.moment_id := new_moment_id;
             
             RETURN NEW;
         END;
@@ -1318,6 +1346,8 @@ steps = [
         -- Function for albums_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_albums_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_album_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1335,12 +1365,15 @@ steps = [
                 representative_image
             )
             VALUES (
-                NEW.album_id,
+                COALESCE(NEW.album_id, gen_random_uuid()),
                 cur_event_profile_uuid('event_id'),
                 NEW.label,
                 NEW.description,
                 NEW.representative_image
-            );
+            )
+            RETURNING album_id INTO new_album_id;
+            
+            NEW.album_id := new_album_id;
             
             RETURN NEW;
         END;
@@ -1513,6 +1546,8 @@ steps = [
         -- Function for uploads_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_uploads_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_upload_id INTEGER;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1548,7 +1583,9 @@ steps = [
                 NEW.errors,
                 NEW.notes
             )
-            ON CONFLICT DO NOTHING;
+            RETURNING upload_id INTO new_upload_id;
+            
+            NEW.upload_id := new_upload_id;
             
             RETURN NEW;
         END;
@@ -1850,6 +1887,8 @@ steps = [
         -- Function for my_access_requests_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            new_access_request_id INTEGER;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1888,7 +1927,9 @@ steps = [
                 CASE WHEN NOT cur_profile_bool('is_public') THEN NEW.applicant_profile_id ELSE NULL END,
                 COALESCE(CASE WHEN cur_profile_bool('is_public') THEN TRUE ELSE NEW.communication_consent END, FALSE)
             )
-            RETURNING access_request_id INTO NEW.access_request_id;
+            RETURNING access_request_id INTO new_access_request_id;
+            
+            NEW.access_request_id := new_access_request_id;
             
             RETURN NEW;
         END;
@@ -2360,7 +2401,7 @@ steps = [
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM faces f WHERE f.group_id = OLD.group_id
-            ) AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
+            ) AND cur_transaction('temp_event_in_deletion')::UUID IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete group with faces';
             END IF;
             
@@ -2393,7 +2434,7 @@ steps = [
             IF TG_OP = 'DELETE' AND (
                 OLD.album_id = (SELECT archive_album_id FROM events WHERE event_id = OLD.event_id)
                 OR OLD.album_id = (SELECT favorites_album_id FROM events WHERE event_id = OLD.event_id)
-            ) AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
+            ) AND cur_transaction('temp_event_in_deletion')::UUID IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete default albums';
             END IF;
             
@@ -2414,7 +2455,7 @@ steps = [
             END IF;
             
             IF TG_OP = 'DELETE' AND OLD.group_id = (SELECT unassociated_group_id FROM events WHERE event_id = OLD.event_id)
-                AND (SELECT event_in_deletion FROM settings WHERE id = 1 LIMIT 1) IS DISTINCT FROM OLD.event_id THEN
+                AND cur_transaction('temp_event_in_deletion')::UUID IS DISTINCT FROM OLD.event_id THEN
                 RAISE EXCEPTION 'Policy error: cannot delete default group';
             END IF;
             

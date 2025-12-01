@@ -182,3 +182,57 @@ export function formatDateDDMMYYYY(value) {
   return `${day}-${month}-${year}`;
 }
 
+/**
+ * Format duration in milliseconds to human-readable string (e.g., "2m 30s", "1h 15m")
+ * @param {number} milliseconds - Duration in milliseconds
+ * @returns {string} Formatted duration string
+ */
+export function formatDuration(milliseconds) {
+  if (!milliseconds || milliseconds < 0) return '0s';
+  
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  const remainingHours = hours % 24;
+  const remainingMinutes = minutes % 60;
+  const remainingSeconds = seconds % 60;
+  
+  const parts = [];
+  
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  if (remainingHours > 0) {
+    parts.push(`${remainingHours}h`);
+  }
+  if (remainingMinutes > 0) {
+    parts.push(`${remainingMinutes}m`);
+  }
+  if (remainingSeconds > 0 || parts.length === 0) {
+    parts.push(`${remainingSeconds}s`);
+  }
+  
+  return parts.join(' ');
+}
+
+/**
+ * Calculate duration between two timestamps
+ * @param {string|Date} startTime - Start timestamp string from database or Date object
+ * @param {string|Date} endTime - End timestamp string from database or Date object
+ * @returns {number|null} Duration in milliseconds, or null if invalid
+ */
+export function calculateDuration(startTime, endTime) {
+  if (!startTime || !endTime) return null;
+  
+  const start = typeof startTime === 'string' ? parseDatabaseTimestamp(startTime) : startTime;
+  const end = typeof endTime === 'string' ? parseDatabaseTimestamp(endTime) : endTime;
+  
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return null;
+  }
+  
+  return end.getTime() - start.getTime();
+}
+

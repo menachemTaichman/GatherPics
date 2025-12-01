@@ -301,17 +301,6 @@ class EventModels(BaseModels):
         return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = %s', (self.db.event_id,), return_format=ReturnFormat.VALUE)
 
     # -------- Groups helpers --------
-    def get_last_group_num(self) -> int:
-        """Get the last group number."""
-        query = f"""
-            SELECT MAX(CAST(SUBSTRING(label FROM 8) AS INTEGER)) AS last_group_num
-            FROM groups
-            WHERE label LIKE 'Person %%'
-            AND SUBSTRING(label FROM 8) ~ '^[0-9]+$'
-        """
-
-        return self.db.execute_query(query, return_format=ReturnFormat.VALUE)
-
     def get_faces_group_in_image(self, group_id: str, image_ids: str | list[str]) -> list[str] | None:
         """Return the faces in image(s) from a group.
         Args:

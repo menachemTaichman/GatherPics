@@ -182,7 +182,6 @@ class Event():
 
         def _cluster_and_group_faces(face_ids: list[str], minimal_group_size: int, unassociated_group_id: str):
             clusters = self.face_utils.cluster_faces(face_ids, threshold_similarity=cluster_threshold, max_matches_faces=max_matches_faces)
-            print(f"Clusters: {clusters}")
             groups_created = 0
             
             for new_faces, existing_faces in clusters:
@@ -201,15 +200,15 @@ class Event():
 
                 if len(add_faces) >= minimal_group_size:
                     if largest_group_id is None or largest_group_id == unassociated_group_id:
-                        group_num = self.models.get_last_group_num() + 1
-                        largest_group_id = self.models.add('groups', {'label': f"Person {group_num}"})
+                        group_label = self.models.get_unique_label('groups', 'Person', '', brackets=False, event_id=self.event_id)
+                        largest_group_id = self.models.add('groups', {'label': group_label})
                         groups_created += 1
                     
                     self.models.edit_childs('groups', largest_group_id, 'faces', add_faces, operation=ChildOperation.ADD)
 
             return groups_created
 
-        def _process_image(image_file, unassociated_group_id, upload_id):
+        def _process_image(image_file, unassociated_group_id: str, upload_id: str):
             image_path = os.path.join(self.to_process_dir, image_file)
             try:
                 original_img = PILImage.open(image_path)
@@ -219,11 +218,8 @@ class Event():
                 metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
-                label = image_file
-                i = 2
-                while self.models.is_exists('images', {'label': label}):
-                    label = f"{label} ({i})"
-                    i += 1
+                image_name, image_ext = os.path.splitext(image_file)
+                label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, event_id=self.event_id)
 
                 image_id = self.models.add(
                     'images',

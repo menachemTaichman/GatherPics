@@ -23,7 +23,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { usePermissions } from '../../hooks/usePermissions';
 
-import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { formatDateTimeLocale, calculateDuration, formatDuration } from '../../utils/dateUtils';
 
 export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
@@ -640,6 +640,13 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     return e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1);
   };
 
+  // Calculate completion duration
+  const completionDuration = useMemo(() => {
+    if (!upload?.started_at || !upload?.completed_at) return null;
+    const duration = calculateDuration(upload.started_at, upload.completed_at);
+    return duration !== null ? formatDuration(duration) : null;
+  }, [upload?.started_at, upload?.completed_at]);
+
   return (
     <div className="w-full">
       {/* Sticky Header */}
@@ -675,6 +682,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           <span className={`text-xs ${
                             upload.status === 'completed' ? 'text-green-600' : upload.status === 'failed' ? 'text-red-600' : 'text-yellow-600'
                           }`}>{upload.status}</span>
+                          {completionDuration && (
+                            <>
+                              <span className="text-gray-400">•</span>
+                              <span className="text-xs text-gray-600">
+                                completed in {completionDuration}
+                              </span>
+                            </>
+                          )}
                         </>
                       )}
                     </div>

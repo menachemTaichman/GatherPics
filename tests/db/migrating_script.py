@@ -1,12 +1,20 @@
 """
-Development script to reset PostgreSQL database and migrate data from SQLite.
+Development script to reset PostgreSQL database and migrate data from PostgreSQL or SQLite.
 This script:
 1. Connects to default 'postgres' database
-2. Terminates all active connections to 'photo_app_db'
-3. Drops and recreates 'photo_app_db'
-4. Runs Yoyo migrations to create schema
-5. Migrates data from SQLite to PostgreSQL
-6. Converts timestamps from SQLite timezone to Israel timezone (Asia/Jerusalem)
+2. (Default) Copies current PostgreSQL database to temporary database
+3. Terminates all active connections to 'photo_app_db'
+4. Drops and recreates 'photo_app_db'
+5. Runs Yoyo migrations to create schema
+6. Migrates data from PostgreSQL (default) or SQLite (if --from-sqlite flag is passed)
+7. Converts timestamps from SQLite timezone to Israel timezone (Asia/Jerusalem) when migrating from SQLite
+
+Schema Change Handling:
+- Columns removed from target: Automatically excluded from migration
+- Columns added to target: Will use default values or NULL (if nullable)
+- Required columns (NOT NULL, no default) missing in source: Migration will fail with warning
+- Column type changes: May cause issues if incompatible; basic type conversions are handled
+- Column renames: Use COLUMN_MAPPING dictionary to map old names to new names
 
 Timezone Configuration:
 - SQLITE_TIMEZONE: The timezone used in the old SQLite database (default: 'UTC')
@@ -15,19 +23,22 @@ Timezone Configuration:
   The database will be configured to use this timezone, and all timestamps
   will be converted to this timezone during migration.
 
-Usage: python migrating_script.py
+Usage: 
+  python migrating_script.py                    # Migrate from existing PostgreSQL database (default)
+  python migrating_script.py --from-sqlite       # Migrate from SQLite instead
 """
 
 import os
 import sys
+import json
 import sqlite3
 import psycopg2
-from psycopg2.extras import execute_batch
+import argparse
+from psycopg2.extras import execute_batch, Json
 from psycopg2 import errors as psycopg2_errors
 from dotenv import load_dotenv
 from yoyo import read_migrations, get_backend
-from datetime import datetime, timezone
-from src.core import DATA_ROOT
+from datetime import datetime, timezone, timedelta
 
 # Try to import dateutil for timezone support, fallback to UTC if not available
 try:
@@ -46,7 +57,7 @@ DB_PORT = os.getenv('DB_PORT', '5432')
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', '')
 DB_NAME = os.getenv('DB_NAME', 'photo_app_db')
-SQLITE_DB_PATH = os.path.join(DATA_ROOT, 'database.db')
+SQLITE_DB_PATH = os.path.join(os.path.dirname(__file__), 'old_db.db')
 
 # Boolean field mapping - INTEGER fields that should be converted to BOOLEAN
 BOOLEAN_FIELDS = {
@@ -96,6 +107,9 @@ EXCLUDED_COLUMNS = {
 SKIP_IDS = {
     'profiles': {
         '89cb4967-0eba-48af-99cc-5e87407fb639',  # Developer profile inserted in 0001_initial_schema.py
+    },
+    'settings': {
+        1,  # Settings row with id=1 inserted in 0001_initial_schema.py
     },
     # Add more tables/IDs as needed
 }
@@ -170,6 +184,71 @@ def get_postgres_conn(database='postgres'):
             cursor.execute(f"SET timezone = '{POSTGRES_TIMEZONE}'")
         conn.commit()
     return conn
+
+def backup_postgres_database():
+    """Backup current PostgreSQL database to a temporary database.
+    
+    Returns:
+        str: Name of the temporary backup database
+    """
+    backup_db_name = f"{DB_NAME}_backup_{int(datetime.now().timestamp())}"
+    print(f"Creating backup database: {backup_db_name}...")
+    
+    conn = get_postgres_conn('postgres')
+    conn.autocommit = True
+    cursor = conn.cursor()
+    
+    try:
+        # Check if source database exists
+        cursor.execute("""
+            SELECT 1 FROM pg_database WHERE datname = %s
+        """, (DB_NAME,))
+        if not cursor.fetchone():
+            raise ValueError(f"Source database {DB_NAME} does not exist!")
+        
+        # Terminate connections to source database
+        print(f"Terminating active connections to {DB_NAME}...")
+        cursor.execute("""
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = %s
+            AND pid <> pg_backend_pid();
+        """, (DB_NAME,))
+        
+        # Create backup database
+        cursor.execute(f'CREATE DATABASE {backup_db_name} WITH TEMPLATE {DB_NAME}')
+        print(f"Backup database {backup_db_name} created successfully!")
+        return backup_db_name
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+def cleanup_backup_database(backup_db_name):
+    """Drop the temporary backup database."""
+    if not backup_db_name:
+        return
+    
+    print(f"Cleaning up backup database: {backup_db_name}...")
+    conn = get_postgres_conn('postgres')
+    conn.autocommit = True
+    cursor = conn.cursor()
+    
+    try:
+        # Terminate connections to backup database
+        cursor.execute("""
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = %s
+            AND pid <> pg_backend_pid();
+        """, (backup_db_name,))
+        
+        # Drop backup database
+        cursor.execute(f'DROP DATABASE IF EXISTS {backup_db_name}')
+        print(f"Backup database {backup_db_name} dropped.")
+    finally:
+        cursor.close()
+        conn.close()
 
 def reset_database():
     """Reset PostgreSQL database - drop and recreate."""
@@ -264,30 +343,70 @@ def convert_timestamp_value(value, field_name, table_name):
                 dt = datetime.fromtimestamp(value, tz=timezone.utc)
         elif isinstance(value, str):
             # Try parsing as ISO format
-            # Handle various formats
-            formats = [
-                '%Y-%m-%d %H:%M:%S',
-                '%Y-%m-%d %H:%M:%S.%f',
-                '%Y-%m-%dT%H:%M:%S',
-                '%Y-%m-%dT%H:%M:%S.%f',
-                '%Y-%m-%dT%H:%M:%S%z',
-                '%Y-%m-%dT%H:%M:%S.%f%z',
-            ]
-            dt = None
-            for fmt in formats:
+            # First try dateutil parser (handles all ISO formats including timezone offsets like +00:00)
+            if HAS_DATEUTIL:
                 try:
-                    dt = datetime.strptime(value, fmt)
-                    break
-                except ValueError:
-                    continue
-            
-            if dt is None:
-                # If parsing failed, try dateutil parser as fallback (if available)
-                if HAS_DATEUTIL:
                     from dateutil.parser import parse
                     dt = parse(value)
-                else:
-                    # Last resort: try to parse as simple date
+                except (ValueError, TypeError):
+                    dt = None
+            else:
+                dt = None
+            
+            # If dateutil not available or parsing failed, try standard formats
+            if dt is None:
+                formats = [
+                    '%Y-%m-%d %H:%M:%S',
+                    '%Y-%m-%d %H:%M:%S.%f',
+                    '%Y-%m-%dT%H:%M:%S',
+                    '%Y-%m-%dT%H:%M:%S.%f',
+                    '%Y-%m-%dT%H:%M:%S%z',  # Handles +0000 or -0500 format
+                    '%Y-%m-%dT%H:%M:%S.%f%z',  # Handles +0000 or -0500 format
+                ]
+                for fmt in formats:
+                    try:
+                        dt = datetime.strptime(value, fmt)
+                        break
+                    except ValueError:
+                        continue
+                
+                # If still None, try to handle +00:00 format manually (strptime doesn't support this)
+                if dt is None and ('+' in value or value.count('-') > 2):
+                    try:
+                        # Remove timezone offset and parse, then add it back
+                        if '+' in value:
+                            base, offset = value.rsplit('+', 1)
+                            sign = 1
+                        elif value.count('-') > 2:
+                            # Find the last - which is likely the timezone separator
+                            parts = value.rsplit('-', 2)
+                            base = '-'.join(parts[:-2])
+                            offset = '-' + parts[-2] + ':' + parts[-1]
+                            sign = -1
+                        else:
+                            raise ValueError("Cannot parse timezone")
+                        
+                        # Parse base datetime
+                        for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f']:
+                            try:
+                                dt = datetime.strptime(base, fmt)
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if dt is not None:
+                            # Parse timezone offset (HH:MM format)
+                            offset_parts = offset.replace(':', '').replace('+', '').replace('-', '')
+                            if len(offset_parts) == 4:
+                                hours = int(offset_parts[:2])
+                                minutes = int(offset_parts[2:])
+                                tz_offset = timedelta(hours=hours * sign, minutes=minutes * sign)
+                                dt = dt.replace(tzinfo=timezone(tz_offset))
+                    except (ValueError, IndexError):
+                        pass
+                
+                # Last resort: try to parse as simple date
+                if dt is None:
                     try:
                         dt = datetime.strptime(value.split()[0], '%Y-%m-%d')
                     except (ValueError, IndexError):
@@ -335,34 +454,155 @@ def convert_timestamp_value(value, field_name, table_name):
         print(f"    Warning: Failed to convert timestamp {field_name}={value} in {table_name}: {e}")
         return value  # Return original value if conversion fails
 
-def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=None):
-    """Migrate a single table from SQLite to PostgreSQL.
+def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns=None, is_postgres_source=False):
+    """Migrate a single table from SQLite or PostgreSQL to PostgreSQL.
     
     Args:
-        sqlite_cursor: SQLite database cursor
-        pg_cursor: PostgreSQL database cursor
+        source_cursor: SQLite or PostgreSQL database cursor (source)
+        pg_cursor: PostgreSQL database cursor (target)
         pg_conn: PostgreSQL database connection (for counting rows)
         table_name: Name of the table to migrate
         exclude_columns: List of column names to exclude from migration (for deferred FKs)
+        is_postgres_source: If True, source is PostgreSQL; if False, source is SQLite
     """
     # Get PostgreSQL table name (may be different from SQLite name)
     pg_table_name = TABLE_MAPPING.get(table_name, table_name)
     print(f"Migrating table: {table_name} -> {pg_table_name}...")
     
-    # Get all rows from SQLite
-    sqlite_cursor.execute(f'SELECT * FROM {table_name}')
-    rows = sqlite_cursor.fetchall()
+    # Get all rows from source
+    if is_postgres_source:
+        # For PostgreSQL, select columns explicitly to ensure correct order
+        source_table_name = table_name
+        # Get source columns in their natural order
+        if hasattr(source_cursor, 'connection'):
+            source_conn = source_cursor.connection
+            with source_conn.cursor() as source_info_cursor:
+                source_info_cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' 
+                    AND table_name = %s 
+                    ORDER BY ordinal_position
+                """, (source_table_name,))
+                source_column_order = [row[0] for row in source_info_cursor.fetchall()]
+        else:
+            # Fallback: use target order
+            pg_cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = %s 
+                ORDER BY ordinal_position
+            """, (pg_table_name,))
+            source_column_order = [row[0] for row in pg_cursor.fetchall()]
+        
+        # Get target columns to know which ones to include
+        pg_cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = %s 
+            ORDER BY ordinal_position
+        """, (pg_table_name,))
+        target_column_order = [row[0] for row in pg_cursor.fetchall()]
+        
+        # Select columns that exist in both, in TARGET order (so values match INSERT order)
+        select_columns = [col for col in target_column_order if col in source_column_order]
+        if not select_columns:
+            print(f"  No matching columns found between source and target for {table_name}")
+            return
+        
+        # Detect schema differences
+        missing_in_source = set(target_column_order) - set(source_column_order)
+        missing_in_target = set(source_column_order) - set(target_column_order)
+        
+        if missing_in_source:
+            print(f"    Warning: Target has columns not in source (will use defaults/NULL): {', '.join(sorted(missing_in_source))}")
+        if missing_in_target:
+            print(f"    Info: Source has columns not in target (will be excluded): {', '.join(sorted(missing_in_target))}")
+        
+        # Check for required columns that are missing (non-nullable, no default)
+        if missing_in_source:
+            pg_cursor.execute("""
+                SELECT column_name, is_nullable, column_default
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = %s 
+                AND column_name = ANY(%s)
+            """, (pg_table_name, list(missing_in_source)))
+            missing_cols_info = {row[0]: (row[1] == 'YES', row[2]) for row in pg_cursor.fetchall()}
+            
+            required_missing = [col for col, (nullable, default) in missing_cols_info.items() 
+                              if not nullable and default is None]
+            if required_missing:
+                print(f"    Error: Required columns missing in source (no default): {', '.join(required_missing)}")
+                print(f"    Migration may fail for this table. Consider adding defaults or making columns nullable.")
+        
+        # Create a mapping from target column name to source column index for reordering
+        source_col_to_index = {col: i for i, col in enumerate(source_column_order)}
+        
+        # Select in target order - this ensures values are in the right order for INSERT
+        # But we need to verify the actual returned column order matches
+        source_cursor.execute(f'SELECT {", ".join(select_columns)} FROM {source_table_name}')
+        
+        # Verify the returned column order matches what we selected
+        returned_column_names = [desc[0] for desc in source_cursor.description]
+        if returned_column_names != select_columns:
+            # Columns returned in different order - this shouldn't happen but let's handle it
+            print(f"    Warning: Column order mismatch. Selected: {select_columns[:3]}..., Returned: {returned_column_names[:3]}...")
+            # Create a mapping to reorder values
+            value_reorder_map = [returned_column_names.index(col) for col in select_columns]
+            # We'll need to reorder rows later
+            all_column_names = select_columns
+        else:
+            all_column_names = select_columns  # These are in target order (for INSERT)
+            value_reorder_map = None
+    else:
+        source_cursor.execute(f'SELECT * FROM {table_name}')
+        all_column_names = [description[0] for description in source_cursor.description]
+    
+    rows = source_cursor.fetchall()
     
     if not rows:
         print(f"  No data in {table_name}")
         return
     
-    # Get column names
-    all_column_names = [description[0] for description in sqlite_cursor.description]
-    
     # Apply column name mapping if exists for this table
     column_mapping = COLUMN_MAPPING.get(table_name, {})
     mapped_column_names = [column_mapping.get(col, col) for col in all_column_names]
+    
+    # For PostgreSQL source, detect JSONB columns
+    jsonb_column_indices = set()
+    if is_postgres_source:
+        # Query information_schema from the source database to find JSONB columns
+        # We need to use the source connection, not the target
+        if hasattr(source_cursor, 'connection'):
+            source_conn = source_cursor.connection
+            with source_conn.cursor() as source_info_cursor:
+                source_info_cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' 
+                    AND table_name = %s 
+                    AND data_type IN ('json', 'jsonb')
+                """, (source_table_name,))
+                jsonb_column_names = {row[0] for row in source_info_cursor.fetchall()}
+        else:
+            # Fallback: query target database (should have same schema)
+            pg_cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = %s 
+                AND data_type IN ('json', 'jsonb')
+            """, (pg_table_name,))
+            jsonb_column_names = {row[0] for row in pg_cursor.fetchall()}
+        
+        # Map JSONB column names to their indices in the source
+        for i, col_name in enumerate(all_column_names):
+            # For PostgreSQL source, column names should match directly (no mapping needed)
+            if col_name in jsonb_column_names:
+                jsonb_column_indices.add(i)
     
     # Combine excluded columns from both deferred FKs and schema differences
     all_excluded = set(exclude_columns or [])
@@ -401,9 +641,60 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         for i, value in enumerate(row):
             if i not in exclude_indices:
                 col_name = col_index_to_name[i]
-                # First convert boolean, then timestamp (timestamp conversion handles non-timestamp values)
-                converted_value = convert_boolean_value(value, col_name, table_name)
-                converted_value = convert_timestamp_value(converted_value, col_name, table_name)
+                # For PostgreSQL source, values are already in correct format
+                if is_postgres_source:
+                    # Handle JSONB columns - convert dict/list to Json() for psycopg2
+                    # Check both by index and by column name (fallback if detection failed)
+                    is_jsonb_col = (i in jsonb_column_indices or 
+                                   col_name.lower() in ['data', 'metadata', 'config', 'settings', 'preferences'])
+                    
+                    if is_jsonb_col:
+                        # This is a JSONB column - handle accordingly
+                        # JSONB can store: dict, list, str, int, float, bool, None
+                        if value is None:
+                            converted_value = None
+                        elif isinstance(value, (dict, list)):
+                            converted_value = Json(value)
+                        elif isinstance(value, str):
+                            # Try to parse as JSON string first
+                            try:
+                                parsed = json.loads(value)
+                                converted_value = Json(parsed)
+                            except (json.JSONDecodeError, TypeError):
+                                # Not valid JSON, but it's a JSONB column - wrap as string JSON
+                                converted_value = Json(value)
+                        elif isinstance(value, (int, float, bool)):
+                            # JSONB can store primitives directly - wrap in Json()
+                            converted_value = Json(value)
+                        else:
+                            # Unknown type in JSONB column - try to convert to JSON
+                            try:
+                                converted_value = Json(value)
+                            except (TypeError, ValueError):
+                                # Non-JSON value in JSONB column - this is an error
+                                # This might indicate a column order mismatch
+                                raise ValueError(
+                                    f"Column '{col_name}' is JSONB but got {type(value).__name__} value: {value}. "
+                                    f"This might indicate a column order mismatch. "
+                                    f"Column index: {i}, Column name: {col_name}, "
+                                    f"All columns: {all_column_names[:i+1]}, "
+                                    f"Row values (first 3): {row[:3] if len(row) > 3 else row}"
+                                )
+                    elif isinstance(value, (dict, list)) and value is not None:
+                        # Safety: if we have a dict/list but didn't detect it as JSONB, 
+                        # check if column name suggests it might be JSONB
+                        if 'json' in col_name.lower() or col_name.lower() in ['data', 'metadata', 'config']:
+                            converted_value = Json(value)
+                        else:
+                            # Unknown dict/list - log warning but try to convert
+                            print(f"    Warning: Column {col_name} has dict/list value but not detected as JSONB, attempting conversion")
+                            converted_value = Json(value)
+                    else:
+                        converted_value = value
+                else:
+                    # First convert boolean, then timestamp (timestamp conversion handles non-timestamp values)
+                    converted_value = convert_boolean_value(value, col_name, table_name)
+                    converted_value = convert_timestamp_value(converted_value, col_name, table_name)
                 converted_row.append(converted_value)
         converted_rows.append(tuple(converted_row))
     
@@ -441,8 +732,14 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                         try:
                             pg_cursor.execute(insert_sql, row)
                             inserted_count += 1
-                        except psycopg2_errors.UniqueViolation:
-                            # Skip duplicates
+                        except psycopg2.IntegrityError as e:
+                            # Skip duplicates - this can happen when migrating from PostgreSQL
+                            # if rows were already inserted by migrations
+                            # IntegrityError is the base class for UniqueViolation
+                            pass
+                        except Exception as e:
+                            # Log other errors but continue
+                            print(f"    Warning: Failed to insert row in {pg_table_name}: {e}")
                             pass
                     pg_conn.commit()
                 else:
@@ -499,23 +796,24 @@ def migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns
     else:
         print(f"  No columns to migrate (all excluded)")
 
-def update_deferred_fk_columns(sqlite_cursor, pg_cursor, table_name, fk_column, primary_key_column):
+def update_deferred_fk_columns(source_cursor, pg_cursor, table_name, fk_column, primary_key_column, is_postgres_source=False):
     """Update deferred foreign key column after referenced table is migrated.
     
     Args:
-        sqlite_cursor: SQLite database cursor
-        pg_cursor: PostgreSQL database cursor
-        table_name: Name of the table to update (SQLite name)
+        source_cursor: SQLite or PostgreSQL database cursor (source)
+        pg_cursor: PostgreSQL database cursor (target)
+        table_name: Name of the table to update
         fk_column: Name of the foreign key column to update
         primary_key_column: Name of the primary key column for matching rows
+        is_postgres_source: If True, source is PostgreSQL; if False, source is SQLite
     """
     # Get PostgreSQL table name (may be different from SQLite name)
     pg_table_name = TABLE_MAPPING.get(table_name, table_name)
     print(f"  Updating {pg_table_name}.{fk_column}...")
     
-    # Get all rows with their FK values from SQLite
-    sqlite_cursor.execute(f'SELECT {primary_key_column}, {fk_column} FROM {table_name}')
-    rows = sqlite_cursor.fetchall()
+    # Get all rows with their FK values from source
+    source_cursor.execute(f'SELECT {primary_key_column}, {fk_column} FROM {table_name}')
+    rows = source_cursor.fetchall()
     
     if not rows:
         return
@@ -530,6 +828,262 @@ def update_deferred_fk_columns(sqlite_cursor, pg_cursor, table_name, fk_column, 
     
     if updated_count > 0:
         print(f"    Updated {updated_count} rows")
+
+def migrate_data_from_postgres(backup_db_name):
+    """Migrate data from PostgreSQL backup database to PostgreSQL."""
+    print("Connecting to PostgreSQL backup database...")
+    backup_conn = get_postgres_conn(backup_db_name)
+    backup_cursor = backup_conn.cursor()
+    
+    print("Connecting to PostgreSQL target database...")
+    pg_conn = get_postgres_conn(DB_NAME)
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        # Get all table names from PostgreSQL backup
+        backup_cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+        """)
+        tables = [row[0] for row in backup_cursor.fetchall()]
+        
+        # Reverse TABLE_MAPPING to get PostgreSQL table names from SQLite names
+        reverse_table_mapping = {v: k for k, v in TABLE_MAPPING.items()}
+        
+        # Convert PostgreSQL table names to SQLite names if needed (for compatibility with migration logic)
+        # For PostgreSQL->PostgreSQL migration, we use the same table names
+        migration_order = [
+            # Base tables first (no FK dependencies)
+            'default_preferences',
+            'rekognition_usaged',
+            
+            # Tables that reference each other (circular) - create without FKs first
+            'events',  # Created first, then profiles can reference it
+            'profiles',  # Can reference events.restricted_to_event
+            
+            # Dependent on profiles and events
+            'settings',
+            'profiles_preferences',
+            'refresh_tokens',
+            'notifications',
+            'feedbacks',
+            
+            # Junction table for events_profiles
+            'events_profiles',
+            
+            # Dependent on events, created before images/groups that need them
+            'groups',  # May need events.unassociated_group_id (deferred)
+            'moments',  # Needs events, representative_image deferred
+            'albums',  # Needs events, representative_image deferred
+            
+            # Uploads (needs events, profiles) - can be migrated before images
+            'uploads',
+            
+            # Dependent on events and other tables
+            'images',  # Needs events, moments (FK OK), uploads (FK OK now)
+            
+            # Dependent on images and groups
+            'faces',  # Needs images, groups (FKs OK)
+            
+            # Junction tables (use PostgreSQL table names)
+            'albums_images',  # Needs albums, images
+            'profiles_images',  # PostgreSQL name for events_profiles_images
+            'profiles_groups',  # PostgreSQL name for events_profiles_groups
+            'profiles_albums',  # PostgreSQL name for events_profiles_albums
+            
+            # Access requests (needs events, profiles, groups)
+            'access_requests',
+            'access_requests_groups',  # Needs access_requests, groups
+        ]
+        
+        # Primary key columns for each table (used for updating deferred FKs)
+        primary_keys = {
+            'events': 'event_id',
+            'profiles': 'profile_id',
+            'groups': 'group_id',
+            'moments': 'moment_id',
+            'albums': 'album_id',
+            'images': 'image_id',
+            'faces': 'face_id',
+        }
+        
+        # Step 1: Migrate all tables, excluding deferred FK columns
+        print("\nStep 1: Migrating tables (excluding deferred FK columns)...")
+        for table_name in migration_order:
+            # Check if table exists in backup (use PostgreSQL table name)
+            pg_table_name = TABLE_MAPPING.get(table_name, table_name)
+            if pg_table_name in tables:
+                # For deferred FK columns, use the original table name (SQLite name) to look up columns
+                deferred_cols = DEFERRED_FK_COLUMNS.get(table_name, [])
+                migrate_table(backup_cursor, pg_cursor, pg_conn, pg_table_name, exclude_columns=deferred_cols, is_postgres_source=True)
+                pg_conn.commit()
+                
+                # After migrating groups, replace trigger-created Unassociated groups with backup IDs
+                if pg_table_name == 'groups':
+                    print("\n  Replacing trigger-created Unassociated groups with backup IDs...")
+                    backup_cursor.execute("""
+                        SELECT event_id, group_id, label 
+                        FROM groups 
+                        WHERE label = 'Unassociated'
+                    """)
+                    backup_unassociated_groups = backup_cursor.fetchall()
+                    
+                    for event_id, backup_group_id, label in backup_unassociated_groups:
+                        # Check if trigger-created group exists
+                        pg_cursor.execute("""
+                            SELECT group_id FROM groups 
+                            WHERE event_id = %s AND label = 'Unassociated'
+                        """, (event_id,))
+                        trigger_group = pg_cursor.fetchone()
+                        
+                        if trigger_group and trigger_group[0] != backup_group_id:
+                            # Set transaction context to allow deletion of default group
+                            pg_cursor.execute("""
+                                SELECT set_transaction_context('temp_event_in_deletion', %s)
+                            """, (str(event_id),))
+                            
+                            # Delete trigger-created group
+                            pg_cursor.execute("""
+                                DELETE FROM groups WHERE group_id = %s AND event_id = %s
+                            """, (trigger_group[0], event_id))
+                            
+                            # Insert backup group (if not already exists from migration)
+                            pg_cursor.execute("""
+                                INSERT INTO groups (event_id, group_id, label, representative_face)
+                                SELECT %s, %s, %s, NULL
+                                WHERE NOT EXISTS (SELECT 1 FROM groups WHERE group_id = %s)
+                            """, (event_id, backup_group_id, label, backup_group_id))
+                            # Update events to reference backup ID
+                            pg_cursor.execute("""
+                                UPDATE events SET unassociated_group_id = %s WHERE event_id = %s
+                            """, (backup_group_id, event_id))
+                    
+                    pg_conn.commit()
+                    print("  Unassociated groups updated")
+                
+                # After migrating albums, replace trigger-created Archive/Favorites albums with backup IDs
+                if pg_table_name == 'albums':
+                    print("\n  Replacing trigger-created Archive/Favorites albums with backup IDs...")
+                    backup_cursor.execute("""
+                        SELECT event_id, archive_album_id, favorites_album_id 
+                        FROM events
+                    """)
+                    events_data = backup_cursor.fetchall()
+                    
+                    for event_id, backup_archive_id, backup_favorites_id in events_data:
+                        # Handle archive album
+                        if backup_archive_id:
+                            pg_cursor.execute("""
+                                SELECT archive_album_id FROM events WHERE event_id = %s
+                            """, (event_id,))
+                            trigger_archive = pg_cursor.fetchone()
+                            
+                            if trigger_archive and trigger_archive[0] != backup_archive_id:
+                                # Set transaction context to allow deletion of default album
+                                pg_cursor.execute("""
+                                    SELECT set_transaction_context('temp_event_in_deletion', %s)
+                                """, (str(event_id),))
+                                
+                                # Delete trigger-created album
+                                pg_cursor.execute("""
+                                    DELETE FROM albums WHERE album_id = %s AND event_id = %s
+                                """, (trigger_archive[0], event_id))
+                                
+                                # Insert backup album (if not already exists from migration)
+                                pg_cursor.execute("""
+                                    INSERT INTO albums (event_id, album_id, label, description, representative_image)
+                                    SELECT %s, %s, 'Archive', NULL, NULL
+                                    WHERE NOT EXISTS (SELECT 1 FROM albums WHERE album_id = %s)
+                                """, (event_id, backup_archive_id, backup_archive_id))
+                                # Update events to reference backup ID
+                                pg_cursor.execute("""
+                                    UPDATE events SET archive_album_id = %s WHERE event_id = %s
+                                """, (backup_archive_id, event_id))
+                        
+                        # Handle favorites album
+                        if backup_favorites_id:
+                            pg_cursor.execute("""
+                                SELECT favorites_album_id FROM events WHERE event_id = %s
+                            """, (event_id,))
+                            trigger_favorites = pg_cursor.fetchone()
+                            
+                            if trigger_favorites and trigger_favorites[0] != backup_favorites_id:
+                                # Set transaction context to allow deletion of default album
+                                pg_cursor.execute("""
+                                    SELECT set_transaction_context('temp_event_in_deletion', %s)
+                                """, (str(event_id),))
+                                
+                                # Delete trigger-created album
+                                pg_cursor.execute("""
+                                    DELETE FROM albums WHERE album_id = %s AND event_id = %s
+                                """, (trigger_favorites[0], event_id))
+                                
+                                # Insert backup album (if not already exists from migration)
+                                pg_cursor.execute("""
+                                    INSERT INTO albums (event_id, album_id, label, description, representative_image)
+                                    SELECT %s, %s, 'Favorites', NULL, NULL
+                                    WHERE NOT EXISTS (SELECT 1 FROM albums WHERE album_id = %s)
+                                """, (event_id, backup_favorites_id, backup_favorites_id))
+                                # Update events to reference backup ID
+                                pg_cursor.execute("""
+                                    UPDATE events SET favorites_album_id = %s WHERE event_id = %s
+                                """, (backup_favorites_id, event_id))
+                    
+                    pg_conn.commit()
+                    print("  Archive/Favorites albums updated")
+        
+        # Step 2: Update deferred FK columns after referenced tables are migrated
+        print("\nStep 2: Updating deferred foreign key columns...")
+        
+        # Update events.representative_image after images are migrated
+        if 'images' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'events', 'representative_image', 'event_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        # Update events.archive_album_id and favorites_album_id after albums are migrated
+        if 'albums' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'events', 'archive_album_id', 'event_id', is_postgres_source=True)
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'events', 'favorites_album_id', 'event_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        # Update events.unassociated_group_id after groups are migrated
+        if 'groups' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'events', 'unassociated_group_id', 'event_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        # Update moments.representative_image after images are migrated
+        if 'moments' in tables and 'images' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'moments', 'representative_image', 'moment_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        # Update albums.representative_image after images are migrated
+        if 'albums' in tables and 'images' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'albums', 'representative_image', 'album_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        # Update groups.representative_face after faces are migrated
+        if 'groups' in tables and 'faces' in tables:
+            update_deferred_fk_columns(backup_cursor, pg_cursor, 'groups', 'representative_face', 'group_id', is_postgres_source=True)
+            pg_conn.commit()
+        
+        print("\nData migration complete!")
+        
+        # Analyze database after migration
+        print("\nAnalyzing database...")
+        try:
+            pg_cursor.execute('ANALYZE;')
+            pg_conn.commit()
+            print("Database analysis complete!")
+        except Exception as e:
+            print(f"Warning: Database analysis failed: {e}")
+        
+    finally:
+        backup_cursor.close()
+        backup_conn.close()
+        pg_cursor.close()
+        pg_conn.close()
 
 def migrate_data():
     """Migrate data from SQLite to PostgreSQL."""
@@ -619,7 +1173,7 @@ def migrate_data():
         for table_name in migration_order:
             if table_name in tables:
                 deferred_cols = DEFERRED_FK_COLUMNS.get(table_name, [])
-                migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=deferred_cols)
+                migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=deferred_cols, is_postgres_source=False)
                 pg_conn.commit()
                 
                 # After migrating groups, replace trigger-created Unassociated groups with SQLite IDs
@@ -641,20 +1195,15 @@ def migrate_data():
                         trigger_group = pg_cursor.fetchone()
                         
                         if trigger_group and trigger_group[0] != sqlite_group_id:
-                            # Set event_in_deletion to allow deletion of default group
+                            # Set transaction context to allow deletion of default group
                             pg_cursor.execute("""
-                                UPDATE settings SET event_in_deletion = %s WHERE id = 1
-                            """, (event_id,))
+                                SELECT set_transaction_context('temp_event_in_deletion', %s)
+                            """, (str(event_id),))
                             
                             # Delete trigger-created group
                             pg_cursor.execute("""
                                 DELETE FROM groups WHERE group_id = %s AND event_id = %s
                             """, (trigger_group[0], event_id))
-                            
-                            # Clear event_in_deletion
-                            pg_cursor.execute("""
-                                UPDATE settings SET event_in_deletion = NULL WHERE id = 1
-                            """)
                             
                             # Insert SQLite group (if not already exists from migration)
                             pg_cursor.execute("""
@@ -688,20 +1237,15 @@ def migrate_data():
                             trigger_archive = pg_cursor.fetchone()
                             
                             if trigger_archive and trigger_archive[0] != sqlite_archive_id:
-                                # Set event_in_deletion to allow deletion of default album
+                                # Set transaction context to allow deletion of default album
                                 pg_cursor.execute("""
-                                    UPDATE settings SET event_in_deletion = %s WHERE id = 1
-                                """, (event_id,))
+                                    SELECT set_transaction_context('temp_event_in_deletion', %s)
+                                """, (str(event_id),))
                                 
                                 # Delete trigger-created album
                                 pg_cursor.execute("""
                                     DELETE FROM albums WHERE album_id = %s AND event_id = %s
                                 """, (trigger_archive[0], event_id))
-                                
-                                # Clear event_in_deletion
-                                pg_cursor.execute("""
-                                    UPDATE settings SET event_in_deletion = NULL WHERE id = 1
-                                """)
                                 
                                 # Insert SQLite album (if not already exists from migration)
                                 pg_cursor.execute("""
@@ -722,20 +1266,15 @@ def migrate_data():
                             trigger_favorites = pg_cursor.fetchone()
                             
                             if trigger_favorites and trigger_favorites[0] != sqlite_favorites_id:
-                                # Set event_in_deletion to allow deletion of default album
+                                # Set transaction context to allow deletion of default album
                                 pg_cursor.execute("""
-                                    UPDATE settings SET event_in_deletion = %s WHERE id = 1
-                                """, (event_id,))
+                                    SELECT set_transaction_context('temp_event_in_deletion', %s)
+                                """, (str(event_id),))
                                 
                                 # Delete trigger-created album
                                 pg_cursor.execute("""
                                     DELETE FROM albums WHERE album_id = %s AND event_id = %s
                                 """, (trigger_favorites[0], event_id))
-                                
-                                # Clear event_in_deletion
-                                pg_cursor.execute("""
-                                    UPDATE settings SET event_in_deletion = NULL WHERE id = 1
-                                """)
                                 
                                 # Insert SQLite album (if not already exists from migration)
                                 pg_cursor.execute("""
@@ -756,33 +1295,33 @@ def migrate_data():
         
         # Update events.representative_image after images are migrated
         if 'events' in tables and 'images' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'representative_image', 'event_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'representative_image', 'event_id', is_postgres_source=False)
             pg_conn.commit()
         
         # Update events.archive_album_id and favorites_album_id after albums are migrated
         if 'events' in tables and 'albums' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'archive_album_id', 'event_id')
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'favorites_album_id', 'event_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'archive_album_id', 'event_id', is_postgres_source=False)
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'favorites_album_id', 'event_id', is_postgres_source=False)
             pg_conn.commit()
         
         # Update events.unassociated_group_id after groups are migrated
         if 'events' in tables and 'groups' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'unassociated_group_id', 'event_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'events', 'unassociated_group_id', 'event_id', is_postgres_source=False)
             pg_conn.commit()
         
         # Update moments.representative_image after images are migrated
         if 'moments' in tables and 'images' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'moments', 'representative_image', 'moment_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'moments', 'representative_image', 'moment_id', is_postgres_source=False)
             pg_conn.commit()
         
         # Update albums.representative_image after images are migrated
         if 'albums' in tables and 'images' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'albums', 'representative_image', 'album_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'albums', 'representative_image', 'album_id', is_postgres_source=False)
             pg_conn.commit()
         
         # Update groups.representative_face after faces are migrated
         if 'groups' in tables and 'faces' in tables:
-            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'groups', 'representative_face', 'group_id')
+            update_deferred_fk_columns(sqlite_cursor, pg_cursor, 'groups', 'representative_face', 'group_id', is_postgres_source=False)
             pg_conn.commit()
         
         print("\nData migration complete!")
@@ -804,12 +1343,40 @@ def migrate_data():
 
 def main():
     """Main migration script."""
+    # ========================================
+    # CONFIGURATION: Set default migration source
+    # Change this to True to default to SQLite, or False to default to PostgreSQL
+    # Can be overridden with --from-sqlite or --from-postgres command-line flags
+    # ========================================
+    DEFAULT_USE_SQLITE = False  # Set to True to default to SQLite, False for PostgreSQL
+    
+    parser = argparse.ArgumentParser(description='Reset PostgreSQL database and migrate data')
+    parser.add_argument('--from-sqlite', action='store_true',
+                        help='Migrate from SQLite instead of existing PostgreSQL database (overrides default)')
+    parser.add_argument('--from-postgres', action='store_true',
+                        help='Migrate from existing PostgreSQL database (overrides default)')
+    args = parser.parse_args()
+    
+    # Determine migration source: command-line flag overrides default
+    use_sqlite = DEFAULT_USE_SQLITE
+    if args.from_sqlite:
+        use_sqlite = True
+    elif args.from_postgres:
+        use_sqlite = False
+    
     print("=" * 60)
     print("PostgreSQL Database Reset and Migration Script")
     print("=" * 60)
+    print(f"Migration source: {'SQLite' if use_sqlite else 'PostgreSQL'}")
     print()
     
+    backup_db_name = None
     try:
+        # Step 0: Backup PostgreSQL database (default behavior, unless using SQLite)
+        if not use_sqlite:
+            backup_db_name = backup_postgres_database()
+            print()
+        
         # Step 1: Reset database
         reset_database()
         print()
@@ -819,7 +1386,14 @@ def main():
         print()
         
         # Step 3: Migrate data
-        migrate_data()
+        if use_sqlite:
+            migrate_data()
+        else:
+            if backup_db_name:
+                migrate_data_from_postgres(backup_db_name)
+            else:
+                print("Error: Backup database not created!")
+                sys.exit(1)
         print()
         
         print("=" * 60)
@@ -831,6 +1405,10 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        # Cleanup backup database if it was created
+        if backup_db_name:
+            cleanup_backup_database(backup_db_name)
 
 if __name__ == '__main__':
     main()

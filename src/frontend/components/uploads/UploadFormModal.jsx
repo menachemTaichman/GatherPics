@@ -7,6 +7,7 @@ import { imagesAPI, eventsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useEventGeneralById } from '../../utils/dataManager';
+import { formatDuration } from '../../utils/dateUtils';
 
 export default function UploadFormModal({ 
   isOpen, 
@@ -20,8 +21,10 @@ export default function UploadFormModal({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadStartTime, setUploadStartTime] = useState(null);
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
+  const timeUpdateIntervalRef = useRef(null);
   const { showToast } = useToast();
   const eventId = useEventId(eventUrl);
   useApplyScopes(isOpen && eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
@@ -107,8 +110,23 @@ export default function UploadFormModal({
       setUploadProgress(null);
       setUploading(false);
       setIsDragging(false);
+      setUploadStartTime(null);
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current);
+        timeUpdateIntervalRef.current = null;
+      }
     }
   }, [isOpen]);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current);
+        timeUpdateIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const validateAndAddFiles = useCallback((files) => {
     const fileArray = Array.from(files);
@@ -252,14 +270,35 @@ export default function UploadFormModal({
       return;
     }
 
+    const startTime = Date.now();
+    setUploadStartTime(startTime);
     setUploading(true);
     setUploadProgress({ 
       step: 'uploading', 
       current: selectedFiles.length, 
       total: selectedFiles.length, 
       message: `Uploading ${selectedFiles.length} image(s)...`,
-      percentage: 10
+      percentage: 10,
+      elapsedTime: 0,
+      estimatedTimeRemaining: null
     });
+
+    // Start interval to update time display every second
+    if (timeUpdateIntervalRef.current) {
+      clearInterval(timeUpdateIntervalRef.current);
+    }
+    timeUpdateIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      setUploadProgress(prev => {
+        if (!prev) return prev;
+        let estimatedTimeRemaining = null;
+        if (prev.percentage > 0 && prev.percentage < 100) {
+          const totalEstimated = (elapsed / prev.percentage) * 100;
+          estimatedTimeRemaining = Math.max(0, totalEstimated - elapsed);
+        }
+        return { ...prev, elapsedTime: elapsed, estimatedTimeRemaining };
+      });
+    }, 1000);
 
     try {
       const files = selectedFiles.map(f => f.file);
@@ -272,25 +311,42 @@ export default function UploadFormModal({
         (progress) => {
           // Real-time progress updates from server with calculated percentage
           const percentage = calculateOverallProgress(progress);
+          const elapsed = Date.now() - startTime;
+          let estimatedTimeRemaining = null;
+          if (percentage > 0 && percentage < 100) {
+            const totalEstimated = (elapsed / percentage) * 100;
+            estimatedTimeRemaining = Math.max(0, totalEstimated - elapsed);
+          }
           setUploadProgress({
             step: progress.step,
             current: progress.current,
             total: progress.total,
             message: progress.message,
-            percentage: percentage
+            percentage: percentage,
+            elapsedTime: elapsed,
+            estimatedTimeRemaining: estimatedTimeRemaining
           });
         }
       );
       
       const successMsg = `Successfully processed ${result.images_processed} image(s), detected ${result.faces_detected} face(s), created ${result.groups_created} group(s)`;
       
+      const finalElapsed = Date.now() - startTime;
       setUploadProgress({ 
         step: 'complete', 
         current: 1, 
         total: 1, 
         message: successMsg,
-        percentage: 100
+        percentage: 100,
+        elapsedTime: finalElapsed,
+        estimatedTimeRemaining: null
       });
+      
+      // Clear time update interval
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current);
+        timeUpdateIntervalRef.current = null;
+      }
 
       showToast(successMsg, 'success');
 
@@ -321,9 +377,24 @@ export default function UploadFormModal({
     } catch (error) {
       console.error('Upload failed:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Upload failed';
+      const finalElapsed = uploadStartTime ? Date.now() - uploadStartTime : 0;
       showToast(errorMsg, 'error');
-      setUploadProgress({ step: 'error', current: 0, total: 0, message: errorMsg, percentage: 0 });
+      setUploadProgress({ 
+        step: 'error', 
+        current: 0, 
+        total: 0, 
+        message: errorMsg, 
+        percentage: 0,
+        elapsedTime: finalElapsed,
+        estimatedTimeRemaining: null
+      });
       setUploading(false);
+      
+      // Clear time update interval
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current);
+        timeUpdateIntervalRef.current = null;
+      }
     }
   };
 
@@ -368,6 +439,74 @@ export default function UploadFormModal({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Upload progress - moved to top */}
+            <AnimatePresence>
+              {uploadProgress && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="border-b border-gray-200"
+                >
+                  <div className={`px-6 py-4 ${
+                    uploadProgress.step === 'complete' 
+                      ? 'bg-green-50 border-green-200' 
+                      : uploadProgress.step === 'error'
+                      ? 'bg-red-50 border-red-200'
+                      : 'bg-blue-50 border-blue-200'
+                  }`}>
+                    <div className="flex items-start space-x-3">
+                      {uploadProgress.step === 'complete' ? (
+                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      ) : uploadProgress.step === 'error' ? (
+                        <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-600 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <p className={`text-sm font-medium flex-1 min-w-0 ${
+                            uploadProgress.step === 'complete' 
+                              ? 'text-green-700' 
+                              : uploadProgress.step === 'error'
+                              ? 'text-red-700'
+                              : 'text-blue-700'
+                          }`}>
+                            {uploadProgress.message}
+                          </p>
+                          {uploadProgress.percentage !== undefined && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                            <span className="text-xs font-semibold text-blue-600 flex-shrink-0">
+                              {Math.round(uploadProgress.percentage)}%
+                            </span>
+                          )}
+                        </div>
+                        {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && uploadProgress.percentage !== undefined && (
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress.percentage || 0}%` }}
+                            />
+                          </div>
+                        )}
+                        {/* Time information */}
+                        {(uploadProgress.elapsedTime !== undefined || uploadProgress.estimatedTimeRemaining !== undefined) && (
+                          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-2">
+                            {uploadProgress.elapsedTime !== undefined && uploadProgress.elapsedTime > 0 && (
+                              <span className="whitespace-nowrap">Time elapsed: {formatDuration(uploadProgress.elapsedTime)}</span>
+                            )}
+                            {uploadProgress.estimatedTimeRemaining !== undefined && uploadProgress.estimatedTimeRemaining > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                              <span className="whitespace-nowrap">Est. time left: {formatDuration(uploadProgress.estimatedTimeRemaining)}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
@@ -497,63 +636,6 @@ export default function UploadFormModal({
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 peer-disabled:opacity-50"></div>
                 </label>
               </div>
-
-              {/* Upload progress */}
-              <AnimatePresence>
-                {uploadProgress && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden mt-4"
-                  >
-                    <div className={`p-4 rounded-lg border ${
-                      uploadProgress.step === 'complete' 
-                        ? 'bg-green-50 border-green-200' 
-                        : uploadProgress.step === 'error'
-                        ? 'bg-red-50 border-red-200'
-                        : 'bg-blue-50 border-blue-200'
-                    }`}>
-                      <div className="flex items-center space-x-3">
-                        {uploadProgress.step === 'complete' ? (
-                          <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-                        ) : uploadProgress.step === 'error' ? (
-                          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-                        ) : (
-                          <Loader2 className="w-5 h-5 animate-spin text-blue-600 flex-shrink-0" />
-                        )}
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <p className={`text-sm font-medium ${
-                              uploadProgress.step === 'complete' 
-                                ? 'text-green-700' 
-                                : uploadProgress.step === 'error'
-                                ? 'text-red-700'
-                                : 'text-blue-700'
-                            }`}>
-                              {uploadProgress.message}
-                            </p>
-                            {uploadProgress.percentage !== undefined && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
-                              <span className="text-xs font-semibold text-blue-600 ml-2">
-                                {Math.round(uploadProgress.percentage)}%
-                              </span>
-                            )}
-                          </div>
-                          {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
-                            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                              <div
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${uploadProgress.percentage || 0}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
 
             {/* Footer */}

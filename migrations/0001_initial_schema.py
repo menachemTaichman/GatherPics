@@ -18,8 +18,7 @@ steps = [
             image_size_limit_bytes INTEGER DEFAULT 0,
             images_count_limit INTEGER DEFAULT 0,
             rekognition_calls_limit INTEGER DEFAULT 0,
-            min_rank_to_create_event INTEGER DEFAULT 0,
-            event_in_deletion UUID DEFAULT NULL
+            min_rank_to_create_event INTEGER DEFAULT 0
         );
         
         -- rekognition_usaged
@@ -325,10 +324,6 @@ steps = [
             ADD CONSTRAINT fk_settings_developer_id 
             FOREIGN KEY (developer_id) REFERENCES profiles(profile_id) ON DELETE SET NULL;
         
-        ALTER TABLE settings
-            ADD CONSTRAINT fk_settings_event_in_deletion 
-            FOREIGN KEY (event_in_deletion) REFERENCES events(event_id) ON DELETE SET NULL;
-        
         -- Foreign keys for events
         ALTER TABLE events
             ADD CONSTRAINT fk_events_archive_album_id 
@@ -353,7 +348,7 @@ steps = [
         -- Foreign keys for profiles
         ALTER TABLE profiles
             ADD CONSTRAINT fk_profiles_restricted_to_event 
-            FOREIGN KEY (restricted_to_event) REFERENCES events(event_id) ON DELETE SET NULL;
+            FOREIGN KEY (restricted_to_event) REFERENCES events(event_id) ON DELETE CASCADE;
         
         -- Foreign keys for profiles_preferences
         ALTER TABLE profiles_preferences
@@ -630,14 +625,13 @@ step(
         ON CONFLICT (profile_id) DO NOTHING;
         
         -- Insert settings row
-        INSERT INTO settings (developer_id, image_size_limit_bytes, images_count_limit, rekognition_calls_limit, min_rank_to_create_event, event_in_deletion)
+        INSERT INTO settings (developer_id, image_size_limit_bytes, images_count_limit, rekognition_calls_limit, min_rank_to_create_event)
         SELECT 
             '89cb4967-0eba-48af-99cc-5e87407fb639',
             13631488,
             6000,
             20000,
-            2,
-            NULL
+            2
         WHERE NOT EXISTS (SELECT 1 FROM settings LIMIT 1);
         
         -- Insert default preferences

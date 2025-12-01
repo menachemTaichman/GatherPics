@@ -1,7 +1,6 @@
 from typing import List, Dict, Any
 from src.core.database.db import DB, ReturnFormat
 from abc import ABC
-import uuid
 from enum import Enum
 
 class ChildOperation(Enum):
@@ -17,11 +16,6 @@ class BaseModels(ABC):
         Set self.db to the database instance.
         """
         self.db = db
-
-    @staticmethod
-    def generate_id() -> str:
-        """Generate a new UUID for the entity."""
-        return str(uuid.uuid4())
 
     def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
         """Check if a record exists and return its id for conflict checking."""
@@ -284,10 +278,6 @@ class BaseModels(ABC):
         Returns:
             new entity id
         """
-        if not self.db.is_auto_increment(table):
-            if self.db.get_id_field(table) not in data:
-                data[self.db.get_id_field(table)] = self.generate_id()
-
         serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
         if serialized_instructions:
             for field, value_type in serialized_instructions.items():
@@ -306,17 +296,6 @@ class BaseModels(ABC):
         Returns:
             list of new entity ids
         """
-        if not self.db.is_auto_increment(table):
-            id_field = self.db.get_id_field(table)
-            if ", " in id_field:
-                id_fields = id_field.split(', ')
-            else:
-                id_fields = [id_field]
-            for id_field in id_fields:
-                if id_field not in fields:
-                    fields.append(id_field)
-                    values = [[*row, self.generate_id()] for row in values]
-
         serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
         if serialized_instructions:
             for field, value_type in serialized_instructions.items():
@@ -435,3 +414,90 @@ class BaseModels(ABC):
                     self.db.execute_query(query, params)
 
         return valid_child_ids, detached_parents
+
+    def get_unique_label(
+        self,
+        table: str,
+        prefix: str,
+        suffix: str = '',
+        *,
+        separator: str = '',
+        brackets: bool = False,
+        exclude_id: str = None,
+        event_id: str = None,
+        start_from: int = 2
+    ) -> str:
+        """Get a unique label by appending a counter if needed.
+        Args:
+            table: table name
+            prefix: prefix for the label
+            suffix: suffix for the label (e.g., file extension like '.jpg')
+            separator: separator between the prefix and the suffix
+            brackets: if True, use format ' (2)', if False, use format ' 2'
+            exclude_id: entity id to exclude from uniqueness check (for updates)
+            event_id: event id for event-scoped tables (optional)
+            start_from: starting number for the counter
+        Returns:
+            unique label with counter appended if needed
+        """
+        original_table = self.db.get_original_table(table)
+        id_field = self.db.get_id_field(table)
+
+        if brackets:
+            str_mid_prefix = ' ('
+            str_mid_suffix = f'){separator}'
+            
+            re_mid_prefix = ' \\('  
+            re_mid_suffix = f'\\){separator}'
+        else:
+            str_mid_prefix = ' '
+            str_mid_suffix = separator  # No space after number for space format
+            re_mid_prefix = ' '
+            re_mid_suffix = separator  # No space in regex either
+
+        full_suffix = f'{suffix}' if suffix else ''
+
+        query = f"""
+            SELECT MAX(
+                COALESCE(
+                    substring(label
+                        FROM ('^' || %s || %s || '([0-9]+)' || %s || %s || '$')
+                    )::bigint,
+                    0
+                )
+            ) AS max_num
+            FROM {original_table}
+            WHERE
+                (
+                    label LIKE %s || '%%' || %s 
+                    OR label = %s || %s || %s
+                )
+        """
+
+        params = [
+            prefix, re_mid_prefix, re_mid_suffix, full_suffix,
+            prefix + str_mid_prefix, str_mid_suffix + full_suffix,
+            prefix, separator, full_suffix,
+        ]
+
+        if exclude_id:
+            query += f' AND {id_field} IS DISTINCT FROM %s'
+            params.append(exclude_id)
+
+        if event_id:
+            query += f' AND event_id = %s'
+            params.append(event_id)
+        
+        query += ';'
+
+        max_num = self.db.execute_query(query, params, return_format=ReturnFormat.VALUE)
+
+        if max_num is None:
+            return f'{prefix}{separator}{full_suffix}'
+        
+        if max_num == 0:
+            next_num = start_from
+        else:
+            next_num = max_num + 1
+        
+        return f'{prefix}{str_mid_prefix}{next_num}{str_mid_suffix}{full_suffix}'
