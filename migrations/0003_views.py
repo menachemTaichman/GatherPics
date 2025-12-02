@@ -54,14 +54,18 @@ steps = [
                 OR p.restricted_to_event IS NOT NULL
             ) AS is_editable
         FROM profiles p
-        LEFT JOIN events_profiles ep ON
-            p.restricted_to_event = ep.event_id
-            AND ep.profile_id = cur_profile_uuid('profile_id')
+        LEFT JOIN events_profiles cur_in_p_rest ON
+            cur_in_p_rest.event_id = p.restricted_to_event
+            AND cur_in_p_rest.profile_id = cur_profile_uuid('profile_id')
+        LEFT JOIN events_profiles p_in_cur_rest ON
+            p_in_cur_rest.event_id = cur_profile_uuid('restricted_to_event')
+            AND p_in_cur_rest.profile_id = p.profile_id
         WHERE
             p.hierarchy_rank < cur_profile_int('hierarchy_rank')
             AND (
                 p.restricted_to_event IS NOT DISTINCT FROM cur_profile_uuid('restricted_to_event')
-                OR ep.profile_id IS NOT NULL
+                OR cur_in_p_rest.profile_id IS NOT NULL
+                OR p_in_cur_rest.profile_id IS NOT NULL
             );
         
         CREATE OR REPLACE VIEW profiles_ext AS

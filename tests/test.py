@@ -142,17 +142,11 @@ print('--------------------------------')
 mm_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
 event_mm = Event(event_id, profile_id=mm_profile_id)
 query = f"""
-SELECT * FROM my_access_requests_groups_ctx;
+SELECT * FROM profiles_ctx;
 """
 result = event_mm.models.db.execute_query(query, return_format=ReturnFormat.LIST_DICTS)
 print(result)
 print('--------------------------------')
-result = event_mm.models.get_childs('my_access_requests', 37, 'groups')
-print(result)
-print('--------------------------------')
-result = event_mm.models.edit_childs('my_access_requests', 37, 'groups', ['549f2ceb-05c5-4bb8-9a33-1759ec3274bb'], operation=ChildOperation.ADD)
-print(result)
-print('--------------------------------')
-result = event_mm.models.get_childs('my_access_requests', 37, 'groups')
+result = event_mm.models.get_entities('profiles')
 print(result)
 print('--------------------------------')

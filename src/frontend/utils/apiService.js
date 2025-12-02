@@ -909,6 +909,12 @@ export const profilesAPI = {
     return response.data;
   },
   
+  // Delete event profile (removes from event, or deletes completely if restricted to that event)
+  deleteEventProfile: async (profileId, eventId) => {
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}`);
+    return response.data;
+  },
+  
   // Check if profile name exists
   checkName: async (label, excludeProfileId, restrictedToEventUrl) => {
     let restrictedToEventId = null;
@@ -988,8 +994,9 @@ export const profilesAPI = {
   // Set images as accessible to profile
   setImagesAccessible: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-images`, {
-      image_ids: imageIds
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      entity_type: 'images',
+      ids: imageIds
     });
     return response.data;
   },
@@ -997,8 +1004,11 @@ export const profilesAPI = {
   // Set images as inaccessible to profile
   setImagesInaccessible: async (profileId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-images`, {
-      data: { image_ids: imageIds }
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      data: {
+        entity_type: 'images',
+        ids: imageIds
+      }
     });
     return response.data;
   },
@@ -1006,8 +1016,9 @@ export const profilesAPI = {
   // Set albums as accessible to profile
   setAlbumsAccessible: async (profileId, albumIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-albums`, {
-      album_ids: albumIds
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      entity_type: 'albums',
+      ids: albumIds
     });
     return response.data;
   },
@@ -1015,8 +1026,11 @@ export const profilesAPI = {
   // Set albums as inaccessible to profile
   setAlbumsInaccessible: async (profileId, albumIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-albums`, {
-      data: { album_ids: albumIds }
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      data: {
+        entity_type: 'albums',
+        ids: albumIds
+      }
     });
     return response.data;
   },
@@ -1024,8 +1038,9 @@ export const profilesAPI = {
   // Set groups as accessible to profile
   setGroupsAccessible: async (profileId, groupIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible-groups`, {
-      group_ids: groupIds
+    const response = await api.put(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      entity_type: 'groups',
+      ids: groupIds
     });
     return response.data;
   },
@@ -1033,8 +1048,11 @@ export const profilesAPI = {
   // Set groups as inaccessible to profile
   setGroupsInaccessible: async (profileId, groupIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible-groups`, {
-      data: { group_ids: groupIds }
+    const response = await api.delete(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+      data: {
+        entity_type: 'groups',
+        ids: groupIds
+      }
     });
     return response.data;
   },
@@ -1108,8 +1126,9 @@ export const profilesAPI = {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `CHECK_IMAGE_ACCESS:${eventId}:${profileId}:${imageIds.join(',')}`;
     return await withDedupe(key, async () => {
-      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/images/check`, {
-        image_ids: imageIds
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+        entity_type: 'images',
+        ids: imageIds
       });
       return response.data;
     });
@@ -1120,8 +1139,9 @@ export const profilesAPI = {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `CHECK_ALBUM_ACCESS:${eventId}:${profileId}:${albumIds.join(',')}`;
     return await withDedupe(key, async () => {
-      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/albums/check`, {
-        album_ids: albumIds
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+        entity_type: 'albums',
+        ids: albumIds
       });
       return response.data;
     });
@@ -1132,8 +1152,9 @@ export const profilesAPI = {
     const eventId = await getEventIdForApi(eventUrl);
     const key = `CHECK_GROUP_ACCESS:${eventId}:${profileId}:${groupIds.join(',')}`;
     return await withDedupe(key, async () => {
-      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/groups/check`, {
-        group_ids: groupIds
+      const response = await api.post(`/api/events/${eventId}/profiles/${profileId}/accessible`, {
+        entity_type: 'groups',
+        ids: groupIds
       });
       return response.data;
     });

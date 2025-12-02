@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy } from 'lucide-react';
+import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI, getEventUrlById } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
@@ -42,8 +42,10 @@ export default function ProfilesGalleryPage() {
   const [error, setError] = useState('');
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [showRemoveFromEventModal, setShowRemoveFromEventModal] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profileToDelete, setProfileToDelete] = useState(null);
+  const [profileToRemoveFromEvent, setProfileToRemoveFromEvent] = useState(null);
   const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
   const [publicAccessCodes, setPublicAccessCodes] = useState({});
   const [publicAccessFlags, setPublicAccessFlags] = useState({});
@@ -250,6 +252,7 @@ export default function ProfilesGalleryPage() {
             can_manage_event: Boolean(eventProfile?.can_manage_event) ? 1 : 0,
             can_delete_event: Boolean(eventProfile?.can_delete_event) ? 1 : 0,
             can_edit: Boolean(eventProfile?.can_edit) ? 1 : 0,
+            is_editable: Boolean(profile.is_editable ?? true),
             eventProfile: eventProfile || null,
             generalProfile: profile,
           };
@@ -290,6 +293,7 @@ export default function ProfilesGalleryPage() {
         can_manage_event: Boolean(eventProfile?.can_manage_event) ? 1 : 0,
         can_delete_event: Boolean(eventProfile?.can_delete_event) ? 1 : 0,
         can_edit: Boolean(eventProfile?.can_edit) ? 1 : 0,
+        is_editable: Boolean(profile.is_editable ?? true),
         eventProfile: eventProfile || null,
         generalProfile: profile,
       };
@@ -455,11 +459,18 @@ export default function ProfilesGalleryPage() {
     if (!profileToDelete) return;
 
     try {
-      // If profile is restricted to an event, use event-specific delete endpoint
-      let targetEventUrl = eventUrl;
-      const restrictedEventId = profileToDelete.restricted_to_event;
+      // When event filter is active, delete should use non-event URL to delete entirely
+      // If profile is restricted to an event, it will be deleted completely
+      // Otherwise, if event filter is active, we should delete from general (not just remove from event)
+      let targetEventUrl = null;
       
-      if (restrictedEventId) {
+      // Only use event URL if:
+      // 1. We're not filtering by event (filterEventId is FILTER_ALL_EVENTS or null)
+      // 2. AND profile is restricted to an event
+      const restrictedEventId = profileToDelete.restricted_to_event;
+      const isEventFilterActive = filterEventId && filterEventId !== FILTER_ALL_EVENTS;
+      
+      if (!isEventFilterActive && restrictedEventId) {
         // Get event URL from event ID (same logic as EditProfileModal)
         targetEventUrl = getEventUrlFromId(restrictedEventId, eventId, eventUrl);
         // If not found in store, try to fetch it from API
@@ -467,6 +478,7 @@ export default function ProfilesGalleryPage() {
           targetEventUrl = await getEventUrlById(restrictedEventId);
         }
       }
+      // If event filter is active, targetEventUrl stays null to delete from general
       
       await profilesAPI.delete(profileToDelete.id, targetEventUrl);
       showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
@@ -478,6 +490,33 @@ export default function ProfilesGalleryPage() {
     } finally {
       setProfileToDelete(null);
       setShowDeleteConfirmModal(false);
+    }
+  };
+
+  const handleRemoveFromEvent = (profile) => {
+    setProfileToRemoveFromEvent(profile);
+    setShowRemoveFromEventModal(true);
+  };
+
+  const handleConfirmRemoveFromEvent = async () => {
+    if (!profileToRemoveFromEvent || !filterEventId || filterEventId === FILTER_ALL_EVENTS) return;
+    
+    try {
+      const result = await profilesAPI.deleteEventProfile(profileToRemoveFromEvent.id, filterEventId);
+      // Check if profile was completely deleted (if it was restricted to this event)
+      const wasCompletelyDeleted = result.deleted_ids && result.deleted_ids.includes(profileToRemoveFromEvent.id);
+      if (wasCompletelyDeleted) {
+        showToast(`Profile "${profileToRemoveFromEvent.label}" deleted`, 'success');
+      } else {
+        showToast(`Profile "${profileToRemoveFromEvent.label}" removed from event`, 'success');
+      }
+    } catch (error) {
+      console.error('Failed to remove profile from event:', error);
+      const errorMsg = getErrorExplanation(error);
+      showToast(errorMsg, 'error');
+    } finally {
+      setProfileToRemoveFromEvent(null);
+      setShowRemoveFromEventModal(false);
     }
   };
 
@@ -954,13 +993,26 @@ export default function ProfilesGalleryPage() {
                   <Copy className="w-4 h-4 text-green-600" />
                 )}
               </button>
-              <button
-                onClick={() => handleDeleteProfile(profile)}
-                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                title="Delete profile"
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </button>
+              {/* Show remove from event button when event filter is active */}
+              {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
+                <button
+                  onClick={() => handleRemoveFromEvent(profile)}
+                  className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                  title="Remove from event"
+                >
+                  <X className="w-4 h-4 text-orange-600" />
+                </button>
+              )}
+              {/* Show delete button only if profile is editable */}
+              {Boolean(profile.is_editable) && (
+                <button
+                  onClick={() => handleDeleteProfile(profile)}
+                  className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                  title="Delete profile"
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              )}
             </>
           )}
         </div>
@@ -968,7 +1020,7 @@ export default function ProfilesGalleryPage() {
     });
 
     return baseColumns;
-  }, [currentProfile, filterEventId, handleCopyPublicLink, handleResetPublicCode, handleRemovePublicCode, handleEditProfile, handleDuplicateProfile, handleDeleteProfile, duplicatingProfileId]);
+  }, [currentProfile, filterEventId, handleCopyPublicLink, handleResetPublicCode, handleRemovePublicCode, handleEditProfile, handleDuplicateProfile, handleDeleteProfile, handleRemoveFromEvent, duplicatingProfileId, selectedEventName]);
 
   return (
     <>
@@ -1144,6 +1196,23 @@ export default function ProfilesGalleryPage() {
           confirmText="Delete"
           cancelText="Cancel"
           caption="This action cannot be undone."
+        />
+      )}
+
+      {showRemoveFromEventModal && profileToRemoveFromEvent && (
+        <ConfirmDelete
+          isOpen={showRemoveFromEventModal}
+          onClose={() => {
+            setShowRemoveFromEventModal(false);
+            setProfileToRemoveFromEvent(null);
+          }}
+          onConfirm={handleConfirmRemoveFromEvent}
+          title="Remove Profile from Event"
+          message="Are you sure you want to remove profile"
+          itemName={profileToRemoveFromEvent.label}
+          confirmText="Remove"
+          cancelText="Cancel"
+          caption={`This will remove the profile from "${selectedEventName}" event. The profile will still exist but won't have access to this event.`}
         />
       )}
 

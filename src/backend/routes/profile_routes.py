@@ -379,40 +379,6 @@ def get_groups_to_request_access(event_id):
     event = get_event(event_id)
     return jsonify({"groups": event.models.get_groups_to_request_access()})
 
-# ========================================
-# CHECK ENDPOINTS
-# ========================================
-
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/images/check", methods=["POST"])
-@require_auth
-def check_images_from_profile(event_id, profile_id):
-    """Check accessible images for a profile."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    event = get_event(event_id)
-    specify, actual = event.models.check_accessibility_status(profile_id, 'images', image_ids)
-
-    return jsonify({"specify": specify, "actual": actual})
-
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums/check", methods=["POST"])
-@require_auth
-def check_albums_from_profile(event_id, profile_id):
-    """Check accessible albums for a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
-    event = get_event(event_id)
-    specify, actual = event.models.check_accessibility_status(profile_id, 'albums', album_ids)
-    return jsonify({"specify": specify, "actual": actual})
-
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups/check", methods=["POST"])
-@require_auth
-def check_groups_from_profile(event_id, profile_id):
-    """Check accessible groups for a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
-    event = get_event(event_id)
-    specify, actual = event.models.check_accessibility_status(profile_id, 'groups', group_ids)
-    return jsonify({"specify": specify, "actual": actual})
 
 # ========================================
 # ACCESS MANAGEMENT
@@ -470,53 +436,60 @@ def remove_groups_from_profile(event_id, profile_id):
 
 # Accessibility management (whitelist/blacklist logic)
 
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-images", methods=["PUT"])
+@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible", methods=["POST", "PUT", "DELETE"])
 @require_auth
-def set_images_as_accessible(event_id, profile_id):
-    """Set multiple images as accessible to a profile."""
+def manage_profile_accessibility(event_id, profile_id):
+    """Manage profile accessibility for entities (images, albums, or groups).
+    
+    POST: Check accessibility status
+    PUT: Set entities as accessible
+    DELETE: Set entities as inaccessible
+    
+    Request body:
+    - entity_type: 'images', 'albums', or 'groups'
+    - ids: List of entity IDs
+    """
     data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'images', image_ids, set_accessible=True)
+    entity_type = data.get('entity_type')
+    entity_ids = data.get('ids', [])
+    
+    if not entity_type:
+        return jsonify({"error": "entity_type is required (images, albums, or groups)"}), 400
+    
+    if entity_type not in ['images', 'albums', 'groups']:
+        return jsonify({"error": "entity_type must be one of: images, albums, groups"}), 400
+    
+    if not entity_ids:
+        return jsonify({"error": "ids is required"}), 400
+    
+    # POST = check accessibility status
 
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-images", methods=["DELETE"])
-@require_auth
-def set_images_as_inaccessible(event_id, profile_id):
-    """Set multiple images as inaccessible to a profile."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'images', image_ids, set_accessible=False)
+    event = get_event(event_id)
+    if request.method == 'POST':
+        specify, actual = event.models.check_accessibility_status(profile_id, entity_type, entity_ids)
+        return jsonify({"specify": specify, "actual": actual})
+    
+    # PUT = set accessible, DELETE = set inaccessible
+    set_accessible = (request.method == 'PUT')
 
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-albums", methods=["PUT"])
-@require_auth
-def set_albums_as_accessible(event_id, profile_id):
-    """Set multiple albums as accessible to a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'albums', album_ids, set_accessible=True)
+    affected_ids, added = event.models.edit_accessibility(profile_id, entity_type, entity_ids, set_accessible=set_accessible)
+    if added:
+        changes = [{
+            'type': 'RELATION_ADD',
+            'relation': f'profile.{entity_type}',
+            'parentId': profile_id,
+            'entities': event.models.get_childs('events_profiles_ctx', profile_id, entity_type, entity_ids)
+        }]
+    else:
+        changes = [{
+            'type': 'RELATION_REMOVE',
+            'relation': f'profile.{entity_type}',
+            'parentId': profile_id,
+            'ids': affected_ids
+        }]
 
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-albums", methods=["DELETE"])
-@require_auth
-def set_albums_as_inaccessible(event_id, profile_id):
-    """Set multiple albums as inaccessible to a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'albums', album_ids, set_accessible=False)
+    return jsonify({"success": True, "changes": changes})
 
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-groups", methods=["PUT"])
-@require_auth
-def set_groups_as_accessible(event_id, profile_id):
-    """Set multiple groups as accessible to a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'groups', group_ids, set_accessible=True)
-
-@profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/accessible-groups", methods=["DELETE"])
-@require_auth
-def set_groups_as_inaccessible(event_id, profile_id):
-    """Set multiple groups as inaccessible to a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
-    return _set_profile_accessibility(event_id, profile_id, 'groups', group_ids, set_accessible=False)
 
 # ========================================
 # PUBLIC ACCESS CODE MANAGEMENT
@@ -630,34 +603,6 @@ def _edit_event_profile_childs(event_id: str, profile_id: str, child: str, child
     operation = ChildOperation.ADD if add else ChildOperation.REMOVE
     affected_ids, _ = event.models.edit_childs('events_profiles_ctx', profile_id, child, child_ids, operation=operation)
     if add:
-        changes = [{
-            'type': 'RELATION_ADD',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
-        }]
-    else:
-        changes = [{
-            'type': 'RELATION_REMOVE',
-            'relation': f'profile.{child}',
-            'parentId': profile_id,
-            'ids': affected_ids
-        }]
-
-    return jsonify({"success": True, "changes": changes})
-
-def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child_ids: list[str], set_accessible: bool):
-    """Set multiple childs as accessible or inaccessible to a profile."""
-    general_models = get_general_models()
-    event = get_event(event_id)
-    if not (general_models.get_current_profile()['is_profiles_manager'] and general_models.is_accessible('profiles', profile_id)):
-        return jsonify({"error": "Access denied"}), 403
-    
-    if child not in ['images', 'albums', 'groups']:
-        return jsonify({"error": f"Invalid child: {child}"}), 400
-    
-    affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
-    if added:
         changes = [{
             'type': 'RELATION_ADD',
             'relation': f'profile.{child}',

@@ -102,7 +102,7 @@ class DB:
                 'relations': {
                     'profiles': {
                         'relation_table': 'events_profiles',
-                        'fields_needed': ['profile_id', 'label', 'hierarchy_rank', 'is_public', 'restricted_to_event', 'has_public_access_code', 'restricted_to_event_name'],
+                        'fields_needed': ['profile_id', 'label', 'hierarchy_rank', 'is_public', 'restricted_to_event', 'has_public_access_code', 'restricted_to_event_name', 'is_editable'],
                         'relation_table_fields': [
                             'can_delete_event',
                             'can_manage_event',
@@ -117,7 +117,7 @@ class DB:
             },
             'profiles': {
                 'primary_key': 'profile_id',
-                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name'],
+                'fields': ['label','email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public', 'has_public_access_code', 'restricted_to_event_name', 'is_editable'],
                 'relations': {
                     'events': {
                         'relation_table': 'events_profiles',

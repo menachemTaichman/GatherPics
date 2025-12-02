@@ -167,14 +167,21 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
   const isSpecifyMixed = specifyStatus === 0;
 
   // Determine actual status for tooltip
-  const entityLabel = entityType === 'image' ? 'photos' : entityType === 'album' ? 'albums' : 'people';
+  const entityCount = entityIds?.length || 0;
+  const isSingular = entityCount === 1;
+  const entityLabelPlural = entityType === 'image' ? 'photos' : entityType === 'album' ? 'albums' : 'people';
+  const entityLabelSingular = entityType === 'image' ? 'photo' : entityType === 'album' ? 'album' : 'person';
+  const entityLabel = isSingular ? entityLabelSingular : entityLabelPlural;
+  const entityCountText = isSingular ? 'The' : 'All selected';
+  const verbText = isSingular ? 'is' : 'are';
+  
   const getActualTooltipText = () => {
     if (actualStatus === 1) {
-      return `All ${entityLabel} are effectively accessible to this profile`;
+      return `${entityCountText} ${entityLabel} ${verbText} effectively accessible to this profile`;
     } else if (actualStatus === -1) {
-      return `All ${entityLabel} are effectively not accessible to this profile`;
+      return `${entityCountText} ${entityLabel} ${verbText} effectively not accessible to this profile`;
     } else if (actualStatus === 0) {
-      return `Some ${entityLabel} are effectively not accessible to this profile`;
+      return `The selected ${entityLabel} have mixed accessibility to this profile`;
     }
     return 'Checking effective accessibility...';
   };

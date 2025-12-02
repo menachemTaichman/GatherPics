@@ -57,6 +57,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const [initialEventSpecificState, setInitialEventSpecificState] = useState(null);
   const [initialEventSpecificEventId, setInitialEventSpecificEventId] = useState(null);
   const [savingEventSpecific, setSavingEventSpecific] = useState(false);
+  const lastProcessedEventProfileRef = useRef(null); // Track last processed eventProfile to prevent loops
   
   // Restriction combobox state
   const [restrictionSearchTerm, setRestrictionSearchTerm] = useState('');
@@ -234,6 +235,13 @@ const restrictionTooltip = isCurrentProfileRestricted
 const disableEventManagementToggles = Boolean(editingProfile?.is_public);
 const disableCanCreateEvents = disableEventManagementToggles || isRestricted;
 const disableRankSelection = Boolean(editingProfile?.is_public);
+
+// Check if profile is editable (for basic info section)
+const isProfileEditable = useMemo(() => {
+  if (isCreating) return true; // Always editable when creating
+  // Check generalProfile first, then fall back to profile prop
+  return Boolean(generalProfile?.is_editable ?? profile?.is_editable ?? true);
+}, [isCreating, generalProfile?.is_editable, profile?.is_editable]);
 
   // Check if event-specific fields have been modified
   const hasEventSpecificChanges = useMemo(() => {
@@ -730,6 +738,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
     // Reset initial state when event changes
     setInitialEventSpecificState(null);
     setInitialEventSpecificEventId(null);
+    lastProcessedEventProfileRef.current = null;
   }, [isOpen, selectedEventId]);
 
   // Keep ref in sync with editingProfile state
@@ -740,7 +749,16 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
   // Update event-specific fields when eventProfile loads for current event
   // Also track initial state for save/cancel
   useEffect(() => {
-    if (!isOpen || !editingProfileRef.current) return;
+    if (!isOpen) return;
+    
+    // If we have eventProfile, we can proceed even without editingProfileRef
+    // (it will be set when editingProfile initializes)
+    const canProceed = selectedEventId && eventProfile;
+    const needsEditingProfile = selectedEventId && !eventProfile && !initialEventSpecificState;
+    
+    if (!canProceed && needsEditingProfile && !editingProfileRef.current) {
+      return;
+    }
     
     if (selectedEventId && eventProfile) {
       const eventSpecificData = {
@@ -753,37 +771,57 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
         can_delete_event: Boolean(eventProfile.can_delete_event),
       };
       
-      // Set initial state if we don't have it yet, or if eventId changed (meaning we had fallback state)
-      const shouldSetInitialState = !initialEventSpecificState || 
-        (initialEventSpecificEventId && String(initialEventSpecificEventId) !== String(selectedEventId));
+      // Create a key to identify this eventProfile instance
+      // This helps us detect when eventProfile loads after fallback was set
+      const eventProfileKey = `${selectedEventId}:${JSON.stringify(eventSpecificData)}`;
+      const isNewEventProfile = lastProcessedEventProfileRef.current !== eventProfileKey;
+      const isDifferentEvent = initialEventSpecificEventId && String(initialEventSpecificEventId) !== String(selectedEventId);
       
-      if (shouldSetInitialState) {
-        setEditingProfile(prev => ({
-          ...prev,
-          ...eventSpecificData,
-        }));
-        
+      // Always update initial state when:
+      // 1. This is a new eventProfile (different from what we processed before)
+      // 2. Event changed (different eventId)
+      // 3. We don't have initial state yet
+      // This ensures we always get the correct baseline from eventProfile (authoritative source)
+      if (isNewEventProfile || isDifferentEvent || !initialEventSpecificState) {
         setInitialEventSpecificState(eventSpecificData);
         setInitialEventSpecificEventId(selectedEventId);
+        lastProcessedEventProfileRef.current = eventProfileKey;
+        
+        // Update editingProfile to match the loaded eventProfile data (only if it exists)
+        if (editingProfileRef.current) {
+          setEditingProfile(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              ...eventSpecificData,
+            };
+          });
+        }
       }
-    } else if (selectedEventId && !eventProfile && !initialEventSpecificState) {
+    } else if (selectedEventId && !eventProfile) {
+      // Reset tracking when eventProfile becomes null
+      lastProcessedEventProfileRef.current = null;
+      
       // Fallback: Set initial state from editingProfile's current values if eventProfile not loaded yet
       // This allows change detection to work even before eventProfile loads
       // Use ref to read current values without adding editingProfile to dependencies
-      const currentProfile = editingProfileRef.current;
-      if (currentProfile) {
-        const fallbackInitialState = {
-          can_upload_and_delete_images: Boolean(currentProfile.can_upload_and_delete_images),
-          can_edit: Boolean(currentProfile.can_edit),
-          all_images: Boolean(currentProfile.all_images),
-          all_groups: Boolean(currentProfile.all_groups),
-          all_albums: Boolean(currentProfile.all_albums),
-          can_manage_event: Boolean(currentProfile.can_manage_event),
-          can_delete_event: Boolean(currentProfile.can_delete_event),
-        };
-        
-        setInitialEventSpecificState(fallbackInitialState);
-        setInitialEventSpecificEventId(selectedEventId);
+      // NOTE: This will be overridden when eventProfile loads (see condition above)
+      if (!initialEventSpecificState) {
+        const currentProfile = editingProfileRef.current;
+        if (currentProfile) {
+          const fallbackInitialState = {
+            can_upload_and_delete_images: Boolean(currentProfile.can_upload_and_delete_images),
+            can_edit: Boolean(currentProfile.can_edit),
+            all_images: Boolean(currentProfile.all_images),
+            all_groups: Boolean(currentProfile.all_groups),
+            all_albums: Boolean(currentProfile.all_albums),
+            can_manage_event: Boolean(currentProfile.can_manage_event),
+            can_delete_event: Boolean(currentProfile.can_delete_event),
+          };
+          
+          setInitialEventSpecificState(fallbackInitialState);
+          setInitialEventSpecificEventId(selectedEventId);
+        }
       }
     } else if (!selectedEventId) {
       // Reset event-specific fields when no event is selected
@@ -804,8 +842,9 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
       
       setInitialEventSpecificState(null);
       setInitialEventSpecificEventId(null);
+      lastProcessedEventProfileRef.current = null;
     }
-  }, [isOpen, eventProfile, selectedEventId, initialEventSpecificState]); // Removed editingProfile from dependencies
+  }, [isOpen, eventProfile, selectedEventId]); // Removed initialEventSpecificState from deps to prevent infinite loop
 
 
   const checkNameConflict = async (label) => {
@@ -876,6 +915,25 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
   };
 
   const handleSave = async () => {
+    // When profile is not editable, only validate and send event-specific fields
+    if (!isProfileEditable && !isCreating) {
+      // Only save event-specific fields when profile is not editable
+      if (!selectedEventId) {
+        showToast('Please select an event to update event-specific authorizations', 'error');
+        return;
+      }
+      
+      if (!hasEventSpecificChanges) {
+        showToast('No event-specific changes to save', 'info');
+        return;
+      }
+      
+      // Use the event-specific save handler (which only sends event-specific fields)
+      await handleSaveEventSpecific();
+      return;
+    }
+
+    // Normal validation for editable profiles or when creating
     if (nameConflict) {
       showToast('Cannot save: Profile name already exists', 'error');
       return;
@@ -906,7 +964,7 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
     setError('');
 
     try {
-      // General profile data (always saved)
+      // General profile data (always saved when editable)
       // Convert boolean values (1/0) to true/false for backend
       const generalProfileData = {
         label: editingProfile.label,
@@ -1484,95 +1542,97 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
           {/* Content - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="space-y-4">
-              {/* Basic Info Section - Compact */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center space-x-2">
-                  <User className="w-4 h-4" />
-                  <span>Basic Information</span>
-                </h3>
+              {/* Basic Info Section - Compact (only show if profile is editable) */}
+              {isProfileEditable && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center space-x-2">
+                    <User className="w-4 h-4" />
+                    <span>Basic Information</span>
+                  </h3>
 
-                <div className={`flex flex-col gap-3 md:grid ${basicInfoGridLayout} md:justify-center md:items-start md:gap-3`}>
-                  {/* Label */}
-                  <div className="w-full md:w-full">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Profile Name <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={editingProfile.label}
-                        onChange={(e) => handleFieldChange('label', e.target.value)}
-                      className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          (nameConflict || error === 'Name and password combination already exists') ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        placeholder="Enter profile name"
-                      />
-                      {(nameConflict || error === 'Name and password combination already exists') && (
-                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
-                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                          <span>
-                            {error === 'Name and password combination already exists' 
-                              ? 'Name and password combination already exists'
-                              : 'Name exists'}
-                          </span>
-                        </div>
+                  <div className={`flex flex-col gap-3 md:grid ${basicInfoGridLayout} md:justify-center md:items-start md:gap-3`}>
+                    {/* Label */}
+                    <div className="w-full md:w-full">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Profile Name <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={editingProfile.label}
+                          onChange={(e) => handleFieldChange('label', e.target.value)}
+                        className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            (nameConflict || error === 'Name and password combination already exists') ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                          placeholder="Enter profile name"
+                        />
+                        {(nameConflict || error === 'Name and password combination already exists') && (
+                          <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                            <span>
+                              {error === 'Name and password combination already exists' 
+                                ? 'Name and password combination already exists'
+                                : 'Name exists'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Email - only for non-public profiles */}
+                    {hasEmailField && (
+                      <div className="w-full md:w-full">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={editingProfile.email || ''}
+                          onChange={(e) => handleFieldChange('email', e.target.value)}
+                          autoComplete={isCreating ? "off" : "email"}
+                          className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus;border-transparent"
+                          placeholder="Enter email (optional)"
+                        />
+                      </div>
+                    )}
+
+                    {/* Password */}
+                    <div className={`flex flex-col gap-1 ${isCreating ? 'w-full md:w-full' : 'md:justify-self-center'}`}>
+                      <label className="block text-xs font-medium text-gray-600">
+                        Password {isCreating && <span className="text-red-500">*</span>}
+                      </label>
+                      {isCreating ? (
+                        <form onSubmit={(e) => e.preventDefault()} autoComplete="off">
+                          <input
+                            type="text"
+                            name="username"
+                            autoComplete="username"
+                            value={editingProfile.label || ''}
+                            readOnly
+                            style={{ display: 'none' }}
+                          />
+                          <input
+                            type="password"
+                            value={editingProfile.password || ''}
+                            onChange={(e) => handleFieldChange('password', e.target.value)}
+                            autoComplete="new-password"
+                            className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter password (required)"
+                          />
+                        </form>
+                      ) : (
+                        <button
+                          onClick={() => setShowPasswordModal(true)}
+                          className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                          title="Change password"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   </div>
-
-                  {/* Email - only for non-public profiles */}
-                  {hasEmailField && (
-                    <div className="w-full md:w-full">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={editingProfile.email || ''}
-                        onChange={(e) => handleFieldChange('email', e.target.value)}
-                        autoComplete={isCreating ? "off" : "email"}
-                        className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus;border-transparent"
-                        placeholder="Enter email (optional)"
-                      />
-                    </div>
-                  )}
-
-                  {/* Password */}
-                  <div className={`flex flex-col gap-1 ${isCreating ? 'w-full md:w-full' : 'md:justify-self-center'}`}>
-                    <label className="block text-xs font-medium text-gray-600">
-                      Password {isCreating && <span className="text-red-500">*</span>}
-                    </label>
-                    {isCreating ? (
-                      <form onSubmit={(e) => e.preventDefault()} autoComplete="off">
-                        <input
-                          type="text"
-                          name="username"
-                          autoComplete="username"
-                          value={editingProfile.label || ''}
-                          readOnly
-                          style={{ display: 'none' }}
-                        />
-                        <input
-                          type="password"
-                          value={editingProfile.password || ''}
-                          onChange={(e) => handleFieldChange('password', e.target.value)}
-                          autoComplete="new-password"
-                          className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter password (required)"
-                        />
-                      </form>
-                    ) : (
-                      <button
-                        onClick={() => setShowPasswordModal(true)}
-                        className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                        title="Change password"
-                      >
-                        <Key className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* General Authorizations Section */}
               {!isCurrentProfileRestricted && (
@@ -2499,7 +2559,13 @@ const disableRankSelection = Boolean(editingProfile?.is_public);
             </button>
             <button
               onClick={handleSave}
-              disabled={loading || nameConflict || !editingProfile.label.trim() || (isCreating && !editingProfile.password?.trim()) || (!hasChanges && !hasEventSpecificChanges)}
+              disabled={
+                loading || 
+                savingEventSpecific ||
+                (isProfileEditable && (nameConflict || !editingProfile.label.trim() || (isCreating && !editingProfile.password?.trim()))) ||
+                (!isProfileEditable && !isCreating && (!selectedEventId || !hasEventSpecificChanges)) ||
+                (isProfileEditable && !hasChanges && !hasEventSpecificChanges)
+              }
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
