@@ -70,27 +70,20 @@ def update_image(event_id, image_id):
     """Update an image's description."""
     event = get_event(event_id)
     data = request.json or {}
-    try:
-        allowed_fields = {'description'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        if sanitized:
-            event.models.edit('images', image_id, sanitized)
-            updated_image = event.models.get_entities('images', [image_id], include_details=True)
-            changes = [{
-                'type': 'UPDATE',
-                'entity': 'image',
-                'items': updated_image
-            }]
-            response = {"success": True, "changes": changes}
-        else:
-            response = {"success": False}
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    allowed_fields = {'description'}
+    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    if sanitized:
+        event.models.edit('images', image_id, sanitized)
+        updated_image = event.models.get_entities('images', [image_id], include_details=True)
+        changes = [{
+            'type': 'UPDATE',
+            'entity': 'image',
+            'items': updated_image
+        }]
+        response = {"success": True, "changes": changes}
+    else:
+        response = {"success": False}
+    return jsonify(response)
 
 @image_bp.route("/images", methods=["DELETE"])
 @require_auth
@@ -101,29 +94,22 @@ def delete_image(event_id):
     image_ids = data.get('image_ids', [])
     if not image_ids:
         return jsonify({"error": "No image IDs provided"}), 400
-    try:
-        deleted_groups, parents = event.delete_images(image_ids)
-        changes = [{
+    deleted_groups, parents = event.delete_images(image_ids)
+    changes = [{
+        'type': 'REMOVE',
+        'entity': 'image',
+        'ids': image_ids
+    }]
+    if deleted_groups:
+        changes.append({
             'type': 'REMOVE',
-            'entity': 'image',
-            'ids': image_ids
-        }]
-        if deleted_groups:
-            changes.append({
-                'type': 'REMOVE',
-                'entity': 'group',
-                'ids': deleted_groups
-            })
-        for entity, entity_ids in parents.items():
-            changes.append({
-                'type': 'UPDATE',
-                'entity': entity,
-                'items': event.models.get_entities(entity, entity_ids)
-            })
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+            'entity': 'group',
+            'ids': deleted_groups
+        })
+    for entity, entity_ids in parents.items():
+        changes.append({
+            'type': 'UPDATE',
+            'entity': entity,
+            'items': event.models.get_entities(entity, entity_ids)
+        })
+    return jsonify({"success": True, "changes": changes})

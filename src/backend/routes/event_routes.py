@@ -11,20 +11,13 @@ event_bp = Blueprint('events', __name__, url_prefix='/api')
 def get_events():
     """List all events (id->event map). Optional auth for profile context."""
     gm = get_general_models()
-    try:
-        events = gm.get_entities('events')
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'event',
-            'items': events,
-        }]
-        return jsonify({'changes': changes})
-    except Forbidden as e:
-        return jsonify({}), 200
-    except DatabaseError as e:
-        return jsonify({}), 200
-    except Exception:
-        return jsonify({}), 200
+    events = gm.get_entities('events')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'event',
+        'items': events,
+    }]
+    return jsonify({'changes': changes})
 
 @event_bp.route('/events/<event_id>', methods=['GET'])
 @require_auth
@@ -32,24 +25,17 @@ def get_event(event_id):
     """Get single event details (auth required to include access-controlled fields if any)."""
     gm = get_general_models()
     event_instance = get_event_instance(event_id)
-    try:
-        event_items = gm.get_entities('events', [event_id], include_details=True)
-        if not event_items:
-            return jsonify({"error": "Event not found"}), 404
+    event_items = gm.get_entities('events', [event_id], include_details=True)
+    if not event_items:
+        return jsonify({"error": "Event not found"}), 404
 
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'event',
-            'items': event_items,
-            'event_id': 'general'
-        }]
-        return jsonify({'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'event',
+        'items': event_items,
+        'event_id': 'general'
+    }]
+    return jsonify({'changes': changes})
 
 @event_bp.route('/events/<event_id>', methods=['PUT'])
 @require_auth
@@ -71,55 +57,37 @@ def update_event(event_id):
 
     sanitized = {k: data[k] for k in data.keys() if k in allowed_fields}
 
-    try:
-        if sanitized:
-            gm.edit('events', event_id, sanitized)
-            updated = gm.get_entities('events', [event_id], include_details=True)
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'event',
-                'items': updated,
-                'event_id': 'general'
-            }]
+    if sanitized:
+        gm.edit('events', event_id, sanitized)
+        updated = gm.get_entities('events', [event_id], include_details=True)
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'event',
+            'items': updated,
+            'event_id': 'general'
+        }]
 
-        return jsonify({'success': True, 'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return jsonify({'success': True, 'changes': changes})
 
 @event_bp.route('/events/<event_id>', methods=['DELETE'])
 @require_auth
 def delete_event(event_id):
     """Delete an event."""
     gm = get_general_models()
-    try:
-        gm.delete_event(event_id)
-        changes = [{
-            'type': 'REMOVE',
-            'entity': 'event',
-            'ids': [event_id],
-            'event_id': 'general'
-        },{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'currentProfile': gm.get_current_profile()
-            }
-        }]
-        return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    gm.delete_event(event_id)
+    changes = [{
+        'type': 'REMOVE',
+        'entity': 'event',
+        'ids': [event_id],
+        'event_id': 'general'
+    },{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': gm.get_current_profile()
+        }
+    }]
+    return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
 
 @event_bp.route('/events', methods=['POST'])
 @require_auth
@@ -169,30 +137,21 @@ def create_event():
     else:
         sanitized['image_size_limit_bytes'] = None
 
-    try:
-        event_id = gm.create_event(sanitized)
-        event = gm.get_entities('events', [event_id], include_details=True)
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'event',
-            'items': event,
-            'event_id': 'general'
-        },{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'currentProfile': gm.get_current_profile()
-            }
-        }]
-        return jsonify({'success': True, 'event_id': event_id, 'changes': changes}), 201
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    event_id = gm.create_event(sanitized)
+    event = gm.get_entities('events', [event_id], include_details=True)
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'event',
+        'items': event,
+        'event_id': 'general'
+    },{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': gm.get_current_profile()
+        }
+    }]
+    return jsonify({'success': True, 'event_id': event_id, 'changes': changes}), 201
 
 @event_bp.route('/events/resolve', methods=['GET'])
 @optional_auth
@@ -207,32 +166,26 @@ def resolve_event():
         return jsonify({"error": "Event not found"}), 404
     
     gm = get_general_models()
-    try:
-        event = gm.get_event_by_url(url)
-        if not event:
-            return jsonify({"error": "Event not found"}), 404
-
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'event',
-            'items': event,
-            'event_id': 'general'
-        }]
-        return jsonify({ 'event_id': event.get('event_id') or event.get('id'), 'event': event, 'changes': changes })
-    except Exception:
+    event = gm.get_event_by_url(url)
+    if not event:
         return jsonify({"error": "Event not found"}), 404
+
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'event',
+        'items': event,
+        'event_id': 'general'
+    }]
+    return jsonify({ 'event_id': event.get('event_id') or event.get('id'), 'event': event, 'changes': changes })
 
 @event_bp.route('/events/<event_id>/url', methods=['GET'])
 def get_event_url(event_id):
     """Get event URL by ID (public)."""
     gm = get_general_models()
-    try:
-        url = gm.get_event_url(event_id)
-        if not url:
-            return jsonify({"error": "Event not found"}), 404
-        return jsonify({ 'event_id': event_id, 'url': url })
-    except Exception:
+    url = gm.get_event_url(event_id)
+    if not url:
         return jsonify({"error": "Event not found"}), 404
+    return jsonify({ 'event_id': event_id, 'url': url })
 
 @event_bp.route('/events/check-name', methods=['POST'])
 @require_auth
@@ -267,14 +220,7 @@ def check_event_url():
 def get_uploads_limits():
     """Get the maximum upload limits for events."""
     gm = get_general_models()
-    try:
-        limits = gm.get_uploads_limits()
-        return jsonify(limits)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    limits = gm.get_uploads_limits()
+    return jsonify(limits)
 
 

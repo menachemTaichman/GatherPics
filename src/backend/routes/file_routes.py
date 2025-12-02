@@ -151,33 +151,30 @@ def download_images(event_id):
     if not image_ids:
         return jsonify({"error": "No image ids provided"}), 400
     
-    try:
-        images = event.models.get_entities('images', image_ids)
-        memory_file = io.BytesIO()
-        failed_images = []
-        accessible_image_ids = set(images.keys())
-        failed_images.extend(image_id for image_id in image_ids if image_id not in accessible_image_ids)
-        
-        with zipfile.ZipFile(memory_file, 'w') as zf:
-            for image_id, image_data in images.items():
-                label = image_data.get('label') or image_id
-                
-                src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
-                file_path = os.path.join(src_dir, f"{image_id}.jpg")
-                if os.path.exists(file_path):
-                    if not os.path.splitext(label)[1]:
-                        label = f"{label}.jpg"
-                    zf.write(file_path, label)
-                else:
-                    failed_images.append(image_id)
-        
-        memory_file.seek(0)
-        return send_file(
-            memory_file,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name='images.zip'
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    images = event.models.get_entities('images', image_ids)
+    memory_file = io.BytesIO()
+    failed_images = []
+    accessible_image_ids = set(images.keys())
+    failed_images.extend(image_id for image_id in image_ids if image_id not in accessible_image_ids)
+    
+    with zipfile.ZipFile(memory_file, 'w') as zf:
+        for image_id, image_data in images.items():
+            label = image_data.get('label') or image_id
+            
+            src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
+            file_path = os.path.join(src_dir, f"{image_id}.jpg")
+            if os.path.exists(file_path):
+                if not os.path.splitext(label)[1]:
+                    label = f"{label}.jpg"
+                zf.write(file_path, label)
+            else:
+                failed_images.append(image_id)
+    
+    memory_file.seek(0)
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='images.zip'
+    )
 

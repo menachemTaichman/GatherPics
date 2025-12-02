@@ -61,27 +61,20 @@ def create_album(event_id):
     event = get_event(event_id)
     data = request.json or {}
     
-    try:
-        allowed_fields = {'label', 'description', 'representative_image'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        if sanitized:
-            album_id = event.models.add('albums', sanitized)
-            created_album = event.models.get_entities('albums', [album_id])
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'album',
-                'items': created_album
-            }]
-            response = {"success": True, "album_id": album_id, "changes": changes}
-        else:
-            response = {"success": False}
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    allowed_fields = {'label', 'description', 'representative_image'}
+    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    if sanitized:
+        album_id = event.models.add('albums', sanitized)
+        created_album = event.models.get_entities('albums', [album_id])
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'album',
+            'items': created_album
+        }]
+        response = {"success": True, "album_id": album_id, "changes": changes}
+    else:
+        response = {"success": False}
+    return jsonify(response)
 
 @album_bp.route("/albums/<album_id>", methods=["PUT"])
 @require_auth
@@ -96,30 +89,21 @@ def update_album(event_id, album_id):
     if (album.get('label', '').lower() in ('archive', 'favorites')) and 'label' in data:
         data.pop('label', None)
 
-    try:
-        allowed = {'label', 'description', 'representative_image'}
-        sanitized = {k: v for k, v in data.items() if k in allowed}
-        if sanitized:
-            event.models.edit('albums', album_id, sanitized)
+    allowed = {'label', 'description', 'representative_image'}
+    sanitized = {k: v for k, v in data.items() if k in allowed}
+    if sanitized:
+        event.models.edit('albums', album_id, sanitized)
 
-            updated = event.models.get_entities('albums', [album_id])
-            changes = [{
-                'type': 'UPDATE',
-                'entity': 'album',
-                'items': updated
-            }]
-            response = {"success": True, "changes": changes}
-        else:
-            response = {"success": False}
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        updated = event.models.get_entities('albums', [album_id])
+        changes = [{
+            'type': 'UPDATE',
+            'entity': 'album',
+            'items': updated
+        }]
+        response = {"success": True, "changes": changes}
+    else:
+        response = {"success": False}
+    return jsonify(response)
 
 @album_bp.route("/albums/<album_id>", methods=["DELETE"])
 @require_auth
@@ -133,24 +117,15 @@ def delete_album(event_id, album_id):
     if album and album.get('label', '').lower() in ('archive', 'favorites'):
         return jsonify({"error": "Cannot delete default albums"}), 400
     
-    try:
-        event.models.delete('albums', album_id)
-        
-        response = {"success": True, "deleted_ids": [album_id]}
-        response['changes'] = [{
-            'type': 'REMOVE',
-            'entity': 'album',
-            'ids': [album_id]
-        }]
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    event.models.delete('albums', album_id)
+    
+    response = {"success": True, "deleted_ids": [album_id]}
+    response['changes'] = [{
+        'type': 'REMOVE',
+        'entity': 'album',
+        'ids': [album_id]
+    }]
+    return jsonify(response)
 
 def _edit_album_images(event_id: str, album_id: str, image_ids: list[str], add: bool):
     event = get_event(event_id)
@@ -229,15 +204,8 @@ def add_images_to_album(event_id, album_id):
     """Add images to an album."""
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    try:
-        response = _edit_album_images(event_id, album_id, image_ids, add=True)
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    response = _edit_album_images(event_id, album_id, image_ids, add=True)
+    return jsonify(response)
 
 @album_bp.route("/albums/<album_id>/images", methods=["DELETE"])
 @require_auth
@@ -245,15 +213,8 @@ def remove_images_from_album(event_id, album_id):
     """Remove images from an album."""
     data = request.json or {}
     image_ids = data.get('image_ids', [])
-    try:
-        response = _edit_album_images(event_id, album_id, image_ids, add=False)
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    response = _edit_album_images(event_id, album_id, image_ids, add=False)
+    return jsonify(response)
 
 @album_bp.route("/albums/favorites/images", methods=["PUT"])
 @require_auth
@@ -267,18 +228,11 @@ def toggle_favorites_images(event_id):
     if not image_ids:
         return jsonify({"error": "No image IDs provided"}), 400
     
-    try:
-        event = get_event(event_id)
-        event_data = event.models.get_entities('events', event_id, include_details=True)
-        favorites_album_id = event_data['favorites_album_id']
-        response = _edit_album_images(event_id, favorites_album_id, image_ids, add=is_favorite)
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    event = get_event(event_id)
+    event_data = event.models.get_entities('events', event_id, include_details=True)
+    favorites_album_id = event_data['favorites_album_id']
+    response = _edit_album_images(event_id, favorites_album_id, image_ids, add=is_favorite)
+    return jsonify(response)
 
 @album_bp.route("/albums/archive/images", methods=["PUT"])
 @require_auth
@@ -292,16 +246,9 @@ def toggle_archive_images(event_id):
     if not image_ids:
         return jsonify({"error": "No image IDs provided"}), 400
     
-    try:
-        event = get_event(event_id)
-        event_data = event.models.get_entities('events', event_id, include_details=True)
-        archive_album_id = event_data['archive_album_id']
-        response = _edit_album_images(event_id, archive_album_id, image_ids, add=is_archived)
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    event = get_event(event_id)
+    event_data = event.models.get_entities('events', event_id, include_details=True)
+    archive_album_id = event_data['archive_album_id']
+    response = _edit_album_images(event_id, archive_album_id, image_ids, add=is_archived)
+    return jsonify(response)
 

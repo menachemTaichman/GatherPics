@@ -43,50 +43,31 @@ def get_profile(profile_id):
 def create_profile():
     """Create a new general profile."""
     request_data = request.json or {}
-    try:
-        general_models = get_general_models()
+    general_models = get_general_models()
 
-        allowed_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
-        data = {k: v for k, v in request_data.items() if k in allowed_fields}
+    allowed_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
+    data = {k: v for k, v in request_data.items() if k in allowed_fields}
 
-        profile_id = general_models.add('profiles', data)
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id]),
-        }]
-        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    profile_id = general_models.add('profiles', data)
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': general_models.get_entities('profiles', [profile_id]),
+    }]
+    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
 
 @profile_bp.route("/api/profiles/<profile_id>/duplicate", methods=["POST"])
 @require_auth
 def duplicate_profile(profile_id):
     """Duplicate a general profile."""
     general_models = get_general_models()
-    try:
-        new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id)
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': general_models.get_entities('profiles', [new_profile_id]),
-        }]
-        return jsonify({"success": True, "new_profile_id": new_profile_id, "label": label, "password": password, "incomplete_events": incomplete_events, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id)
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': general_models.get_entities('profiles', [new_profile_id]),
+    }]
+    return jsonify({"success": True, "new_profile_id": new_profile_id, "label": label, "password": password, "incomplete_events": incomplete_events, "changes": changes})
 
 @profile_bp.route("/api/profiles/<profile_id>", methods=["PUT"])
 @require_auth
@@ -101,29 +82,22 @@ def add_event_to_profile(profile_id, event_id):
     """Add an event to a profile."""
     general_models = get_general_models()
     event = get_event(event_id)
-    try:
-        # Add event
-        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD)
-        
-        # Get updated profile with events
-        updated_profile = general_models.get_entities('profiles', [profile_id])
-        updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
-        updated_profile[profile_id]['events'] = updated_events
-        
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': updated_profile,
-            'event_id': 'general',
-        }]
-        
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    # Add event
+    event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD)
+    
+    # Get updated profile with events
+    updated_profile = general_models.get_entities('profiles', [profile_id])
+    updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+    updated_profile[profile_id]['events'] = updated_events
+    
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': updated_profile,
+        'event_id': 'general',
+    }]
+    
+    return jsonify({"success": True, "changes": changes})
 
 @profile_bp.route("/api/profiles/<profile_id>/events/<event_id>", methods=["DELETE"])
 @require_auth
@@ -131,57 +105,43 @@ def remove_event_from_profile(profile_id, event_id):
     """Remove an event from a profile."""
     event = get_event(event_id)
     general_models = get_general_models()
-    try:
-        # Remove event
-        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
-        
-        # Get updated profile with events
-        updated_profile = general_models.get_entities('profiles', [profile_id])
-        updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
-        updated_profile[profile_id]['events'] = updated_events
-        
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': updated_profile,
-            'event_id': 'general',
-        }]
-        
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    # Remove event
+    event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+    
+    # Get updated profile with events
+    updated_profile = general_models.get_entities('profiles', [profile_id])
+    updated_events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+    updated_profile[profile_id]['events'] = updated_events
+    
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': updated_profile,
+        'event_id': 'general',
+    }]
+    
+    return jsonify({"success": True, "changes": changes})
 
 @profile_bp.route("/api/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
 def delete_profile(profile_id):
     """Delete a general profile."""
     general_models = get_general_models()
-    try:
-        event_ids = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
-        general_models.delete_profile(profile_id)
-        changes = [{
+    event_ids = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
+    general_models.delete_profile(profile_id)
+    changes = [{
+        'type': 'REMOVE',
+        'entity': 'profile',
+        'ids': [profile_id]
+    }]
+    for event_id in event_ids:
+        changes.append({
             'type': 'REMOVE',
-            'entity': 'profile',
-            'ids': [profile_id]
-        }]
-        for event_id in event_ids:
-            changes.append({
-                'type': 'REMOVE',
-                'entity': 'event_profile',
-                'ids': [profile_id],
-                'event_id': event_id
-            })
-        return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+            'entity': 'event_profile',
+            'ids': [profile_id],
+            'event_id': event_id
+        })
+    return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
 
 @profile_bp.route("/api/profiles/check-name", methods=["POST"])
 @require_auth
@@ -207,10 +167,7 @@ def check_profile_name():
 def get_profile_password(profile_id):
     """Get profile password."""
     general_models = get_general_models()
-    try:
-        return jsonify({"password": general_models.get_profile_password(profile_id)})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
+    return jsonify({"password": general_models.get_profile_password(profile_id)})
 
 @profile_bp.route("/api/profiles/<profile_id>/password", methods=["PUT"])
 @require_auth
@@ -219,15 +176,8 @@ def update_profile_password(profile_id):
     general_models = get_general_models()
     data = request.json or {}
     password = data.get('password', '')
-    try:
-        general_models.edit('profiles', profile_id, {'password': password})
-        return jsonify({"success": True})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    general_models.edit('profiles', profile_id, {'password': password})
+    return jsonify({"success": True})
 
 # ========================================
 # EVENT PROFILE ROUTES
@@ -290,38 +240,28 @@ def get_event_profile(event_id, profile_id):
 def create_event_profile(event_id):
     """Create a new event profile."""
     request_data = request.json or {}
-    try:
-        general_models = get_general_models()
-        event = get_event(event_id)
-        allowed_general_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
-        allowed_event_fields = ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups']
-        general_data = {k: v for k, v in request_data.items() if k in allowed_general_fields}
-        general_data['restricted_to_event'] = event_id
-        event_data = {k: v for k, v in request_data.items() if k in allowed_event_fields}
+    general_models = get_general_models()
+    event = get_event(event_id)
+    allowed_general_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
+    allowed_event_fields = ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups']
+    general_data = {k: v for k, v in request_data.items() if k in allowed_general_fields}
+    general_data['restricted_to_event'] = event_id
+    event_data = {k: v for k, v in request_data.items() if k in allowed_event_fields}
 
-        profile_id = general_models.add('profiles', general_data)
-        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
-        profiles, event_profiles = event.models.get_childs('events', event_id, 'profiles', [profile_id])
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': profiles,
-            'event_id': 'general',
-        },{
-            'type': 'UPSERT',
-            'entity': 'event_profile',
-            'items': event_profiles
-        }]
-        return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    profile_id = general_models.add('profiles', general_data)
+    event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
+    profiles, event_profiles = event.models.get_childs('events', event_id, 'profiles', [profile_id])
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': profiles,
+        'event_id': 'general',
+    },{
+        'type': 'UPSERT',
+        'entity': 'event_profile',
+        'items': event_profiles
+    }]
+    return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>", methods=["PUT"])
 @require_auth
@@ -335,27 +275,20 @@ def update_event_profile(event_id, profile_id):
 def delete_event_profile(event_id, profile_id):
     """Delete an event profile."""
     general_models = get_general_models()
-    try:
-        complete_delete = general_models.delete_profile(profile_id, event_id)
-        changes = [{
+    complete_delete = general_models.delete_profile(profile_id, event_id)
+    changes = [{
+        'type': 'REMOVE',
+        'entity': 'event_profile',
+        'ids': [profile_id]
+    }]
+    if complete_delete:
+        changes.append({
             'type': 'REMOVE',
-            'entity': 'event_profile',
-            'ids': [profile_id]
-        }]
-        if complete_delete:
-            changes.append({
-                'type': 'REMOVE',
-                'entity': 'profile',
-                'ids': [profile_id],
-                'event_id': 'general'
-            })
-        return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+            'entity': 'profile',
+            'ids': [profile_id],
+            'event_id': 'general'
+        })
+    return jsonify({"success": True, "deleted_ids": [profile_id], "changes": changes})
 
 # ========================================
 # CURRENT PROFILE ENDPOINTS
@@ -385,18 +318,15 @@ def get_current_profile():
 def get_my_preferences():
     """Get preferences for the current profile."""
     general_models = get_general_models()
-    try:
-        preferences = general_models.get_my_preferences()
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'preferences': preferences
-            }
-        }]
-        return jsonify({"changes": changes})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    preferences = general_models.get_my_preferences()
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'preferences': preferences
+        }
+    }]
+    return jsonify({"changes": changes})
 
 @profile_bp.route("/api/profiles/current/preferences", methods=["PUT"])
 @require_auth
@@ -412,23 +342,16 @@ def update_my_preferences():
     if not preference_group or not preference_key or preference_value is None:
         return jsonify({"error": "preference_group, preference_key, and preference_value are required"}), 400
     
-    try:
-        general_models.update_my_preferences(preference_group, preference_key, preference_value)
-        preferences = general_models.get_my_preferences()
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'preferences': preferences
-            }
-        }]
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    general_models.update_my_preferences(preference_group, preference_key, preference_value)
+    preferences = general_models.get_my_preferences()
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'preferences': preferences
+        }
+    }]
+    return jsonify({"success": True, "changes": changes})
 
 @profile_bp.route("/api/profiles/current", methods=["PUT"])
 @require_auth
@@ -436,25 +359,18 @@ def update_current_profile():
     """Update the current profile data."""
     event_id = request.args.get('event_id', None)
     profile_id = get_current_profile_id()
-    try:
-        general_models = get_general_models()
-        data = request.json
-        general_models.edit('current_profile', profile_id, data)
+    general_models = get_general_models()
+    data = request.json
+    general_models.edit('current_profile', profile_id, data)
 
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'localStorage',
-            'items': {
-                'currentProfile': general_models.get_current_profile(event_id)
-            }
-        }]
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': general_models.get_current_profile(event_id)
+        }
+    }]
+    return jsonify({"success": True, "changes": changes})
 
 @profile_bp.route("/api/events/<event_id>/profiles/current/groups-to-request-access", methods=["GET"])
 @require_auth
@@ -471,53 +387,32 @@ def get_groups_to_request_access(event_id):
 @require_auth
 def check_images_from_profile(event_id, profile_id):
     """Check accessible images for a profile."""
-    try:
-        data = request.json or {}
-        image_ids = data.get('image_ids', [])
-        event = get_event(event_id)
-        specify, actual = event.models.check_accessibility_status(profile_id, 'images', image_ids)
+    data = request.json or {}
+    image_ids = data.get('image_ids', [])
+    event = get_event(event_id)
+    specify, actual = event.models.check_accessibility_status(profile_id, 'images', image_ids)
 
-        return jsonify({"specify": specify, "actual": actual})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return jsonify({"specify": specify, "actual": actual})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums/check", methods=["POST"])
 @require_auth
 def check_albums_from_profile(event_id, profile_id):
     """Check accessible albums for a profile."""
-    try:
-        data = request.json or {}
-        album_ids = data.get('album_ids', [])
-        event = get_event(event_id)
-        specify, actual = event.models.check_accessibility_status(profile_id, 'albums', album_ids)
-        return jsonify({"specify": specify, "actual": actual})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    data = request.json or {}
+    album_ids = data.get('album_ids', [])
+    event = get_event(event_id)
+    specify, actual = event.models.check_accessibility_status(profile_id, 'albums', album_ids)
+    return jsonify({"specify": specify, "actual": actual})
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups/check", methods=["POST"])
 @require_auth
 def check_groups_from_profile(event_id, profile_id):
     """Check accessible groups for a profile."""
-    try:
-        data = request.json or {}
-        group_ids = data.get('group_ids', [])
-        event = get_event(event_id)
-        specify, actual = event.models.check_accessibility_status(profile_id, 'groups', group_ids)
-        return jsonify({"specify": specify, "actual": actual})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    data = request.json or {}
+    group_ids = data.get('group_ids', [])
+    event = get_event(event_id)
+    specify, actual = event.models.check_accessibility_status(profile_id, 'groups', group_ids)
+    return jsonify({"specify": specify, "actual": actual})
 
 # ========================================
 # ACCESS MANAGEMENT
@@ -632,62 +527,39 @@ def set_groups_as_inaccessible(event_id, profile_id):
 def generate_public_access_code(profile_id):
     """Generate a public access code for a profile."""
     general_models = get_general_models()
-    try:
-        # Check if profile is public
-        general_models.generate_public_access_code(profile_id)
-        public_code = general_models.get_public_access_code(profile_id)
-        profile = general_models.get_entities('profiles', [profile_id])
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': profile
-        }]
-        return jsonify({"success": True, "public_code": public_code, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    # Check if profile is public
+    general_models.generate_public_access_code(profile_id)
+    public_code = general_models.get_public_access_code(profile_id)
+    profile = general_models.get_entities('profiles', [profile_id])
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': profile
+    }]
+    return jsonify({"success": True, "public_code": public_code, "changes": changes})
 
 @profile_bp.route("/api/profiles/<profile_id>/public-access-code", methods=["GET"])
 @require_auth
 def get_public_access_code(profile_id):
     """Get the public access code for a profile."""
     general_models = get_general_models()
-    try:
-        public_code = general_models.get_public_access_code(profile_id)
-        return jsonify({"success": True, "public_code": public_code})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    public_code = general_models.get_public_access_code(profile_id)
+    return jsonify({"success": True, "public_code": public_code})
 
 @profile_bp.route("/api/profiles/<profile_id>/public-access-code", methods=["DELETE"])
 @require_auth
 def remove_public_access_code(profile_id):
     """Remove public access code for a profile."""
     general_models = get_general_models()
-    try:
-        general_models.revoke_public_access_code(profile_id)
-        
-        changes = [{
-            'type': 'UPSERT',
-            'entity': 'profile',
-            'items': general_models.get_entities('profiles', [profile_id])
-        }]
-        
-        return jsonify({"success": True, "changes": changes})
+    general_models.revoke_public_access_code(profile_id)
     
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'profile',
+        'items': general_models.get_entities('profiles', [profile_id])
+    }]
+    
+    return jsonify({"success": True, "changes": changes})
 
 # ========================================
 # HELPER FUNCTIONS
@@ -696,62 +568,54 @@ def remove_public_access_code(profile_id):
 def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
     general_models = get_general_models()
 
-    try:
-        general_fields = [
-            'label',
-            'hierarchy_rank',
-            'password',
-            'email',
-            'is_public',
-            'restricted_to_event',
-            'can_create_events',
+    general_fields = [
+        'label',
+        'hierarchy_rank',
+        'password',
+        'email',
+        'is_public',
+        'restricted_to_event',
+        'can_create_events',
+    ]
+    general_data = {k: v for k, v in data.items() if k in general_fields}
+    if general_data:
+        general_models.edit('profiles', profile_id, general_data)
+
+    if event_id:
+        event_fields = [
+            'can_manage_event',
+            'can_delete_event',
+            'can_upload_and_delete_images',
+            'can_edit',
+            'all_images',
+            'all_albums',
+            'all_groups',
         ]
-        general_data = {k: v for k, v in data.items() if k in general_fields}
-        if general_data:
-            general_models.edit('profiles', profile_id, general_data)
-
-        if event_id:
-            event_fields = [
-                'can_manage_event',
-                'can_delete_event',
-                'can_upload_and_delete_images',
-                'can_edit',
-                'all_images',
-                'all_albums',
-                'all_groups',
-            ]
-            event_data = {k: v for k, v in data.items() if k in event_fields}
-            event = get_event(event_id)
-            event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
-            profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'profile',
-                'items': profiles,
-                'event_id': 'general',
-            },{
-                'type': 'UPSERT',
-                'entity': 'event_profile',
-                'items': event_profiles,
-                'event_id': event_id
-            }]
-        
-        else:
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'profile',
-                'items': general_models.get_entities('profiles', [profile_id]),
-                'event_id': 'general',
-            }]
-
-        return jsonify({"success": True, "changes": changes})
+        event_data = {k: v for k, v in data.items() if k in event_fields}
+        event = get_event(event_id)
+        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
+        profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': profiles,
+            'event_id': 'general',
+        },{
+            'type': 'UPSERT',
+            'entity': 'event_profile',
+            'items': event_profiles,
+            'event_id': event_id
+        }]
     
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    else:
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'profile',
+            'items': general_models.get_entities('profiles', [profile_id]),
+            'event_id': 'general',
+        }]
+
+    return jsonify({"success": True, "changes": changes})
 
 def _edit_event_profile_childs(event_id: str, profile_id: str, child: str, child_ids: list[str], add: bool):
     """Add or remove multiple childs from a profile."""
@@ -763,32 +627,24 @@ def _edit_event_profile_childs(event_id: str, profile_id: str, child: str, child
     if child not in ['images', 'albums', 'groups']:
         return jsonify({"error": f"Invalid child: {child}"}), 400
 
-    try:
-        operation = ChildOperation.ADD if add else ChildOperation.REMOVE
-        affected_ids, _ = event.models.edit_childs('events_profiles_ctx', profile_id, child, child_ids, operation=operation)
-        if add:
-            changes = [{
-                'type': 'RELATION_ADD',
-                'relation': f'profile.{child}',
-                'parentId': profile_id,
-                'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
-            }]
-        else:
-            changes = [{
-                'type': 'RELATION_REMOVE',
-                'relation': f'profile.{child}',
-                'parentId': profile_id,
-                'ids': affected_ids
-            }]
+    operation = ChildOperation.ADD if add else ChildOperation.REMOVE
+    affected_ids, _ = event.models.edit_childs('events_profiles_ctx', profile_id, child, child_ids, operation=operation)
+    if add:
+        changes = [{
+            'type': 'RELATION_ADD',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
+        }]
+    else:
+        changes = [{
+            'type': 'RELATION_REMOVE',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'ids': affected_ids
+        }]
 
-        return jsonify({"success": True, "changes": changes})
-    
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return jsonify({"success": True, "changes": changes})
 
 def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child_ids: list[str], set_accessible: bool):
     """Set multiple childs as accessible or inaccessible to a profile."""
@@ -800,27 +656,20 @@ def _set_profile_accessibility(event_id: str, profile_id: str, child: str, child
     if child not in ['images', 'albums', 'groups']:
         return jsonify({"error": f"Invalid child: {child}"}), 400
     
-    try:
-        affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
-        if added:
-            changes = [{
-                'type': 'RELATION_ADD',
-                'relation': f'profile.{child}',
-                'parentId': profile_id,
-                'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
-            }]
-        else:
-            changes = [{
-                'type': 'RELATION_REMOVE',
-                'relation': f'profile.{child}',
-                'parentId': profile_id,
-                'ids': affected_ids
-            }]
+    affected_ids, added = event.models.edit_accessibility(profile_id, child, child_ids, set_accessible=set_accessible)
+    if added:
+        changes = [{
+            'type': 'RELATION_ADD',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'entities': event.models.get_childs('events_profiles_ctx', profile_id, child, child_ids)
+        }]
+    else:
+        changes = [{
+            'type': 'RELATION_REMOVE',
+            'relation': f'profile.{child}',
+            'parentId': profile_id,
+            'ids': affected_ids
+        }]
 
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return jsonify({"success": True, "changes": changes})

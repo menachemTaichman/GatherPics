@@ -130,27 +130,18 @@ def update_group(event_id, group_id):
     """Update a group."""
     event = get_event(event_id)
     data = request.json or {}
-    try:        
-        changes = []
-        allowed_fields = {'label', 'representative_face'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        if sanitized:
-            event.models.edit('groups', group_id, sanitized)
-            changes.append({
-                'type': 'UPDATE',
-                'entity': 'group',
-                'items': event.models.get_entities('groups', [group_id])
-            })
+    changes = []
+    allowed_fields = {'label', 'representative_face'}
+    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    if sanitized:
+        event.models.edit('groups', group_id, sanitized)
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'group',
+            'items': event.models.get_entities('groups', [group_id])
+        })
 
-        return jsonify({"success": True, "changes": changes})
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DBPolicyError as e:
-        return jsonify({"error": str(e)}), 400
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    return jsonify({"success": True, "changes": changes})
 
 @group_bp.route("/groups/<group_id>/faces", methods=["GET"])
 @require_auth
@@ -191,124 +182,117 @@ def transfer_faces(event_id):
     if target_group_id and new_group_name:
         return jsonify({"error": "Only one of target_group_id or new_group_name must be provided"}), 400
     
-    try:
-        if not event.models.get_entities('faces', face_ids):
-            return jsonify({"error": "Faces not found"}), 404
+    if not event.models.get_entities('faces', face_ids):
+        return jsonify({"error": "Faces not found"}), 404
 
-        if new_group_name:
-            if event.models.is_exists('groups', {'label': new_group_name}):
-                return jsonify({"error": f"Group name '{new_group_name}' already exists"}), 400
-            target_group_id = event.models.add('groups', {'label': new_group_name})
-        
-        if not target_group_id:
-            return jsonify({"error": "target_group_id or new_group_name must be provided"}), 400
-        
-        result = event.models.add_faces_to_group(
-            face_ids=face_ids,
-            target_group_id=target_group_id,
-        )
+    if new_group_name:
+        if event.models.is_exists('groups', {'label': new_group_name}):
+            return jsonify({"error": f"Group name '{new_group_name}' already exists"}), 400
+        target_group_id = event.models.add('groups', {'label': new_group_name})
+    
+    if not target_group_id:
+        return jsonify({"error": "target_group_id or new_group_name must be provided"}), 400
+    
+    result = event.models.add_faces_to_group(
+        face_ids=face_ids,
+        target_group_id=target_group_id,
+    )
 
-        detached_groups_images = result['detached_groups_images']
-        detached_groups_faces = result['detached_groups_faces']
-        faces_added = result['faces_added']
-        images_added = result['images_added']
-        deleted_group_ids = result['deleted_group_ids']
-        updated_groups_uploads = result['updated_groups_uploads']
-        removed_groups_uploads = result['removed_groups_uploads']
+    detached_groups_images = result['detached_groups_images']
+    detached_groups_faces = result['detached_groups_faces']
+    faces_added = result['faces_added']
+    images_added = result['images_added']
+    deleted_group_ids = result['deleted_group_ids']
+    updated_groups_uploads = result['updated_groups_uploads']
+    removed_groups_uploads = result['removed_groups_uploads']
 
-        changes = []
-        
-        # Remove images from detached groups
-        for group_id, image_ids in detached_groups_images.items():
-            changes.append({
-                'type': 'RELATION_REMOVE',
-                'relation': 'group.images',
-                'parentId': group_id,
-                'ids': image_ids
-            })
-        
-        # Remove faces from detached groups
-        for group_id, face_ids in detached_groups_faces.items():
-            changes.append({
-                'type': 'RELATION_REMOVE',
-                'relation': 'group.faces',
-                'parentId': group_id,
-                'ids': face_ids
-            })
-
-        # Add images to target group
-        images_added_entities = event.models.get_childs('groups', target_group_id, 'images', images_added)
-        for image_id, image in images_added_entities.items():
-            image['groups'] = event.models.get_childs('images', image_id, 'groups', return_ids=True)
-            image['faces'] = event.models.get_childs('images', image_id, 'faces', return_ids=True)
+    changes = []
+    
+    # Remove images from detached groups
+    for group_id, image_ids in detached_groups_images.items():
         changes.append({
-            'type': 'RELATION_ADD',
+            'type': 'RELATION_REMOVE',
             'relation': 'group.images',
-            'parentId': target_group_id,
-            'entities': images_added_entities
+            'parentId': group_id,
+            'ids': image_ids
         })
-        
-        # Add faces to target group
-        faces_added_entities = event.models.get_entities('faces', faces_added)
+    
+    # Remove faces from detached groups
+    for group_id, face_ids in detached_groups_faces.items():
         changes.append({
-            'type': 'RELATION_ADD',
+            'type': 'RELATION_REMOVE',
             'relation': 'group.faces',
-            'parentId': target_group_id,
-            'entities': faces_added_entities
-        })
-        
-        # Update all affected groups
-        changes.append({
-            'type': 'UPDATE',
-            'entity': 'group',
-            'items': event.models.get_entities('groups', list(detached_groups_images.keys()) + [target_group_id])
-        })
-        changes.append({
-            'type': 'UPDATE',
-            'entity': 'face',
-            'items': faces_added_entities
+            'parentId': group_id,
+            'ids': face_ids
         })
 
-        # Update upload.moments relations
-        for upload_id, groups in updated_groups_uploads.items():
-            _, relation_data = event.models.get_childs('uploads', upload_id, 'groups', groups)
-            changes.append({
-                'type': 'RELATION_UPSERT',
-                'relation': 'upload.groups',
-                'parentId': upload_id,
-                'relationData': relation_data
-            })
+    # Add images to target group
+    images_added_entities = event.models.get_childs('groups', target_group_id, 'images', images_added)
+    for image_id, image in images_added_entities.items():
+        image['groups'] = event.models.get_childs('images', image_id, 'groups', return_ids=True)
+        image['faces'] = event.models.get_childs('images', image_id, 'faces', return_ids=True)
+    changes.append({
+        'type': 'RELATION_ADD',
+        'relation': 'group.images',
+        'parentId': target_group_id,
+        'entities': images_added_entities
+    })
+    
+    # Add faces to target group
+    faces_added_entities = event.models.get_entities('faces', faces_added)
+    changes.append({
+        'type': 'RELATION_ADD',
+        'relation': 'group.faces',
+        'parentId': target_group_id,
+        'entities': faces_added_entities
+    })
+    
+    # Update all affected groups
+    changes.append({
+        'type': 'UPDATE',
+        'entity': 'group',
+        'items': event.models.get_entities('groups', list(detached_groups_images.keys()) + [target_group_id])
+    })
+    changes.append({
+        'type': 'UPDATE',
+        'entity': 'face',
+        'items': faces_added_entities
+    })
+
+    # Update upload.moments relations
+    for upload_id, groups in updated_groups_uploads.items():
+        _, relation_data = event.models.get_childs('uploads', upload_id, 'groups', groups)
+        changes.append({
+            'type': 'RELATION_UPSERT',
+            'relation': 'upload.groups',
+            'parentId': upload_id,
+            'relationData': relation_data
+        })
+    
+    for upload_id, groups in removed_groups_uploads.items():
+        changes.append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'upload.groups',
+            'parentId': upload_id,
+            'ids': groups
+        })
+    
+    # Remove deleted groups from store
+    if deleted_group_ids:
+        changes.append({
+            'type': 'REMOVE',
+            'entity': 'group',
+            'ids': deleted_group_ids
+        })
         
-        for upload_id, groups in removed_groups_uploads.items():
-            changes.append({
-                'type': 'RELATION_REMOVE',
-                'relation': 'upload.groups',
-                'parentId': upload_id,
-                'ids': groups
-            })
-        
-        # Remove deleted groups from store
-        if deleted_group_ids:
-            changes.append({
-                'type': 'REMOVE',
-                'entity': 'group',
-                'ids': deleted_group_ids
-            })
-            
-        response = {
-            "success": True,
-            'deleted_group_ids': deleted_group_ids,
-            'new_group_created': bool(new_group_name),
-            'target_group_id': target_group_id,
-            'len_added': len(faces_added),
-            'images_added': images_added,
-            'changes': changes
-        }
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    response = {
+        "success": True,
+        'deleted_group_ids': deleted_group_ids,
+        'new_group_created': bool(new_group_name),
+        'target_group_id': target_group_id,
+        'len_added': len(faces_added),
+        'images_added': images_added,
+        'changes': changes
+    }
+    return jsonify(response)
 

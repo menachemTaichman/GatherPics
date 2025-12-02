@@ -76,6 +76,7 @@ def upload_images(event_id):
                 pass
     
     saved_files = []
+    processing_succeeded = False
     try:
         # Save files to to_process directory
         for file in files:
@@ -97,10 +98,12 @@ def upload_images(event_id):
                 saved_files.append(filename)
         
         if not saved_files:
+            cleanup_files(saved_files, event.to_process_dir)
             return jsonify({"error": "No valid JPG files provided"}), 400
         
         # Process images
         result = general_models.process_new_images(event_id, file_names=saved_files, assign_moments=assign_moments)
+        processing_succeeded = True
         
         # Build changes for frontend
         changes = []
@@ -168,19 +171,11 @@ def upload_images(event_id):
             "errors": result.get('errors', []),
             "changes": changes
         })
-        
-    except ValueError as e:
-        cleanup_files(saved_files, event.to_process_dir)
-        return jsonify({"error": str(e)}), 400
-    except Forbidden as e:
-        cleanup_files(saved_files, event.to_process_dir)
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        cleanup_files(saved_files, event.to_process_dir)
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        cleanup_files(saved_files, event.to_process_dir)
-        return jsonify({"error": str(e)}), 400
+    finally:
+        # Cleanup files only if processing failed
+        # If processing succeeded, files are already moved/processed by process_new_images
+        if not processing_succeeded and saved_files:
+            cleanup_files(saved_files, event.to_process_dir)
 
 @upload_bp.route("/images/upload", methods=["POST"])
 @require_auth
@@ -221,6 +216,7 @@ def upload_files_only(event_id):
                 saved_files.append(filename)
         
         if not saved_files:
+            cleanup_files(saved_files, event.to_process_dir)
             return jsonify({"error": "No valid JPG files provided"}), 400
         
         return jsonify({
@@ -228,37 +224,10 @@ def upload_files_only(event_id):
             "files_saved": len(saved_files),
             "filenames": saved_files
         })
-        
-    except Forbidden as e:
+    except Exception:
         # Cleanup any files that were saved before the error
-        for filename in saved_files:
-            try:
-                filepath = os.path.join(event.to_process_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception:
-                pass
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        # Cleanup any files that were saved before the error
-        for filename in saved_files:
-            try:
-                filepath = os.path.join(event.to_process_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception:
-                pass
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        # Cleanup any files that were saved before the error
-        for filename in saved_files:
-            try:
-                filepath = os.path.join(event.to_process_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception:
-                pass
-        return jsonify({"error": str(e)}), 400
+        cleanup_files(saved_files, event.to_process_dir)
+        raise
 
 @upload_bp.route("/images/process-stream", methods=["GET"])
 @require_auth
@@ -490,27 +459,20 @@ def update_upload(event_id, upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
         
     data = request.json or {}
-    try:
-        allowed_fields = {'notes'}
-        sanitized = {k: v for k, v in data.items() if k in allowed_fields}
-        if sanitized:
-            event.models.edit('uploads', upload_id, sanitized)
-            updated_upload = event.models.get_entities('uploads', [upload_id])
-            changes = [{
-                'type': 'UPDATE',
-                'entity': 'upload',
-                'items': updated_upload
-            }]
-            response = {"success": True, "changes": changes}
-        else:
-            response = {"success": False}
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    allowed_fields = {'notes'}
+    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    if sanitized:
+        event.models.edit('uploads', upload_id, sanitized)
+        updated_upload = event.models.get_entities('uploads', [upload_id])
+        changes = [{
+            'type': 'UPDATE',
+            'entity': 'upload',
+            'items': updated_upload
+        }]
+        response = {"success": True, "changes": changes}
+    else:
+        response = {"success": False}
+    return jsonify(response)
 
 @upload_bp.route("/uploads/<int:upload_id>", methods=["DELETE"])
 @require_auth
@@ -520,21 +482,14 @@ def delete_upload(event_id, upload_id):
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
     
-    try:
-        event.models.delete('uploads', upload_id)
-        
-        response = {"success": True, "deleted_ids": [upload_id]}
-        response['changes'] = [{
-            'type': 'REMOVE',
-            'entity': 'upload',
-            'ids': [upload_id]
-        }]
-        return jsonify(response)
-    except Forbidden as e:
-        return jsonify({"error": str(e)}), 403
-    except DatabaseError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    event.models.delete('uploads', upload_id)
+    
+    response = {"success": True, "deleted_ids": [upload_id]}
+    response['changes'] = [{
+        'type': 'REMOVE',
+        'entity': 'upload',
+        'ids': [upload_id]
+    }]
+    return jsonify(response)
 
 

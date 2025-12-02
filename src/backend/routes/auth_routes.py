@@ -72,25 +72,19 @@ def login():
     if not label:
         return jsonify({"error": "Profile label is required"}), 400
     
-    try:
-        general_models = get_general_models()
-        
-        # Authenticate profile
-        profile_id = general_models.authenticate_profile(label, password)
-        if not profile_id:
-            return jsonify({"error": "Invalid credentials"}), 401
-        
-        # Get profile details
-        # Create access token
-        access_token = create_access_token(identity=profile_id)
-        
-        # Create authentication response
-        return create_auth_response(access_token, profile_id, expires_days=30)
-        
-    except Exception as e:
-        print(f"Login error: {e}")
-        traceback.print_exc()
-        return jsonify({"error": "Authentication failed"}), 500
+    general_models = get_general_models()
+    
+    # Authenticate profile
+    profile_id = general_models.authenticate_profile(label, password)
+    if not profile_id:
+        return jsonify({"error": "Invalid credentials"}), 401
+    
+    # Get profile details
+    # Create access token
+    access_token = create_access_token(identity=profile_id)
+    
+    # Create authentication response
+    return create_auth_response(access_token, profile_id, expires_days=30)
 
 @auth_bp.route("/auth/refresh", methods=["POST"])
 def refresh():
@@ -100,31 +94,25 @@ def refresh():
     if not refresh_token:
         return jsonify({"error": "Refresh token not found"}), 401
     
-    try:
-        general_models = get_general_models()
-        
-        # Validate refresh token
-        profile_id = general_models.validate_refresh_token(refresh_token)
-        
-        if not profile_id:
-            return jsonify({"error": "Invalid or expired refresh token"}), 401
-        
-        # Create new access token
-        access_token = create_access_token(identity=profile_id)
-        
-        # Create response and set access token cookie
-        response = make_response(jsonify({
-            "access_token": access_token
-        }))
-        
-        set_access_cookies(response, access_token)
-        
-        return response
-        
-    except Exception as e:
-        print(f"Refresh error: {e}")
-        traceback.print_exc()
-        return jsonify({"error": "Token refresh failed"}), 500
+    general_models = get_general_models()
+    
+    # Validate refresh token
+    profile_id = general_models.validate_refresh_token(refresh_token)
+    
+    if not profile_id:
+        return jsonify({"error": "Invalid or expired refresh token"}), 401
+    
+    # Create new access token
+    access_token = create_access_token(identity=profile_id)
+    
+    # Create response and set access token cookie
+    response = make_response(jsonify({
+        "access_token": access_token
+    }))
+    
+    set_access_cookies(response, access_token)
+    
+    return response
 
 @auth_bp.route("/auth/logout", methods=["POST"])
 def logout():
@@ -132,11 +120,8 @@ def logout():
     refresh_token = request.cookies.get('refresh_token')
     
     if refresh_token:
-        try:
-            general_models = get_general_models()
-            general_models.revoke_refresh_token(refresh_token)
-        except Exception as e:
-            print(f"Logout error: {e}")
+        general_models = get_general_models()
+        general_models.revoke_refresh_token(refresh_token)
     
     response = make_response(jsonify({"message": "Logout successful"}))
     
@@ -158,17 +143,11 @@ def logout():
 @auth_bp.route("/events/<event_id>/public-access/<public_code>", methods=["POST"])
 def authenticate_public_access(event_id, public_code):
     """Authenticate using public access code and return refresh token."""
-    try:
-        general_models = get_general_models()
-        profile_id = general_models.authenticate_public_access(event_id, public_code)
-        
-        # Create access token
-        access_token = create_access_token(identity=profile_id, expires_delta=timedelta(hours=1))
-        
-        return create_auth_response(access_token, profile_id)
+    general_models = get_general_models()
+    profile_id = general_models.authenticate_public_access(event_id, public_code)
     
-    except Forbidden as e:
-        return jsonify({'error': str(e)}), 403
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
+    # Create access token
+    access_token = create_access_token(identity=profile_id, expires_delta=timedelta(hours=1))
+    
+    return create_auth_response(access_token, profile_id)
 
