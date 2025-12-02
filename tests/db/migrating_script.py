@@ -23,9 +23,16 @@ Timezone Configuration:
   The database will be configured to use this timezone, and all timestamps
   will be converted to this timezone during migration.
 
+Backup Database Handling:
+- Backup databases are preserved if migration fails (not cleaned up in error cases)
+- Use --from-backup to restore from an existing backup database
+- Backup databases are only cleaned up after successful migration completion
+- If migration fails, you can run the script again with --from-backup to restore
+
 Usage: 
   python migrating_script.py                    # Migrate from existing PostgreSQL database (default)
   python migrating_script.py --from-sqlite       # Migrate from SQLite instead
+  python migrating_script.py --from-backup       # Migrate from existing backup database (most recent)
 """
 
 import os
@@ -220,6 +227,45 @@ def backup_postgres_database():
         print(f"Backup database {backup_db_name} created successfully!")
         return backup_db_name
         
+    finally:
+        cursor.close()
+        conn.close()
+
+def find_existing_backup_databases():
+    """Find existing backup databases for the current DB_NAME.
+    
+    Returns:
+        list: List of (backup_db_name, timestamp) tuples, sorted by timestamp (newest first)
+    """
+    conn = get_postgres_conn('postgres')
+    conn.autocommit = True
+    cursor = conn.cursor()
+    
+    try:
+        # Find all databases that match the backup pattern
+        backup_pattern = f"{DB_NAME}_backup_"
+        cursor.execute("""
+            SELECT datname 
+            FROM pg_database 
+            WHERE datname LIKE %s
+            ORDER BY datname DESC
+        """, (f"{backup_pattern}%",))
+        
+        backups = []
+        for row in cursor.fetchall():
+            backup_db_name = row[0]
+            # Extract timestamp from backup name
+            try:
+                timestamp_str = backup_db_name.replace(backup_pattern, "")
+                timestamp = int(timestamp_str)
+                backups.append((backup_db_name, timestamp))
+            except ValueError:
+                # Skip if timestamp can't be parsed
+                continue
+        
+        # Sort by timestamp (newest first)
+        backups.sort(key=lambda x: x[1], reverse=True)
+        return backups
     finally:
         cursor.close()
         conn.close()
@@ -1345,35 +1391,67 @@ def main():
     """Main migration script."""
     # ========================================
     # CONFIGURATION: Set default migration source
-    # Change this to True to default to SQLite, or False to default to PostgreSQL
-    # Can be overridden with --from-sqlite or --from-postgres command-line flags
+    # Change these to set defaults for debugging (VS Code debugger, etc.)
+    # Can be overridden with --from-sqlite, --from-postgres, or --from-backup command-line flags
     # ========================================
     DEFAULT_USE_SQLITE = False  # Set to True to default to SQLite, False for PostgreSQL
+    DEFAULT_USE_BACKUP = False  # Set to True to default to backup database, False otherwise
     
     parser = argparse.ArgumentParser(description='Reset PostgreSQL database and migrate data')
     parser.add_argument('--from-sqlite', action='store_true',
                         help='Migrate from SQLite instead of existing PostgreSQL database (overrides default)')
     parser.add_argument('--from-postgres', action='store_true',
                         help='Migrate from existing PostgreSQL database (overrides default)')
+    parser.add_argument('--from-backup', action='store_true',
+                        help='Migrate from existing backup database (finds most recent backup)')
     args = parser.parse_args()
     
     # Determine migration source: command-line flag overrides default
     use_sqlite = DEFAULT_USE_SQLITE
-    if args.from_sqlite:
+    use_backup = DEFAULT_USE_BACKUP
+    if args.from_backup:
+        use_backup = True
+        use_sqlite = False
+    elif args.from_sqlite:
+        use_backup = False
         use_sqlite = True
     elif args.from_postgres:
+        use_backup = False
         use_sqlite = False
     
     print("=" * 60)
     print("PostgreSQL Database Reset and Migration Script")
     print("=" * 60)
-    print(f"Migration source: {'SQLite' if use_sqlite else 'PostgreSQL'}")
+    if use_backup:
+        print("Migration source: PostgreSQL Backup Database")
+    else:
+        print(f"Migration source: {'SQLite' if use_sqlite else 'PostgreSQL'}")
     print()
     
     backup_db_name = None
+    backup_was_existing = False  # Track if we're using an existing backup
     try:
-        # Step 0: Backup PostgreSQL database (default behavior, unless using SQLite)
-        if not use_sqlite:
+        # Step 0: Get backup database (create new or use existing)
+        if use_backup:
+            # Find existing backup databases
+            existing_backups = find_existing_backup_databases()
+            if not existing_backups:
+                print("Error: No existing backup databases found!")
+                print(f"Looking for databases matching pattern: {DB_NAME}_backup_*")
+                sys.exit(1)
+            
+            # Use the most recent backup
+            backup_db_name, timestamp = existing_backups[0]
+            backup_was_existing = True
+            backup_time = datetime.fromtimestamp(timestamp)
+            print(f"Using existing backup database: {backup_db_name}")
+            print(f"Backup created at: {backup_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Found {len(existing_backups)} backup database(s) total")
+            if len(existing_backups) > 1:
+                print("  (Using most recent backup)")
+            print()
+        elif not use_sqlite:
+            # Create new backup
             backup_db_name = backup_postgres_database()
             print()
         
@@ -1392,7 +1470,7 @@ def main():
             if backup_db_name:
                 migrate_data_from_postgres(backup_db_name)
             else:
-                print("Error: Backup database not created!")
+                print("Error: Backup database not available!")
                 sys.exit(1)
         print()
         
@@ -1400,15 +1478,27 @@ def main():
         print("Migration complete!")
         print("=" * 60)
         
+        # Only cleanup backup database if migration succeeded and it was a newly created backup
+        # (Don't cleanup existing backups that were explicitly requested with --from-backup)
+        if backup_db_name and not backup_was_existing:
+            print()
+            cleanup_backup_database(backup_db_name)
+        elif backup_was_existing:
+            print()
+            print(f"Note: Backup database {backup_db_name} was preserved (use --from-backup to restore from it)")
+        
     except Exception as e:
         print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
-    finally:
-        # Cleanup backup database if it was created
         if backup_db_name:
-            cleanup_backup_database(backup_db_name)
+            if backup_was_existing:
+                print(f"\nNote: Backup database {backup_db_name} is still available for recovery")
+                print("      Run the script again with --from-backup to restore from it")
+            else:
+                print(f"\nNote: Backup database {backup_db_name} was preserved due to error")
+                print("      Run the script again with --from-backup to restore from it")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
