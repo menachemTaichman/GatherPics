@@ -9,6 +9,17 @@ from src.backend.helpers import get_event, get_general_models, Forbidden, Databa
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 
+def cleanup_files(file_names, to_process_dir):
+    """Delete files from to_process directory, ignoring if already deleted."""
+    if file_names:
+        for filename in file_names:
+            try:
+                filepath = os.path.join(to_process_dir, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass
+
 def sanitize_filename(filename):
     """
     Sanitize filename while preserving spaces.
@@ -64,16 +75,6 @@ def upload_images(event_id):
     
     if not files:
         return jsonify({"error": "No files provided"}), 400
-    
-    def cleanup_files(file_names, to_process_dir):
-        """Delete files from to_process directory, ignoring if already deleted."""
-        for filename in file_names:
-            try:
-                filepath = os.path.join(to_process_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception:
-                pass
     
     saved_files = []
     processing_succeeded = False
@@ -245,17 +246,6 @@ def process_images_stream(event_id):
                          if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
     else:
         files_to_track = file_names
-    
-    def cleanup_files(file_names, to_process_dir):
-        """Delete files from to_process directory, ignoring if already deleted."""
-        if file_names:
-            for filename in file_names:
-                try:
-                    filepath = os.path.join(to_process_dir, filename)
-                    if os.path.exists(filepath):
-                        os.remove(filepath)
-                except Exception:
-                    pass
     
     progress_queue = queue.Queue()
     

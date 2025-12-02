@@ -1,9 +1,11 @@
 from flask import Flask, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from flask_jwt_extended.exceptions import JWTDecodeError, InvalidHeaderError, NoAuthorizationError
 from datetime import timedelta
 import traceback
 import os
+import logging
 
 # Load environment variables from .env file if it exists (development only)
 # In production (AWS), environment variables are already set
@@ -86,6 +88,31 @@ def handle_database_error(error):
 @app.errorhandler(DBPolicyError)
 def handle_db_policy_error(error):
     return jsonify({"error": str(error)}), 400
+
+# JWT Error Handlers
+@app.errorhandler(JWTDecodeError)
+def handle_jwt_decode_error(error):
+    return jsonify({"error": "Invalid token"}), 401
+
+@app.errorhandler(InvalidHeaderError)
+def handle_invalid_header_error(error):
+    return jsonify({"error": "Invalid authorization header"}), 401
+
+@app.errorhandler(NoAuthorizationError)
+def handle_no_authorization_error(error):
+    return jsonify({"error": "Missing authorization token"}), 401
+
+# General Exception Handler - catches all unhandled exceptions
+@app.errorhandler(Exception)
+def handle_general_exception(error):
+    """Catch-all exception handler for any unhandled exceptions."""
+    # Log the full traceback for debugging
+    logging.error(f"Unhandled exception: {error}", exc_info=True)
+    
+    # Don't expose internal error details in production
+    error_message = str(error) if app.debug else "An unexpected error occurred"
+    
+    return jsonify({"error": error_message}), 500
 
 # Production build serving
 @app.route('/assets/<path:filename>')

@@ -24,7 +24,6 @@ def get_events():
 def get_event(event_id):
     """Get single event details (auth required to include access-controlled fields if any)."""
     gm = get_general_models()
-    event_instance = get_event_instance(event_id)
     event_items = gm.get_entities('events', [event_id], include_details=True)
     if not event_items:
         return jsonify({"error": "Event not found"}), 404
@@ -222,5 +221,3 @@ def get_uploads_limits():
     gm = get_general_models()
     limits = gm.get_uploads_limits()
     return jsonify(limits)
-
-
