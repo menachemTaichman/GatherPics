@@ -107,8 +107,7 @@ steps = [
                 all_groups,
                 all_albums
             )
-            VALUES (cur_profile_uuid('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
-            ON CONFLICT (event_id, profile_id) DO NOTHING;
+            VALUES (cur_profile_uuid('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
             
             RETURN NEW;
         END;
@@ -185,7 +184,11 @@ steps = [
                 password = NEW.password
             WHERE profile_id = cur_profile_uuid('profile_id');
             
-            RETURN NEW;
+            IF deleted_event_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -292,6 +295,7 @@ steps = [
         RETURNS TRIGGER AS $$
         DECLARE
             min_rank INTEGER;
+            updated_profile_id UUID;
         BEGIN
             IF NOT OLD.is_editable THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not editable';
@@ -320,15 +324,22 @@ steps = [
                 restricted_to_event = NEW.restricted_to_event,
                 is_public = NEW.is_public,
                 public_access_code = NEW.public_access_code
-            WHERE profile_id = OLD.profile_id;
+            WHERE profile_id = OLD.profile_id
+            RETURNING profile_id INTO updated_profile_id;
             
-            RETURN NEW;
+            IF updated_profile_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_profiles_ctx_delete()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_profile_id UUID;
         BEGIN
             IF NOT OLD.is_editable THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not editable';
@@ -338,9 +349,14 @@ steps = [
                 RAISE EXCEPTION 'Policy error: the profile is associated with an event. Please remove the profile from all events first.';
             END IF;
 
-            DELETE FROM profiles WHERE profile_id = OLD.profile_id;
+            DELETE FROM profiles WHERE profile_id = OLD.profile_id
+            RETURNING profile_id INTO deleted_profile_id;
             
-            RETURN OLD;
+            IF deleted_profile_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -363,25 +379,39 @@ steps = [
         -- Function for my_notifications_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_my_notifications_ctx_update()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_notification_id INTEGER;
         BEGIN
 
             UPDATE notifications SET
                 read = COALESCE(NEW.read, read),
                 read_at = COALESCE(NEW.read_at, CURRENT_TIMESTAMP)
-            WHERE notification_id = OLD.notification_id;
+            WHERE notification_id = OLD.notification_id
+            RETURNING notification_id INTO updated_notification_id;
             
-            RETURN NEW;
+            IF updated_notification_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_notifications_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_my_notifications_ctx_delete()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_notification_id INTEGER;
         BEGIN
 
-            DELETE FROM notifications WHERE notification_id = OLD.notification_id;
+            DELETE FROM notifications WHERE notification_id = OLD.notification_id
+            RETURNING notification_id INTO deleted_notification_id;
             
-            RETURN OLD;
+            IF deleted_notification_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -501,13 +531,19 @@ steps = [
             FROM settings
             WHERE settings.id = 1;
             
-            RETURN NEW;
+            IF new_feedback_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_feedbacks_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_my_feedbacks_ctx_update()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_feedback_id INTEGER;
         BEGIN
             
             IF OLD.is_closed = TRUE THEN
@@ -519,30 +555,44 @@ steps = [
                 type = NEW.type,
                 message = NEW.message,
                 communication_consent = COALESCE(CASE WHEN NEW.sender_email IS NOT NULL THEN TRUE ELSE NEW.communication_consent END, FALSE)
-            WHERE feedback_id = OLD.feedback_id;
+            WHERE feedback_id = OLD.feedback_id
+            RETURNING feedback_id INTO updated_feedback_id;
             
-            RETURN NEW;
+            IF updated_feedback_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_feedbacks_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_my_feedbacks_ctx_delete()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_feedback_id INTEGER;
         BEGIN
             
             IF OLD.is_closed = TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete closed feedback';
             END IF;
 
-            DELETE FROM feedbacks WHERE feedback_id = OLD.feedback_id;
+            DELETE FROM feedbacks WHERE feedback_id = OLD.feedback_id
+            RETURNING feedback_id INTO deleted_feedback_id;
             
-            RETURN OLD;
+            IF deleted_feedback_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for feedbacks_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_feedbacks_ctx_update()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_feedback_id INTEGER;
         BEGIN
 
             UPDATE feedbacks SET
@@ -553,7 +603,8 @@ steps = [
                 closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
                 closed_by = cur_profile_uuid('profile_id'),
                 closed_details = NEW.closed_details
-            WHERE feedback_id = OLD.feedback_id;
+            WHERE feedback_id = OLD.feedback_id
+            RETURNING feedback_id INTO updated_feedback_id;
 
             IF NEW.is_closed THEN
                 INSERT INTO notifications (
@@ -577,18 +628,29 @@ steps = [
                 AND p.is_public = FALSE;
             END IF;
             
-            RETURN NEW;
+            IF updated_feedback_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for feedbacks_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_feedbacks_ctx_delete()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_feedback_id INTEGER;
         BEGIN
 
-            DELETE FROM feedbacks WHERE feedback_id = OLD.feedback_id;
+            DELETE FROM feedbacks WHERE feedback_id = OLD.feedback_id
+            RETURNING feedback_id INTO deleted_feedback_id;
             
-            RETURN OLD;
+            IF deleted_feedback_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -642,6 +704,9 @@ steps = [
         -- Function for events_profiles_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_events_profiles_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_profile_id UUID;
+            inserted_event_id UUID;
         BEGIN
             IF NEW.profile_id NOT IN (
                 SELECT profile_id FROM profiles_ctx WHERE is_editable
@@ -682,7 +747,8 @@ steps = [
                 COALESCE(NEW.all_images, FALSE),
                 COALESCE(NEW.all_groups, FALSE),
                 COALESCE(NEW.all_albums, FALSE)
-            );
+            )
+            RETURNING profile_id, event_id INTO inserted_profile_id, inserted_event_id;
 
             IF NEW.all_images THEN
                 INSERT INTO profiles_images (profile_id, image_id)
@@ -708,13 +774,20 @@ steps = [
                 ON CONFLICT DO NOTHING;
             END IF;
             
-            RETURN NEW;
+            IF inserted_profile_id IS NOT NULL AND inserted_event_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for events_profiles_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_events_profiles_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_profile_id UUID;
+            updated_event_id UUID;
         BEGIN
             IF NEW.all_images AND NOT OLD.all_images AND cur_event_profile_bool('all_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot set profile all_images if current profile does not have all_images';
@@ -738,7 +811,8 @@ steps = [
                 all_groups = NEW.all_groups,
                 all_albums = NEW.all_albums
             WHERE event_id = cur_event_profile_uuid('event_id')
-            AND profile_id = OLD.profile_id;
+            AND profile_id = OLD.profile_id
+            RETURNING profile_id, event_id INTO updated_profile_id, updated_event_id;
 
             IF OLD.all_images AND NOT NEW.all_images THEN
                 DELETE FROM profiles_images 
@@ -779,17 +853,30 @@ steps = [
                 ON CONFLICT DO NOTHING;
             END IF;
             
-            RETURN NEW;
+            IF updated_profile_id IS NOT NULL AND updated_event_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for events_profiles_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_events_profiles_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_profile_id UUID;
+            deleted_event_id UUID;
         BEGIN
-            DELETE FROM events_profiles WHERE event_id = cur_event_profile_uuid('event_id') AND profile_id = OLD.profile_id;
+            DELETE FROM events_profiles 
+            WHERE event_id = cur_event_profile_uuid('event_id') AND profile_id = OLD.profile_id
+            RETURNING profile_id, event_id INTO deleted_profile_id, deleted_event_id;
             
-            RETURN OLD;
+            IF deleted_profile_id IS NOT NULL AND deleted_event_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -829,6 +916,9 @@ steps = [
         -- Function for profiles_images_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_profiles_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_profile_id UUID;
+            inserted_image_id UUID;
         BEGIN
             IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
@@ -840,27 +930,43 @@ steps = [
 
             INSERT INTO profiles_images (profile_id, image_id)
             VALUES (NEW.profile_id, NEW.image_id)
-            ON CONFLICT DO NOTHING;
+            ON CONFLICT DO NOTHING
+            RETURNING profile_id, image_id INTO inserted_profile_id, inserted_image_id;
             
-            RETURN NEW;
+            IF inserted_profile_id IS NOT NULL AND inserted_image_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_images_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_profiles_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_profile_id UUID;
+            deleted_image_id UUID;
         BEGIN
             DELETE FROM profiles_images
             WHERE profile_id = OLD.profile_id
-            AND image_id = OLD.image_id;
+            AND image_id = OLD.image_id
+            RETURNING profile_id, image_id INTO deleted_profile_id, deleted_image_id;
             
-            RETURN OLD;
+            IF deleted_profile_id IS NOT NULL AND deleted_image_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_groups_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_profiles_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_profile_id UUID;
+            inserted_group_id UUID;
         BEGIN
             
             IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
@@ -873,27 +979,43 @@ steps = [
 
             INSERT INTO profiles_groups (profile_id, group_id)
             VALUES (NEW.profile_id, NEW.group_id)
-            ON CONFLICT DO NOTHING;
+            ON CONFLICT DO NOTHING
+            RETURNING profile_id, group_id INTO inserted_profile_id, inserted_group_id;
             
-            RETURN NEW;
+            IF inserted_profile_id IS NOT NULL AND inserted_group_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_groups_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_profiles_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_profile_id UUID;
+            deleted_group_id UUID;
         BEGIN
             DELETE FROM profiles_groups
             WHERE profile_id = OLD.profile_id
-            AND group_id = OLD.group_id;
+            AND group_id = OLD.group_id
+            RETURNING profile_id, group_id INTO deleted_profile_id, deleted_group_id;
             
-            RETURN OLD;
+            IF deleted_profile_id IS NOT NULL AND deleted_group_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_albums_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_profiles_albums_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_profile_id UUID;
+            inserted_album_id UUID;
         BEGIN
             
             IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
@@ -906,21 +1028,34 @@ steps = [
 
             INSERT INTO profiles_albums (profile_id, album_id)
             VALUES (NEW.profile_id, NEW.album_id)
-            ON CONFLICT DO NOTHING;
+            ON CONFLICT DO NOTHING
+            RETURNING profile_id, album_id INTO inserted_profile_id, inserted_album_id;
             
-            RETURN NEW;
+            IF inserted_profile_id IS NOT NULL AND inserted_album_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for profiles_albums_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_profiles_albums_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_profile_id UUID;
+            deleted_album_id UUID;
         BEGIN
             DELETE FROM profiles_albums
             WHERE profile_id = OLD.profile_id
-            AND album_id = OLD.album_id;
+            AND album_id = OLD.album_id
+            RETURNING profile_id, album_id INTO deleted_profile_id, deleted_album_id;
             
-            RETURN OLD;
+            IF deleted_profile_id IS NOT NULL AND deleted_album_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -1024,13 +1159,19 @@ steps = [
             
             NEW.face_id := new_face_id;
             
-            RETURN NEW;
+            IF new_face_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for faces_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_faces_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_face_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
@@ -1040,23 +1181,35 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the target group is not accessible';
             END IF;
 
-            UPDATE faces SET group_id = NEW.group_id WHERE face_id = OLD.face_id;
+            UPDATE faces SET group_id = NEW.group_id WHERE face_id = OLD.face_id
+            RETURNING face_id INTO updated_face_id;
             
-            RETURN NEW;
+            IF updated_face_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for faces_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_faces_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_face_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            DELETE FROM faces WHERE face_id = OLD.face_id;
+            DELETE FROM faces WHERE face_id = OLD.face_id
+            RETURNING face_id INTO deleted_face_id;
             
-            RETURN OLD;
+            IF deleted_face_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -1114,13 +1267,19 @@ steps = [
                 ON CONFLICT DO NOTHING;
             END IF;
             
-            RETURN NEW;
+            IF new_image_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for images_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_image_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
@@ -1132,23 +1291,35 @@ steps = [
                 high_quality_file_size = NEW.high_quality_file_size,
                 display_file_size = NEW.display_file_size,
                 thumb_file_size = NEW.thumb_file_size
-            WHERE image_id = OLD.image_id;
+            WHERE image_id = OLD.image_id
+            RETURNING image_id INTO updated_image_id;
             
-            RETURN NEW;
+            IF updated_image_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for images_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_image_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to delete images';
             END IF;
 
-            DELETE FROM images WHERE image_id = OLD.image_id;
+            DELETE FROM images WHERE image_id = OLD.image_id
+            RETURNING image_id INTO deleted_image_id;
             
-            RETURN OLD;
+            IF deleted_image_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -1236,36 +1407,54 @@ steps = [
             
             NEW.group_id := new_group_id;
             
-            RETURN NEW;
+            IF new_group_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for groups_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_group_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
             UPDATE groups SET label = NEW.label, representative_face = NEW.representative_face
-            WHERE group_id = OLD.group_id;
+            WHERE group_id = OLD.group_id
+            RETURNING group_id INTO updated_group_id;
             
-            RETURN NEW;
+            IF updated_group_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for groups_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_group_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            DELETE FROM groups WHERE group_id = OLD.group_id;
+            DELETE FROM groups WHERE group_id = OLD.group_id
+            RETURNING group_id INTO deleted_group_id;
             
-            RETURN OLD;
+            IF deleted_group_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -1305,13 +1494,19 @@ steps = [
             
             NEW.moment_id := new_moment_id;
             
-            RETURN NEW;
+            IF new_moment_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for moments_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_moments_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_moment_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
@@ -1323,23 +1518,35 @@ steps = [
                 start_date = NEW.start_date,
                 end_date = NEW.end_date,
                 representative_image = NEW.representative_image
-            WHERE moment_id = OLD.moment_id;
+            WHERE moment_id = OLD.moment_id
+            RETURNING moment_id INTO updated_moment_id;
             
-            RETURN NEW;
+            IF updated_moment_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for moments_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_moments_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_moment_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            DELETE FROM moments WHERE moment_id = OLD.moment_id;
+            DELETE FROM moments WHERE moment_id = OLD.moment_id
+            RETURNING moment_id INTO deleted_moment_id;
             
-            RETURN OLD;
+            IF deleted_moment_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -1375,13 +1582,19 @@ steps = [
             
             NEW.album_id := new_album_id;
             
-            RETURN NEW;
+            IF new_album_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for albums_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_albums_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_album_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
@@ -1391,29 +1604,44 @@ steps = [
                 label = NEW.label,
                 description = NEW.description,
                 representative_image = NEW.representative_image
-            WHERE album_id = OLD.album_id;
+            WHERE album_id = OLD.album_id
+            RETURNING album_id INTO updated_album_id;
             
-            RETURN NEW;
+            IF updated_album_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for albums_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_albums_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_album_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            DELETE FROM albums WHERE album_id = OLD.album_id;
+            DELETE FROM albums WHERE album_id = OLD.album_id
+            RETURNING album_id INTO deleted_album_id;
             
-            RETURN OLD;
+            IF deleted_album_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for albums_images_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_albums_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_album_id UUID;
+            inserted_image_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1433,24 +1661,37 @@ steps = [
 
             INSERT INTO albums_images (album_id, image_id)
             VALUES (NEW.album_id, NEW.image_id)
-            ON CONFLICT DO NOTHING;
+            ON CONFLICT DO NOTHING
+            RETURNING album_id, image_id INTO inserted_album_id, inserted_image_id;
             
-            RETURN NEW;
+            IF inserted_album_id IS NOT NULL AND inserted_image_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for albums_images_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_albums_images_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_album_id UUID;
+            deleted_image_id UUID;
         BEGIN
             IF cur_event_profile_bool('can_edit') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
             DELETE FROM albums_images
-            WHERE album_id = OLD.album_id AND image_id = OLD.image_id;
+            WHERE album_id = OLD.album_id AND image_id = OLD.image_id
+            RETURNING album_id, image_id INTO deleted_album_id, deleted_image_id;
             
-            RETURN OLD;
+            IF deleted_album_id IS NOT NULL AND deleted_image_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -1587,13 +1828,19 @@ steps = [
             
             NEW.upload_id := new_upload_id;
             
-            RETURN NEW;
+            IF new_upload_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for uploads_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_uploads_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_upload_id INTEGER;
         BEGIN
             IF OLD.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') THEN
                 RAISE EXCEPTION 'Permission denied: the upload is not editable';
@@ -1612,15 +1859,22 @@ steps = [
                 moments_count = NEW.moments_count,
                 errors = NEW.errors,
                 notes = NEW.notes
-            WHERE upload_id = OLD.upload_id;
+            WHERE upload_id = OLD.upload_id
+            RETURNING upload_id INTO updated_upload_id;
             
-            RETURN NEW;
+            IF updated_upload_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for uploads_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_uploads_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_upload_id INTEGER;
         BEGIN
             IF cur_event_profile_bool('can_upload_and_delete_images') IS DISTINCT FROM TRUE THEN
                 RAISE EXCEPTION 'Permission denied: cannot upload and delete images';
@@ -1632,9 +1886,14 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile is not accessible';
             END IF;
 
-            DELETE FROM uploads WHERE upload_id = OLD.upload_id;
+            DELETE FROM uploads WHERE upload_id = OLD.upload_id
+            RETURNING upload_id INTO deleted_upload_id;
             
-            RETURN OLD;
+            IF deleted_upload_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,
@@ -1931,13 +2190,19 @@ steps = [
             
             NEW.access_request_id := new_access_request_id;
             
-            RETURN NEW;
+            IF new_access_request_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_access_requests_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_access_request_id INTEGER;
         BEGIN
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: cannot update closed access request';
@@ -1946,29 +2211,44 @@ steps = [
             UPDATE access_requests SET
                 details = NEW.details,
                 communication_consent = COALESCE(cur_profile_bool('is_public') OR NEW.communication_consent, FALSE)
-            WHERE access_request_id = OLD.access_request_id;
+            WHERE access_request_id = OLD.access_request_id
+            RETURNING access_request_id INTO updated_access_request_id;
             
-            RETURN NEW;
+            IF updated_access_request_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_access_requests_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_my_access_requests_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_access_request_id INTEGER;
         BEGIN
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete closed access request';
             END IF;
 
-            DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id;
+            DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id
+            RETURNING access_request_id INTO deleted_access_request_id;
             
-            RETURN OLD;
+            IF deleted_access_request_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_access_requests_groups_ctx INSERT
         CREATE OR REPLACE FUNCTION trg_insert_my_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            inserted_access_request_id INTEGER;
+            inserted_group_id UUID;
         BEGIN
             IF cur_event_profile_uuid('event_id') IS NULL THEN
                 RAISE EXCEPTION 'Permission denied: event not found';
@@ -1986,7 +2266,8 @@ steps = [
             SELECT NEW.access_request_id, cgtra.group_id
             FROM groups_to_access_requests_ctx cgtra
             WHERE cgtra.group_id = NEW.group_id
-            ON CONFLICT DO NOTHING;
+            ON CONFLICT DO NOTHING
+            RETURNING access_request_id, group_id INTO inserted_access_request_id, inserted_group_id;
 
             INSERT INTO notifications (
                 profile_id,
@@ -2021,13 +2302,20 @@ steps = [
                     AND ga.is_accessible
                 );
             
-            RETURN NEW;
+            IF inserted_access_request_id IS NOT NULL AND inserted_group_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for my_access_requests_groups_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_my_access_requests_groups_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_access_request_id INTEGER;
+            deleted_group_id UUID;
         BEGIN
             IF cur_profile_uuid('profile_id') IS DISTINCT FROM (SELECT ar.profile_id FROM access_requests ar WHERE OLD.access_request_id = ar.access_request_id) THEN
                 RAISE EXCEPTION 'Permission denied: the access request is not accessible';
@@ -2037,34 +2325,54 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the access request is closed';
             END IF;
 
-            DELETE FROM access_requests_groups WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
+            DELETE FROM access_requests_groups 
+            WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id
+            RETURNING access_request_id, group_id INTO deleted_access_request_id, deleted_group_id;
             
-            RETURN OLD;
+            IF deleted_access_request_id IS NOT NULL AND deleted_group_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for access_requests_ctx UPDATE
         CREATE OR REPLACE FUNCTION trg_update_access_requests_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_access_request_id INTEGER;
         BEGIN
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: the access request is closed';
             END IF;
 
             UPDATE access_requests SET applicant_profile_id = NEW.applicant_profile_id
-            WHERE access_request_id = OLD.access_request_id;
+            WHERE access_request_id = OLD.access_request_id
+            RETURNING access_request_id INTO updated_access_request_id;
             
-            RETURN NEW;
+            IF updated_access_request_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
         -- Function for access_requests_ctx DELETE
         CREATE OR REPLACE FUNCTION trg_delete_access_requests_ctx()
         RETURNS TRIGGER AS $$
+        DECLARE
+            deleted_access_request_id INTEGER;
         BEGIN
-            DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id;
+            DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id
+            RETURNING access_request_id INTO deleted_access_request_id;
             
-            RETURN OLD;
+            IF deleted_access_request_id IS NOT NULL THEN
+                RETURN OLD;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -2073,6 +2381,7 @@ steps = [
         RETURNS TRIGGER AS $$
         DECLARE
             applicant_profile_id UUID := (SELECT applicant_profile_id FROM access_requests WHERE access_request_id = OLD.access_request_id);
+            updated_access_request_id INTEGER;
             was_closed BOOLEAN;
             v_event_id UUID;
         BEGIN
@@ -2112,7 +2421,8 @@ steps = [
                 approved = NEW.approved,
                 closed_at = COALESCE(NEW.closed_at, CURRENT_TIMESTAMP),
                 closed_by = cur_profile_uuid('profile_id')
-            WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id;
+            WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id
+            RETURNING access_request_id INTO updated_access_request_id;
 
             PERFORM ensure_access_requests_closed_func(OLD.access_request_id, NEW.closed_at);
             
@@ -2143,7 +2453,11 @@ steps = [
                 );
             END IF;
             
-            RETURN NEW;
+            IF updated_access_request_id IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
         """,

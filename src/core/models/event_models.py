@@ -85,7 +85,7 @@ class EventModels(BaseModels):
         
         return biggest
 
-    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict | None = None) -> tuple[list[str], dict[str, list[str]]]:
+    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict = {}) -> tuple[list[str], dict[str, list[str]]]:
         """Edit childs of a parent.
         Args:
             parent: parent entity
@@ -372,10 +372,12 @@ class EventModels(BaseModels):
         """
         affected_uploads_to_groups = {}
         query = f"""
-            SELECT DISTINCT auf.upload_id, auf.group_id
-            FROM uploads_faces_ctx auf
-            WHERE auf.face_id IN ({','.join(['%s'] * len(face_ids))})
-            AND auf.group_id <> %s
+            SELECT DISTINCT i.upload_id, f.group_id
+            FROM uploads_faces_ctx ufc
+            INNER JOIN faces f ON ufc.face_id = f.face_id
+            INNER JOIN images i ON f.image_id = i.image_id
+            WHERE ufc.face_id IN ({','.join(['%s'] * len(face_ids))})
+            AND f.group_id <> %s
         """
         result = self.db.execute_query(query, face_ids + [target_group_id], return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, group_id in result:

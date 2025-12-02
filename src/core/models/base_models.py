@@ -338,7 +338,7 @@ class BaseModels(ABC):
         self.delete(table, entity_ids)
         return entity_ids
 
-    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict | None = None) -> tuple[list[str], dict[str, list[str]]]:
+    def edit_childs(self, parent: str, entity_id: str, child: str, child_ids: list[str], operation: ChildOperation, data: dict = {}) -> tuple[list[str], dict[str, list[str]]]:
         """Edit childs of a parent.
         Args:
             parent: parent entity
@@ -362,58 +362,119 @@ class BaseModels(ABC):
         exclusive = relation_table == child_table
         ctx_relation_table = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
+        id_type = 'INTEGER' if self.db.is_auto_increment(child_table) else 'UUID'
 
-        within = operation in [REMOVE, UPDATE]
-        # TODO: maybe to use it only for count, not for the list of child ids
-        valid_child_ids = self.get_childs(parent, entity_id, child_table, child_ids, within=within, return_ids=True)
-        if not valid_child_ids:
-            return [], {}
 
         detached_parents = {}
-        if operation == ADD and exclusive:
-            detached_parents = self.get_parents(child_table, valid_child_ids, parent)
-
-        placeholders = ','.join(['%s'] * len(valid_child_ids))
-        params = []
-        added_data = ''
         if exclusive:
-            params.extend([entity_id, *valid_child_ids])
-            if data:
-                added_data = ',' + ','.join([f'{k} = NULL' for k in data.keys()])
-
             if operation == ADD:
-                query = f'UPDATE {ctx_relation_table} SET {id_field} = %s{added_data} WHERE {child_id_field} IN ({placeholders})'
-            elif operation == REMOVE:
-                query = f'UPDATE {ctx_relation_table} SET {id_field} = NULL{added_data} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
-            self.db.execute_query(query, params)
-        else:
-            if operation == ADD:
-                added_values_clause = ''
-                added_data_clause = ''
+                update_clause = f'{id_field} = %s'
                 if data:
-                    added_values_clause = ',' + ','.join([f'%s' for _ in range(len(data.keys()))])
-                    added_data_clause = ',' + ','.join([f'{k}' for k in data.keys()])
-
-                values_clause = ','.join([f'(%s, %s{added_values_clause})'] * len(valid_child_ids))
-                for cid in valid_child_ids:
-                    params.extend([entity_id, cid])
-                    if data:
-                        params.extend(data.values())
-
-                query = f'INSERT INTO {ctx_relation_table} ({id_field}, {child_id_field}{added_data_clause}) VALUES {values_clause} ON CONFLICT DO NOTHING'
-                self.db.execute_query(query, params)
-            elif operation == REMOVE:
-                params.extend([entity_id, *valid_child_ids])
-                query = f'DELETE FROM {ctx_relation_table} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
-                self.db.execute_query(query, params)
+                    update_clause += ',' + ','.join([f'{k} = %s' for k in data.keys()])
+                where_clause = f' AND r.{id_field} IS DISTINCT FROM %s'
+                params = [child_ids, entity_id, *data.values(), entity_id]
             elif operation == UPDATE:
-                if data:
-                    updated_data_clause = ','.join([f'{k} = %s' for k in data.keys()])
-                    params = [*data.values(), entity_id, *valid_child_ids]
-                    query = f'UPDATE {ctx_relation_table} SET {updated_data_clause} WHERE {id_field} = %s AND {child_id_field} IN ({placeholders})'
-                    self.db.execute_query(query, params)
+                update_clause = ', '.join([f'{k} = %s' for k in data.keys()])
+                where_clause = f' AND r.{id_field} = %s'
+                params = [child_ids, *data.values(), entity_id]
+            elif operation == REMOVE:
+                update_clause = f'{id_field} = NULL'
+                if relation_table_fields:
+                    update_clause += ',' + ','.join([f'{k} = NULL' for k in relation_table_fields])
+                where_clause = f' AND r.{id_field} = %s'
+                params = [child_ids, entity_id]
 
-        return valid_child_ids, detached_parents
+            query = f"""
+                WITH child_ids AS (
+                    SELECT DISTINCT unnest(%s::{id_type}[]) AS {child_id_field} 
+                ),
+                old_parents AS (
+                    SELECT r.{child_id_field}, r.{id_field} AS old_parent_id
+                    FROM {ctx_relation_table} r
+                    INNER JOIN child_ids c ON r.{child_id_field} = c.{child_id_field}
+                    WHERE r.{id_field} IS NOT NULL
+                ),
+                updated AS (
+                    UPDATE {ctx_relation_table} AS r
+                    SET {update_clause}
+                    FROM child_ids c
+                    WHERE r.{child_id_field} = c.{child_id_field}
+                    {where_clause}
+                    RETURNING r.{child_id_field}
+                )
+                SELECT u.{child_id_field}, op.old_parent_id
+                FROM updated u
+                LEFT JOIN old_parents op ON u.{child_id_field} = op.{child_id_field}
+            """
+            result = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_TUPLES)
+            
+            affected_child_ids = [row[0] for row in result]
+            for child_id, old_parent_id in result:
+                if old_parent_id:
+                    detached_parents.setdefault(old_parent_id, []).append(child_id)
+        else:
+            params = []
+            cte_part = f"""
+                WITH child_ids AS (
+                    SELECT DISTINCT unnest(%s::{id_type}[]) AS {child_id_field} 
+                )
+            """
+
+            if operation == ADD:
+                columns = [id_field, child_id_field]
+                value_placeholders = [f'%s', f'c.{child_id_field}']
+                params = [child_ids, entity_id]
+                
+                if data:
+                    columns.extend(data.keys())
+                    value_placeholders.extend(['%s'] * len(data))
+                    params.extend(data.values())
+                
+                cols_str = ', '.join(columns)
+                vals_str = ', '.join(value_placeholders)
+                                
+                query = f"""
+                    {cte_part}
+                    INSERT INTO {ctx_relation_table} ({cols_str})
+                    SELECT {vals_str}
+                    FROM child_ids c
+                    ON CONFLICT DO NOTHING
+                    RETURNING {child_id_field}
+                """
+
+            elif operation == UPDATE:
+                update_clause = ', '.join([f'{k} = %s' for k in data.keys()])
+                params = [child_ids, *data.values(), entity_id]
+                
+                query = f"""
+                    {cte_part}
+                    UPDATE {ctx_relation_table} AS r
+                    SET {update_clause}
+                    FROM child_ids c
+                    WHERE r.{child_id_field} = c.{child_id_field}
+                    AND r.{id_field} = %s
+                    RETURNING r.{child_id_field}
+                """
+
+            elif operation == REMOVE:
+                params = [child_ids, entity_id]
+                
+                query = f"""
+                    {cte_part}
+                    DELETE FROM {ctx_relation_table} AS r
+                    USING child_ids c
+                    WHERE r.{child_id_field} = c.{child_id_field}
+                    AND r.{id_field} = %s
+                    RETURNING r.{child_id_field}
+                """
+
+            result = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_TUPLES)
+            affected_child_ids = [row[0] for row in result]
+
+            if operation == REMOVE and affected_child_ids:
+                detached_parents[entity_id] = affected_child_ids
+
+        return affected_child_ids, detached_parents
 
     def get_unique_label(
         self,

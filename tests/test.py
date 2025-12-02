@@ -121,5 +121,14 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = db.execute_query('SELECT * FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
+# image_ids = ["f31135da-9b0d-499d-9eed-51b490ee2618", "52bc7104-f56e-4d98-bafe-fc5ce3b66e5b"]
+# album_id = 'f947b84f-7d57-4f4d-8593-cbba2c30c353'
+# result = event.models.get_childs('albums', album_id, 'images', image_ids, return_ids=True)
+# result = event.models.edit_childs('albums', album_id, 'images', image_ids, operation=ChildOperation.ADD)
+# print(result)
+
+face_ids = ['b5c1bbd3-4127-4d32-a724-140842989e42']
+target_group_id = '8f965866-ec14-4b61-95d8-79bae649dad4'
+result = event.models.add_faces_to_group(face_ids=face_ids, target_group_id=target_group_id)
 print(result)
+print('--------------------------------')
