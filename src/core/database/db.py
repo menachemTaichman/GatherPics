@@ -717,6 +717,11 @@ class DB:
         
         except psycopg2_errors.Error as e:
             error_str = str(e)
+            # Strip CONTEXT and SQL statement details from PostgreSQL errors
+            # Format: "Error message\nCONTEXT: ..."
+            if "\nCONTEXT:" in error_str:
+                error_str = error_str.split("\nCONTEXT:")[0].strip()
+            
             if "Policy error" in error_str:
                 error_message = error_str.replace("Policy error: ", "")
                 raise DBPolicyError(f"Policy error: {error_message}") from e
@@ -731,7 +736,7 @@ class DB:
                     error_message = error_str.replace("Database error: ", "")
                     raise DatabaseError(f"Internal error: {error_message}") from e
         
-        if has_resultset:
+        if has_resultset or return_format:
 
             if return_format is None:
                 return_format = ReturnFormat.LIST_TUPLES
@@ -749,7 +754,7 @@ class DB:
             elif return_format == ReturnFormat.LIST_DICTS:
                 results = [dict(zip(columns, row)) for row in rows] if rows else []
             elif return_format == ReturnFormat.DICT_DICTS:
-                key_col, value_cols = columns[0], columns[1:]
+                value_cols = columns[1:] if has_resultset else []
                 results = {
                     row[0]: dict(zip(value_cols, row[1:]))
                     for row in rows
@@ -760,7 +765,7 @@ class DB:
                     for row in rows
                 } if rows else {}
             elif return_format == ReturnFormat.LIST_AND_DICT_DICTS:
-                key_col, value_cols = columns[0], columns[1:]
+                value_cols = columns[1:] if has_resultset else []
                 list_results = []
                 dict_results = {}
                 for row in rows:

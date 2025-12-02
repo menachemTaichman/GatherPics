@@ -32,6 +32,8 @@ from src.backend.routes import (
 )
 
 app = Flask(__name__)
+# Set debug mode from environment variable (defaults to True for development)
+app.config['DEBUG'] = os.getenv('ENVIRONMENT', 'DEVELOPMENT') != 'PRODUCTION'
 CORS(app, origins="*", supports_credentials=True)
 
 # JWT Configuration
@@ -76,18 +78,53 @@ def internal_error(error):
 def forbidden(error):
     return jsonify({"error": "Forbidden", "message": str(error)}), 403
 
+def clean_postgres_error(error_message: str) -> str:
+    """Remove CONTEXT and SQL statement details from PostgreSQL error messages."""
+    if "\nCONTEXT:" in error_message:
+        return error_message.split("\nCONTEXT:")[0].strip()
+    return error_message
+
+def log_error_to_db(error_message: str, error_type: str, traceback_str: str = None):
+    """Log error to database errors table (to be implemented later).
+    
+    In non-production mode, logs errors to application logs with full context.
+    error_message should be the original error (with CONTEXT from PostgreSQL).
+    """
+    # Log to application logs in non-production mode
+    if app.debug:
+        log_msg = f"[{error_type}] {error_message}"
+        if traceback_str:
+            log_msg += f"\n{traceback_str}"
+        logging.error(log_msg)
+    
+    # TODO: Implement database error logging
+    # This will save errors to an errors table for monitoring/debugging
+    pass
+
 # Exception handlers for custom exceptions
 @app.errorhandler(Forbidden)
 def handle_forbidden(error):
-    return jsonify({"error": str(error)}), 403
+    error_msg = clean_postgres_error(str(error))
+    traceback_str = traceback.format_exc() if app.debug else None
+    log_error_to_db(str(error), "Forbidden", traceback_str)
+    return jsonify({"error": error_msg}), 403
 
 @app.errorhandler(DatabaseError)
 def handle_database_error(error):
-    return jsonify({"error": str(error)}), 500
+    error_msg = clean_postgres_error(str(error))
+    traceback_str = traceback.format_exc() if app.debug else None
+    log_error_to_db(str(error), "DatabaseError", traceback_str)
+    # Show generic message in production, detailed error in debug mode
+    if not app.debug:
+        error_msg = "An internal database error occurred"
+    return jsonify({"error": error_msg}), 500
 
 @app.errorhandler(DBPolicyError)
 def handle_db_policy_error(error):
-    return jsonify({"error": str(error)}), 400
+    error_msg = clean_postgres_error(str(error))
+    traceback_str = traceback.format_exc() if app.debug else None
+    log_error_to_db(str(error), "DBPolicyError", traceback_str)
+    return jsonify({"error": error_msg}), 400
 
 # JWT Error Handlers
 @app.errorhandler(JWTDecodeError)
@@ -134,5 +171,5 @@ def serve_production(path):
     return send_file(os.path.join(DIST_DIR, 'index.html'))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=app.config['DEBUG'])
 

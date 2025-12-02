@@ -1051,18 +1051,25 @@ const isProfileEditable = useMemo(() => {
       console.error(`Failed to ${isCreating ? 'create' : 'update'} profile:`, error);
       const rawErrorMsg = error.response?.data?.error || error.message || '';
       
+      // Normalize error message for case-insensitive comparison
+      const normalizedErrorMsg = rawErrorMsg.toLowerCase();
+      
       // Check for specific database policy errors that need special handling
-      if (rawErrorMsg.includes('Label with this password already exists')) {
+      if (normalizedErrorMsg.includes('label with this password already exists')) {
         // Label AND password combination already exists
         // Don't set nameConflict=true because this is about the combination, not just the label
         setNameConflict(false);
-        setError('Name and password combination already exists');
-        // Don't show toast for this error, show error message near the name field instead
-      } else if (rawErrorMsg.includes('Profile label already exists') && !rawErrorMsg.includes('Label with this password')) {
+        const errorText = 'Name and password combination already exists';
+        setError(errorText);
+        // Show both inline error and toast
+        showToast(errorText, 'error');
+      } else if (normalizedErrorMsg.includes('profile label already exists') && !normalizedErrorMsg.includes('label with this password')) {
         // Only label exists (not the combination)
+        // Handles: "Profile label already exists", "Policy error: Profile label already exists", etc.
         setNameConflict(true);
         setError('');
-        // Don't show toast for this error, show "Name exists" near the name field instead
+        // Show both inline error and toast
+        showToast('Profile label already exists', 'error');
       } else {
         // Use the error handler for user-friendly messages
         const errorMsg = formatErrorMessage(isCreating ? 'create' : 'update profile', error);

@@ -121,32 +121,52 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result1 = event.models.get_entities('images', ['778a6e66-04bd-4a36-b769-527ddb7da4bc'])
-print(result1)
-print('--------------------------------')
-result2 = event.models.get_childs('images', '778a6e66-04bd-4a36-b769-527ddb7da4bc', 'groups')
-print(result2)
-print('--------------------------------')
-result3 = event.models.get_childs('images', '778a6e66-04bd-4a36-b769-527ddb7da4bc', 'faces')
-print(result3)
-print('--------------------------------')
-result4 = event.models.get_childs('images', '778a6e66-04bd-4a36-b769-527ddb7da4bc', 'albums')
-print(result4)
-print('--------------------------------')
-# image_ids = ["f31135da-9b0d-499d-9eed-51b490ee2618", "52bc7104-f56e-4d98-bafe-fc5ce3b66e5b"]
-# album_id = 'f947b84f-7d57-4f4d-8593-cbba2c30c353'
-# result = event.models.get_childs('albums', album_id, 'images', image_ids, return_ids=True)
-# result = event.models.edit_childs('albums', album_id, 'images', image_ids, operation=ChildOperation.ADD)
-# print(result)
-
-mm_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-event_mm = Event(event_id, profile_id=mm_profile_id)
-query = f"""
-SELECT * FROM profiles_ctx;
-"""
-result = event_mm.models.db.execute_query(query, return_format=ReturnFormat.LIST_DICTS)
-print(result)
-print('--------------------------------')
-result = event_mm.models.get_entities('profiles')
-print(result)
-print('--------------------------------')
+# mm_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
+# event_mm = Event(event_id, profile_id=mm_profile_id)
+# other_profile = '3bba6f81-98e1-40ef-b0d2-e955f5040aa9'
+# # other_profile = '1f5e7d6a-74f0-4e73-bfd9-da5fac6ca9e2'
+# db.execute_query('UPDATE events_profiles SET all_images = TRUE, can_edit = TRUE WHERE profile_id = %s AND event_id = %s;', (other_profile, event_id))
+# update = 'FALSE'
+# result2 = event_mm.models.db.execute_query('SELECT profile_id, all_images, can_edit FROM events_profiles_ctx WHERE profile_id = %s;', (other_profile,))
+# print('events_profiles_ctx')
+# print(result2)
+# print('--------------------------------')
+# result3 = db.execute_query('SELECT profile_id, all_images, can_edit FROM events_profiles WHERE profile_id = %s;', (other_profile,))
+# print('events_profiles before update')
+# print(result3)
+# print('--------------------------------')
+# query4 = f"""
+#     UPDATE events_profiles_ctx
+#     SET all_images = %s
+#     WHERE profile_id = %s
+#     AND event_id = %s
+# """
+# params4 = [update, other_profile, event_id]
+# result4 = event_mm.models.db.execute_query(query4, params4, return_format=ReturnFormat.LIST_TUPLES)
+# print('update events_profiles_ctx directly')
+# print(result4)
+# print('--------------------------------')
+# query5 = f"""
+#     WITH child_ids AS (
+#         SELECT DISTINCT unnest(%s::UUID[]) AS profile_id
+#     )
+#     UPDATE events_profiles_ctx AS r
+#     SET can_edit = %s
+#     FROM child_ids c
+#     WHERE r.profile_id = c.profile_id
+#     AND r.event_id = %s
+#     RETURNING r.profile_id
+# """
+# params = [[other_profile], update, event_id]
+# result5 = event_mm.models.db.execute_query(query5, params, return_format=ReturnFormat.LIST_VALUES)
+# print('update events_profiles_ctx')
+# print(result5)
+# print('--------------------------------')
+# # event.models.edit_childs('events', event_id, 'profiles', [other_profile], operation=ChildOperation.UPDATE, data={'all_images': True})
+# result6 = db.execute_query('SELECT profile_id, all_images, can_edit FROM events_profiles WHERE profile_id = %s;', (other_profile,))
+# print('events_profiles after update')
+# print(result6)
+# print('--------------------------------')
+# result7 = event_mm.models.get_entities('profiles')
+# print(result7)
+# print('--------------------------------')
