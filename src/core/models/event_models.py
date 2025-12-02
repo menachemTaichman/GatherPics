@@ -622,3 +622,23 @@ class EventModels(BaseModels):
         self.db.execute_query(query, values)
         
         return request_id
+
+    def get_my_access_request_groups(self, access_request_id: str) -> dict[str, dict]:
+        """Get groups of a my access request.
+        Args:
+            access_request_id: access request id
+        Returns:
+            dict of groups with group id as key and group data as value
+        """
+        query = f"""
+            SELECT
+                marge.group_id,
+                marge.label,
+                marge.representative_face,
+                marge.approved,
+                marge.closed_at,
+                marge.closed_by
+            FROM my_access_requests_groups_ext marge
+            WHERE marge.access_request_id = %s
+        """
+        return self.db.execute_query(query, (access_request_id,), return_format=ReturnFormat.DICT_DICTS)

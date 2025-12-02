@@ -626,6 +626,16 @@ export default function RequestDetailModal({
                     </div>
                   </div>
                   
+                  {requestData.closed_at && (
+                    <div className="flex items-center space-x-3">
+                      <Clock className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{formatDateTimeLocale(requestData.closed_at)}</p>
+                        <p className="text-xs text-gray-500">Closed At</p>
+                      </div>
+                    </div>
+                  )}
+                  
                   {requestData.details && (
                     <div className="flex items-start space-x-3">
                       <FileText className="w-5 h-5 text-gray-400 mt-0.5" />

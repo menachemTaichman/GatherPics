@@ -2227,9 +2227,22 @@ steps = [
         RETURNS TRIGGER AS $$
         DECLARE
             deleted_access_request_id INTEGER;
+            has_closed_group BOOLEAN;
         BEGIN
             IF OLD.is_closed THEN
                 RAISE EXCEPTION 'Permission denied: cannot delete closed access request';
+            END IF;
+
+            -- Check if there is at least one closed group (approved or denied)
+            SELECT EXISTS(
+                SELECT 1 
+                FROM access_requests_groups arg
+                WHERE arg.access_request_id = OLD.access_request_id
+                AND arg.approved IS NOT NULL
+            ) INTO has_closed_group;
+
+            IF has_closed_group THEN
+                RAISE EXCEPTION 'Permission denied: cannot delete access request with closed groups';
             END IF;
 
             DELETE FROM access_requests WHERE access_request_id = OLD.access_request_id
@@ -2329,6 +2342,8 @@ steps = [
             WHERE access_request_id = OLD.access_request_id AND group_id = OLD.group_id
             RETURNING access_request_id, group_id INTO deleted_access_request_id, deleted_group_id;
             
+            PERFORM ensure_access_requests_closed_func(OLD.access_request_id, NULL);
+
             IF deleted_access_request_id IS NOT NULL AND deleted_group_id IS NOT NULL THEN
                 RETURN OLD;
             END IF;

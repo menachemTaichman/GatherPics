@@ -579,6 +579,7 @@ export default function AccountModal({ hideButton = false }) {
                                       {(() => {
                                         const status = request.status || 'pending';
                                         const isClosed = status !== 'pending';
+                                        const isDeletable = request.is_deletable !== false; // Default to true if not set
                                         return isClosed ? (
                                           <button
                                             onClick={() => handleEditRequest(request)}
@@ -596,13 +597,15 @@ export default function AccountModal({ hideButton = false }) {
                                             >
                                               <Edit2 className="w-4 h-4 text-blue-600" />
                                             </button>
-                                            <button
-                                              onClick={() => handleDeleteRequest(request)}
-                                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                              title="Delete request"
-                                            >
-                                              <Trash2 className="w-4 h-4 text-red-600" />
-                                            </button>
+                                            {isDeletable && (
+                                              <button
+                                                onClick={() => handleDeleteRequest(request)}
+                                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                                title="Delete request"
+                                              >
+                                                <Trash2 className="w-4 h-4 text-red-600" />
+                                              </button>
+                                            )}
                                           </>
                                         );
                                       })()}

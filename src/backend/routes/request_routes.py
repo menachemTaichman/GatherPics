@@ -75,17 +75,12 @@ def get_my_request(event_id, request_id):
     event = get_event(event_id)
 
     request_data = event.models.get_entities('my_access_requests', [request_id])
-    groups, relation_data = event.models.get_childs('my_access_requests', request_id, 'groups')
+    groups = event.models.get_my_access_request_groups(request_id)
+    request_data[request_id]['groups'] = groups
     changes = [{
         'type': 'UPSERT',
         'entity': 'my_access_request',
         'items': request_data
-    },{
-        'type': 'RELATION_SET',
-        'relation': 'my_access_request.groups',
-        'parentId': request_id,
-        'entities': groups,
-        'relationData': relation_data
     }]
     
     return jsonify({'changes': changes})

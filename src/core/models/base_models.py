@@ -241,7 +241,7 @@ class BaseModels(ABC):
 
         for parent in parents:
             id_field = self.db.get_id_field(parent)
-            relation, child, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
+            relation, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
             ctx_relation = f'{relation}_ctx'
             
             if return_format == ReturnFormat.LIST_TUPLES:

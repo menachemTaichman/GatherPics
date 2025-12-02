@@ -305,7 +305,22 @@ export function useApplyScopes(scopes = EMPTY_SCOPES) {
 
 // Representative URL helper with debug
 export function getRepresentativeUrl(urlHelpers, entity, id) {
-  const url = urlHelpers?.getRepresentativeUrl ? urlHelpers.getRepresentativeUrl(entity, id) : null;
+  // Validate inputs silently (return null for invalid inputs)
+  if (!id || id === null || id === undefined || id === 'null' || id === 'undefined') {
+    return null;
+  }
+  
+  if (!urlHelpers || !urlHelpers.getRepresentativeUrl) {
+    return null;
+  }
+  
+  const url = urlHelpers.getRepresentativeUrl(entity, id);
+  
+  // Only log critical errors (URLs containing null/undefined)
+  if (url && (url.includes('/null') || url.includes('/undefined'))) {
+    console.error('[getRepresentativeUrl] Generated URL contains null/undefined:', { entity, id, url });
+  }
+  
   return url;
 }
 

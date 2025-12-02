@@ -508,7 +508,9 @@ steps = [
             SELECT 1
             FROM access_requests_groups_ctx argc
             WHERE argc.access_request_id = ar.access_request_id
-        );
+        )
+        AND ar.profile_id <> cur_profile_uuid('profile_id')
+        AND ar.applicant_profile_id IS DISTINCT FROM cur_profile_uuid('profile_id');
         
         CREATE OR REPLACE VIEW events_profiles_ctx AS
         SELECT
@@ -729,14 +731,26 @@ steps = [
             AND umc.moment_id = ums.moment_id;
 
         CREATE OR REPLACE VIEW my_access_requests_ext AS
-        SELECT ard.*
+        SELECT
+            ard.*,
+            (
+                NOT EXISTS (
+                    SELECT 1 
+                    FROM access_requests_groups arg
+                    WHERE arg.access_request_id = ard.access_request_id AND arg.approved IS NOT NULL
+                )
+                AND NOT ard.is_closed
+            ) AS is_deletable
         FROM access_requests_details ard
         INNER JOIN my_access_requests_ctx marc ON ard.access_request_id = marc.access_request_id;
         
         CREATE OR REPLACE VIEW my_access_requests_groups_ext AS
-        SELECT margc.*
+        SELECT
+            margc.*,
+            g.label AS label,
+            g.representative_face AS representative_face
         FROM my_access_requests_groups_ctx margc
-        INNER JOIN access_requests_groups_ctx argc ON margc.access_request_id = argc.access_request_id AND margc.group_id = argc.group_id;
+        INNER JOIN groups g ON margc.group_id = g.group_id;
         
         CREATE OR REPLACE VIEW access_requests_ext AS
         SELECT ard.*

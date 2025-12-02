@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown, AlertCircle } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown, AlertCircle, Clock } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -13,6 +13,8 @@ import { usePreference } from '../../hooks/useSettings';
 import { setPreference } from '../../utils/settings';
 import { toggleSortOrder } from '../../utils/sorting';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
+import { API_BASE } from '../../utils/apiService';
+import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function RequestFormModal({ 
   isOpen, 
@@ -22,6 +24,25 @@ export default function RequestFormModal({
   urlHelpers
 }) {
   const eventId = useEventId(eventUrl);
+  
+  // Helper function to get representative URL with fallback to local eventId
+  const getRepUrl = useCallback((entity, parentId) => {
+    if (!parentId) return null;
+    
+    // Try urlHelpers first
+    if (urlHelpers?.getRepresentativeUrl) {
+      const url = urlHelpers.getRepresentativeUrl(entity, parentId);
+      if (url) return url;
+    }
+    
+    // Fallback: use local eventId if available
+    if (eventId) {
+      return `${API_BASE}/api/events/${eventId}/${entity}/${parentId}/representative`;
+    }
+    
+    return null;
+  }, [urlHelpers, eventId]);
+  
   const [formData, setFormData] = useState({
     requestType: 'own', // 'own' or 'new'
     applicant_name: '',
@@ -65,12 +86,15 @@ export default function RequestFormModal({
         setIsLoadingGroups(true);
         try {
           const response = await profilesAPI.getGroupsToRequestAccess(eventUrl);
-          const groups = (response?.groups || []).map(group => ({
-            id: group.group_id,
-            group_id: group.group_id,
-            label: group.label,
-            representative_face: group.rep_id || group.representative_face
-          }));
+          const groups = (response?.groups || []).map(group => {
+            const mapped = {
+              id: group.group_id,
+              group_id: group.group_id,
+              label: group.label,
+              representative_face: group.rep_id || group.representative_face
+            };
+            return mapped;
+          });
           setAllGroups(groups);
         } catch (error) {
           console.error('Failed to load groups:', error);
@@ -190,19 +214,25 @@ export default function RequestFormModal({
     
     if (requestData && requestDataId) {
       // Editing existing request (my-requests) – treat as 'own' by default
-      const groupIds = requestDataGroups ? Object.keys(requestDataGroups) : [];
+      // Only include pending groups (not approved, not denied) in initial selection
+      const allGroupIds = requestDataGroups ? Object.keys(requestDataGroups) : [];
+      const pendingIds = allGroupIds.filter(groupId => {
+        const groupData = requestDataGroups[groupId];
+        const approved = groupData?.approved;
+        return approved !== true && approved !== 1 && approved !== false && approved !== 0;
+      });
       setFormData({
         requestType: 'own',
         applicant_name: requestDataApplicantName || '',
         applicant_email: requestDataApplicantEmail || '',
         applicant_phone: requestDataApplicantPhone || '',
         details: requestDataDetails || '',
-        group_ids: groupIds,
+        group_ids: pendingIds,
         applicant_profile_id: requestDataApplicantProfileId || (currentProfile?.id || currentProfile?.profile_id) || null,
         communication_consent: requestDataCommunicationConsent || false
       });
-      setSelectedGroups(new Set(groupIds));
-      setInitialGroups(new Set(groupIds)); // Store initial groups for calculating diff
+      setSelectedGroups(new Set(pendingIds));
+      setInitialGroups(new Set(pendingIds)); // Store only pending groups for calculating diff
     } else {
       // Creating new request - automatically determine type based on profile
       const requestType = currentProfileIsPublic ? 'new' : 'own';
@@ -279,34 +309,6 @@ export default function RequestFormModal({
       [field]: value
     }));
   };
-
-  // Filter and sort groups
-  const filteredAndSortedGroups = useMemo(() => {
-    return allGroups
-      .filter(group => {
-        const label = group.label || `Person ${group.id}`;
-        const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
-        
-        return matchesSearch;
-      })
-      .sort((a, b) => {
-        // Only sort by name
-        const aValue = a.label || `Person ${a.id}`;
-        const bValue = b.label || `Person ${b.id}`;
-        
-        if (sortOrder === 'asc') {
-          return aValue > bValue ? 1 : -1;
-        } else {
-          return aValue < bValue ? 1 : -1;
-        }
-      })
-      .reduce((unique, group) => {
-        if (!unique.some(g => g.id === group.id)) {
-          unique.push(group);
-        }
-        return unique;
-      }, []);
-  }, [allGroups, searchTerm, sortOrder]);
 
   const handleGroupToggle = (groupId, event) => {
     const groupIndex = filteredAndSortedGroups.findIndex(g => g.id === groupId);
@@ -431,23 +433,116 @@ export default function RequestFormModal({
     return approved === false || approved === 0;
   });
   
+  // Create a set of denied group IDs for efficient lookup
+  const deniedGroupIds = useMemo(() => {
+    return new Set(deniedGroups.map(([groupId]) => String(groupId)));
+  }, [deniedGroups]);
+
+  // Filter and sort groups
+  const filteredAndSortedGroups = useMemo(() => {
+    return allGroups
+      .filter(group => {
+        // Exclude denied groups
+        const groupIdStr = String(group.id || group.group_id);
+        if (deniedGroupIds.has(groupIdStr)) {
+          return false;
+        }
+        
+        const label = group.label || `Person ${group.id}`;
+        const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        return matchesSearch;
+      })
+      .sort((a, b) => {
+        // Only sort by name
+        const aValue = a.label || `Person ${a.id}`;
+        const bValue = b.label || `Person ${b.id}`;
+        
+        if (sortOrder === 'asc') {
+          return aValue > bValue ? 1 : -1;
+        } else {
+          return aValue < bValue ? 1 : -1;
+        }
+      })
+      .reduce((unique, group) => {
+        if (!unique.some(g => g.id === group.id)) {
+          unique.push(group);
+        }
+        return unique;
+      }, []);
+  }, [allGroups, searchTerm, sortOrder, deniedGroupIds]);
+  
   // Sort approved and denied groups by label
-  const sortByLabel = ([idA], [idB]) => {
-    const groupA = allGroups.find(g => (g.id || g.group_id) === idA);
-    const groupB = allGroups.find(g => (g.id || g.group_id) === idB);
-    const labelA = groupA?.label || '';
-    const labelB = groupB?.label || '';
+  const sortByLabel = ([idA, groupDataA], [idB, groupDataB]) => {
+    // Prefer label from request relation, fallback to allGroups
+    const labelA = groupDataA?.label || allGroups.find(g => (g.id || g.group_id) === idA)?.label || '';
+    const labelB = groupDataB?.label || allGroups.find(g => (g.id || g.group_id) === idB)?.label || '';
     return labelA.localeCompare(labelB);
   };
   approvedGroups.sort(sortByLabel);
   deniedGroups.sort(sortByLabel);
   
+  // Calculate pending groups (not approved and not denied)
+  const pendingGroupIds = useMemo(() => {
+    if (!requestData?.groups) return new Set();
+    return new Set(
+      Object.entries(requestData.groups)
+        .filter(([groupId, groupData]) => {
+          const approved = groupData.approved;
+          return approved !== true && approved !== 1 && approved !== false && approved !== 0;
+        })
+        .map(([groupId]) => String(groupId))
+    );
+  }, [requestData?.groups]);
+  
   const getGroupDisplayName = (groupId) => {
+    // Prefer label from request relation, fallback to allGroups
+    const groupData = requestData?.groups?.[groupId];
+    if (groupData?.label) {
+      return groupData.label;
+    }
     const group = allGroups.find(g => (g.id || g.group_id) === groupId);
     if (!group) return 'Unknown';
     const id = group.id || group.group_id || '';
     return group.label || `Person ${id}`;
   };
+  
+  const getGroupRepresentativeFace = (groupId) => {
+    // Prefer representative_face from request relation, fallback to allGroups
+    const groupData = requestData?.groups?.[groupId];
+    if (groupData?.representative_face) {
+      return groupData.representative_face;
+    }
+    const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+    return group?.representative_face || null;
+  };
+
+  // Detect if there are changes (only for edit mode)
+  const hasChanges = useMemo(() => {
+    if (!isEditing) return true; // Always allow creation
+    
+    // Check if groups have changed
+    const selectedSet = new Set(Array.from(selectedGroups).map(id => String(id)));
+    const initialSet = new Set(Array.from(initialGroups).map(id => String(id)));
+    
+    // Check if sets are different
+    if (selectedSet.size !== initialSet.size) return true;
+    for (const id of selectedSet) {
+      if (!initialSet.has(id)) return true;
+    }
+    for (const id of initialSet) {
+      if (!selectedSet.has(id)) return true;
+    }
+    
+    // Check if form fields have changed
+    if (formData.applicant_name.trim() !== (requestData?.applicant_name || '').trim()) return true;
+    if (formData.applicant_email.trim() !== (requestData?.applicant_email || '').trim()) return true;
+    if (formData.applicant_phone.trim() !== (requestData?.applicant_phone || '').trim()) return true;
+    if (formData.details.trim() !== (requestData?.details || '').trim()) return true;
+    if (formData.communication_consent !== (requestData?.communication_consent || false)) return true;
+    
+    return false;
+  }, [isEditing, selectedGroups, initialGroups, formData, requestData]);
 
   // Calculate count of selectable groups (excluding already approved/denied groups)
   const selectableGroupsCount = useMemo(() => {
@@ -485,7 +580,9 @@ export default function RequestFormModal({
     }
     
     // Validate groups selection
-    if (selectedGroups.size === 0) {
+    // Allow removing all groups if there are closed (approved/denied) groups in the request
+    const hasClosedGroups = approvedGroups.length > 0 || deniedGroups.length > 0;
+    if (selectedGroups.size === 0 && (!isEditing || !hasClosedGroups)) {
       showToast('Please select at least one group', 'error');
       return;
     }
@@ -613,6 +710,12 @@ export default function RequestFormModal({
                   </>
                 )}
               </div>
+              {isClosed && requestData?.closed_at && (
+                <div className="flex items-center space-x-1 mt-1">
+                  <Clock className="w-3 h-3 text-gray-400" />
+                  <span className="text-xs text-gray-500">Closed: {formatDateTimeLocale(requestData.closed_at)}</span>
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -652,8 +755,9 @@ export default function RequestFormModal({
                             const ids = Object.keys(groupsObj);
                             if (ids.length === 0) return <span className="text-gray-500">None</span>;
                             return ids.map((gid) => {
-                              const group = allGroups.find(g => String(g.id || g.group_id) === String(gid));
-                              const label = group?.label || `Person ${gid}`;
+                              // Prefer label from request relation, fallback to allGroups
+                              const groupData = groupsObj[gid];
+                              const label = groupData?.label || allGroups.find(g => String(g.id || g.group_id) === String(gid))?.label || `Person ${gid}`;
                               return (
                                 <span key={gid} className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-800">{label}</span>
                               );
@@ -752,8 +856,10 @@ export default function RequestFormModal({
                           <span>Approved</span>
                         </h4>
                         <div className="flex items-center space-x-3 overflow-x-auto pb-1">
-                          {approvedGroups.map(([groupId]) => {
-                            const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                          {approvedGroups.map(([groupId, groupData]) => {
+                            // Use data from request relation first, fallback to allGroups
+                            const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
+                            const groupIdForUrl = groupId;
                             return (
                               <div
                                 key={groupId}
@@ -762,8 +868,8 @@ export default function RequestFormModal({
                               >
                                 <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-green-500 bg-green-100 flex items-center justify-center">
                                   {ImageComponent(
-                                    group?.representative_face && group?.id 
-                                      ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                    repFace && groupIdForUrl
+                                      ? `${getRepUrl('groups', groupIdForUrl)}?v=${repFace || 'none'}`
                                       : null,
                                     {
                                       width: 32,
@@ -789,8 +895,10 @@ export default function RequestFormModal({
                           <span>Denied</span>
                         </h4>
                         <div className="flex items-center space-x-3 overflow-x-auto pb-1">
-                          {deniedGroups.map(([groupId]) => {
-                            const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                          {deniedGroups.map(([groupId, groupData]) => {
+                            // Use data from request relation first, fallback to allGroups
+                            const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
+                            const groupIdForUrl = groupId;
                             return (
                               <div
                                 key={groupId}
@@ -799,8 +907,8 @@ export default function RequestFormModal({
                               >
                                 <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-red-500 bg-red-100 flex items-center justify-center">
                                   {ImageComponent(
-                                    group?.representative_face && group?.id 
-                                      ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                    repFace && groupIdForUrl
+                                      ? `${getRepUrl('groups', groupIdForUrl)}?v=${repFace || 'none'}`
                                       : null,
                                     {
                                       width: 32,
@@ -885,17 +993,21 @@ export default function RequestFormModal({
                           <div className="flex flex-col items-center space-y-1">
                             {/* Representative image */}
                             <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
-                              {group.representative_face && group.id ? (
-                                <img
-                                  src={`${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face}`}
-                                  alt={group.label}
-                                  className="w-full h-full object-cover rounded-full"
-                                />
-                              ) : (
-                                <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center">
-                                  <User className="w-6 h-6 text-gray-500" />
-                                </div>
-                              )}
+                              {(() => {
+                                const groupIdForUrl = group.id || group.group_id;
+                                const baseUrl = getRepUrl('groups', groupIdForUrl);
+                                return group.representative_face && groupIdForUrl && baseUrl ? (
+                                  <img
+                                    src={`${baseUrl}?v=${group.representative_face}`}
+                                    alt={group.label}
+                                    className="w-full h-full object-cover rounded-full"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center">
+                                    <User className="w-6 h-6 text-gray-500" />
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <div className="text-center">
                               <p className="font-medium text-gray-900 text-xs truncate w-full">
@@ -929,8 +1041,10 @@ export default function RequestFormModal({
                               <span>Approved</span>
                             </h4>
                             <div className="flex items-center space-x-3 overflow-x-auto pb-1">
-                              {approvedGroups.map(([groupId]) => {
-                                const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                              {approvedGroups.map(([groupId, groupData]) => {
+                                // Use data from request relation first, fallback to allGroups
+                                const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
+                                const groupIdForUrl = groupId;
                                 return (
                                   <div
                                     key={groupId}
@@ -939,8 +1053,8 @@ export default function RequestFormModal({
                                   >
                                     <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-green-500 bg-green-100 flex items-center justify-center">
                                       {ImageComponent(
-                                        group?.representative_face && group?.id 
-                                          ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                        repFace && groupIdForUrl
+                                          ? `${getRepUrl('groups', groupIdForUrl)}?v=${repFace || 'none'}`
                                           : null,
                                         {
                                           width: 32,
@@ -966,8 +1080,10 @@ export default function RequestFormModal({
                               <span>Denied</span>
                             </h4>
                             <div className="flex items-center space-x-3 overflow-x-auto pb-1">
-                              {deniedGroups.map(([groupId]) => {
-                                const group = allGroups.find(g => (g.id || g.group_id) === groupId);
+                              {deniedGroups.map(([groupId, groupData]) => {
+                                // Use data from request relation first, fallback to allGroups
+                                const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
+                                const groupIdForUrl = groupId;
                                 return (
                                   <div
                                     key={groupId}
@@ -976,8 +1092,8 @@ export default function RequestFormModal({
                                   >
                                     <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-red-500 bg-red-100 flex items-center justify-center">
                                       {ImageComponent(
-                                        group?.representative_face && group?.id 
-                                          ? `${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face || 'none'}`
+                                        repFace && groupIdForUrl
+                                          ? `${getRepUrl('groups', groupIdForUrl)}?v=${repFace || 'none'}`
                                           : null,
                                         {
                                           width: 32,
@@ -1136,7 +1252,7 @@ export default function RequestFormModal({
                   <button
                     type="submit"
                     onClick={handleSubmit}
-                    disabled={loading || selectedGroups.size === 0}
+                    disabled={loading || (!isEditing && selectedGroups.size === 0) || (isEditing && !hasChanges)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
                   >
                     {loading && (

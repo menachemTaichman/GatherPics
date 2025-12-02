@@ -334,6 +334,13 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 renderCell: (request) => formatDateTimeLocale(request.requested_at),
               },
               {
+                key: 'closed_at',
+                label: 'Closed',
+                sortable: true,
+                align: 'left',
+                renderCell: (request) => request.closed_at ? formatDateTimeLocale(request.closed_at) : <span className="text-gray-400">—</span>,
+              },
+              {
                 key: 'profile_label',
                 label: 'Profile',
                 sortable: true,

@@ -398,12 +398,13 @@ class DB:
                     'closed_details',
                     'applicant_profile_id',
                     'profile_label',
+                    'is_deletable',
                 ],
                 'relations': {
                     'groups': {
                         'relation_table': 'my_access_requests_groups',
-                        'fields_needed': ['label', 'representative_face'],
-                        'relation_table_fields': ['approved', 'closed_at', 'closed_by']
+                        'fields_needed': ['group_id'],
+                        'relation_table_fields': ['group_id', 'label', 'representative_face', 'approved', 'closed_at', 'closed_by']
                     },
                 },
                 'serializable': {
