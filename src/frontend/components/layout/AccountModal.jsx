@@ -465,7 +465,7 @@ export default function AccountModal({ hideButton = false }) {
                     </div>
 
                     {/* Include Archived */}
-                    <PermissionGate requires="hasArchiveAlbum">
+                    <PermissionGate requires="hasArchiveAlbum" eventUrl={eventUrl}>
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h4 className="text-sm font-semibold text-gray-700 mb-3">Gallery Preferences</h4>
                         <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">

@@ -323,7 +323,7 @@ export default function MoveToMomentModal({
       const imageText = addedCount === 1 ? 'image' : 'images';
       
       // Get the target moment from the freshly updated store
-      const updatedMoments = storeSelectors.momentsAll(useDataStore.getState());
+      const updatedMoments = storeSelectors.momentsAll(useDataStore.getState(), eventId);
       const targetMoment = updatedMoments.find(m => m.id === targetMomentId);
       
       if (targetMoment) {
