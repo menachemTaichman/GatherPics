@@ -1,10 +1,10 @@
-from flask import Blueprint, send_file, abort, make_response, jsonify, request
+from flask import Blueprint, send_file, abort, make_response
 import os
 import io
 import zipfile
 
 from src.backend.middleware.auth import require_auth, optional_auth
-from src.backend.helpers import get_event, get_general_models, Event
+from src.backend.helpers import get_event, get_general_models, get_input, validate_path_param
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 
@@ -12,6 +12,9 @@ file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_file_webp(event_id, file_type, file_id):
     """Serve various types of image files (display, face, thumb, etc.)."""
+    event_id = validate_path_param('event_id', event_id)
+    # file_id can be image_id or face_id depending on file_type, validate as UUID string
+    file_id = validate_path_param('image_id' if file_type in ['display', 'thumb', 'high_quality', 'original'] else 'face_id', file_id)
     event = get_event(event_id)
     
     dir_map = {
@@ -48,34 +51,45 @@ def get_file_webp(event_id, file_type, file_id):
 @file_bp.route('/display/<image_id>.webp')
 @require_auth
 def get_display_image_webp(event_id, image_id):
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     return get_file_webp(event_id, 'display', image_id)
 
 @file_bp.route('/faces/<face_id>.webp')
 @require_auth
 def get_face_crop_webp(event_id, face_id):
+    event_id = validate_path_param('event_id', event_id)
+    face_id = validate_path_param('face_id', face_id)
     return get_file_webp(event_id, 'face', face_id)
 
 @file_bp.route('/thumb/<image_id>.webp')
 @require_auth
 def get_thumbnail_image_webp(event_id, image_id):
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     return get_file_webp(event_id, 'thumb', image_id)
 
 @file_bp.route('/high_quality/<image_id>.webp')
 @require_auth
 def get_high_quality_image_webp(event_id, image_id):
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     return get_file_webp(event_id, 'high_quality', image_id)
 
 @file_bp.route('/original/<image_id>.webp')
 @require_auth
 def get_original_image_webp(event_id, image_id):
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     return get_file_webp(event_id, 'original', image_id)
 
 @file_bp.route('/representative/display', methods=['GET', 'HEAD'])
 @require_auth
 def get_event_display_representative_webp(event_id):
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = general_models.get_entities('events', event_id)
-    event_instance = Event(event_id)
+    event_instance = get_event(event_id)
     if not event:
         abort(404)
     representative_image = event['representative_image']
@@ -92,9 +106,10 @@ def get_event_display_representative_webp(event_id):
 @file_bp.route('/representative/thumb', methods=['GET', 'HEAD'])
 @optional_auth
 def get_event_thumb_representative_webp(event_id):
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = general_models.get_entities('events', event_id)
-    event_instance = Event(event_id)
+    event_instance = get_event(event_id)
     if not event:
         abort(404)
     representative_image = event['representative_image']
@@ -112,7 +127,8 @@ def get_event_thumb_representative_webp(event_id):
 @file_bp.route('/<entity>/<parent_id>/representative', methods=['GET', 'HEAD'])
 @require_auth
 def get_representative_webp(event_id, entity, parent_id):
-    
+    event_id = validate_path_param('event_id', event_id)
+    parent_id = validate_path_param('parent_id', parent_id)
     event = get_event(event_id)
 
     dir_map = {
@@ -143,13 +159,11 @@ def get_representative_webp(event_id, entity, parent_id):
 @require_auth
 def download_images(event_id):
     """Download images as a ZIP file."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    quality = (data.get('quality') or 'high').lower()
-    
-    if not image_ids:
-        return jsonify({"error": "No image ids provided"}), 400
+    image_ids = get_input('image_ids', required=True)
+    quality = get_input('quality', required=False) or 'high'
+    quality = quality.lower()
     
     images = event.models.get_entities('images', image_ids)
     memory_file = io.BytesIO()

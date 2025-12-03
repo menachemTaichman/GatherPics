@@ -8,7 +8,7 @@ from datetime import timedelta, datetime, timezone
 import secrets
 import traceback
 
-from src.backend.helpers import get_general_models, Forbidden
+from src.backend.helpers import get_general_models, get_input, validate_path_param
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
@@ -65,12 +65,8 @@ def create_auth_response(access_token: str, profile_id: str, expires_days: int =
 @auth_bp.route("/auth/login", methods=["POST"])
 def login():
     """Authenticate user and issue access + refresh tokens."""
-    data = request.json or {}
-    label = data.get('label', '').strip()
-    password = data.get('password', '')
-    
-    if not label:
-        return jsonify({"error": "Profile label is required"}), 400
+    label = get_input('label', required=True)
+    password = get_input('password', required=True)
     
     general_models = get_general_models()
     
@@ -143,6 +139,7 @@ def logout():
 @auth_bp.route("/events/<event_id>/public-access/<public_code>", methods=["POST"])
 def authenticate_public_access(event_id, public_code):
     """Authenticate using public access code and return refresh token."""
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     profile_id = general_models.authenticate_public_access(event_id, public_code)
     

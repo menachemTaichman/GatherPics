@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models, Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, Forbidden, get_multiple_inputs
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -34,21 +34,13 @@ def update_settings():
     if not current_profile.get('has_settings', False):
         raise Forbidden('You do not have permission to update settings')
     
-    data = request.json or {}
-    
-    # Allowed fields that can be updated
-    allowed_fields = [
+    # Get allowed fields that can be updated
+    update_data = get_multiple_inputs([
         'image_size_limit_bytes',
         'images_count_limit',
         'rekognition_calls_limit',
         'min_rank_to_create_event',
-    ]
-    
-    # Filter to only allowed fields
-    update_data = {k: v for k, v in data.items() if k in allowed_fields}
-    
-    if not update_data:
-        return jsonify({"error": "No valid fields to update"}), 400
+    ], required=True)
     
     general_models.update_settings(update_data)
     

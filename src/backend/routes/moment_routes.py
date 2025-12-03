@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, ChildOperation, Event, Forbidden, DatabaseError
+from src.backend.helpers import get_event, ChildOperation, get_input, get_multiple_inputs, validate_path_param
 
 moment_bp = Blueprint('moments', __name__, url_prefix='/api/events/<event_id>')
 
@@ -9,6 +9,7 @@ moment_bp = Blueprint('moments', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_moments(event_id):
     """List all accessible moment summaries for the specific event."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     moments = event.models.get_entities('moments')
     changes = [{
@@ -22,6 +23,8 @@ def get_moments(event_id):
 @require_auth
 def get_moment(event_id, moment_id):
     """Get a specific moment's details as changes."""
+    event_id = validate_path_param('event_id', event_id)
+    moment_id = validate_path_param('moment_id', moment_id)
     event = get_event(event_id)
     if not event.models.is_accessible('moments', moment_id):
         return jsonify({"error": f"Moment {moment_id} not found or not accessible"}), 404
@@ -46,12 +49,10 @@ def get_moment(event_id, moment_id):
 @require_auth
 def check_moment_name(event_id):
     """Check if a moment name already exists."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    label = data.get('label', '')
-    exclude_moment_id = data.get('exclude_moment_id', '')
-    if not label:
-        return jsonify({"error": "Label is required"}), 400
+    label = get_input('label', required=True)
+    exclude_moment_id = get_input('exclude_moment_id', required=False)
     conflict_moment_id = event.models.is_exists('moments', {'label': label}, exclude_id=exclude_moment_id)
     return jsonify({"conflict": bool(conflict_moment_id)})
 
@@ -59,11 +60,11 @@ def check_moment_name(event_id):
 @require_auth
 def create_moment(event_id):
     """Create a new moment."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
     
-    allowed_fields = {'label', 'description', 'start_date', 'end_date', 'representative_image'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['description', 'start_date', 'end_date', 'representative_image'])
+    sanitized['label'] = get_input('label', required=True)
     if sanitized:
         moment_id = event.models.add('moments', sanitized)
         created_moment = event.models.get_entities('moments', [moment_id])
@@ -81,13 +82,13 @@ def create_moment(event_id):
 @require_auth
 def update_moment(event_id, moment_id):
     """Update a moment's metadata."""
+    event_id = validate_path_param('event_id', event_id)
+    moment_id = validate_path_param('moment_id', moment_id)
     event = get_event(event_id)
     if not event.models.is_accessible('moments', moment_id):
         return jsonify({"error": f"Moment {moment_id} not found or not accessible"}), 404
         
-    data = request.json or {}
-    allowed_fields = {'label', 'description', 'start_date', 'end_date', 'representative_image'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['label', 'description', 'start_date', 'end_date', 'representative_image'])
     if sanitized:
         event.models.edit('moments', moment_id, sanitized)
         updated_moment = event.models.get_entities('moments', [moment_id])
@@ -105,6 +106,8 @@ def update_moment(event_id, moment_id):
 @require_auth
 def delete_moment(event_id, moment_id):
     """Delete a moment."""
+    event_id = validate_path_param('event_id', event_id)
+    moment_id = validate_path_param('moment_id', moment_id)
     event = get_event(event_id)
     if not event.models.is_accessible('moments', moment_id):
         return jsonify({"error": f"Moment {moment_id} not found or not accessible"}), 404
@@ -123,6 +126,7 @@ def delete_moment(event_id, moment_id):
 @require_auth
 def get_images_to_moments(event_id):
     """Get all images with data for selecting in moment editor."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     images = event.models.get_images_to_moments()
     changes = [{
@@ -214,8 +218,9 @@ def _edit_moment_images(event_id: str, moment_id: str | None, image_ids: list[st
 @require_auth
 def add_images_to_moment(event_id, moment_id):
     """Add images to a moment."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    moment_id = validate_path_param('moment_id', moment_id)
+    image_ids = get_input('image_ids', required=True)
     response = _edit_moment_images(event_id, moment_id, image_ids, add=True)
     return response
 
@@ -223,7 +228,7 @@ def add_images_to_moment(event_id, moment_id):
 @require_auth
 def remove_images_from_moments(event_id):
     """Remove images from their moments."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    image_ids = get_input('image_ids', required=True)
     response = _edit_moment_images(event_id, None, image_ids, add=False)
     return response

@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, _parse_bool, Forbidden, DatabaseError, DBPolicyError
+from src.backend.helpers import get_event, get_input, get_multiple_inputs, get_query_param, validate_path_param
 
 group_bp = Blueprint('groups', __name__, url_prefix='/api/events/<event_id>')
 
@@ -9,6 +9,7 @@ group_bp = Blueprint('groups', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_groups(event_id):
     """List all accessible group summaries for the specific event."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     groups = event.models.get_entities('groups')
     changes = [{
@@ -22,12 +23,14 @@ def get_groups(event_id):
 @require_auth
 def get_group(event_id, group_id):
     """Get a specific group's details as changes, including its images and faces."""
+    event_id = validate_path_param('event_id', event_id)
+    group_id = validate_path_param('group_id', group_id)
     event = get_event(event_id)
 
     if not event.models.is_accessible('groups', group_id):
         return jsonify({"error": f"Group {group_id} not found or not accessible"}), 404
     
-    filter_enabled = _parse_bool(request.args.get('filter', 'false'), False)
+    filter_enabled = get_query_param('filter', required=False) or False
     
     changes = []
     result = {'changes': changes}
@@ -65,17 +68,20 @@ def get_group(event_id, group_id):
     
     return jsonify(result)
 
-@group_bp.route("/groups/related", methods=["GET"])
+@group_bp.route("/groups/related", methods=["POST"])
 @require_auth
 def get_related_groups(event_id):
-    """Get related groups based on a set of selected groups and base images."""
+    """Get related groups based on a set of selected groups and base images.
+    
+    Request body:
+    - image_ids: List of image IDs (optional)
+    - selected_groups: List of group IDs (required)
+    """
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
 
-    image_ids_str = request.args.get('image_ids', '')
-    selected_groups_str = request.args.get('selected_groups', '')
-
-    image_ids = image_ids_str.split(',') if image_ids_str else []
-    selected_groups = selected_groups_str.split(',') if selected_groups_str else []
+    image_ids = get_input('image_ids', required=False) or []
+    selected_groups = get_input('selected_groups', required=True)
 
     group_ids = selected_groups
 
@@ -101,12 +107,10 @@ def get_related_groups(event_id):
 @require_auth
 def check_group_name(event_id):
     """Check if a group name already exists."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    label = data.get('label', '')
-    exclude_group_id = data.get('exclude_group_id', '')
-    if not label:
-        return jsonify({"error": "Label is required"}), 400
+    label = get_input('label', required=True)
+    exclude_group_id = get_input('exclude_group_id', required=False)
     conflict_group_id = event.models.is_exists('groups', {'label': label}, exclude_id=exclude_group_id)
     if conflict_group_id:
         conflicting_group = event.models.get_entities('groups', [conflict_group_id])
@@ -128,11 +132,11 @@ def check_group_name(event_id):
 @require_auth
 def update_group(event_id, group_id):
     """Update a group."""
+    event_id = validate_path_param('event_id', event_id)
+    group_id = validate_path_param('group_id', group_id)
     event = get_event(event_id)
-    data = request.json or {}
     changes = []
-    allowed_fields = {'label', 'representative_face'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['label', 'representative_face'])
     if sanitized:
         event.models.edit('groups', group_id, sanitized)
         changes.append({
@@ -143,38 +147,27 @@ def update_group(event_id, group_id):
 
     return jsonify({"success": True, "changes": changes})
 
-@group_bp.route("/groups/<group_id>/faces", methods=["GET"])
+@group_bp.route("/groups/<group_id>/faces", methods=["POST"])
 @require_auth
 def get_faces_group_in_image(event_id, group_id):
-    """Get the faces in image(s) from a group."""
+    """Get the faces in images from a group."""
+    event_id = validate_path_param('event_id', event_id)
+    group_id = validate_path_param('group_id', group_id)
     event = get_event(event_id)
-    image_id = request.args.get('image_id')
-    image_ids_str = request.args.get('image_ids')
+    image_ids = get_input('image_ids', required=True)
     
-    if not image_id and not image_ids_str:
-        return jsonify({"error": "image_id or image_ids parameter is required"}), 400
-    
-    # Handle single or multiple images
-    if image_id:
-        faces = event.models.get_faces_group_in_image(group_id, image_id)
-    else:
-        image_ids = image_ids_str.split(',') if image_ids_str else []
-        faces = event.models.get_faces_group_in_image(group_id, image_ids)
-    
+    faces = event.models.get_faces_group_in_image(group_id, image_ids)
     return jsonify({"faces": faces})
 
 @group_bp.route("/groups/transfer-faces", methods=["POST"])
 @require_auth
 def transfer_faces(event_id):
     """Transfer faces between groups."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    target_group_id = data.get('target_group_id')
-    new_group_name = data.get('new_group_name', None)
-    face_ids = data.get('face_ids', None)
-    
-    if not face_ids or not isinstance(face_ids, list):
-        return jsonify({"error": "face_ids parameter is required"}), 400
+    target_group_id = get_input('target_group_id', required=False)
+    new_group_name = get_input('new_group_name', required=False)
+    face_ids = get_input('face_ids', required=True)
     
     if not target_group_id and not new_group_name:
         return jsonify({"error": "Missing required parameters"}), 400

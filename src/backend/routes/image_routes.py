@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_input, get_multiple_inputs, validate_path_param
 
 image_bp = Blueprint('images', __name__, url_prefix='/api/events/<event_id>')
 
@@ -9,6 +9,7 @@ image_bp = Blueprint('images', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_images(event_id):
     """List all accessible images summaries for the specific event."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     images = event.models.get_entities('images')
     changes = [{
@@ -22,6 +23,8 @@ def get_images(event_id):
 @require_auth
 def get_image(event_id, image_id):
     """Get a specific image's details as changes."""
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     event = get_event(event_id)
     if not event.models.is_accessible('images', image_id):
         return jsonify({"error": f"Image {image_id} not found or not accessible"}), 404
@@ -68,10 +71,10 @@ def get_image(event_id, image_id):
 @require_auth
 def update_image(event_id, image_id):
     """Update an image's description."""
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
     event = get_event(event_id)
-    data = request.json or {}
-    allowed_fields = {'description'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['description'])
     if sanitized:
         event.models.edit('images', image_id, sanitized)
         updated_image = event.models.get_entities('images', [image_id], include_details=True)
@@ -89,11 +92,9 @@ def update_image(event_id, image_id):
 @require_auth
 def delete_image(event_id):
     """Delete an image."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    if not image_ids:
-        return jsonify({"error": "No image IDs provided"}), 400
+    image_ids = get_input('image_ids', required=True)
     deleted_groups, parents = event.delete_images(image_ids)
     changes = [{
         'type': 'REMOVE',

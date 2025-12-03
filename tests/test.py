@@ -121,6 +121,14 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+result = event.models.get_entities('groups')
+print(result)
+print('--------------------------------')
+
+profile = general_models.get_current_profile(event_id)
+print(profile)
+print('--------------------------------')
+
 # mm_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
 # event_mm = Event(event_id, profile_id=mm_profile_id)
 # other_profile = '3bba6f81-98e1-40ef-b0d2-e955f5040aa9'

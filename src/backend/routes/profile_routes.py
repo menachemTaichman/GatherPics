@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, Event, Forbidden, DBPolicyError, DatabaseError
+from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, get_input, get_multiple_inputs, get_query_param, validate_path_param
 
 profile_bp = Blueprint('profiles', __name__)
 
@@ -27,6 +26,7 @@ def get_profiles():
 @require_auth
 def get_profile(profile_id):
     """Get a single general profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     profile = general_models.get_entities('profiles', [profile_id])
     events = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
@@ -42,11 +42,9 @@ def get_profile(profile_id):
 @require_auth
 def create_profile():
     """Create a new general profile."""
-    request_data = request.json or {}
     general_models = get_general_models()
 
-    allowed_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
-    data = {k: v for k, v in request_data.items() if k in allowed_fields}
+    data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public'])
 
     profile_id = general_models.add('profiles', data)
     changes = [{
@@ -60,6 +58,7 @@ def create_profile():
 @require_auth
 def duplicate_profile(profile_id):
     """Duplicate a general profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id)
     changes = [{
@@ -73,13 +72,15 @@ def duplicate_profile(profile_id):
 @require_auth
 def update_profile(profile_id):
     """Update a general profile."""
-    data = request.json or {}
-    return _update_profile(profile_id, data)
+    profile_id = validate_path_param('profile_id', profile_id)
+    return _update_profile(profile_id)
 
 @profile_bp.route("/api/profiles/<profile_id>/events/<event_id>", methods=["POST"])
 @require_auth
 def add_event_to_profile(profile_id, event_id):
     """Add an event to a profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = get_event(event_id)
     # Add event
@@ -103,6 +104,8 @@ def add_event_to_profile(profile_id, event_id):
 @require_auth
 def remove_event_from_profile(profile_id, event_id):
     """Remove an event from a profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     # Remove event
@@ -126,6 +129,7 @@ def remove_event_from_profile(profile_id, event_id):
 @require_auth
 def delete_profile(profile_id):
     """Delete a general profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     event_ids = general_models.get_childs('profiles', profile_id, 'events', return_ids=True)
     general_models.delete_profile(profile_id)
@@ -148,13 +152,9 @@ def delete_profile(profile_id):
 def check_profile_name():
     """Check if a profile name already exists."""
     general_models = get_general_models()
-    data = request.json or {}
-    label = data.get('label', '')
-    exclude_profile_id = data.get('exclude_profile_id', None)
-    restricted_to_event_id = data.get('restricted_to_event_id', None)
-    if not label:
-        return jsonify({"error": "Label is required"}), 400
-    
+    label = get_input('label', required=True)
+    exclude_profile_id = get_input('exclude_profile_id', required=False)
+    restricted_to_event_id = get_input('restricted_to_event_id', required=False)
     fields = {'label': label}
     if restricted_to_event_id:
         fields['restricted_to_event'] = restricted_to_event_id
@@ -166,6 +166,7 @@ def check_profile_name():
 @require_auth
 def get_profile_password(profile_id):
     """Get profile password."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     return jsonify({"password": general_models.get_profile_password(profile_id)})
 
@@ -173,9 +174,9 @@ def get_profile_password(profile_id):
 @require_auth
 def update_profile_password(profile_id):
     """Update profile password."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
-    data = request.json or {}
-    password = data.get('password', '')
+    password = get_input('password', required=True)
     general_models.edit('profiles', profile_id, {'password': password})
     return jsonify({"success": True})
 
@@ -187,6 +188,7 @@ def update_profile_password(profile_id):
 @require_auth
 def get_event_profiles(event_id):
     """Get all event profiles."""
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles')
     changes = [{
@@ -205,6 +207,8 @@ def get_event_profiles(event_id):
 @require_auth
 def get_event_profile(event_id, profile_id):
     """Get a single event profile with relations."""
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
     event = get_event(event_id)
     general_models = get_general_models()
     profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
@@ -239,14 +243,12 @@ def get_event_profile(event_id, profile_id):
 @require_auth
 def create_event_profile(event_id):
     """Create a new event profile."""
-    request_data = request.json or {}
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = get_event(event_id)
-    allowed_general_fields = ['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public']
-    allowed_event_fields = ['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups']
-    general_data = {k: v for k, v in request_data.items() if k in allowed_general_fields}
+    general_data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public'])
     general_data['restricted_to_event'] = event_id
-    event_data = {k: v for k, v in request_data.items() if k in allowed_event_fields}
+    event_data = get_multiple_inputs(['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups'])
 
     profile_id = general_models.add('profiles', general_data)
     event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
@@ -267,13 +269,16 @@ def create_event_profile(event_id):
 @require_auth
 def update_event_profile(event_id, profile_id):
     """Update an event profile."""
-    data = request.json or {}
-    return _update_profile(profile_id, data, event_id)
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    return _update_profile(profile_id, event_id)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>", methods=["DELETE"])
 @require_auth
 def delete_event_profile(event_id, profile_id):
     """Delete an event profile."""
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     complete_delete = general_models.delete_profile(profile_id, event_id)
     changes = [{
@@ -298,8 +303,9 @@ def delete_event_profile(event_id, profile_id):
 @require_auth
 def get_current_profile():
     """Get current profile data combining general and event-specific information."""
-    event_id = request.args.get('event_id', None)
     
+    event_id = get_query_param('event_id', required=False)
+
     general_models = get_general_models()
     profile = general_models.get_current_profile(event_id)
 
@@ -334,13 +340,9 @@ def update_my_preferences():
     """Update a single preference for the current profile."""
     general_models = get_general_models()
     
-    data = request.json or {}
-    preference_group = data.get('preference_group')
-    preference_key = data.get('preference_key')
-    preference_value = data.get('preference_value')
-    
-    if not preference_group or not preference_key or preference_value is None:
-        return jsonify({"error": "preference_group, preference_key, and preference_value are required"}), 400
+    preference_group = get_input('preference_group', required=True)
+    preference_key = get_input('preference_key', required=True)
+    preference_value = get_input('preference_value', required=True)
     
     general_models.update_my_preferences(preference_group, preference_key, preference_value)
     preferences = general_models.get_my_preferences()
@@ -376,6 +378,7 @@ def update_current_profile():
 @require_auth
 def get_groups_to_request_access(event_id):
     """Get groups to request access for the current profile."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     return jsonify({"groups": event.models.get_groups_to_request_access()})
 
@@ -390,48 +393,54 @@ def get_groups_to_request_access(event_id):
 @require_auth
 def add_images_to_profile(event_id, profile_id):
     """Add multiple images to a profile."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    image_ids = get_input('image_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'images', image_ids, add=True)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/images", methods=["DELETE"])
 @require_auth
 def remove_images_from_profile(event_id, profile_id):
     """Remove multiple images from a profile."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    image_ids = get_input('image_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'images', image_ids, add=False)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["PUT"])
 @require_auth
 def add_albums_to_profile(event_id, profile_id):
     """Add multiple albums to a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    album_ids = get_input('album_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'albums', album_ids, add=True)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/albums", methods=["DELETE"])
 @require_auth
 def remove_albums_from_profile(event_id, profile_id):
     """Remove multiple albums from a profile."""
-    data = request.json or {}
-    album_ids = data.get('album_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    album_ids = get_input('album_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'albums', album_ids, add=False)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups", methods=["PUT"])
 @require_auth
 def add_groups_to_profile(event_id, profile_id):
     """Add multiple groups to a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    group_ids = get_input('group_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'groups', group_ids, add=True)
 
 @profile_bp.route("/api/events/<event_id>/profiles/<profile_id>/groups", methods=["DELETE"])
 @require_auth
 def remove_groups_from_profile(event_id, profile_id):
     """Remove multiple groups from a profile."""
-    data = request.json or {}
-    group_ids = data.get('group_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    group_ids = get_input('group_ids', required=True)
     return _edit_event_profile_childs(event_id, profile_id, 'groups', group_ids, add=False)
 
 # Accessibility management (whitelist/blacklist logic)
@@ -449,18 +458,13 @@ def manage_profile_accessibility(event_id, profile_id):
     - entity_type: 'images', 'albums', or 'groups'
     - ids: List of entity IDs
     """
-    data = request.json or {}
-    entity_type = data.get('entity_type')
-    entity_ids = data.get('ids', [])
-    
-    if not entity_type:
-        return jsonify({"error": "entity_type is required (images, albums, or groups)"}), 400
+    event_id = validate_path_param('event_id', event_id)
+    profile_id = validate_path_param('profile_id', profile_id)
+    entity_type = get_input('entity_type', required=True)
+    entity_ids = get_input('ids', required=True)
     
     if entity_type not in ['images', 'albums', 'groups']:
         return jsonify({"error": "entity_type must be one of: images, albums, groups"}), 400
-    
-    if not entity_ids:
-        return jsonify({"error": "ids is required"}), 400
     
     # POST = check accessibility status
 
@@ -499,6 +503,7 @@ def manage_profile_accessibility(event_id, profile_id):
 @require_auth
 def generate_public_access_code(profile_id):
     """Generate a public access code for a profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     # Check if profile is public
     general_models.generate_public_access_code(profile_id)
@@ -515,6 +520,7 @@ def generate_public_access_code(profile_id):
 @require_auth
 def get_public_access_code(profile_id):
     """Get the public access code for a profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     public_code = general_models.get_public_access_code(profile_id)
     return jsonify({"success": True, "public_code": public_code})
@@ -523,6 +529,7 @@ def get_public_access_code(profile_id):
 @require_auth
 def remove_public_access_code(profile_id):
     """Remove public access code for a profile."""
+    profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
     general_models.revoke_public_access_code(profile_id)
     
@@ -538,10 +545,10 @@ def remove_public_access_code(profile_id):
 # HELPER FUNCTIONS
 # ========================================
 
-def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
+def _update_profile(profile_id: str, event_id: str | None = None):
     general_models = get_general_models()
 
-    general_fields = [
+    general_data = get_multiple_inputs([
         'label',
         'hierarchy_rank',
         'password',
@@ -549,13 +556,12 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
         'is_public',
         'restricted_to_event',
         'can_create_events',
-    ]
-    general_data = {k: v for k, v in data.items() if k in general_fields}
+    ])
     if general_data:
         general_models.edit('profiles', profile_id, general_data)
 
     if event_id:
-        event_fields = [
+        event_data = get_multiple_inputs([
             'can_manage_event',
             'can_delete_event',
             'can_upload_and_delete_images',
@@ -563,8 +569,7 @@ def _update_profile(profile_id: str, data: dict, event_id: str | None = None):
             'all_images',
             'all_albums',
             'all_groups',
-        ]
-        event_data = {k: v for k, v in data.items() if k in event_fields}
+        ])
         event = get_event(event_id)
         event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
         profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])

@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, ChildOperation, Event, Forbidden, DatabaseError, DBPolicyError
+from src.backend.helpers import get_event, ChildOperation, get_input, get_multiple_inputs, validate_path_param
 
 album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 
@@ -9,6 +9,7 @@ album_bp = Blueprint('albums', __name__, url_prefix='/api/events/<event_id>')
 @require_auth
 def get_albums(event_id):
     """List all accessible album summaries for the specific event."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     albums = event.models.get_entities('albums')
     changes = [{
@@ -22,6 +23,8 @@ def get_albums(event_id):
 @require_auth
 def get_album(event_id, album_id):
     """Get a specific album's details as changes."""
+    event_id = validate_path_param('event_id', event_id)
+    album_id = validate_path_param('album_id', album_id)
     event = get_event(event_id)
     if not event.models.is_accessible('albums', album_id):
         return jsonify({"error": f"Album {album_id} not found or not accessible"}), 404
@@ -45,12 +48,10 @@ def get_album(event_id, album_id):
 @require_auth
 def check_album_name(event_id):
     """Check if an album name already exists."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
-    label = data.get('label', '')
-    exclude_album_id = data.get('exclude_album_id', '')
-    if not label:
-        return jsonify({"error": "Label is required"}), 400
+    label = get_input('label', required=True)
+    exclude_album_id = get_input('exclude_album_id', required=False)
     conflict_album_id = event.models.is_exists('albums', {'label': label}, exclude_id=exclude_album_id)
     return jsonify({"conflict": bool(conflict_album_id), "conflicting_album": conflict_album_id})
 
@@ -58,11 +59,11 @@ def check_album_name(event_id):
 @require_auth
 def create_album(event_id):
     """Create a new album."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
     
-    allowed_fields = {'label', 'description', 'representative_image'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['description', 'representative_image'])
+    sanitized['label'] = get_input('label', required=True)
     if sanitized:
         album_id = event.models.add('albums', sanitized)
         created_album = event.models.get_entities('albums', [album_id])
@@ -80,17 +81,14 @@ def create_album(event_id):
 @require_auth
 def update_album(event_id, album_id):
     """Update an album's details."""
+    event_id = validate_path_param('event_id', event_id)
+    album_id = validate_path_param('album_id', album_id)
     event = get_event(event_id)
     album = event.models.get_entities('albums', album_id)
     if not album:
         return jsonify({"error": f"Album {album_id} not found or not accessible"}), 404
 
-    data = request.json or {}
-    if (album.get('label', '').lower() in ('archive', 'favorites')) and 'label' in data:
-        data.pop('label', None)
-
-    allowed = {'label', 'description', 'representative_image'}
-    sanitized = {k: v for k, v in data.items() if k in allowed}
+    sanitized = get_multiple_inputs(['label', 'description', 'representative_image'])
     if sanitized:
         event.models.edit('albums', album_id, sanitized)
 
@@ -109,6 +107,8 @@ def update_album(event_id, album_id):
 @require_auth
 def delete_album(event_id, album_id):
     """Delete an album."""
+    event_id = validate_path_param('event_id', event_id)
+    album_id = validate_path_param('album_id', album_id)
     event = get_event(event_id)
     if not event.models.is_accessible('albums', album_id):
         return jsonify({"error": f"Album {album_id} not found or not accessible"}), 404
@@ -128,8 +128,8 @@ def delete_album(event_id, album_id):
     return jsonify(response)
 
 def _edit_album_images(event_id: str, album_id: str, image_ids: list[str], add: bool):
-    event = get_event(event_id)
     """Helper: Add or remove images from an album, return response with changes."""
+    event = get_event(event_id)
     operation = ChildOperation.ADD if add else ChildOperation.REMOVE
     updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=operation)
     changes = []
@@ -202,8 +202,9 @@ def _edit_album_images(event_id: str, album_id: str, image_ids: list[str], add: 
 @require_auth
 def add_images_to_album(event_id, album_id):
     """Add images to an album."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    album_id = validate_path_param('album_id', album_id)
+    image_ids = get_input('image_ids', required=True)
     response = _edit_album_images(event_id, album_id, image_ids, add=True)
     return jsonify(response)
 
@@ -211,8 +212,9 @@ def add_images_to_album(event_id, album_id):
 @require_auth
 def remove_images_from_album(event_id, album_id):
     """Remove images from an album."""
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
+    event_id = validate_path_param('event_id', event_id)
+    album_id = validate_path_param('album_id', album_id)
+    image_ids = get_input('image_ids', required=True)
     response = _edit_album_images(event_id, album_id, image_ids, add=False)
     return jsonify(response)
 
@@ -220,13 +222,9 @@ def remove_images_from_album(event_id, album_id):
 @require_auth
 def toggle_favorites_images(event_id):
     """Add or remove multiple images from favorites album."""
-    
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    is_favorite = data.get('is_favorite', False)
-    
-    if not image_ids:
-        return jsonify({"error": "No image IDs provided"}), 400
+    event_id = validate_path_param('event_id', event_id)
+    image_ids = get_input('image_ids', required=True)
+    is_favorite = get_input('is_favorite', required=True)
     
     event = get_event(event_id)
     event_data = event.models.get_entities('events', event_id, include_details=True)
@@ -238,13 +236,9 @@ def toggle_favorites_images(event_id):
 @require_auth
 def toggle_archive_images(event_id):
     """Add or remove multiple images from archive album."""
-    
-    data = request.json or {}
-    image_ids = data.get('image_ids', [])
-    is_archived = data.get('is_archived', False)
-    
-    if not image_ids:
-        return jsonify({"error": "No image IDs provided"}), 400
+    event_id = validate_path_param('event_id', event_id)
+    image_ids = get_input('image_ids', required=True)
+    is_archived = get_input('is_archived', required=True)
     
     event = get_event(event_id)
     event_data = event.models.get_entities('events', event_id, include_details=True)

@@ -125,10 +125,9 @@ export default function GroupsFilter({
     
     setIsLoadingRelatedGroups(true);
     try {
-      const selectedParam = groupsToUse.join(',');
       const params = {
-        image_ids: safeImageIds.join(','),
-        selected_groups: selectedParam
+        image_ids: safeImageIds,
+        selected_groups: groupsToUse
       };
       
       const data = await groupsAPI.getRelated(eventUrl, params);

@@ -30,7 +30,7 @@ class Event():
             shutil.rmtree(event_dir)
    
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
-        event_dir = os.path.join(DATA_ROOT, event_id)
+        event_dir = os.path.join(DATA_ROOT, str(event_id))
         
         self.event_id = event_id
         self.models = EventModels(event_id, profile_id, public_code)

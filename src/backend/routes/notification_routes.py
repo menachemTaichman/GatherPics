@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 from datetime import datetime
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models, Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, get_input
 
 notification_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
 
@@ -22,13 +22,13 @@ def get_my_notifications():
 @notification_bp.route('/my/<int:notification_id>/read', methods=['PATCH'])
 @require_auth
 def toggle_read(notification_id):
-    """Mark a specific notification as read."""
+    """Mark a specific notification as read.
+    
+    Request body:
+    - read: Boolean (optional, defaults to True)
+    """
     general_models = get_general_models()
-    read = request.json.get('read', True)
-    if read is None:
-        return jsonify({'error': 'read is required'}), 400
-    if not isinstance(read, bool):
-        return jsonify({'error': 'read must be a boolean (true or false)'}), 400
+    read = get_input('read', required=False) or True
     
     data = {
         'read': read,

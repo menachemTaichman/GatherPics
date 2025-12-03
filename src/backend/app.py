@@ -2,6 +2,7 @@ from flask import Flask, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_jwt_extended.exceptions import JWTDecodeError, InvalidHeaderError, NoAuthorizationError
+from pydantic import ValidationError
 from datetime import timedelta
 import traceback
 import os
@@ -68,7 +69,13 @@ def bad_request(error):
 
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({"error": "Not Found", "message": str(error)}), 404
+    """Handle 404 errors (route not found or invalid URL parameter type)."""
+    # Check if this might be a parameter validation error
+    # Flask returns 404 when URL parameter type conversion fails (e.g., invalid UUID or int)
+    return jsonify({
+        "error": "Not Found",
+        "message": "The requested resource was not found. This may be due to an invalid ID format in the URL."
+    }), 404
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -125,6 +132,43 @@ def handle_db_policy_error(error):
     traceback_str = traceback.format_exc() if app.debug else None
     log_error_to_db(str(error), "DBPolicyError", traceback_str)
     return jsonify({"error": error_msg}), 400
+
+# Pydantic Validation Error Handler
+@app.errorhandler(ValidationError)
+def handle_validation_error(error):
+    """Handle Pydantic validation errors and return clean JSON response."""
+    # Since get_input() validates one field at a time, we typically get one error
+    error_list = error.errors()
+    if not error_list:
+        return jsonify({"error": "Fields Validation failed"}), 400
+    
+    # Handle first error (most common case)
+    err = error_list[0]
+    field = '.'.join(str(loc) for loc in err['loc'])
+    message = err['msg']
+    error_type = err['type']
+    
+    # If there are multiple errors, include them all
+    details = {
+        'field': field,
+        'message': message,
+        'type': error_type
+    }
+    
+    if len(error_list) > 1:
+        details['additional_errors'] = [
+            {
+                'field': '.'.join(str(loc) for loc in e['loc']),
+                'message': e['msg'],
+                'type': e['type']
+            }
+            for e in error_list[1:]
+        ]
+    
+    return jsonify({
+        "error": "Fields Validation failed",
+        "details": details
+    }), 400
 
 # JWT Error Handlers
 @app.errorhandler(JWTDecodeError)

@@ -1,8 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, ChildOperation, Forbidden, DatabaseError
+from src.backend.helpers import get_event, get_general_models, ChildOperation, get_input, get_multiple_inputs, validate_path_param
 
 request_bp = Blueprint('requests', __name__, url_prefix='/api/events/<event_id>')
 
@@ -12,6 +12,7 @@ request_bp = Blueprint('requests', __name__, url_prefix='/api/events/<event_id>'
 @require_auth
 def get_requests(event_id):
     """List all accessible requests for managers."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     requests = event.models.get_entities('access_requests')
     changes = [{
@@ -25,6 +26,7 @@ def get_requests(event_id):
 @require_auth
 def get_request(event_id, request_id):
     """Get a specific access request for managers."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('access_requests', request_id):
         return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
@@ -59,6 +61,7 @@ def get_request(event_id, request_id):
 @require_auth
 def get_my_requests(event_id):
     """List current user's own requests."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     requests = event.models.get_entities('my_access_requests')
     changes = [{
@@ -72,6 +75,7 @@ def get_my_requests(event_id):
 @require_auth
 def get_my_request(event_id, request_id):
     """Get a specific request belonging to current user."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
 
     request_data = event.models.get_entities('my_access_requests', [request_id])
@@ -89,21 +93,19 @@ def get_my_request(event_id, request_id):
 @require_auth
 def create_access_request(event_id):
     """Create a new access request."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    data = request.json or {}
     
     request_data = {
         'profile_id': get_jwt_identity(),
-        'applicant_name': data['applicant_name'],
-        'applicant_email': data.get('applicant_email'),
-        'applicant_phone': data.get('applicant_phone'),
-        'details': data.get('details'),
-        'applicant_profile_id': data.get('applicant_profile_id'),
-        'communication_consent': data.get('communication_consent'),
+        'applicant_name': get_input('applicant_name', required=True),
+        'applicant_email': get_input('applicant_email', required=False),
+        'applicant_phone': get_input('applicant_phone', required=False),
+        'details': get_input('details', required=False),
+        'applicant_profile_id': get_input('applicant_profile_id', required=False),
+        'communication_consent': get_input('communication_consent', required=False) or False,
     }
-    group_ids = data.get('group_ids')
-    if not (group_ids and isinstance(group_ids, list)):
-        return jsonify({"error": "group_ids parameter is required"}), 400
+    group_ids = get_input('group_ids', required=True)
     
     # request_id = event.models.add('my_access_requests', request_data)
     # event.models.edit_childs('my_access_requests', request_id, 'groups', group_ids, operation=ChildOperation.ADD)
@@ -125,22 +127,23 @@ def create_access_request(event_id):
 @require_auth
 def update_my_request(event_id, request_id):
     """Update current user's own request."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-        
-    data = request.json or {}
-    allowed_fields = {'applicant_name', 'applicant_email', 'applicant_phone', 'details', 'communication_consent'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    
+    sanitized = get_multiple_inputs(['applicant_name', 'applicant_email', 'applicant_phone', 'details', 'communication_consent'])
     
     if sanitized:
         event.models.edit('my_access_requests', request_id, sanitized)
 
     # Handle groups to add
-    if 'groups_to_add' in data and isinstance(data['groups_to_add'], list) and len(data['groups_to_add']) > 0:
-        event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_add'], operation=ChildOperation.ADD)
+    groups_to_add = get_input('groups_to_add', required=False)
+    if groups_to_add and isinstance(groups_to_add, list) and len(groups_to_add) > 0:
+        event.models.edit_childs('my_access_requests', request_id, 'groups', groups_to_add, operation=ChildOperation.ADD)
 
     # Handle groups to remove
-    if 'groups_to_remove' in data and isinstance(data['groups_to_remove'], list) and len(data['groups_to_remove']) > 0:
-        event.models.edit_childs('my_access_requests', request_id, 'groups', data['groups_to_remove'], operation=ChildOperation.REMOVE)
+    groups_to_remove = get_input('groups_to_remove', required=False)
+    if groups_to_remove and isinstance(groups_to_remove, list) and len(groups_to_remove) > 0:
+        event.models.edit_childs('my_access_requests', request_id, 'groups', groups_to_remove, operation=ChildOperation.REMOVE)
         
     updated_request = event.models.get_entities('my_access_requests', [request_id])
     groups, relation_data = event.models.get_childs('my_access_requests', request_id, 'groups')
@@ -164,6 +167,7 @@ def update_my_request(event_id, request_id):
 @require_auth
 def delete_request(event_id, request_id):
     """Delete an access request."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     if not event.models.is_accessible('access_requests', request_id):
@@ -191,6 +195,7 @@ def delete_request(event_id, request_id):
 @require_auth
 def delete_all_requests(event_id):
     """Delete all access requests for this event."""
+    event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = get_event(event_id)
     deleted_ids = event.models.delete_all('access_requests')
@@ -211,6 +216,7 @@ def delete_all_requests(event_id):
 @require_auth
 def delete_my_request(event_id, request_id):
     """Delete current user's own request."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     
     event.models.delete('my_access_requests', request_id)
@@ -227,15 +233,15 @@ def delete_my_request(event_id, request_id):
 @require_auth
 def toggle_request(event_id, request_id):
     """Toggle access request (approve/deny groups)."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('access_requests', request_id):
         return jsonify({"error": f"Request {request_id} not found or not accessible"}), 404
     
-    data = request.json or {}
-    approved_group_ids = data.get('groupsApproved') or []
-    denied_group_ids = data.get('groupsDenied') or []
-    closed_details = data.get('closedDetails')
-    profile_name = data.get('profileName')
+    approved_group_ids = get_input('groups_approved', required=False) or []
+    denied_group_ids = get_input('groups_denied', required=False) or []
+    closed_details = get_input('closed_details', required=False)
+    profile_name = get_input('profile_name', required=False)
     
     general_models = get_general_models()
     applicant_profile_id, label, password = general_models.toggle_access_request(

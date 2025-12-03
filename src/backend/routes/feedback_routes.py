@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models, Forbidden, DatabaseError
+from src.backend.helpers import get_general_models, get_input, get_multiple_inputs
 
 feedback_bp = Blueprint('feedbacks', __name__, url_prefix='/api')
 
@@ -45,9 +45,7 @@ def update_feedback(feedback_id):
     """Update a feedback - developer only."""
     general_models = get_general_models()
     
-    data = request.json or {}
-    allowed_fields = {'type', 'notes', 'is_closed', 'solved', 'closed_at', 'closed_by', 'closed_details'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['type', 'notes', 'is_closed', 'solved', 'closed_at', 'closed_by', 'closed_details'])
     
     if sanitized:
         general_models.edit('feedbacks', feedback_id, sanitized)
@@ -145,9 +143,7 @@ def update_my_feedback(feedback_id):
     """Update current user's own feedback."""
     general_models = get_general_models()
     
-    data = request.json or {}
-    allowed_fields = {'title', 'type', 'message', 'communication_consent'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['title', 'type', 'message', 'communication_consent'])
     
     if sanitized:
         general_models.edit('my_feedbacks', feedback_id, sanitized)
@@ -183,36 +179,42 @@ def delete_my_feedback(feedback_id):
 def create_feedback():
     """Create a new feedback."""
     general_models = get_general_models()
-    data = request.json or {}
     
     feedback_data = {
         'profile_id': get_jwt_identity(),
-        'message': data['message'],
-        'title': data.get('title'),
-        'type': data.get('type', 0),
-        'communication_consent': data.get('communication_consent', False),
+        'message': get_input('message', required=True),
+        'title': get_input('title', required=False),
+        'type': get_input('type', required=False) or 0,
+        'communication_consent': get_input('communication_consent', required=False) or False,
     }
     
-    if data.get('sender_name'):
-        feedback_data['sender_name'] = data['sender_name']
-    if data.get('sender_email'):
-        feedback_data['sender_email'] = data['sender_email']
+    sender_name = get_input('sender_name', required=False)
+    if sender_name:
+        feedback_data['sender_name'] = sender_name
+    
+    sender_email = get_input('sender_email', required=False)
+    if sender_email:
+        feedback_data['sender_email'] = sender_email
     
     # Include metadata if sender agrees
-    if data.get('include_metadata'):
+    if get_input('include_metadata', required=False):
         feedback_data['user_agent'] = request.headers.get('User-Agent')
         feedback_data['ip_address'] = request.remote_addr
         
         # Include diagnostics (console logs, network info, etc.)
         diagnostics = {}
-        if data.get('console_logs'):
-            diagnostics['console_logs'] = data['console_logs']
-        if data.get('network_logs'):
-            diagnostics['network_logs'] = data['network_logs']
-        if data.get('network_errors'):
-            diagnostics['network_errors'] = data['network_errors']
-        if data.get('browser_info'):
-            diagnostics['browser_info'] = data['browser_info']
+        console_logs = get_input('console_logs', required=False)
+        if console_logs:
+            diagnostics['console_logs'] = console_logs
+        network_logs = get_input('network_logs', required=False)
+        if network_logs:
+            diagnostics['network_logs'] = network_logs
+        network_errors = get_input('network_errors', required=False)
+        if network_errors:
+            diagnostics['network_errors'] = network_errors
+        browser_info = get_input('browser_info', required=False)
+        if browser_info:
+            diagnostics['browser_info'] = browser_info
         
         if diagnostics:
             feedback_data['diagnostics'] = diagnostics

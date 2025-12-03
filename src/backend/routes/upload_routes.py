@@ -5,7 +5,7 @@ import threading
 import re
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, Forbidden, DatabaseError, json_dumps_safe
+from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe, get_multiple_inputs, validate_path_param
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 
@@ -63,7 +63,7 @@ def sanitize_filename(filename):
 @require_auth
 def upload_images(event_id):
     """Upload and process images."""
-    
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     
@@ -182,6 +182,7 @@ def upload_images(event_id):
 @require_auth
 def upload_files_only(event_id):
     """Upload files to to_process directory without processing."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     
@@ -234,6 +235,7 @@ def upload_files_only(event_id):
 @require_auth
 def process_images_stream(event_id):
     """Process images with SSE progress streaming."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
@@ -390,6 +392,7 @@ def process_images_stream(event_id):
 @require_auth
 def get_uploads(event_id):
     """List all accessible uploads for the specific event."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     uploads = event.models.get_entities('uploads')
     changes = [{
@@ -403,6 +406,7 @@ def get_uploads(event_id):
 @require_auth
 def get_upload(event_id, upload_id):
     """Get a specific upload's details as changes."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
@@ -444,13 +448,12 @@ def get_upload(event_id, upload_id):
 @require_auth
 def update_upload(event_id, upload_id):
     """Update an upload's notes."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
         
-    data = request.json or {}
-    allowed_fields = {'notes'}
-    sanitized = {k: v for k, v in data.items() if k in allowed_fields}
+    sanitized = get_multiple_inputs(['notes'])
     if sanitized:
         event.models.edit('uploads', upload_id, sanitized)
         updated_upload = event.models.get_entities('uploads', [upload_id])
@@ -468,6 +471,7 @@ def update_upload(event_id, upload_id):
 @require_auth
 def delete_upload(event_id, upload_id):
     """Delete an upload."""
+    event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404

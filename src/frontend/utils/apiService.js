@@ -490,10 +490,15 @@ export const groupsAPI = {
   },
 
   getFacesInImage: async (groupId, imageId, eventUrl) => {
+    // Use getFacesInImages for consistency (single image is just a list with one item)
+    return groupsAPI.getFacesInImages(groupId, [imageId], eventUrl);
+  },
+
+  getFacesInImages: async (groupId, imageIds, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const key = `GROUP_GET_FACES_IN_IMAGE:${eventId}:${groupId}:${imageId}`;
+    const key = `GROUP_GET_FACES_IN_IMAGES:${eventId}:${groupId}:${imageIds.join(',')}`;
     return await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces?image_id=${imageId}`);
+      const response = await api.post(`/api/events/${eventId}/groups/${groupId}/faces`, { image_ids: imageIds });
       const data = response.data || {};
       if (Array.isArray(data.faces)) {
         data.faces = data.faces.map(normalizeFace);
@@ -502,20 +507,15 @@ export const groupsAPI = {
     });
   },
 
-  getFacesInImages: async (groupId, imageIds, eventUrl) => {
-    const eventId = await getEventIdForApi(eventUrl);
-    const key = `GROUP_GET_FACES_IN_IMAGES:${eventId}:${groupId}:${imageIds.join(',')}`;
-    return await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/groups/${groupId}/faces?image_ids=${imageIds.join(',')}`);
-      return response.data || {};
-    });
-  },
-
   getRelated: async (eventUrl, params = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const key = `GROUPS_GET_RELATED:${eventId}:${JSON.stringify(params||{})}`;
+    const requestData = {
+      image_ids: params.image_ids || [],
+      selected_groups: params.selected_groups || []
+    };
+    const key = `GROUPS_GET_RELATED:${eventId}:${JSON.stringify(requestData)}`;
     return await withDedupe(key, async () => {
-      const response = await api.get(`/api/events/${eventId}/groups/related`, { params });
+      const response = await api.post(`/api/events/${eventId}/groups/related`, requestData);
       const data = response.data || {};
       if (Array.isArray(data.related_groups)) {
         data.related_groups = data.related_groups.map(normalizeGroup);
@@ -1381,11 +1381,11 @@ export const requestsAPI = {
   toggle: async (requestId, groupsApproved, groupsDenied, closedDetails, profileName, applicantProfileId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const data = { 
-      groupsApproved: groupsApproved || [],
-      groupsDenied: groupsDenied || [],
-      closedDetails: closedDetails || null,
-      profileName: profileName || null,
-      applicantProfileId: applicantProfileId || null
+      groups_approved: groupsApproved || [],
+      groups_denied: groupsDenied || [],
+      closed_details: closedDetails || null,
+      profile_name: profileName || null,
+      applicant_profile_id: applicantProfileId || null
     };
     const response = await api.post(`/api/events/${eventId}/requests/${requestId}/toggle`, data);
     return response.data;

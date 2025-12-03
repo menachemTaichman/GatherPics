@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth, optional_auth
-from src.backend.helpers import get_general_models, Forbidden, DatabaseError, get_event as get_event_instance
-from src.core.errors import DBPolicyError
+from src.backend.helpers import get_general_models, get_input, get_multiple_inputs, validate_path_param
 
 event_bp = Blueprint('events', __name__, url_prefix='/api')
 
@@ -23,6 +22,7 @@ def get_events():
 @require_auth
 def get_event(event_id):
     """Get single event details (auth required to include access-controlled fields if any)."""
+    event_id = validate_path_param('event_id', event_id)
     gm = get_general_models()
     event_items = gm.get_entities('events', [event_id], include_details=True)
     if not event_items:
@@ -40,10 +40,10 @@ def get_event(event_id):
 @require_auth
 def update_event(event_id):
     """Update basic event settings (name, URL, visibility, limits)."""
+    event_id = validate_path_param('event_id', event_id)
     gm = get_general_models()
-    data = request.json or {}
 
-    allowed_fields = {
+    sanitized = get_multiple_inputs([
         'name',
         'url',
         'date',
@@ -52,9 +52,7 @@ def update_event(event_id):
         'image_size_limit_bytes',
         'rekognition_calls_limit',
         'representative_image',
-    }
-
-    sanitized = {k: data[k] for k in data.keys() if k in allowed_fields}
+    ])
 
     if sanitized:
         gm.edit('events', event_id, sanitized)
@@ -72,6 +70,7 @@ def update_event(event_id):
 @require_auth
 def delete_event(event_id):
     """Delete an event."""
+    event_id = validate_path_param('event_id', event_id)
     gm = get_general_models()
     gm.delete_event(event_id)
     changes = [{
@@ -93,18 +92,15 @@ def delete_event(event_id):
 def create_event():
     """Create a new event."""
     gm = get_general_models()
-    data = request.json or {}
 
-    allowed_fields = {
+    sanitized = get_multiple_inputs([
         'name',
         'url',
         'date',
         'is_public',
         'images_count_limit',
         'image_size_limit_bytes',
-    }
-
-    sanitized = {k: data.get(k) for k in allowed_fields if k in data}
+    ])
 
     name = (sanitized.get('name') or '').strip()
     url = (sanitized.get('url') or '').strip()
@@ -180,6 +176,7 @@ def resolve_event():
 @event_bp.route('/events/<event_id>/url', methods=['GET'])
 def get_event_url(event_id):
     """Get event URL by ID (public)."""
+    event_id = validate_path_param('event_id', event_id)
     gm = get_general_models()
     url = gm.get_event_url(event_id)
     if not url:
@@ -190,12 +187,8 @@ def get_event_url(event_id):
 @require_auth
 def check_event_name():
     gm = get_general_models()
-    data = request.json or {}
-    name = (data.get('name') or '').strip()
-    exclude_event_id = data.get('exclude_event_id')
-
-    if not name:
-        return jsonify({"error": "Name is required"}), 400
+    name = get_input('name', required=True)
+    exclude_event_id = get_input('exclude_event_id', required=False)
 
     conflict_id = gm.is_exists('events', {'name': name}, exclude_id=exclude_event_id)
     return jsonify({'conflict': bool(conflict_id), 'conflicting_event': conflict_id})
@@ -204,12 +197,8 @@ def check_event_name():
 @require_auth
 def check_event_url():
     gm = get_general_models()
-    data = request.json or {}
-    url = (data.get('url') or '').strip()
-    exclude_event_id = data.get('exclude_event_id')
-
-    if not url:
-        return jsonify({"error": "URL is required"}), 400
+    url = get_input('url', required=True)
+    exclude_event_id = get_input('exclude_event_id', required=False)
 
     conflict_id = gm.is_exists('events', {'url': url}, exclude_id=exclude_event_id)
     return jsonify({'conflict': bool(conflict_id), 'conflicting_event': conflict_id})
