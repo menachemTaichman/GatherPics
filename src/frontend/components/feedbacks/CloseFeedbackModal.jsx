@@ -7,7 +7,6 @@ import { useToast } from '../../contexts/ToastContext';
 import { feedbacksAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useFeedbackById } from '../../utils/dataManager';
-import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function CloseFeedbackModal({ 
   isOpen, 
@@ -17,7 +16,6 @@ export default function CloseFeedbackModal({
   const [loading, setLoading] = useState(false);
   const [closeDetails, setCloseDetails] = useState('');
   const [solved, setSolved] = useState(false);
-  const [notifyByEmail, setNotifyByEmail] = useState(true);
   
   const { showToast } = useToast();
   const { registerModal, unregisterModal } = useModalManager();
@@ -39,7 +37,6 @@ export default function CloseFeedbackModal({
     if (isOpen) {
       setCloseDetails('');
       setSolved(false);
-      setNotifyByEmail(true);
     }
   }, [isOpen]);
 
@@ -54,43 +51,13 @@ export default function CloseFeedbackModal({
       
       showToast(`Feedback ${solved ? 'resolved' : 'closed'}`, 'success');
       onClose(true); // Pass true to indicate success
-      
-      // After closing: if notifyByEmail, open Gmail tab (only if consent given)
-      if (notifyByEmail && feedback?.communication_consent && feedback?.sender_email) {
-        setTimeout(() => {
-          const lines = [];
-          lines.push(`Feedback ${solved ? 'Resolved' : 'Closed'}`);
-          if (feedback.title) lines.push(`Title: ${feedback.title}`);
-          if (feedback.sender_name) lines.push(`From: ${feedback.sender_name}`);
-          if (feedback.created_at) lines.push(`Submitted: ${formatDateTimeLocale(feedback.created_at)}`);
-          if (feedback.type !== undefined) {
-            lines.push(`Type: ${feedback.type === 0 ? 'Bug Report' : 'Suggestion'}`);
-          }
-          if (feedback.message) {
-            lines.push('');
-            lines.push('Original Message:');
-            lines.push(feedback.message);
-          }
-          if (closeDetails) {
-            lines.push('');
-            lines.push(`Response from Team: ${closeDetails}`);
-          }
-          lines.push('');
-          lines.push(`Status: ${solved ? '✅ Resolved' : 'Closed'}`);
-          
-          const subject = encodeURIComponent(`Your feedback has been ${solved ? 'resolved' : 'closed'}`);
-          const body = encodeURIComponent(lines.join('\n'));
-          const mailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(feedback.sender_email)}&su=${subject}&body=${body}`;
-          window.open(mailUrl, '_blank', 'noopener');
-        }, 450); // Slight delay ensures modal closes first
-      }
     } catch (error) {
       console.error('Failed to close feedback:', error);
       showToast(formatErrorMessage('close feedback', error), 'error');
     } finally {
       setLoading(false);
     }
-  }, [feedbackId, solved, closeDetails, showToast, onClose, notifyByEmail, feedback]);
+  }, [feedbackId, solved, closeDetails, showToast, onClose]);
 
   // Custom keyboard handler to allow input elements
   const handleCloseModalKeys = useCallback((e) => {
@@ -176,30 +143,6 @@ export default function CloseFeedbackModal({
               disabled={loading}
             />
           </div>
-          
-          {/* Email Notification Toggle */}
-          {feedback?.sender_email && (
-            <div>
-              <label className={`relative inline-flex items-center ${feedback.communication_consent ? 'cursor-pointer' : 'cursor-not-allowed'} select-none`}>
-                <input
-                  type="checkbox"
-                  checked={notifyByEmail && feedback.communication_consent}
-                  onChange={e => feedback.communication_consent && setNotifyByEmail(e.target.checked)}
-                  disabled={!feedback.communication_consent || loading}
-                  className="sr-only peer"
-                />
-                <div className={`w-10 h-5 ${feedback.communication_consent ? 'bg-gray-200' : 'bg-gray-300'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
-                <span className={`ml-3 text-sm font-medium ${feedback.communication_consent ? 'text-gray-700' : 'text-gray-400'}`}>
-                  Notify sender by email
-                </span>
-              </label>
-              {!feedback.communication_consent && (
-                <p className="text-xs text-amber-600 mt-1 ml-14">
-                  Sender does not want to receive email updates
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="flex justify-end space-x-3">

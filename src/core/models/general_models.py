@@ -5,7 +5,6 @@ from datetime import timedelta, datetime, timezone
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
-from src.core.services.email import send_email
 from src.core.errors import PolicyError, Forbidden, DatabaseError
 
 class GeneralModels(BaseModels):
@@ -443,15 +442,15 @@ class GeneralModels(BaseModels):
         self.db.execute_query(query, params)
     
     # Password reset helpers
-    def request_password_reset(self, email: str, reset_url_base: str) -> bool:
-        """Request a password reset link. Sends email only if profile with email exists.
+    def request_password_reset(self, email: str, reset_url_base: str) -> tuple[str, str, str, str] | None:
+        """Request a password reset link. Creates token and returns reset URL.
         
         Args:
             email: Email address of the profile
             reset_url_base: Base URL for the reset link (e.g., "https://example.com")
             
         Returns:
-            True if email was sent (profile found), False otherwise
+            (profile_id, profile_label, reset_token, reset_url) if profile found, None otherwise
         """
         query = 'SELECT profile_id, label FROM profiles WHERE email = %s'
         profile_id, profile_label = self.db.execute_query(query, (email,), return_format=ReturnFormat.TUPLE)
@@ -468,25 +467,9 @@ class GeneralModels(BaseModels):
             
             reset_url = f"{reset_url_base.rstrip('/')}/reset-password/{reset_token}"
             
-            send_email(
-                to=email,
-                subject='Password Reset Request',
-                body_text=f'Hello {profile_label},\n\nYou requested a password reset. Click the link below to reset your password:\n\n{reset_url}\n\nThis link will expire in 10 minutes.\n\nIf you did not request this, please ignore this email.',
-                body_html=f'''
-                    <html>
-                    <body>
-                        <p>Hello {profile_label},</p>
-                        <p>You requested a password reset. Click the link below to reset your password:</p>
-                        <p><a href="{reset_url}">{reset_url}</a></p>
-                        <p>This link will expire in 10 minutes.</p>
-                        <p>If you did not request this, please ignore this email.</p>
-                    </body>
-                    </html>
-                '''
-            )
-            return True
+            return profile_id, profile_label, reset_token, reset_url
         
-        return False
+        return None
 
     def validate_reset_token(self, token: str) -> tuple[str, str] | None:
         """Validate a reset token.

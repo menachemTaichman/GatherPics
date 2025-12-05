@@ -35,6 +35,7 @@ Environment Variables:
     - AWS_REGION: AWS region (defaults to 'us-east-1')
 """
 import os
+import traceback
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from dataclasses import dataclass
@@ -261,6 +262,8 @@ def send_email(
     """
     Convenience function to send an email.
     
+    Errors are automatically logged to the database and do not raise exceptions.
+    
     Args:
         to: Recipient email address(es)
         subject: Email subject
@@ -272,7 +275,7 @@ def send_email(
         bcc: BCC recipients
         
     Returns:
-        dict: Response containing status and message_id
+        dict: Response containing status and message_id, or None if sending failed
         
     Example:
         >>> send_email(
@@ -293,6 +296,21 @@ def send_email(
         bcc=bcc
     )
     
-    service = get_email_service()
-    return service.send_email(message)
+    try:
+        service = get_email_service()
+        return service.send_email(message)
+    except Exception as e:
+        # Log error to database but don't raise exception
+        try:
+            from src.core.errors import log_error
+            log_error(
+                error_message=f"Failed to send email: {str(e)}",
+                error_type="EmailError",
+                traceback_str=traceback.format_exc()
+            )
+        except Exception as log_error_exception:
+            # If logging itself fails, just print
+            print(f"Failed to send email and log error: {str(e)} (logging error: {str(log_error_exception)})")
+        
+        return None
 

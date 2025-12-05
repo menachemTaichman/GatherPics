@@ -6,47 +6,7 @@ import traceback
 import logging
 import re
 
-from src.core.errors import Forbidden, DatabaseError, PolicyError
-
-
-def sanitize_sensitive_data(text: str) -> str:
-    """Remove sensitive information (emails and passwords) from error messages and tracebacks.
-    
-    This function is designed to never raise exceptions - if sanitization fails,
-    it returns the original text to ensure error handlers always work.
-    
-    Args:
-        text: The text to sanitize
-        
-    Returns:
-        Sanitized text with sensitive data replaced with [REDACTED], or original text if sanitization fails
-    """
-    if not text:
-        return text
-    
-    try:
-        # Pattern to match email addresses
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        
-        # Replace emails
-        text = re.sub(email_pattern, '[REDACTED_EMAIL]', text)
-        
-        # Pattern 1: Match password fields with quotes and separators like "password": "value" or password=value
-        # This pattern has 3 groups: (prefix)(value)(suffix)
-        pattern1 = r'(?i)(["\']?password["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)(["\']?)'
-        text = re.sub(pattern1, r'\1[REDACTED_PASSWORD]\3', text)
-        
-        # Pattern 2: Match password followed by space and value like "password value"
-        # This pattern has 2 groups: (prefix)(value)
-        pattern2 = r'(?i)(password\s+)([^\s,}]+)'
-        text = re.sub(pattern2, r'\1[REDACTED_PASSWORD]', text)
-        
-        return text
-    except Exception as e:
-        # If sanitization fails for any reason, log it but return original text
-        # This ensures error handlers never crash due to sanitization issues
-        logging.warning(f"Sanitization failed, returning original text: {e}")
-        return text
+from src.core.errors import Forbidden, DatabaseError, PolicyError, sanitize_sensitive_data, log_error
 
 
 def clean_postgres_error(error_message: str) -> str:
@@ -57,68 +17,51 @@ def clean_postgres_error(error_message: str) -> str:
 
 
 def log_error_to_db(error_message: str, error_type: str, traceback_str: str = None):
-    """Log error to database errors table.
+    """Log error to database errors table with Flask request context.
+    
+    Wrapper around core log_error() that extracts Flask request context
+    (profile_id, request_path, etc.) and passes it to the core logging function.
     
     In non-production mode, logs errors to application logs with full context.
     error_message should be the original error (with CONTEXT from PostgreSQL).
     
     Returns the error_id if successfully logged, None otherwise.
     """
-    # Sanitize sensitive data before logging
-    sanitized_error_message = sanitize_sensitive_data(error_message)
-    sanitized_traceback = sanitize_sensitive_data(traceback_str) if traceback_str else None
+    # Get request information
+    request_path = request.path if request else None
+    request_method = request.method if request else None
+    user_agent = request.headers.get('User-Agent') if request else None
+    ip_address = request.remote_addr if request else None
     
-    # Log to application logs in non-production mode
-    if current_app.debug:
-        log_msg = f"[{error_type}] {sanitized_error_message}"
-        if sanitized_traceback:
-            log_msg += f"\n{sanitized_traceback}"
-        logging.error(log_msg)
+    # Extract event_id from request path if available
+    # Pattern: /api/events/<event_id>/... or /events/<event_id>/...
+    event_id = None
+    if request_path:
+        # Try to extract event_id from URL pattern like /api/events/<uuid>/...
+        match = re.search(r'/events/([a-f0-9-]{36})', request_path)
+        if match:
+            event_id = match.group(1)
     
-    # Save to database
+    # Get current profile ID if available
+    profile_id = None
     try:
-        from src.backend.helpers import get_general_models
-        
-        # Get request information
-        request_path = request.path if request else None
-        request_method = request.method if request else None
-        user_agent = request.headers.get('User-Agent') if request else None
-        ip_address = request.remote_addr if request else None
-        
-        # Extract event_id from request path if available
-        # Pattern: /api/events/<event_id>/... or /events/<event_id>/...
-        event_id = None
-        if request_path:
-            # Try to extract event_id from URL pattern like /api/events/<uuid>/...
-            match = re.search(r'/events/([a-f0-9-]{36})', request_path)
-            if match:
-                event_id = match.group(1)
-        
-        # Get current profile ID if available
-        profile_id = None
-        try:
-            profile_id = get_jwt_identity()
-        except:
-            pass  # Not authenticated or no JWT
-        
-        error_data = {
-            'error_type': error_type,
-            'error_message': sanitized_error_message[:10000] if len(sanitized_error_message) > 10000 else sanitized_error_message,  # Limit message length
-            'traceback': sanitized_traceback[:50000] if sanitized_traceback and len(sanitized_traceback) > 50000 else sanitized_traceback,  # Limit traceback length
-            'profile_id': profile_id,
-            'event_id': event_id,
-            'request_path': request_path[:500] if request_path and len(request_path) > 500 else request_path,
-            'request_method': request_method,
-            'user_agent': user_agent[:1000] if user_agent and len(user_agent) > 1000 else user_agent,
-            'ip_address': ip_address,
-        }
-        
-        general_models = get_general_models()
-        error_id = general_models.add('errors', error_data)
-        return error_id
-    except Exception as e:
-        logging.error(f"Failed to log error to database: {e}", exc_info=True)
-        return None
+        profile_id = get_jwt_identity()
+    except:
+        pass  # Not authenticated or no JWT
+    
+    # Call core logging function with all context
+    return log_error(
+        error_message=error_message,
+        error_type=error_type,
+        traceback_str=traceback_str,
+        profile_id=profile_id,
+        event_id=event_id,
+        request_path=request_path,
+        request_method=request_method,
+        user_agent=user_agent,
+        ip_address=ip_address,
+        debug_mode=current_app.debug if current_app else False
+    )
 
 
 def register_error_handlers(app):

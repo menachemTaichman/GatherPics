@@ -4,6 +4,8 @@ from flask_jwt_extended import get_jwt_identity
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, get_general_models, ChildOperation
 from src.backend.validators import get_input, get_multiple_inputs, validate_path_param
+from src.core.services.email import send_email
+from datetime import datetime
 
 request_bp = Blueprint('requests', __name__, url_prefix='/api/events/<event_id>')
 
@@ -257,6 +259,119 @@ def toggle_request(event_id, request_id):
     # Return updated request
     updated_request = event.models.get_entities('access_requests', [request_id])
     groups, relation_data = event.models.get_childs('access_requests', request_id, 'groups')
+    
+    # Send email if request has consent and email
+    request_data = updated_request.get(request_id, {})
+    applicant_email = request_data.get('applicant_email')
+    
+    # If applicant_profile_id exists but no email in request_data, try to get it from profile
+    if not applicant_email and request_data.get('applicant_profile_id'):
+        profile_data = general_models.get_entities('profiles', [request_data['applicant_profile_id']])
+        if profile_data and request_data['applicant_profile_id'] in profile_data:
+            applicant_email = profile_data[request_data['applicant_profile_id']].get('email')
+    
+    communication_consent = request_data.get('communication_consent')
+    
+    if applicant_email and communication_consent and (approved_group_ids or denied_group_ids):
+        # Get group labels for approved/denied groups
+        def get_group_label(group_id):
+            group = groups.get(group_id, {})
+            return group.get('label') or f'Person {group_id}'
+        
+        lines = []
+        lines.append('Access Request Processed')
+        if request_data.get('profile_label'):
+            lines.append(f'Requested by: {request_data["profile_label"]}')
+        elif request_data.get('applicant_name'):
+            lines.append(f'Requested by: {request_data["applicant_name"]}')
+        if applicant_email:
+            lines.append(f'Email: {applicant_email}')
+        if request_data.get('applicant_phone'):
+            lines.append(f'Phone: {request_data["applicant_phone"]}')
+        if request_data.get('requested_at'):
+            requested_at = request_data['requested_at']
+            if isinstance(requested_at, str):
+                try:
+                    dt = datetime.fromisoformat(requested_at.replace('Z', '+00:00'))
+                    lines.append(f'Requested At: {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                except:
+                    lines.append(f'Requested At: {requested_at}')
+            else:
+                lines.append(f'Requested At: {requested_at}')
+        
+        # People access header
+        if approved_group_ids or denied_group_ids:
+            lines.append('')
+            lines.append('People access:')
+        if approved_group_ids:
+            approved_labels = [get_group_label(gid) for gid in approved_group_ids]
+            lines.append(f'✅ Approved: {", ".join(approved_labels)}')
+        if denied_group_ids:
+            denied_labels = [get_group_label(gid) for gid in denied_group_ids]
+            lines.append(f'❌ Denied: {", ".join(denied_labels)}')
+        
+        if closed_details:
+            lines.append('')
+            lines.append(f'Manager Notes: {closed_details}')
+        
+        # New profile details
+        if applicant_profile_id and label:
+            lines.append('')
+            lines.append('New Profile Created:')
+            lines.append(f'- Name: {label}')
+            if password:
+                lines.append(f'- Password: {password}')
+        
+        subject = 'Your access request status'
+        body_text = '\n'.join(lines)
+        
+        # Build HTML version
+        html_parts = ['<html><body>', '<h2>Access Request Processed</h2>']
+        if request_data.get('profile_label') or request_data.get('applicant_name'):
+            html_parts.append(f'<p><strong>Requested by:</strong> {request_data.get("profile_label") or request_data.get("applicant_name", "")}</p>')
+        if applicant_email:
+            html_parts.append(f'<p><strong>Email:</strong> {applicant_email}</p>')
+        if request_data.get('applicant_phone'):
+            html_parts.append(f'<p><strong>Phone:</strong> {request_data["applicant_phone"]}</p>')
+        if request_data.get('requested_at'):
+            requested_at = request_data['requested_at']
+            if isinstance(requested_at, str):
+                try:
+                    dt = datetime.fromisoformat(requested_at.replace('Z', '+00:00'))
+                    html_parts.append(f'<p><strong>Requested At:</strong> {dt.strftime("%Y-%m-%d %H:%M:%S")}</p>')
+                except:
+                    html_parts.append(f'<p><strong>Requested At:</strong> {requested_at}</p>')
+            else:
+                html_parts.append(f'<p><strong>Requested At:</strong> {requested_at}</p>')
+        
+        if approved_group_ids or denied_group_ids:
+            html_parts.append('<p><strong>People access:</strong></p>')
+        if approved_group_ids:
+            approved_labels = [get_group_label(gid) for gid in approved_group_ids]
+            html_parts.append(f'<p>✅ Approved: {", ".join(approved_labels)}</p>')
+        if denied_group_ids:
+            denied_labels = [get_group_label(gid) for gid in denied_group_ids]
+            html_parts.append(f'<p>❌ Denied: {", ".join(denied_labels)}</p>')
+        
+        if closed_details:
+            html_parts.append(f'<p><strong>Manager Notes:</strong> {closed_details.replace(chr(10), "<br>")}</p>')
+        
+        if applicant_profile_id and label:
+            html_parts.append('<p><strong>New Profile Created:</strong></p>')
+            html_parts.append(f'<p>- Name: {label}</p>')
+            if password:
+                html_parts.append(f'<p>- Password: {password}</p>')
+        
+        html_parts.append('</body></html>')
+        body_html = ''.join(html_parts)
+        
+        send_email(
+            to=applicant_email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html
+        )
+    
     changes = [{
         'type': 'UPDATE',
         'entity': 'access_request',

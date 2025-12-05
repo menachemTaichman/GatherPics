@@ -9,6 +9,7 @@ import secrets
 
 from src.backend.helpers import get_general_models, get_frontend_url
 from src.backend.validators import get_input, validate_path_param
+from src.core.services.email import send_email
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
@@ -154,7 +155,27 @@ def request_password_reset():
     email = get_input('email', required=True)
     
     general_models = get_general_models()
-    general_models.request_password_reset(email, get_frontend_url())
+    result = general_models.request_password_reset(email, get_frontend_url())
+    
+    # result is (profile_id, profile_label, reset_token, reset_url) if profile found, None otherwise
+    if result:
+        profile_id, profile_label, reset_token, reset_url = result
+        send_email(
+            to=email,
+            subject='Password Reset Request',
+            body_text=f'Hello {profile_label},\n\nYou requested a password reset. Click the link below to reset your password:\n\n{reset_url}\n\nThis link will expire in 10 minutes.\n\nIf you did not request this, please ignore this email.',
+            body_html=f'''
+                <html>
+                <body>
+                    <p>Hello {profile_label},</p>
+                    <p>You requested a password reset. Click the link below to reset your password:</p>
+                    <p><a href="{reset_url}">{reset_url}</a></p>
+                    <p>This link will expire in 10 minutes.</p>
+                    <p>If you did not request this, please ignore this email.</p>
+                </body>
+                </html>
+            '''
+        )
     
     return jsonify({"success": True, "message": "If an account with that email exists, a password reset link has been sent."})
 

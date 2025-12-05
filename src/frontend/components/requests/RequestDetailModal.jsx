@@ -44,9 +44,6 @@ export default function RequestDetailModal({
   const [nameConflict, setNameConflict] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-  const [notifyByEmail, setNotifyByEmail] = useState(true);
-  // Track whether we are creating a new profile (to indicate in the mail)
-  const [newProfileCreated, setNewProfileCreated] = useState(false);
   
   const { showToast } = useToast();
   const permissions = usePermissions();
@@ -180,12 +177,6 @@ export default function RequestDetailModal({
     }
   }, [isOpen, requestId, requestData]);
 
-  // Track if new profile is created based on isNewProfileRequest
-  useEffect(() => {
-    if (isOpen && requestData) {
-      setNewProfileCreated(isNewProfileRequest);
-    }
-  }, [isOpen, requestData, isNewProfileRequest]);
 
   // Custom keyboard handler for navigation
   const handleDetailModalKeys = useCallback((e) => {
@@ -351,7 +342,7 @@ export default function RequestDetailModal({
     try {
       const requestId = request.access_request_id || request.id;
       
-      const toggleResult = await requestsAPI.toggle(
+      await requestsAPI.toggle(
         requestId,
         approvedGroupIds.length > 0 ? approvedGroupIds : null,
         deniedGroupIds.length > 0 ? deniedGroupIds : null,
@@ -374,45 +365,6 @@ export default function RequestDetailModal({
         onNavigate('jump', nextIndex);
       } else if (totalRequests <= 1) {
         onClose();
-      }
-      
-      // After handling modal: if notifyByEmail, open Gmail tab (only if consent given)
-      if (notifyByEmail && requestData.communication_consent && requestData.applicant_email) {
-        setTimeout(() => {
-          const lines = [];
-          lines.push(`Access Request Processed`);
-          lines.push(`Requested by: ${requestData.profile_label || requestData.applicant_name || 'N/A'}`);
-          lines.push(`Email: ${requestData.applicant_email}`);
-          if (requestData.applicant_phone) lines.push(`Phone: ${requestData.applicant_phone}`);
-          lines.push(`Requested At: ${formatDateTimeLocale(requestData.requested_at)}`);
-          // People access header
-          if ((approvedGroupIds && approvedGroupIds.length) || (deniedGroupIds && deniedGroupIds.length)) {
-            lines.push('');
-            lines.push('People access:');
-          }
-          if (approvedGroupIds?.length > 0) lines.push(`✅ Approved: ${approvedGroupIds.map(id => getGroupDisplayName(id)).join(', ')}`);
-          if (deniedGroupIds?.length > 0) lines.push(`❌ Denied: ${deniedGroupIds.map(id => getGroupDisplayName(id)).join(', ')}`);
-          if (closedDetails) {
-            lines.push('');
-            lines.push(`Manager Notes: ${closedDetails}`);
-          }
-          // New profile details from toggle API response
-          const createdProfile = (toggleResult && (toggleResult.new_profile || toggleResult.created_profile || toggleResult.profile)) || null;
-          if (createdProfile) {
-            lines.push('');
-            lines.push('New Profile Created:');
-            if (createdProfile.label || createdProfile.name) lines.push(`- Name: ${createdProfile.label || createdProfile.name}`);
-            if (createdProfile.password) lines.push(`- Password: ${createdProfile.password}`);
-          } else if (newProfileCreated && approvedGroupIds.length > 0) {
-            // Fallback message if API did not include details for some reason
-            lines.push('');
-            lines.push('New Profile Created for the requester.');
-          }
-          const subject = encodeURIComponent('Your access request status');
-          const body = encodeURIComponent(lines.join('\n'));
-          const mailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(requestData.applicant_email)}&su=${subject}&body=${body}`;
-          window.open(mailUrl, '_blank','noopener');
-        }, 450); // Slight delay ensures modal closes first
       }
     } catch (error) {
       console.error('Failed to apply changes:', error);
@@ -1022,29 +974,7 @@ export default function RequestDetailModal({
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex flex-row items-center justify-between">
-          {requestData.applicant_email && !requestData.closed_at ? (
-            <div className="flex flex-col mr-5">
-              <label className={`relative inline-flex items-center ${requestData.communication_consent ? 'cursor-pointer' : 'cursor-not-allowed'} select-none`}>
-                <input
-                  type="checkbox"
-                  checked={notifyByEmail && requestData.communication_consent}
-                  onChange={e => requestData.communication_consent && setNotifyByEmail(e.target.checked)}
-                  disabled={!requestData.communication_consent}
-                  className="sr-only peer"
-                />
-                <div className={`w-10 h-5 ${requestData.communication_consent ? 'bg-gray-200' : 'bg-gray-300'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
-                <span className={`ml-3 text-sm font-medium ${requestData.communication_consent ? 'text-gray-700' : 'text-gray-400'}`}>
-                  Notify requester by email
-                </span>
-              </label>
-              {!requestData.communication_consent && (
-                <p className="text-xs text-amber-600 mt-1 ml-14">
-                  Requester does not want to receive email updates
-                </p>
-              )}
-            </div>
-          ) : <div />}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex flex-row items-center justify-end">
           <div className="flex items-center justify-end flex-1">
             {canApprove && (
               <button

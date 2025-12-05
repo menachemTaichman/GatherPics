@@ -4,6 +4,8 @@ from flask_jwt_extended import get_jwt_identity
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_general_models
 from src.backend.validators import get_input, get_multiple_inputs
+from src.core.services.email import send_email
+from datetime import datetime
 
 feedback_bp = Blueprint('feedbacks', __name__, url_prefix='/api')
 
@@ -46,12 +48,81 @@ def update_feedback(feedback_id):
     """Update a feedback - developer only."""
     general_models = get_general_models()
     
+    # Get feedback before update to check if it's being closed
+    old_feedback = general_models.get_entities('feedbacks', [feedback_id])
+    was_closed = old_feedback and old_feedback.get(feedback_id, {}).get('is_closed')
+    
     sanitized = get_multiple_inputs(['type', 'notes', 'is_closed', 'solved', 'closed_at', 'closed_by', 'closed_details'])
     
     if sanitized:
         general_models.edit('feedbacks', feedback_id, sanitized)
 
     updated_feedback = general_models.get_entities('feedbacks', [feedback_id])
+    
+    # Send email if feedback was just closed and has consent
+    if sanitized and sanitized.get('is_closed') and not was_closed:
+        feedback_data = updated_feedback.get(feedback_id, {})
+        sender_email = feedback_data.get('sender_email')
+        communication_consent = feedback_data.get('communication_consent')
+        solved = feedback_data.get('solved', False)
+        closed_details = feedback_data.get('closed_details')
+        
+        if sender_email and communication_consent:
+            lines = []
+            lines.append(f'Feedback {"Resolved" if solved else "Closed"}')
+            lines.append('')
+            lines.append('Thank you for your feedback!')
+            lines.append('')
+            if feedback_data.get('title'):
+                lines.append(f'Title: {feedback_data["title"]}')
+            if feedback_data.get('sender_name'):
+                lines.append(f'From: {feedback_data["sender_name"]}')
+            if feedback_data.get('created_at'):
+                created_at = feedback_data['created_at']
+                if isinstance(created_at, str):
+                    try:
+                        dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        lines.append(f'Submitted: {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                    except:
+                        lines.append(f'Submitted: {created_at}')
+                else:
+                    lines.append(f'Submitted: {created_at}')
+            if feedback_data.get('type') is not None:
+                lines.append(f'Type: {"Bug Report" if feedback_data["type"] == 0 else "Suggestion"}')
+            if feedback_data.get('message'):
+                lines.append('')
+                lines.append('Original Message:')
+                lines.append(feedback_data['message'])
+            if closed_details:
+                lines.append('')
+                lines.append(f'Response from Team: {closed_details}')
+            lines.append('')
+            lines.append(f'Status: {"✅ Resolved" if solved else "Closed"}')
+            
+            subject = f'Your feedback has been {"resolved" if solved else "closed"}'
+            body_text = '\n'.join(lines)
+            body_html = f'''
+                <html>
+                <body>
+                    <h2>Feedback {"Resolved" if solved else "Closed"}</h2>
+                    <p>Your feedback has been {"resolved" if solved else "closed"}.</p>
+                    <p><strong>Thank you for your feedback!</strong></p>
+                    {f'<p><strong>Title:</strong> {feedback_data.get("title", "")}</p>' if feedback_data.get('title') else ''}
+                    {f'<p><strong>From:</strong> {feedback_data.get("sender_name", "")}</p>' if feedback_data.get('sender_name') else ''}
+                    {f'<p><strong>Type:</strong> {"Bug Report" if feedback_data.get("type") == 0 else "Suggestion"}</p>' if feedback_data.get('type') is not None else ''}
+                    {f'<p><strong>Original Message:</strong></p><p>{feedback_data.get("message", "").replace(chr(10), "<br>")}</p>' if feedback_data.get('message') else ''}
+                    {f'<p><strong>Response from Team:</strong> {closed_details.replace(chr(10), "<br>")}</p>' if closed_details else ''}
+                    <p><strong>Status:</strong> {"✅ Resolved" if solved else "Closed"}</p>
+                </body>
+                </html>
+            '''
+            
+            send_email(
+                to=sender_email,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html
+            )
     
     changes = [{
         'type': 'UPDATE',
