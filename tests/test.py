@@ -122,6 +122,11 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+other_profile_id = '9ffeaf15-fb5b-4130-b66c-3436c8b39a1b'
+data = {'label': 'M7', 'email': 'm@m.m', 'hierarchy_rank': 0, 'is_public': False, 'restricted_to_event': '75cb6635-879d-4386-b023-366444dc0fb2', 'can_create_events': False}
+result = general_models.edit('profiles', other_profile_id, data)
+print(result)
+
 passwords = db.execute_query('SELECT profile_id, label, password FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
 print(passwords)
 

@@ -666,8 +666,8 @@ step(
         VALUES (
             '89cb4967-0eba-48af-99cc-5e87407fb639',
             'Developer',
-            'metai',
-            'AE5cBXP8XnZhT',
+            'metaichman@gmail.com',
+            'scrypt:32768:8:1$GuxrXuUGt7Ampf2f$230050c7b95489495fc44b2dbc4781dc8265f9a4a513f987a0bdc4260660403e10f39ce37036e26d84e56950ef3d0fabac79f4257b38c413c36440a160848793',
             10,
             TRUE,
             NULL,

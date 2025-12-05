@@ -318,8 +318,18 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
 
+            IF NEW.email <> OLD.email AND NOT OLD.is_public THEN
+                RAISE EXCEPTION 'Permission denied: cannot update email for non-public profiles';
+            END IF;
+
+            IF NEW.password <> OLD.password AND NOT OLD.is_public THEN
+                RAISE EXCEPTION 'Permission denied: cannot update password for non-public profiles';
+            END IF;
+
             UPDATE profiles SET
                 label = NEW.label,
+                email = NEW.email,
+                password = NEW.password,
                 hierarchy_rank = NEW.hierarchy_rank,
                 can_create_events = NEW.can_create_events,
                 restricted_to_event = NEW.restricted_to_event,

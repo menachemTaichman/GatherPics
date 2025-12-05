@@ -1,8 +1,10 @@
+import secrets
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, Forbidden
 from src.backend.validators import get_input, get_multiple_inputs, get_query_param, validate_path_param
+from src.core.utils.password_utils import hash_password
 
 profile_bp = Blueprint('profiles', __name__)
 
@@ -45,8 +47,13 @@ def create_profile():
     """Create a new general profile."""
     general_models = get_general_models()
 
-    data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public'])
-    data['password'] = general_models.generate_unique_password(data['label'])
+    data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'can_create_events', 'restricted_to_event', 'is_public'])
+    if not data['is_public']:
+        data['password'] = secrets.token_urlsafe(6)
+    else:
+        data['password'] = get_input('password', required=True)
+
+    data['password'] = hash_password(data['password'])
 
     profile_id = general_models.add('profiles', data)
     changes = [{
@@ -233,8 +240,14 @@ def create_event_profile(event_id):
     event_id = validate_path_param('event_id', event_id)
     general_models = get_general_models()
     event = get_event(event_id)
-    general_data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public'])
+    general_data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'can_create_events', 'is_public'])
     general_data['restricted_to_event'] = event_id
+    if general_data['is_public']:
+        general_data['password'] = get_input('password', required=True)
+    else:
+        general_data['password'] = secrets.token_urlsafe(6)
+    
+    general_data['password'] = hash_password(general_data['password'])
     event_data = get_multiple_inputs(['can_manage_event', 'can_delete_event', 'can_upload_and_delete_images', 'can_edit', 'all_images', 'all_albums', 'all_groups'])
 
     profile_id = general_models.add('profiles', general_data)
@@ -374,11 +387,11 @@ def update_current_profile_password():
     new_password = get_input('new_password', required=True)
     
     # Verify current password
-    if not general_models.verify_profile_password(profile_id, current_password):
+    if not general_models.authenticate_profile_id(profile_id, current_password):
         raise Forbidden("Current password is incorrect")
     
     # Update password
-    general_models.edit('current_profile', profile_id, {'password': new_password})
+    general_models.edit('current_profile', profile_id, {'password': hash_password(new_password)})
 
     changes = [{
         'type': 'UPSERT',
@@ -564,6 +577,7 @@ def _update_profile(profile_id: str, event_id: str | None = None):
 
     general_data = get_multiple_inputs([
         'label',
+        'email',
         'hierarchy_rank',
         'password',
         'is_public',
@@ -571,6 +585,12 @@ def _update_profile(profile_id: str, event_id: str | None = None):
         'can_create_events',
     ])
     if general_data:
+        profile = general_models.get_entities('profiles', profile_id)
+        if not profile.get('is_public', True):
+            general_data.pop('password', None)
+            if general_data.get('is_public', True):
+                general_data['email'] = None
+        print(f'general_data: {general_data}')
         general_models.edit('profiles', profile_id, general_data)
 
     if event_id:

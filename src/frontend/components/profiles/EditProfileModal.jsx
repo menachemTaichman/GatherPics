@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle } from 'lucide-react';
+import { X, User, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle, Lock, Eye, EyeOff } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI, getEventUrlById, API_BASE } from '../../utils/apiService';
@@ -14,6 +14,7 @@ import { RemovableThumbnail } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
 import ConfirmDelete from '../modals/ConfirmDelete';
+import PublicProfilePasswordModal from './PublicProfilePasswordModal';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false, initialEventId = null }) {
   const eventId = useEventId(eventUrl);
@@ -66,6 +67,8 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const restrictionDropdownRef = useRef(null);
   const addEventSelectRef = useRef(null);
   const [selectedEventToAdd, setSelectedEventToAdd] = useState('');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   // Tooltip states for help icons
   const [showRankTooltip, setShowRankTooltip] = useState(false);
@@ -233,6 +236,30 @@ const restrictionTooltip = isCurrentProfileRestricted
 const disableEventManagementToggles = Boolean(editingProfile?.is_public);
 const disableCanCreateEvents = disableEventManagementToggles || isRestricted;
 const disableRankSelection = Boolean(editingProfile?.is_public);
+
+// Check if is_public has changed from initial state
+const isPublicChanged = useMemo(() => {
+  if (!initialProfileState || !editingProfile) return false;
+  const initialIsPublic = Boolean(initialProfileState.is_public);
+  const currentIsPublic = Boolean(editingProfile.is_public);
+  return initialIsPublic !== currentIsPublic;
+}, [initialProfileState, editingProfile]);
+
+// Check if both initial and current is_public are true (required for password change)
+const canChangePassword = useMemo(() => {
+  if (!initialProfileState || !editingProfile) return false;
+  const initialIsPublic = Boolean(initialProfileState.is_public);
+  const currentIsPublic = Boolean(editingProfile.is_public);
+  return initialIsPublic && currentIsPublic;
+}, [initialProfileState, editingProfile]);
+
+// Check if changing from public to non-public (email becomes required and editable)
+const changingFromPublicToNonPublic = useMemo(() => {
+  if (!initialProfileState || !editingProfile || isCreating) return false;
+  const initialIsPublic = Boolean(initialProfileState.is_public);
+  const currentIsPublic = Boolean(editingProfile.is_public);
+  return initialIsPublic && !currentIsPublic;
+}, [initialProfileState, editingProfile, isCreating]);
 
 // Check if profile is editable (for basic info section)
 const isProfileEditable = useMemo(() => {
@@ -503,10 +530,12 @@ const isProfileEditable = useMemo(() => {
       }
       
       // Email is included when creating (required for non-public profiles)
+      // Password is included when creating public profiles (required)
       // When editing, email is private and only editable via AccountModal (current_profile)
       const initialEditingState = {
         label: profile?.label || '',
         email: '', // Required for non-public profiles when creating
+        password: '', // Required for public profiles when creating
         hierarchy_rank: profile?.hierarchy_rank || 0,
         can_create_events: false,
         can_upload_and_delete_images: Boolean(profile?.can_upload_and_delete_images),
@@ -872,6 +901,26 @@ const isProfileEditable = useMemo(() => {
   const handleFieldChange = (field, value) => {
     setEditingProfile(prev => {
       const updated = { ...prev, [field]: value };
+      
+      // When toggling is_public
+      if (field === 'is_public') {
+        if (!Boolean(value) && isCreating) {
+          // When creating: clear password if switching to non-public
+          updated.password = '';
+        } else if (!Boolean(value) && !isCreating && Boolean(prev.is_public)) {
+          // When editing: initialize email if changing from public to non-public
+          // Use existing email from generalProfile if available, otherwise empty string
+          if (!updated.email && generalProfile?.email) {
+            updated.email = generalProfile.email;
+          } else if (!updated.email) {
+            updated.email = '';
+          }
+        } else if (Boolean(value) && !isCreating && !Boolean(prev.is_public)) {
+          // When editing: clear email if changing from non-public to public
+          updated.email = '';
+        }
+      }
+      
       // Update ref immediately so it's available in timeouts
       editingProfileRef.current = updated;
       return updated;
@@ -929,6 +978,24 @@ const isProfileEditable = useMemo(() => {
       }
     }
 
+    // Email is required when changing from public to non-public
+    if (!isCreating && changingFromPublicToNonPublic) {
+      const emailValue = editingProfile.email?.trim();
+      if (!emailValue || emailValue.length === 0) {
+        showToast('Email is required when changing from public to non-public profile', 'error');
+        return;
+      }
+    }
+
+    // Password is required for public profiles when creating
+    if (isCreating && Boolean(editingProfile.is_public)) {
+      const passwordValue = editingProfile.password?.trim();
+      if (!passwordValue || passwordValue.length === 0) {
+        showToast('Password is required for public profiles', 'error');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
 
@@ -943,10 +1010,20 @@ const isProfileEditable = useMemo(() => {
         restricted_to_event: editingProfile.restricted_to_event || null
       };
       
-      // Include email only when creating (required for non-public profiles)
-      // When editing, email is private and only editable via AccountModal (current_profile)
+      // Include email when:
+      // - Creating non-public profiles (required)
+      // - Changing from public to non-public (required)
+      // When editing normally, email is private and only editable via AccountModal (current_profile)
       if (isCreating && editingProfile.email) {
         generalProfileData.email = editingProfile.email.trim() || null;
+      } else if (!isCreating && changingFromPublicToNonPublic && editingProfile.email) {
+        generalProfileData.email = editingProfile.email.trim() || null;
+      }
+
+      // Include password only when creating public profiles (required)
+      // When editing, password is changed via separate modal
+      if (isCreating && Boolean(editingProfile.is_public) && editingProfile.password) {
+        generalProfileData.password = editingProfile.password.trim() || null;
       }
 
       // Event-specific profile data (only if selectedEventId is set)
@@ -1467,16 +1544,28 @@ const isProfileEditable = useMemo(() => {
 
   const maxRank = (currentProfile?.hierarchy_rank || 0) - 1;
   const rankOptions = Array.from({ length: Math.max(0, maxRank) + 1 }, (_, i) => i);
-  
+
   // Email field is shown:
   // - As input when creating (required for non-public profiles)
-  // - As read-only text when editing (always shown, even if empty for other profiles)
-  const hasEmailInput = isCreating && !Boolean(editingProfile?.is_public);
-  const hasEmailDisplay = !isCreating && !Boolean(editingProfile?.is_public);
+  // - As input when editing and changing from public to non-public (required)
+  // - As read-only text when editing non-public profiles (not changing)
+  const hasEmailInput = (isCreating && !Boolean(editingProfile?.is_public)) || 
+                        (!isCreating && changingFromPublicToNonPublic);
+  const hasEmailDisplay = !isCreating && !Boolean(editingProfile?.is_public) && !changingFromPublicToNonPublic;
   const hasEmailField = hasEmailInput || hasEmailDisplay;
-  const basicInfoGridLayout = hasEmailField
-    ? 'md:grid-cols-[15rem_15rem_auto]'
-    : 'md:grid-cols-[15rem_auto]';
+  
+  // Password field is shown:
+  // - As input when creating public profiles (required)
+  const hasPasswordInput = isCreating && Boolean(editingProfile?.is_public);
+  const hasPasswordField = hasPasswordInput;
+  
+  // Determine grid layout based on fields
+  let basicInfoGridLayout = 'md:grid-cols-[15rem_auto]';
+  if (hasEmailField && hasPasswordField) {
+    basicInfoGridLayout = 'md:grid-cols-[15rem_15rem_15rem_auto]';
+  } else if (hasEmailField || hasPasswordField) {
+    basicInfoGridLayout = 'md:grid-cols-[15rem_15rem_auto]';
+  }
 
   return (
     <AnimatePresence>
@@ -1548,7 +1637,7 @@ const isProfileEditable = useMemo(() => {
                       </div>
                     </div>
 
-                    {/* Email - input when creating, read-only text when editing */}
+                    {/* Email - input when creating or when changing from public to non-public */}
                     {hasEmailInput && (
                       <div className="w-full md:w-full">
                         <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -1572,6 +1661,34 @@ const isProfileEditable = useMemo(() => {
                         </label>
                         <div className="w-full h-10 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 flex items-center">
                           {generalProfile?.email || 'Not available'}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Password - input when creating public profile */}
+                    {hasPasswordInput && (
+                      <div className="w-full md:w-full">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Password <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={editingProfile.password || ''}
+                            onChange={(e) => handleFieldChange('password', e.target.value)}
+                            autoComplete="new-password"
+                            className="w-full h-10 px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter password (required)"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+                            title={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1856,19 +1973,44 @@ const isProfileEditable = useMemo(() => {
                       <p className="text-sm text-gray-500">Accessible via link, managed by admins only</p>
                     </div>
                     <div className="flex flex-col items-end">
-                      <label
-                        className={`relative inline-flex items-center ${disablePublicToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                        title={disablePublicToggle ? publicToggleTooltip : undefined}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editingProfile.is_public)}
-                          onChange={(e) => handleFieldChange('is_public', Boolean(e.target.checked))}
-                          className="sr-only peer"
-                          disabled={disablePublicToggle}
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
+                      <div className="flex items-center gap-3">
+                        {/* Change Password Button - only show when editing existing public profile */}
+                        {!isCreating && Boolean(editingProfile?.is_public) && (
+                          <button
+                            type="button"
+                            onClick={() => setShowPasswordModal(true)}
+                            disabled={!canChangePassword}
+                            className={`px-3 py-1.5 text-sm font-medium flex items-center space-x-2 transition-colors ${
+                              canChangePassword
+                                ? 'bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200'
+                                : 'bg-gray-50 text-gray-400 rounded-lg cursor-not-allowed opacity-60'
+                            }`}
+                            title={
+                              !canChangePassword
+                                ? isPublicChanged
+                                  ? 'Please save changes first'
+                                  : 'Password can only be changed for public profiles'
+                                : 'Change password for this public profile'
+                            }
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Change Password</span>
+                          </button>
+                        )}
+                        <label
+                          className={`relative inline-flex items-center ${disablePublicToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                          title={disablePublicToggle ? publicToggleTooltip : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProfile.is_public)}
+                            onChange={(e) => handleFieldChange('is_public', Boolean(e.target.checked))}
+                            className="sr-only peer"
+                            disabled={disablePublicToggle}
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
                       {disablePublicToggle && (
                         <p className="mt-1 text-xs text-gray-500 text-right">
                           {publicToggleTooltip}
@@ -2510,7 +2652,9 @@ const isProfileEditable = useMemo(() => {
                 (isProfileEditable && (
                   nameConflict || 
                   !editingProfile.label.trim() || 
-                  (isCreating && !Boolean(editingProfile.is_public) && !editingProfile.email?.trim())
+                  (isCreating && !Boolean(editingProfile.is_public) && !editingProfile.email?.trim()) ||
+                  (isCreating && Boolean(editingProfile.is_public) && !editingProfile.password?.trim()) ||
+                  (!isCreating && changingFromPublicToNonPublic && !editingProfile.email?.trim())
                 )) ||
                 (!isProfileEditable && !isCreating && (!selectedEventId || !hasEventSpecificChanges)) ||
                 (isProfileEditable && !hasChanges && !hasEventSpecificChanges)
@@ -2554,6 +2698,17 @@ const isProfileEditable = useMemo(() => {
           />
         );
       })()}
+
+      {/* Public Profile Password Change Modal */}
+      {!isCreating && editingProfile?.id && Boolean(editingProfile?.is_public) && (
+        <PublicProfilePasswordModal
+          isOpen={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+          profileId={editingProfile.id}
+          profileLabel={editingProfile.label}
+          eventUrl={selectedEventId ? getEventUrlFromId(selectedEventId) : eventUrl}
+        />
+      )}
     </AnimatePresence>
   );
 }

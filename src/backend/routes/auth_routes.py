@@ -72,7 +72,7 @@ def login():
     general_models = get_general_models()
     
     # Authenticate profile
-    profile_id = general_models.authenticate_profile(label, password)
+    profile_id = general_models.authenticate_profile_label(label, password)
     if not profile_id:
         return jsonify({"error": "Invalid credentials"}), 401
     

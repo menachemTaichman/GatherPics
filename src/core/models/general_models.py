@@ -6,6 +6,7 @@ from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
 from src.core.errors import PolicyError, Forbidden, DatabaseError
+from src.core.utils.password_utils import hash_password, verify_password
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -52,23 +53,20 @@ class GeneralModels(BaseModels):
         return super().is_exists(table, fields, exclude_id)
 
     # Profile management
-    def generate_unique_password(self, label: str) -> str:
-        """Generate a unique password for a profile."""
-        password = secrets.token_urlsafe(6)
-        attemp = 0
-        max_attemp = 10
-        while self.is_exists('profiles', {'password': password, 'label': label}) and attemp < max_attemp:
-            attemp += 1
-            password = secrets.token_urlsafe(6)
-        
-        if attemp >= max_attemp:
-            raise DatabaseError('Failed to generate a unique password. Please try again or with a different name')
-        
-        return password
-
     def duplicate_profile(self, profile_id: str, overrides: dict = {}) -> tuple[str, str, str, list[str]]:
         """
         Duplicate a profile.
+
+        Args:
+            profile_id: id of the profile to duplicate
+            overrides: dictionary of overrides for the new profile
+                - label: label of the new profile
+                - hierarchy_rank: hierarchy rank of the new profile
+                - can_create_events: whether the new profile can create events
+                - restricted_to_event: event id of the new profile
+                - is_public: whether the new profile is public
+                - email: email of the new profile
+
         Returns:
             new_profile_id: id of the new profile
             label: label of the new profile
@@ -87,7 +85,7 @@ class GeneralModels(BaseModels):
         if 'password' in overrides.keys():
             password = overrides['password']
         else:
-            password = self.generate_unique_password(label)
+            password = secrets.token_urlsafe(6)
 
         hierarchy_rank = overrides.get('hierarchy_rank', profile['hierarchy_rank'])
         can_create_events = overrides.get('can_create_events', profile['can_create_events'])
@@ -98,7 +96,7 @@ class GeneralModels(BaseModels):
         incomplete_events = []
         profile_data = {
             'label': label,
-            'password': password,
+            'password': hash_password(password),
             'hierarchy_rank': hierarchy_rank,
             'can_create_events': can_create_events,
             'restricted_to_event': restricted_to_event,
@@ -351,16 +349,23 @@ class GeneralModels(BaseModels):
         self.edit('settings', 1, fields)
 
     # Auth helpers
-    def authenticate_profile(self, label: str, password: str) -> str | None:
+    def authenticate_profile_label(self, label: str, password: str) -> str | None:
         """Authenticate a profile by label and password.
         
         Returns:
             profile_id if authenticated, None otherwise
         """
-        query = 'SELECT profile_id FROM profiles WHERE label = %s AND password = %s'
-        return self.db.execute_query(query, (label, password), return_format=ReturnFormat.VALUE)
+        query = 'SELECT profile_id, password FROM profiles WHERE label = %s'
+        result = self.db.execute_query(query, (label,), return_format=ReturnFormat.TUPLE)
+        if not result:
+            return None
+        
+        profile_id, hashed_password = result
+        if verify_password(hashed_password, password):
+            return profile_id
+        return None
 
-    def verify_profile_password(self, profile_id: str, password: str) -> bool:
+    def authenticate_profile_id(self, profile_id: str, password: str) -> bool:
         """Verify if the given password matches the profile's current password.
         
         Args:
@@ -371,8 +376,8 @@ class GeneralModels(BaseModels):
             True if password matches, False otherwise
         """
         query = f'SELECT password FROM profiles WHERE profile_id = %s'
-        current_password = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
-        return (password == current_password) and current_password is not None and password is not None
+        hashed_password = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
+        return verify_password(hashed_password, password)
 
     def authenticate_public_access(self, event_id: str, public_code: str) -> str:
         """Authenticate a profile by public access code.
@@ -518,7 +523,8 @@ class GeneralModels(BaseModels):
         profile_id, label = profile
 
         # self.db.execute_query('UPDATE password_reset_links SET used = TRUE, used_at = NOW() WHERE token = %s', (token,))
-        self.db.execute_query('UPDATE profiles SET password = %s WHERE profile_id = %s', (new_password, profile_id))
+        hashed_password = hash_password(new_password)
+        self.db.execute_query('UPDATE profiles SET password = %s WHERE profile_id = %s', (hashed_password, profile_id))
         
         return profile_id, label
 
