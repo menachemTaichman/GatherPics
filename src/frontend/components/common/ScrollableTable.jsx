@@ -14,6 +14,7 @@ import { ArrowUp, ArrowDown } from 'lucide-react';
  * @param {string} props.className - Additional CSS classes
  * @param {Function} props.getRowKey - Function to get unique key for row: (row, index) => string
  * @param {string} props.rowClassName - Additional CSS classes for rows
+ * @param {Function} props.onRowClick - Row click handler: (row, index) => void
  */
 export default function ScrollableTable({
   columns,
@@ -25,6 +26,8 @@ export default function ScrollableTable({
   className = '',
   getRowKey = (row, index) => row.id || row.key || `row-${index}`,
   rowClassName = '',
+  onRowClick = null,
+  style = {},
 }) {
   const getSortIcon = (field) => {
     if (!field || sortBy !== field) return null;
@@ -58,7 +61,7 @@ export default function ScrollableTable({
   }
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)' }}>
+    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)', ...style }}>
       <div className="overflow-y-auto flex-1 min-h-0">
         <table className="w-full border-collapse">
           <thead className="bg-white sticky top-0 z-20 shadow-sm">
@@ -112,7 +115,8 @@ export default function ScrollableTable({
             {data.map((row, rowIndex) => (
               <tr
                 key={getRowKey(row, rowIndex)}
-                className={`hover:bg-gray-50 ${rowClassName}`}
+                className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName}`}
+                onClick={() => onRowClick && onRowClick(row, rowIndex)}
               >
                 {columns.map((column, colIndex) => {
                   const {

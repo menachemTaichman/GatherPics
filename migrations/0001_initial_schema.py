@@ -126,7 +126,8 @@ steps = [
             solved BOOLEAN NOT NULL DEFAULT FALSE,
             closed_at TIMESTAMP,
             closed_by UUID,
-            closed_details TEXT
+            closed_details TEXT,
+            error_ids INTEGER[]
         );
         
         -- events_profiles
@@ -277,6 +278,21 @@ steps = [
             PRIMARY KEY (access_request_id, group_id)
         );
         
+        -- errors
+        CREATE TABLE IF NOT EXISTS errors (
+            error_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            error_type TEXT NOT NULL,
+            error_message TEXT NOT NULL,
+            traceback TEXT,
+            profile_id UUID,
+            event_id UUID,
+            request_path TEXT,
+            request_method TEXT,
+            user_agent TEXT,
+            ip_address TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
         -- Create unique constraints for case-insensitive fields
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_name_lower ON events(LOWER(name));
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_url_lower ON events(LOWER(url));
@@ -292,6 +308,7 @@ steps = [
         DROP INDEX IF EXISTS idx_images_event_label_lower;
         DROP INDEX IF EXISTS idx_events_url_lower;
         DROP INDEX IF EXISTS idx_events_name_lower;
+        DROP TABLE IF EXISTS errors CASCADE;
         DROP TABLE IF EXISTS access_requests_groups CASCADE;
         DROP TABLE IF EXISTS access_requests CASCADE;
         DROP TABLE IF EXISTS uploads CASCADE;
@@ -511,8 +528,19 @@ steps = [
         ALTER TABLE access_requests_groups
             ADD CONSTRAINT fk_access_requests_groups_closed_by 
             FOREIGN KEY (closed_by) REFERENCES profiles(profile_id) ON DELETE SET NULL;
+        
+        -- Foreign keys for errors
+        ALTER TABLE errors
+            ADD CONSTRAINT fk_errors_profile_id 
+            FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE SET NULL;
+        
+        ALTER TABLE errors
+            ADD CONSTRAINT fk_errors_event_id 
+            FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE SET NULL;
         """,
         """
+        ALTER TABLE errors DROP CONSTRAINT IF EXISTS fk_errors_event_id;
+        ALTER TABLE errors DROP CONSTRAINT IF EXISTS fk_errors_profile_id;
         ALTER TABLE access_requests_groups DROP CONSTRAINT IF EXISTS fk_access_requests_groups_closed_by;
         ALTER TABLE access_requests_groups DROP CONSTRAINT IF EXISTS fk_access_requests_groups_group_id;
         ALTER TABLE access_requests_groups DROP CONSTRAINT IF EXISTS fk_access_requests_groups_access_request_id;
@@ -581,9 +609,13 @@ step(
         CREATE INDEX IF NOT EXISTS idx_albums_images_image_id ON albums_images(image_id);
         CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
         CREATE INDEX IF NOT EXISTS idx_uploads_started_at ON uploads(started_at);
-        CREATE INDEX IF NOT EXISTS idx_access_requests_requested_at ON access_requests(requested_at);        
+        CREATE INDEX IF NOT EXISTS idx_access_requests_requested_at ON access_requests(requested_at);
+        CREATE INDEX IF NOT EXISTS idx_errors_created_at ON errors(created_at);
+        CREATE INDEX IF NOT EXISTS idx_errors_error_type ON errors(error_type);
         """,
         """
+        DROP INDEX IF EXISTS idx_errors_error_type;
+        DROP INDEX IF EXISTS idx_errors_created_at;
         DROP INDEX IF EXISTS idx_access_requests_requested_at;
         DROP INDEX IF EXISTS idx_uploads_started_at;
         DROP INDEX IF EXISTS idx_uploads_status;
@@ -644,6 +676,7 @@ step(
             ('ImageViewer', 'facesOpen', 'bool', '0'),
             ('ImageViewer', 'sidebarOpen', 'bool', '0'),
             ('GroupDetail', 'sortDir', 'str', 'asc'),
+            ('Moments', 'sortBy', 'str', 'date'),
             ('Moments', 'sortDir', 'str', 'asc'),
             ('Moments', 'carouselExpanded', 'bool', '1'),
             ('EditMomentImagesModal', 'filter', 'str', 'all'),
@@ -678,11 +711,17 @@ step(
             ('ProfilesGallery', 'sortBy', 'string', 'name'),
             ('ProfilesGallery', 'filterEventId', 'string', 'all'),
             ('SettingsPage', 'activeSection', 'str', 'limits'),
-            ('SettingsPage', 'filterPeriod', 'str', 'all'),
-            ('SettingsPage', 'filterDateFrom', 'str', ''),
-            ('SettingsPage', 'filterDateTo', 'str', ''),
-            ('SettingsPage', 'sortBy', 'str', 'created_at'),
-            ('SettingsPage', 'sortDir', 'str', 'desc')
+            ('SettingsPage', 'usageFilterPeriod', 'str', 'all'),
+            ('SettingsPage', 'usageFilterDateFrom', 'str', ''),
+            ('SettingsPage', 'usageFilterDateTo', 'str', ''),
+            ('SettingsPage', 'usageSortBy', 'str', 'created_at'),
+            ('SettingsPage', 'usageSortDir', 'str', 'desc'),
+            ('SettingsPage', 'errorFilterPeriod', 'str', 'all'),
+            ('SettingsPage', 'errorFilterDateFrom', 'str', ''),
+            ('SettingsPage', 'errorFilterDateTo', 'str', ''),
+            ('SettingsPage', 'errorFilterType', 'str', 'all'),
+            ('SettingsPage', 'errorSortBy', 'str', 'created_at'),
+            ('SettingsPage', 'errorSortDir', 'str', 'asc')
         ON CONFLICT (preference_group, preference_key) DO NOTHING;
         """,
         """

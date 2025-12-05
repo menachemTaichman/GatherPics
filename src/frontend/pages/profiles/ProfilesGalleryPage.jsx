@@ -1142,6 +1142,7 @@ export default function ProfilesGalleryPage() {
             </motion.div>
           ) : (
             <ScrollableTable
+              style={{ maxHeight: 'calc(100vh - 20rem)' }}
               columns={columns}
               data={sortedProfiles}
               sortBy={sortBy}

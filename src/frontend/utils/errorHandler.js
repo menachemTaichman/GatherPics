@@ -4,6 +4,38 @@
  */
 
 /**
+ * Sanitize sensitive data (emails and passwords) from error messages
+ * @param {string} text - The text to sanitize
+ * @returns {string} Sanitized text
+ */
+function sanitizeSensitiveData(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Pattern to match email addresses
+  const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  
+  // Pattern to match password fields in various formats
+  const passwordPatterns = [
+    /(["']?password["']?\s*[:=]\s*["']?)([^"'\s,}]+)(["']?)/gi,
+    /(password\s+)([^\s,}]+)/gi,
+  ];
+  
+  let sanitized = text;
+  
+  // Replace emails
+  sanitized = sanitized.replace(emailPattern, '[REDACTED_EMAIL]');
+  
+  // Replace passwords
+  passwordPatterns.forEach(pattern => {
+    sanitized = sanitized.replace(pattern, (match, prefix, value, suffix) => {
+      return prefix + '[REDACTED_PASSWORD]' + (suffix || '');
+    });
+  });
+  
+  return sanitized;
+}
+
+/**
  * Map database error messages to user-friendly messages
  * This prepares for multi-language support by using error keys
  * @param {string} errorMsg - The raw error message from the backend
@@ -59,6 +91,9 @@ export function getErrorExplanation(error) {
   // This allows specific error messages to override generic status code messages
   if (error?.response?.data?.error) {
     let errorMsg = error.response.data.error;
+    
+    // Sanitize sensitive data first (defense in depth)
+    errorMsg = sanitizeSensitiveData(errorMsg);
     
     // First, try to map to user-friendly message
     const userFriendlyMsg = mapDatabaseErrorToUserMessage(errorMsg);
@@ -143,7 +178,7 @@ export function getErrorExplanation(error) {
   
   // PRIORITY 4: Fallback to error message if available
   if (error?.message) {
-    return error.message;
+    return sanitizeSensitiveData(error.message);
   }
   
   return 'unknown error';

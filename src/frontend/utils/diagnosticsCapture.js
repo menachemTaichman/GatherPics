@@ -3,6 +3,79 @@
  * Captures console logs and network activity for feedback system
  */
 
+/**
+ * Sanitize sensitive data (emails and passwords) from text or objects
+ * @param {string|object} data - The data to sanitize
+ * @returns {string|object} Sanitized data
+ */
+function sanitizeSensitiveData(data) {
+  if (!data) return data;
+  
+  // If it's a string, sanitize it directly
+  if (typeof data === 'string') {
+    // Pattern to match email addresses
+    const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+    
+    // Pattern to match password fields in various formats
+    // Pattern 1: JSON format with quotes: "password":"value" (most common in axios errors)
+    // Pattern 2: Generic key-value: password:value or password="value"
+    // Pattern 3: Space-separated: password value
+    const passwordPatterns = [
+      /(["']password["']\s*:\s*["'])([^"']+)(["'])/gi,  // JSON: "password":"value"
+      /(["']?password["']?\s*[:=]\s*["']?)([^"'\s,}]+)(["']?)/gi,  // Generic: password:value or password="value"
+      /(password\s+)([^\s,}]+)/gi,  // Space-separated: password value
+    ];
+    
+    let sanitized = data;
+    
+    // Replace emails
+    sanitized = sanitized.replace(emailPattern, '[REDACTED_EMAIL]');
+    
+    // Replace passwords
+    passwordPatterns.forEach(pattern => {
+      sanitized = sanitized.replace(pattern, (match, prefix, value, suffix) => {
+        return prefix + '[REDACTED_PASSWORD]' + (suffix || '');
+      });
+    });
+    
+    return sanitized;
+  }
+  
+  // If it's an object, recursively sanitize
+  if (typeof data === 'object') {
+    if (Array.isArray(data)) {
+      return data.map(item => sanitizeSensitiveData(item));
+    }
+    
+    const sanitized = {};
+    for (const [key, value] of Object.entries(data)) {
+      // Skip password fields entirely or redact their values
+      if (key.toLowerCase().includes('password')) {
+        sanitized[key] = '[REDACTED_PASSWORD]';
+      } else if (key === 'data' && typeof value === 'string') {
+        // Special handling for axios config.data which might be a JSON string
+        try {
+          const parsed = JSON.parse(value);
+          const sanitizedParsed = sanitizeSensitiveData(parsed);
+          sanitized[key] = JSON.stringify(sanitizedParsed);
+        } catch (e) {
+          // If not JSON, just sanitize as string
+          sanitized[key] = sanitizeSensitiveData(value);
+        }
+      } else if (typeof value === 'string') {
+        sanitized[key] = sanitizeSensitiveData(value);
+      } else if (typeof value === 'object' && value !== null) {
+        sanitized[key] = sanitizeSensitiveData(value);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  }
+  
+  return data;
+}
+
 class DiagnosticsCapture {
   constructor() {
     this.consoleLogs = [];
@@ -80,15 +153,22 @@ class DiagnosticsCapture {
         // Capture the log
         if (this.isCapturing) {
           try {
+            const message = args.map(arg => {
+              try {
+                // First sanitize the object if it's an object, then stringify, then sanitize the string as backup
+                let sanitizedArg = sanitizeSensitiveData(arg);
+                const serialized = typeof sanitizedArg === 'object' ? JSON.stringify(sanitizedArg, null, 2) : String(sanitizedArg);
+                // Sanitize the stringified version as well (catches any passwords in JSON format)
+                return sanitizeSensitiveData(serialized);
+              } catch (e) {
+                // If stringification fails, just sanitize the string representation
+                return sanitizeSensitiveData(String(arg));
+              }
+            }).join(' ');
+            
             this.consoleLogs.push({
               type: method,
-              message: args.map(arg => {
-                try {
-                  return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
-                } catch (e) {
-                  return String(arg);
-                }
-              }).join(' '),
+              message,
               timestamp: new Date().toISOString()
             });
             
@@ -122,8 +202,11 @@ class DiagnosticsCapture {
     
     window.fetch = async (...args) => {
       const startTime = Date.now();
-      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || 'unknown';
+      let url = typeof args[0] === 'string' ? args[0] : args[0]?.url || 'unknown';
       const method = args[1]?.method || 'GET';
+      
+      // Sanitize URL in case it contains sensitive data
+      url = sanitizeSensitiveData(url);
       
       try {
         const response = await this.originalFetch(...args);
@@ -156,9 +239,12 @@ class DiagnosticsCapture {
                 responseBody = await clonedResponse.text();
               }
               
+              // Sanitize response body before storing
+              const sanitizedResponseBody = sanitizeSensitiveData(responseBody);
+              
               this.networkErrors.push({
                 ...logEntry,
-                responseBody,
+                responseBody: sanitizedResponseBody,
                 headers: Object.fromEntries(response.headers.entries())
               });
               
@@ -237,7 +323,7 @@ class DiagnosticsCapture {
       // Intercept open to capture method and URL
       xhr.open = function(m, u, ...args) {
         method = m;
-        url = u;
+        url = sanitizeSensitiveData(u);  // Sanitize URL in case it contains sensitive data
         return originalOpen.apply(this, [m, u, ...args]);
       };
       
@@ -274,9 +360,12 @@ class DiagnosticsCapture {
                   // Keep as text if not JSON
                 }
                 
+                // Sanitize response body before storing
+                const sanitizedResponseBody = sanitizeSensitiveData(responseBody);
+                
                 self.networkErrors.push({
                   ...logEntry,
-                  responseBody,
+                  responseBody: sanitizedResponseBody,
                   responseType: xhr.responseType || 'text'
                 });
                 

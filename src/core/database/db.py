@@ -71,6 +71,23 @@ class DB:
                     'created_at',
                 ],
             },
+            'errors': {
+                'auto_increment': True,
+                'primary_key': 'error_id',
+                'fields': [
+                    'error_id',
+                    'error_type',
+                    'error_message',
+                    'traceback',
+                    'profile_id',
+                    'event_id',
+                    'request_path',
+                    'request_method',
+                    'user_agent',
+                    'ip_address',
+                    'created_at',
+                ],
+            },
             'events': {
                 'primary_key': 'event_id',
                 'fields': [
@@ -232,6 +249,7 @@ class DB:
                     'ip_address',
                     'diagnostics',
                     'notes',
+                    'error_ids',
                 ],
                 'serializable': {
                     'diagnostics': dict,
@@ -483,20 +501,67 @@ class DB:
             return str(value)
     
     @staticmethod
-    def deserialize_value(value_type: type | str, value_str: str) -> bool | int | float | list | dict | str:
-        """Convert a database string to a Python value."""
+    def deserialize_value(value_type: type | str, value: Any) -> bool | int | float | list | dict | str:
+        """Convert a database string to a Python value.
+        
+        Handles both string values that need parsing (from TEXT/JSONB columns)
+        and native Python types (from PostgreSQL arrays, JSONB, etc.)
+        """
         if isinstance(value_type, str):
             value_type = DB.resolve_value_type(value_type)
+        
+        # Handle None values
+        if value is None:
+            if value_type == bool:
+                return False
+            elif value_type == int:
+                return 0
+            elif value_type == float:
+                return 0.0
+            elif value_type == list:
+                return []
+            elif value_type == dict:
+                return {}
+            else:  # str
+                return ''
+        
+        # If value is already of the expected type (e.g., PostgreSQL arrays are already lists)
+        if value_type in (list, dict) and isinstance(value, value_type):
+            return value
+        
         if value_type == bool:
-            return value_str.lower() in ('true', '1', 'yes') or int(value_str) == 1
+            if isinstance(value, bool):
+                return value
+            value_str = str(value)
+            return value_str.lower() in ('true', '1', 'yes') or (value_str.isdigit() and int(value_str) == 1)
         elif value_type == int:
-            return int(value_str)
+            if isinstance(value, int):
+                return value
+            return int(value)
         elif value_type == float:
-            return float(value_str)
-        elif value_type in (list, dict):
-            return json.loads(value_str if value_str is not None else '[]')
+            if isinstance(value, float):
+                return value
+            return float(value)
+        elif value_type == list:
+            # PostgreSQL INTEGER[] arrays are already lists
+            if isinstance(value, list):
+                return value
+            # Only parse JSON if value is a string
+            if isinstance(value, str):
+                return json.loads(value)
+            # Fallback: try to convert to list
+            return list(value) if value else []
+        elif value_type == dict:
+            # JSONB columns are already dicts
+            if isinstance(value, dict):
+                return value
+            # Only parse JSON if value is a string
+            if isinstance(value, str):
+                return json.loads(value)
+            # Fallback
+            return {}
         else:  # str
-            return value_str
+            return str(value)
 
     @staticmethod
     def get_original_table(table: str) -> str:

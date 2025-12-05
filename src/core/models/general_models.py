@@ -347,6 +347,7 @@ class GeneralModels(BaseModels):
 
         result['developer_hierarchy_rank'] = 10
         result['rekognition_usage'] = self.get_entities('rekognition_usaged')
+        result['errors'] = self.get_entities('errors')
 
         return result
     

@@ -44,6 +44,19 @@ steps = [
             ruc.*
         FROM rekognition_usaged_ctx ruc;
 
+        -- errors
+        
+        CREATE OR REPLACE VIEW errors_ctx AS
+        SELECT
+            e.*
+        FROM errors e
+        WHERE cur_profile_bool('is_developer');
+
+        CREATE OR REPLACE VIEW errors_ext AS
+        SELECT
+            ec.*
+        FROM errors_ctx ec;
+
         -- profiles
         
         CREATE OR REPLACE VIEW profiles_ctx AS
@@ -122,7 +135,8 @@ steps = [
             fe.closed_at,
             fe.closed_by,
             p2.label AS closed_by_label,
-            fe.closed_details
+            fe.closed_details,
+            fe.error_ids
         FROM feedbacks fe
         LEFT JOIN profiles p1 ON fe.profile_id = p1.profile_id
         LEFT JOIN profiles p2 ON fe.closed_by = p2.profile_id;
@@ -1072,6 +1086,8 @@ steps = [
         DROP VIEW IF EXISTS my_preferences CASCADE;
         DROP VIEW IF EXISTS profiles_ext CASCADE;
         DROP VIEW IF EXISTS profiles_ctx CASCADE;
+        DROP VIEW IF EXISTS errors_ext CASCADE;
+        DROP VIEW IF EXISTS errors_ctx CASCADE;
         DROP VIEW IF EXISTS rekognition_usaged_ext CASCADE;
         DROP VIEW IF EXISTS rekognition_usaged_ctx CASCADE;
         DROP VIEW IF EXISTS settings_ext CASCADE;

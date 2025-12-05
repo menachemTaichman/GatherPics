@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
-import { useModalManager } from '../../utils/modalManager';
+import { useModalManager, useModalStore } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
-import { feedbacksAPI } from '../../utils/apiService';
+import { feedbacksAPI, settingsAPI } from '../../utils/apiService';
 import { useFeedbackById } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useApplyScopes } from '../../utils/storeUtils';
@@ -29,10 +29,23 @@ export default function FeedbackDetailModal({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [notes, setNotes] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
+  const [showRelatedErrors, setShowRelatedErrors] = useState(false);
+  const [settings, setSettings] = useState(null);
   
   const { showToast } = useToast();
-  const { registerModal, unregisterModal } = useModalManager();
+  const { registerModal, unregisterModal, isTopModal } = useModalManager();
   const modalId = 'feedback-detail-modal';
+  
+  // Check if this modal is the topmost modal
+  const isTopmostModal = useCallback(() => {
+    try {
+      const { stack } = useModalStore.getState();
+      if (stack.length === 0) return true;
+      return isTopModal(modalId);
+    } catch {
+      return true;
+    }
+  }, [isTopModal, modalId]);
 
   // Apply scope for this feedback
   useApplyScopes(
@@ -65,7 +78,23 @@ export default function FeedbackDetailModal({
       };
       fetchFeedback();
     }
-  }, [isOpen, feedbackId]);
+  }, [isOpen, feedbackId, showToast]);
+
+  // Fetch settings (for errors) when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const fetchSettings = async () => {
+        try {
+          const response = await settingsAPI.get();
+          setSettings(response.settings || {});
+        } catch (error) {
+          console.error('Failed to load settings (errors):', error);
+          // Don't show toast for settings errors, just log
+        }
+      };
+      fetchSettings();
+    }
+  }, [isOpen]);
 
   // Initialize notes from feedback
   useEffect(() => {
@@ -147,12 +176,14 @@ export default function FeedbackDetailModal({
   const handleDetailModalKeys = useCallback((e) => {
     const targetTagName = e.target.tagName?.toLowerCase();
     
-    // ESC always closes the modal
+    // ESC handling - only if this is the topmost modal
     if (e.key === 'Escape') {
-      if (!loading) {
+      if (isTopmostModal() && !loading) {
         onClose();
+        return true;
       }
-      return true; // Handled
+      // If not topmost, don't handle it - let the topmost modal handle it
+      return false;
     }
     
     // Arrow keys for navigation (except when in input fields)
@@ -184,7 +215,7 @@ export default function FeedbackDetailModal({
     }
     
     return false; // Not handled
-  }, [loading, onClose, isClosed, handleNavigate]);
+  }, [loading, onClose, isClosed, handleNavigate, isTopmostModal]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId,
@@ -204,6 +235,20 @@ export default function FeedbackDetailModal({
       return null;
     }
   }, [feedback?.diagnostics]);
+
+  // Get related errors for this feedback
+  const relatedErrors = useMemo(() => {
+    if (!settings?.errors || !feedback?.error_ids || !Array.isArray(feedback.error_ids)) return [];
+    const errorsDict = settings.errors || {};
+    return feedback.error_ids
+      .map(errorId => errorsDict[errorId] || Object.values(errorsDict).find(e => e.error_id === errorId))
+      .filter(Boolean) // Remove any undefined/null entries
+      .sort((a, b) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime; // Most recent first
+      });
+  }, [settings?.errors, feedback?.error_ids]);
 
   if (!isOpen || !feedback) return null;
 
@@ -536,6 +581,69 @@ export default function FeedbackDetailModal({
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Related Errors */}
+            {relatedErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <button
+                  onClick={() => setShowRelatedErrors(!showRelatedErrors)}
+                  className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 hover:text-red-600 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                    Related Errors ({relatedErrors.length})
+                  </span>
+                  {showRelatedErrors ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+                
+                {showRelatedErrors && (
+                  <div className="mt-4 space-y-4">
+                    {relatedErrors.map((error) => (
+                      <button
+                        key={error.error_id}
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('error:open-detail', {
+                            detail: { errorId: error.error_id }
+                          }));
+                        }}
+                        className="w-full text-left bg-white p-3 rounded border border-red-200 hover:border-red-400 hover:shadow-md transition-all"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              error.error_type === 'DatabaseError' ? 'bg-red-100 text-red-700' :
+                              error.error_type === 'DBPolicyError' ? 'bg-orange-100 text-orange-700' :
+                              error.error_type === 'Forbidden' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {error.error_type}
+                            </span>
+                            {error.request_method && error.request_path && (
+                              <span className="text-xs text-gray-600">
+                                {error.request_method} {error.request_path}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {formatDateTimeLocale(error.created_at)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-900 mb-2 line-clamp-2">
+                          {error.error_message}
+                        </div>
+                        <div className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                          Click to view details →
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

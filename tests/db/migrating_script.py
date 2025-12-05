@@ -500,7 +500,7 @@ def convert_timestamp_value(value, field_name, table_name):
         print(f"    Warning: Failed to convert timestamp {field_name}={value} in {table_name}: {e}")
         return value  # Return original value if conversion fails
 
-def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns=None, is_postgres_source=False):
+def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns=None, is_postgres_source=False, row_filter=None):
     """Migrate a single table from SQLite or PostgreSQL to PostgreSQL.
     
     Args:
@@ -510,6 +510,7 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         table_name: Name of the table to migrate
         exclude_columns: List of column names to exclude from migration (for deferred FKs)
         is_postgres_source: If True, source is PostgreSQL; if False, source is SQLite
+        row_filter: Optional function(row, column_names) -> bool to filter rows before migration
     """
     # Get PostgreSQL table name (may be different from SQLite name)
     pg_table_name = TABLE_MAPPING.get(table_name, table_name)
@@ -681,6 +682,10 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
     for row in rows:
         # Skip rows that should be excluded (e.g., already inserted by initial schema)
         if pk_column_index is not None and row[pk_column_index] in skip_ids:
+            continue  # Skip this row
+        
+        # Apply row filter if provided
+        if row_filter is not None and not row_filter(row, all_column_names):
             continue  # Skip this row
         
         converted_row = []
@@ -902,7 +907,7 @@ def migrate_data_from_postgres(backup_db_name):
         # For PostgreSQL->PostgreSQL migration, we use the same table names
         migration_order = [
             # Base tables first (no FK dependencies)
-            'default_preferences',
+            # 'default_preferences',  # Skipped - created by migrations
             'rekognition_usaged',
             
             # Tables that reference each other (circular) - create without FKs first
@@ -911,7 +916,7 @@ def migrate_data_from_postgres(backup_db_name):
             
             # Dependent on profiles and events
             'settings',
-            'profiles_preferences',
+            'profiles_preferences',  # Will be filtered to only include preferences in default_preferences
             'refresh_tokens',
             'notifications',
             'feedbacks',
@@ -957,14 +962,65 @@ def migrate_data_from_postgres(backup_db_name):
         
         # Step 1: Migrate all tables, excluding deferred FK columns
         print("\nStep 1: Migrating tables (excluding deferred FK columns)...")
+        
+        # Get valid default preferences for filtering profiles_preferences
+        pg_cursor.execute("""
+            SELECT preference_group, preference_key 
+            FROM default_preferences
+        """)
+        valid_preferences = set(pg_cursor.fetchall())
+        
         for table_name in migration_order:
             # Check if table exists in backup (use PostgreSQL table name)
             pg_table_name = TABLE_MAPPING.get(table_name, table_name)
             if pg_table_name in tables:
                 # For deferred FK columns, use the original table name (SQLite name) to look up columns
                 deferred_cols = DEFERRED_FK_COLUMNS.get(table_name, [])
-                migrate_table(backup_cursor, pg_cursor, pg_conn, pg_table_name, exclude_columns=deferred_cols, is_postgres_source=True)
+                
+                # Special handling for profiles_preferences: filter to only include valid preferences
+                row_filter = None
+                if pg_table_name == 'profiles_preferences':
+                    def filter_profiles_preferences(row, column_names):
+                        # Find indices of preference_group and preference_key columns
+                        try:
+                            group_idx = column_names.index('preference_group')
+                            key_idx = column_names.index('preference_key')
+                            preference_pair = (row[group_idx], row[key_idx])
+                            return preference_pair in valid_preferences
+                        except (ValueError, IndexError):
+                            # If columns not found, include the row (shouldn't happen)
+                            return True
+                    row_filter = filter_profiles_preferences
+                
+                migrate_table(backup_cursor, pg_cursor, pg_conn, pg_table_name, exclude_columns=deferred_cols, is_postgres_source=True, row_filter=row_filter)
                 pg_conn.commit()
+                
+                # After migrating profiles_preferences, fill in missing preferences for all profiles
+                if pg_table_name == 'profiles_preferences':
+                    print("\n  Filling missing preferences for all profiles...")
+                    # Get all default preferences
+                    pg_cursor.execute("""
+                        SELECT preference_group, preference_key, value
+                        FROM default_preferences
+                    """)
+                    default_prefs = pg_cursor.fetchall()
+                    
+                    for preference_group, preference_key, default_value in default_prefs:
+                        # Insert missing preferences for all profiles
+                        pg_cursor.execute("""
+                            INSERT INTO profiles_preferences (
+                                profile_id,
+                                preference_group,
+                                preference_key,
+                                preference_value
+                            )
+                            SELECT profile_id, %s, %s, %s
+                            FROM profiles
+                            ON CONFLICT (profile_id, preference_group, preference_key) DO NOTHING
+                        """, (preference_group, preference_key, default_value))
+                    
+                    pg_conn.commit()
+                    print("  Missing preferences filled")
                 
                 # After migrating groups, replace trigger-created Unassociated groups with backup IDs
                 if pg_table_name == 'groups':
@@ -1161,7 +1217,7 @@ def migrate_data():
         # For circular dependencies (profiles <-> events), we handle them carefully
         migration_order = [
             # Base tables first (no FK dependencies)
-            'default_preferences',
+            # 'default_preferences',  # Skipped - created by migrations
             'rekognition_usaged',
             
             # Tables that reference each other (circular) - create without FKs first
@@ -1170,7 +1226,7 @@ def migrate_data():
             
             # Dependent on profiles and events
             'settings',
-            'profiles_preferences',
+            'profiles_preferences',  # Will be filtered to only include preferences in default_preferences
             'refresh_tokens',
             'notifications',
             'feedbacks',
@@ -1216,11 +1272,62 @@ def migrate_data():
         
         # Step 1: Migrate all tables, excluding deferred FK columns
         print("\nStep 1: Migrating tables (excluding deferred FK columns)...")
+        
+        # Get valid default preferences for filtering profiles_preferences
+        pg_cursor.execute("""
+            SELECT preference_group, preference_key 
+            FROM default_preferences
+        """)
+        valid_preferences = set(pg_cursor.fetchall())
+        
         for table_name in migration_order:
             if table_name in tables:
                 deferred_cols = DEFERRED_FK_COLUMNS.get(table_name, [])
-                migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=deferred_cols, is_postgres_source=False)
+                
+                # Special handling for profiles_preferences: filter to only include valid preferences
+                row_filter = None
+                if table_name == 'profiles_preferences':
+                    def filter_profiles_preferences(row, column_names):
+                        # Find indices of preference_group and preference_key columns
+                        try:
+                            group_idx = column_names.index('preference_group')
+                            key_idx = column_names.index('preference_key')
+                            preference_pair = (row[group_idx], row[key_idx])
+                            return preference_pair in valid_preferences
+                        except (ValueError, IndexError):
+                            # If columns not found, include the row (shouldn't happen)
+                            return True
+                    row_filter = filter_profiles_preferences
+                
+                migrate_table(sqlite_cursor, pg_cursor, pg_conn, table_name, exclude_columns=deferred_cols, is_postgres_source=False, row_filter=row_filter)
                 pg_conn.commit()
+                
+                # After migrating profiles_preferences, fill in missing preferences for all profiles
+                if table_name == 'profiles_preferences':
+                    print("\n  Filling missing preferences for all profiles...")
+                    # Get all default preferences
+                    pg_cursor.execute("""
+                        SELECT preference_group, preference_key, value
+                        FROM default_preferences
+                    """)
+                    default_prefs = pg_cursor.fetchall()
+                    
+                    for preference_group, preference_key, default_value in default_prefs:
+                        # Insert missing preferences for all profiles
+                        pg_cursor.execute("""
+                            INSERT INTO profiles_preferences (
+                                profile_id,
+                                preference_group,
+                                preference_key,
+                                preference_value
+                            )
+                            SELECT profile_id, %s, %s, %s
+                            FROM profiles
+                            ON CONFLICT (profile_id, preference_group, preference_key) DO NOTHING
+                        """, (preference_group, preference_key, default_value))
+                    
+                    pg_conn.commit()
+                    print("  Missing preferences filled")
                 
                 # After migrating groups, replace trigger-created Unassociated groups with SQLite IDs
                 if table_name == 'groups':

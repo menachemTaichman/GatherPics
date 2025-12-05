@@ -318,6 +318,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
         {/* Content Area */}
         <div className="w-full px-8 py-8">
           <ScrollableTable
+            style={{ maxHeight: 'calc(100vh - 20rem)' }}
             columns={[
               {
                 key: 'access_request_id',

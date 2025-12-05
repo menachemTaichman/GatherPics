@@ -281,6 +281,7 @@ export default function FeedbacksGalleryPage() {
       {/* Content */}
       <div className="flex-1 min-h-0 w-full px-8 pt-6 pb-8">
         <ScrollableTable
+          style={{ maxHeight: 'calc(100vh - 22rem)' }}
           columns={[
             {
               key: 'feedback_id',

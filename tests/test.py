@@ -90,18 +90,19 @@ def add_preference(preference_group: str, preference_key: str, value_type: str, 
     """
     params = [preference_group, preference_key, value_type, value]
     db.execute_query(query, params)
-    # query = f"""
-    #     INSERT INTO profiles_preferences (
-    #         profile_id,
-    #         preference_group,
-    #         preference_key,
-    #         preference_value
-    #     )
-    #     SELECT profile_id, %s, %s, %s
-    #     FROM profiles
-    # """
-    # params = [preference_group, preference_key, value]
-    # db.execute_query(query, params)
+    query = f"""
+        INSERT INTO profiles_preferences (
+            profile_id,
+            preference_group,
+            preference_key,
+            preference_value
+        )
+        SELECT profile_id, %s, %s, %s
+        FROM profiles
+        ON CONFLICT (profile_id, preference_group, preference_key) DO NOTHING
+    """
+    params = [preference_group, preference_key, value]
+    db.execute_query(query, params)
 
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
@@ -120,6 +121,18 @@ ids = {
     'albums': ['0aeef84e-0a30-4193-b555-55c5ae672765'], # archive album
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
+
+add_preference('SettingsPage', 'errorFilterType', 'str', '')
+add_preference('SettingsPage', 'errorFilterPeriod', 'str', '')
+
+result1 = db.execute_query('SELECT * FROM errors;', return_format=ReturnFormat.LIST_DICTS)
+print(result1)
+print('--------------------------------')
+
+result2 = db.execute_query('SELECT * FROM feedbacks;', return_format=ReturnFormat.LIST_DICTS)
+print(result2)
+print('--------------------------------')
+
 
 result = event.models.get_entities('groups')
 print(result)

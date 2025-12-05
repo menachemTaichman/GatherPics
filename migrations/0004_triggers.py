@@ -477,6 +477,8 @@ steps = [
         RETURNS TRIGGER AS $$
         DECLARE
             new_feedback_id INTEGER;
+            diagnostics_json JSONB;
+            error_ids_array INTEGER[];
         BEGIN
             IF NEW.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') THEN
                 RAISE EXCEPTION 'Permission denied: cannot create feedback for another profile';
@@ -485,6 +487,29 @@ steps = [
             IF cur_profile_bool('is_public') THEN
                 RAISE EXCEPTION 'Permission denied: public profiles cannot create feedback';
             END IF;
+
+            -- Extract error_ids from diagnostics before insert
+            error_ids_array := ARRAY[]::INTEGER[];
+            BEGIN
+                IF NEW.diagnostics IS NOT NULL THEN
+                    -- Parse diagnostics (stored as TEXT/JSON)
+                    diagnostics_json := NEW.diagnostics::jsonb;
+                    
+                    -- Check network_errors array for error_id in responseBody
+                    IF diagnostics_json ? 'network_errors' AND jsonb_typeof(diagnostics_json->'network_errors') = 'array' THEN
+                        -- Extract all distinct error_id values into array
+                        SELECT ARRAY_AGG(DISTINCT (error_obj->'responseBody'->>'error_id')::INTEGER)
+                        INTO error_ids_array
+                        FROM jsonb_array_elements(diagnostics_json->'network_errors') AS error_obj
+                        WHERE error_obj->'responseBody' ? 'error_id'
+                        AND (error_obj->'responseBody'->>'error_id')::INTEGER IS NOT NULL;
+                    END IF;
+                END IF;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    -- Ignore errors in diagnostics parsing - don't fail feedback creation
+                    NULL;
+            END;
 
             INSERT INTO feedbacks (
                 profile_id,
@@ -497,7 +522,8 @@ steps = [
                 created_at,
                 user_agent,
                 ip_address,
-                diagnostics
+                diagnostics,
+                error_ids
             )
             VALUES (
                 NEW.profile_id,
@@ -510,7 +536,8 @@ steps = [
                 COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
                 NEW.user_agent,
                 NEW.ip_address,
-                NEW.diagnostics
+                NEW.diagnostics,
+                CASE WHEN array_length(error_ids_array, 1) > 0 THEN error_ids_array ELSE NULL END
             )
             RETURNING feedback_id INTO new_feedback_id;
         

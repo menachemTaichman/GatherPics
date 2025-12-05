@@ -168,6 +168,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
           ) : (
             <>
               <ScrollableTable
+                style={{ maxHeight: 'calc(100vh - 20rem)' }}
                 columns={[
                   {
                     key: 'id',

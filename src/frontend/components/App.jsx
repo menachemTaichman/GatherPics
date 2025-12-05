@@ -29,6 +29,7 @@ import RequestFormModal from './requests/RequestFormModal.jsx';
 import { RequestDetailModal } from './requests';
 import { requestsAPI, feedbacksAPI } from '../utils/apiService';
 import { FeedbackDetailModal, FeedbackFormModal } from './feedbacks';
+import { ErrorDetailModal } from './errors';
 import diagnosticsCapture from '../utils/diagnosticsCapture';
 import { APP_CONFIG } from '../config/appConfig';
 
@@ -571,6 +572,7 @@ function AppContent({ eventUrl }) {
 export default function App() {
   const [globalOpenFeedbackId, setGlobalOpenFeedbackId] = useState(null);
   const [globalOpenMyFeedback, setGlobalOpenMyFeedback] = useState({ id: null, data: null });
+  const [globalOpenErrorId, setGlobalOpenErrorId] = useState(null);
 
   // Initialize preferences and diagnostics capture at startup
   useEffect(() => {
@@ -629,6 +631,19 @@ export default function App() {
     };
   }, []);
 
+  // Listen for error:open-detail globally (works from any route)
+  useEffect(() => {
+    const handler = (ev) => {
+      const errorId = ev?.detail?.errorId;
+      if (!errorId) return;
+      setGlobalOpenErrorId(errorId);
+    };
+    window.addEventListener('error:open-detail', handler, true);
+    return () => {
+      window.removeEventListener('error:open-detail', handler, true);
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <ToastProvider>
@@ -664,6 +679,14 @@ export default function App() {
             isOpen={!!globalOpenMyFeedback.id}
             onClose={() => setGlobalOpenMyFeedback({ id: null, data: null })}
             feedback={globalOpenMyFeedback.id === 'new' ? null : globalOpenMyFeedback.data}
+          />
+        )}
+        {/* Global ErrorDetailModal - works from any route */}
+        {globalOpenErrorId && (
+          <ErrorDetailModal
+            isOpen={!!globalOpenErrorId}
+            onClose={() => setGlobalOpenErrorId(null)}
+            errorId={globalOpenErrorId}
           />
         )}
       </ToastProvider>

@@ -307,9 +307,6 @@ def get_current_profile():
     
     event_id = get_query_param('event_id', required=False)
 
-    print(event_id)
-    import src.backend.helpers as helpers
-    print(helpers.get_current_profile_id())
     general_models = get_general_models()
     profile = general_models.get_current_profile(event_id)
 
@@ -366,7 +363,7 @@ def update_current_profile():
     event_id = request.args.get('event_id', None)
     profile_id = get_current_profile_id()
     general_models = get_general_models()
-    data = get_multiple_inputs(['label', 'email'])
+    data = get_multiple_inputs(['label', 'email', 'password'])
     if data:
         general_models.edit('current_profile', profile_id, data)
 
@@ -387,6 +384,26 @@ def get_groups_to_request_access(event_id):
     event = get_event(event_id)
     return jsonify({"groups": event.models.get_groups_to_request_access()})
 
+# @profile_bp.route("/api/profiles/current/password", methods=["GET"])
+# @require_auth
+# def get_current_profile_password():
+#     """Get the current profile password."""
+#     profile_id = get_current_profile_id()
+#     general_models = get_general_models()
+#     return jsonify({"password": general_models.get_profile_password(profile_id)})
+
+# @profile_bp.route("/api/profiles/current/password", methods=["PUT"])
+# @require_auth
+# def update_current_profile_password():
+#     """Update the current profile password."""
+#     profile_id = get_current_profile_id()
+#     general_models = get_general_models()
+#     password = get_input('password', required=True)
+#     from src.core.errors import Forbidden
+#     print('Test error with password: ' + password)
+#     raise Forbidden('Test error with password: ' + password)
+#     general_models.edit('current_profile', profile_id, {'password': password})
+#     return jsonify({"success": True})
 
 # ========================================
 # ACCESS MANAGEMENT

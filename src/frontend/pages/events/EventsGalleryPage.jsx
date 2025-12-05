@@ -395,6 +395,7 @@ export default function EventsGalleryPage() {
             </motion.div>
           ) : (
             <ScrollableTable
+              style={{ maxHeight: 'calc(100vh - 22rem)' }}
               columns={[
                 {
                   key: 'name',
