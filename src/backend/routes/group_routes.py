@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_input, get_multiple_inputs, get_query_param, validate_path_param
+from src.backend.helpers import get_event
+from src.backend.validators import get_input, get_multiple_inputs, get_query_param, validate_path_param
 
 group_bp = Blueprint('groups', __name__, url_prefix='/api/events/<event_id>')
 

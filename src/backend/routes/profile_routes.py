@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, get_input, get_multiple_inputs, get_query_param, validate_path_param
+from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation
+from src.backend.validators import get_input, get_multiple_inputs, get_query_param, validate_path_param
 
 profile_bp = Blueprint('profiles', __name__)
 
@@ -306,6 +307,9 @@ def get_current_profile():
     
     event_id = get_query_param('event_id', required=False)
 
+    print(event_id)
+    import src.backend.helpers as helpers
+    print(helpers.get_current_profile_id())
     general_models = get_general_models()
     profile = general_models.get_current_profile(event_id)
 
@@ -362,8 +366,9 @@ def update_current_profile():
     event_id = request.args.get('event_id', None)
     profile_id = get_current_profile_id()
     general_models = get_general_models()
-    data = request.json
-    general_models.edit('current_profile', profile_id, data)
+    data = get_multiple_inputs(['label', 'email'])
+    if data:
+        general_models.edit('current_profile', profile_id, data)
 
     changes = [{
         'type': 'UPSERT',

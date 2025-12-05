@@ -5,7 +5,8 @@ import threading
 import re
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe, get_multiple_inputs, validate_path_param
+from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe
+from src.backend.validators import get_multiple_inputs, validate_path_param
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 

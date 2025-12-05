@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models, Forbidden, get_multiple_inputs
+from src.backend.helpers import get_general_models, Forbidden
+from src.backend.validators import get_multiple_inputs
 
 settings_bp = Blueprint('settings', __name__)
 

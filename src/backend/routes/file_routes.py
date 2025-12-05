@@ -4,7 +4,8 @@ import io
 import zipfile
 
 from src.backend.middleware.auth import require_auth, optional_auth
-from src.backend.helpers import get_event, get_general_models, get_input, validate_path_param
+from src.backend.helpers import get_event, get_general_models
+from src.backend.validators import get_input, validate_path_param
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 

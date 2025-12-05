@@ -2,7 +2,8 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_general_models, get_input, get_multiple_inputs
+from src.backend.helpers import get_general_models
+from src.backend.validators import get_input, get_multiple_inputs
 
 feedback_bp = Blueprint('feedbacks', __name__, url_prefix='/api')
 

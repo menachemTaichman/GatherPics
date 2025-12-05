@@ -8,7 +8,8 @@ from datetime import timedelta, datetime, timezone
 import secrets
 import traceback
 
-from src.backend.helpers import get_general_models, get_input, validate_path_param
+from src.backend.helpers import get_general_models
+from src.backend.validators import get_input, validate_path_param
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 

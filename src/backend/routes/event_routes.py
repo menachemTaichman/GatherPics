@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth, optional_auth
-from src.backend.helpers import get_general_models, get_input, get_multiple_inputs, validate_path_param
+from src.backend.helpers import get_general_models
+from src.backend.validators import get_input, get_multiple_inputs, validate_path_param
 
 event_bp = Blueprint('events', __name__, url_prefix='/api')
 
