@@ -173,6 +173,8 @@ steps = [
         -- Function for current_profile UPDATE
         CREATE OR REPLACE FUNCTION trg_current_profile_update()
         RETURNS TRIGGER AS $$
+        DECLARE
+            updated_profile_id UUID;
         BEGIN
             IF cur_profile_bool('is_public') THEN
                 RAISE EXCEPTION 'Permission denied: cannot update current profile to a public profile';
@@ -182,10 +184,11 @@ steps = [
                 label = NEW.label,
                 email = NEW.email,
                 password = NEW.password
-            WHERE profile_id = cur_profile_uuid('profile_id');
+            WHERE profile_id = cur_profile_uuid('profile_id')
+            RETURNING profile_id INTO updated_profile_id;
             
-            IF deleted_event_id IS NOT NULL THEN
-                RETURN OLD;
+            IF updated_profile_id IS NOT NULL THEN
+                RETURN NEW;
             END IF;
 
             RETURN NULL;
