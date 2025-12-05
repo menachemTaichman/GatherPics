@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
-from src.core.errors import DBPolicyError, Forbidden
+from src.core.errors import PolicyError, Forbidden
 from datetime import datetime
 
 class EventModels(BaseModels):
@@ -80,7 +80,7 @@ class EventModels(BaseModels):
         
         try:
             self.edit(table, entity_id, {representative_field: biggest})
-        except DBPolicyError as e:
+        except PolicyError as e:
             return None
         
         return biggest
@@ -118,7 +118,7 @@ class EventModels(BaseModels):
         calls_limit = event_data['rekognition_calls_limit']
         calls_used = event_data['rekognition_calls_used']
         if calls_used + count > calls_limit:
-            raise DBPolicyError("Policy error: cannot add more rekognition calls than the limit")
+            raise PolicyError("Policy error: cannot add more rekognition calls than the limit")
 
         query = f"""
             UPDATE events

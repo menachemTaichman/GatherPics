@@ -6,7 +6,7 @@ import traceback
 import logging
 import re
 
-from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+from src.core.errors import Forbidden, DatabaseError, PolicyError
 
 
 def sanitize_sensitive_data(text: str) -> str:
@@ -187,13 +187,13 @@ def register_error_handlers(app):
             logging.error(f"Error handler failed: {e}", exc_info=True)
             return jsonify({"error": "An internal database error occurred"}), 500
 
-    @app.errorhandler(DBPolicyError)
+    @app.errorhandler(PolicyError)
     def handle_db_policy_error(error):
         try:
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
             traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error_to_db(str(error), "DBPolicyError", traceback_str)
+            error_id = log_error_to_db(str(error), "PolicyError", traceback_str)
             response = {"error": error_msg}
             if error_id:
                 response["error_id"] = error_id

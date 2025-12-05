@@ -2,7 +2,7 @@ import os
 import shutil
 from datetime import datetime
 
-from src.core.errors import Forbidden, DBPolicyError
+from src.core.errors import Forbidden, PolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core import DATA_ROOT
@@ -79,7 +79,7 @@ class Event():
                     try:
                         self.models.delete('groups', group_id)                    
                         deleted_groups.add(group_id)
-                    except DBPolicyError as e:
+                    except PolicyError as e:
                         continue
                     except Forbidden as e:
                         continue
@@ -305,7 +305,7 @@ class Event():
             error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {images_count_limit}, Attempting to add: {len(image_files)}"
             _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
-            raise DBPolicyError(error_msg)
+            raise PolicyError(error_msg)
 
         # Check size limits
         total_size = 0
@@ -321,13 +321,13 @@ class Event():
             error_msg = f"{len(files_exceeding_limit)} file(s) exceed size limit of {image_size_limit_bytes} bytes: " + ", ".join([f"{name} ({size} bytes)" for name, size in files_exceeding_limit[:3]])
             _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
-            raise DBPolicyError(error_msg)
+            raise PolicyError(error_msg)
         
         if int(calls_used) + len(image_files) > int(calls_limit):
             error_msg = f"Upload would exceed rekognition calls limit. Current: {calls_used}, Limit: {calls_limit}, Attempting to add: {len(image_files)}"
             _log(error_msg)
             _send_progress('error', 0, 0, error_msg)
-            raise DBPolicyError(error_msg)
+            raise PolicyError(error_msg)
         
         _log(f"Found {len(image_files)} images to process")
         

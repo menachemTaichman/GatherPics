@@ -620,7 +620,7 @@ export default function FeedbackDetailModal({
                           <div className="flex items-center gap-2">
                             <span className={`px-2 py-1 text-xs rounded-full ${
                               error.error_type === 'DatabaseError' ? 'bg-red-100 text-red-700' :
-                              error.error_type === 'DBPolicyError' ? 'bg-orange-100 text-orange-700' :
+                              error.error_type === 'PolicyError' ? 'bg-orange-100 text-orange-700' :
                               error.error_type === 'Forbidden' ? 'bg-yellow-100 text-yellow-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>

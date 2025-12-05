@@ -14,7 +14,7 @@ if os.path.exists('.env'):
     from dotenv import load_dotenv
     load_dotenv()
 
-from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+from src.core.errors import Forbidden, DatabaseError, PolicyError
 
 DATA_ROOT = os.getenv('DATA_ROOT', os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data')))
 
@@ -22,6 +22,6 @@ __all__ = [
     'DATA_ROOT',
     'Forbidden',
     'DatabaseError', 
-    'DBPolicyError',
+    'PolicyError',
 ]
 

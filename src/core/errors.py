@@ -3,7 +3,7 @@ class Forbidden(Exception):
     """Exception raised for forbidden access."""
     pass
 
-class DBPolicyError(Exception):
+class PolicyError(Exception):
     """Exception raised for database policy error."""
     pass
 

@@ -362,8 +362,7 @@ class BaseModels(ABC):
         exclusive = relation_table == child_table
         ctx_relation_table = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
-        id_type = 'INTEGER' if self.db.is_auto_increment(child_table) else 'UUID'
-
+        id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
 
         detached_parents = {}
         if exclusive:

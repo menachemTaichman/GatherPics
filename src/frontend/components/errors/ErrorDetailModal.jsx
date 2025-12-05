@@ -155,13 +155,13 @@ export default function ErrorDetailModal({
           <div className="flex items-center space-x-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
               error.error_type === 'DatabaseError' ? 'bg-red-100' :
-              error.error_type === 'DBPolicyError' ? 'bg-orange-100' :
+              error.error_type === 'PolicyError' ? 'bg-orange-100' :
               error.error_type === 'Forbidden' ? 'bg-yellow-100' :
               'bg-gray-100'
             }`}>
               <AlertTriangle className={`w-5 h-5 ${
                 error.error_type === 'DatabaseError' ? 'text-red-600' :
-                error.error_type === 'DBPolicyError' ? 'text-orange-600' :
+                error.error_type === 'PolicyError' ? 'text-orange-600' :
                 error.error_type === 'Forbidden' ? 'text-yellow-600' :
                 'text-gray-600'
               }`} />
@@ -171,7 +171,7 @@ export default function ErrorDetailModal({
                 <span>Error #{error.error_id}</span>
                 <span className={`px-2 py-1 text-xs rounded-full ${
                   error.error_type === 'DatabaseError' ? 'bg-red-100 text-red-700' :
-                  error.error_type === 'DBPolicyError' ? 'bg-orange-100 text-orange-700' :
+                  error.error_type === 'PolicyError' ? 'bg-orange-100 text-orange-700' :
                   error.error_type === 'Forbidden' ? 'bg-yellow-100 text-yellow-700' :
                   'bg-gray-100 text-gray-700'
                 }`}>

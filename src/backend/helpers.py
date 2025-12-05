@@ -4,7 +4,7 @@ from datetime import datetime, date
 from src.core.models.general_models import GeneralModels
 # Export core classes for use in routes
 from src.core.services.event import Event, ChildOperation
-from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+from src.core.errors import Forbidden, DatabaseError, PolicyError
 
 def get_current_profile_id() -> str | None:
     """Get the current profile ID."""

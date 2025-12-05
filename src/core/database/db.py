@@ -5,7 +5,7 @@ import json
 from contextlib import contextmanager
 import os
 from enum import Enum
-from src.core.errors import Forbidden, DatabaseError, DBPolicyError
+from src.core.errors import Forbidden, DatabaseError, PolicyError
 
 class ReturnFormat(Enum):
     VALUE = 'value'
@@ -49,7 +49,7 @@ class DB:
     def STRUCTURE() -> dict:
         return {
             'settings': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'id',
                 'fields': [
                     'image_size_limit_bytes',
@@ -59,7 +59,7 @@ class DB:
                 ],
             },
             'rekognition_usaged': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'usage_id',
                 'fields': [
                     'usage_id',
@@ -72,7 +72,7 @@ class DB:
                 ],
             },
             'errors': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'error_id',
                 'fields': [
                     'error_id',
@@ -206,12 +206,12 @@ class DB:
                 'fields': ['preference_value'],
             },
             'refresh_tokens': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'token_id',
                 'fields': ['profile_id', 'token', 'issued_at', 'expires_at', 'user_agent', 'ip_address', 'revoked', 'revoked_at'],
             },
             'notifications': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'notification_id',
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
                 'serializable': {
@@ -224,7 +224,7 @@ class DB:
                 'fields': ['profile_id', 'message', 'created_at', 'read', 'type', 'data'],
             },
             'feedbacks': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'feedback_id',
                 'fields': [
                     'profile_id',
@@ -339,7 +339,7 @@ class DB:
                 },
             },
             'uploads': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'upload_id',
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
@@ -361,7 +361,7 @@ class DB:
                 }
             },
             'access_requests': {
-                'auto_increment': True,
+                'id_type': 'INTEGER',
                 'primary_key': 'access_request_id',
                 'fields': [
                     'profile_id',
@@ -585,12 +585,6 @@ class DB:
         return id_field
 
     @staticmethod
-    def is_auto_increment(table: str) -> bool:
-        """Check if the table has an auto increment field."""
-
-        return DB.STRUCTURE()[DB.get_original_table(table)].get('auto_increment', False)
-
-    @staticmethod
     def _get_fields(fields: list[str] | None, table: str | None = None) -> str:
         """Format fields for SQL query."""
         if table:
@@ -789,7 +783,7 @@ class DB:
             
             if "Policy error" in error_str:
                 error_message = error_str.replace("Policy error: ", "")
-                raise DBPolicyError(f"Policy error: {error_message}") from e
+                raise PolicyError(f"Policy error: {error_message}") from e
             elif "Permission denied" in error_str:
                 error_message = error_str.replace("Permission denied: ", "")
                 raise Forbidden(f"Permission denied: {error_message}") from e

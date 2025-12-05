@@ -3,7 +3,7 @@ import secrets
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
-from src.core.errors import DBPolicyError, Forbidden, DatabaseError
+from src.core.errors import PolicyError, Forbidden, DatabaseError
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -181,7 +181,7 @@ class GeneralModels(BaseModels):
         )
 
         if not type_label:
-            raise DBPolicyError(f'Preference {preference_group}.{preference_key} not found')
+            raise PolicyError(f'Preference {preference_group}.{preference_key} not found')
 
         serialized_value = self.db.serialize_value(type_label, preference_value)
 
@@ -238,7 +238,7 @@ class GeneralModels(BaseModels):
         """
         event = self.get_event(event_id)
         if not approved_group_ids and not denied_group_ids:
-            raise DBPolicyError('At least one group must be approved or denied')
+            raise PolicyError('At least one group must be approved or denied')
 
         access_request = event.models.get_entities('access_requests', access_request_id)
         if not access_request:
