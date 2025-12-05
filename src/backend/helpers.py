@@ -1,10 +1,17 @@
 from flask import g
 import json
+import os
 from datetime import datetime, date
 from src.core.models.general_models import GeneralModels
 # Export core classes for use in routes
 from src.core.services.event import Event, ChildOperation
 from src.core.errors import Forbidden, DatabaseError, PolicyError
+
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
+
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
 def get_current_profile_id() -> str | None:
     """Get the current profile ID."""
@@ -43,3 +50,7 @@ def json_serialize_datetime(obj):
 def json_dumps_safe(obj):
     """Serialize object to JSON string, handling datetime objects."""
     return json.dumps(json_serialize_datetime(obj))
+
+def get_frontend_url() -> str:
+    """Get the frontend URL from environment variable."""
+    return FRONTEND_URL

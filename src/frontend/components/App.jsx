@@ -32,6 +32,7 @@ import { FeedbackDetailModal, FeedbackFormModal } from './feedbacks';
 import { ErrorDetailModal } from './errors';
 import diagnosticsCapture from '../utils/diagnosticsCapture';
 import { APP_CONFIG } from '../config/appConfig';
+import { ResetPasswordModal } from './profiles';
 
 // Wrapper component to extract eventUrl from params and pass it to AppContent
 function AppContentWrapper() {
@@ -97,6 +98,34 @@ function PublicAccessPage() {
   }
 
   return null; // Will redirect on success
+}
+
+// Reset password page component - redirects to homepage and opens modal
+function ResetPasswordPage() {
+  const { token } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (token) {
+      // Store token temporarily in sessionStorage for privacy (cleared after use)
+      sessionStorage.setItem('resetPasswordToken', token);
+      // Navigate to homepage
+      navigate('/', { replace: true });
+      // Dispatch event after a small delay to ensure HomePage is mounted
+      // Use capture phase to catch it even if listener isn't ready yet
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('reset-password:open', { 
+          detail: { token },
+          bubbles: true,
+          cancelable: true
+        }));
+      }, 100);
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, [token, navigate]);
+
+  return null;
 }
 
 // Main content component that receives eventUrl as a prop
@@ -658,6 +687,7 @@ export default function App() {
               <Route path="/dashboard/profiles" element={<ProfilesGalleryPage />} />
               <Route path="/dashboard/feedbacks" element={<FeedbacksGalleryPage />} />
               <Route path="/dashboard/settings" element={<SettingsPage />} />
+              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
               <Route path="/:eventUrl/public-access/:publicCode" element={<PublicAccessPage />} />
               <Route path="/:eventUrl/*" element={<AppContentWrapper />} />
             </Routes>

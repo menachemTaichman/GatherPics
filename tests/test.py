@@ -122,8 +122,8 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-add_preference('SettingsPage', 'errorFilterType', 'str', '')
-add_preference('SettingsPage', 'errorFilterPeriod', 'str', '')
+passwords = db.execute_query('SELECT profile_id, label, password FROM profiles;', return_format=ReturnFormat.LIST_TUPLES)
+print(passwords)
 
 result1 = db.execute_query('SELECT * FROM errors;', return_format=ReturnFormat.LIST_DICTS)
 print(result1)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Key, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle } from 'lucide-react';
+import { X, User, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI, getEventUrlById, API_BASE } from '../../utils/apiService';
@@ -10,7 +10,6 @@ import { useApplyScopes, useChilds, useEventId, getEventUrlFromId as getEventUrl
 import { useDataStore } from '../../utils/dataManager';
 import { useEventGeneralById, useProfileById, useEventProfileById, useEventsGeneralList } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { ChangePasswordModal } from './';
 import { RemovableThumbnail } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
@@ -35,7 +34,6 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const [initialProfileState, setInitialProfileState] = useState(null);
   const [initialSelectedEventId, setInitialSelectedEventId] = useState(null);
   const [profileEvents, setProfileEvents] = useState([]); // Track profile's events list
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [nameConflict, setNameConflict] = useState(false);
   const [eventToRemove, setEventToRemove] = useState(null); // Event to remove (for confirmation modal)
   const [loading, setLoading] = useState(false);
@@ -277,10 +275,9 @@ const isProfileEditable = useMemo(() => {
   // Check if profile has been modified (defined early so it can be used in handlers)
   const hasChanges = useMemo(() => {
     if (isCreating) {
-      // When creating, require both label and password to be filled
+      // When creating, require label to be filled
       const hasLabel = editingProfile?.label?.trim();
-      const hasPassword = editingProfile?.password?.trim();
-      return hasLabel && hasPassword;
+      return hasLabel;
     }
     
     // Don't enable save until both editingProfile and initialProfileState are set
@@ -292,9 +289,10 @@ const isProfileEditable = useMemo(() => {
     // Event-specific changes are handled separately with their own save button
     
     // Compare general profile fields (exclude event-specific fields)
-    const generalFieldsToCompare = [
-      'label', 'email', 'hierarchy_rank', 'can_create_events', 'is_public', 'restricted_to_event'
-    ];
+    // Note: email is only included when creating; when editing, it's private and only editable via current_profile
+    const generalFieldsToCompare = isCreating
+      ? ['label', 'email', 'hierarchy_rank', 'can_create_events', 'is_public', 'restricted_to_event']
+      : ['label', 'hierarchy_rank', 'can_create_events', 'is_public', 'restricted_to_event'];
     
     for (const field of generalFieldsToCompare) {
       const currentValue = editingProfile[field];
@@ -320,13 +318,8 @@ const isProfileEditable = useMemo(() => {
     return false;
   }, [editingProfile, initialProfileState, isCreating]);
 
-  // Custom keyboard handler to allow child modal to work
+  // Custom keyboard handler
   const handleEditProfileKeys = (e) => {
-    // If password modal is open, let events pass through to child modal
-    if (showPasswordModal) {
-      return true; // Return true to prevent this modal from stopping propagation to child modal
-    }
-    
     // Handle event input keyboard events directly here (since customKeyHandler runs before onKeyDown)
     if (e.target === eventInputElementRef.current || eventInputRef.current?.contains(e.target)) {
       if (!showEventDropdown) {
@@ -386,7 +379,7 @@ const isProfileEditable = useMemo(() => {
     const targetTagName = e.target.tagName?.toLowerCase();
     if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
       // For Enter key, save the profile (only if there are changes)
-      if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && (!isCreating || editingProfile?.password?.trim()) && hasChanges) {
+      if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && hasChanges) {
         e.preventDefault();
         handleSave();
         return true;
@@ -406,7 +399,7 @@ const isProfileEditable = useMemo(() => {
     modalId: MODAL_ID,
     modalType: 'popup',
     allowOutsideScroll: true,
-    enableFocusTrapping: !showPasswordModal, // Disable when child modal is open
+    enableFocusTrapping: true,
     customKeyHandler: handleEditProfileKeys
   });
 
@@ -454,8 +447,6 @@ const isProfileEditable = useMemo(() => {
     const initialEditingState = {
       id: mergedProfile.id || mergedProfile.profile_id,
       label: mergedProfile.label || '',
-      email: mergedProfile.email || '',
-      password: undefined, // Don't include password when editing
       hierarchy_rank: mergedProfile.hierarchy_rank || 0,
       can_create_events: Boolean(mergedProfile.can_create_events),
       can_upload_and_delete_images: Boolean(eventData.can_upload_and_delete_images ?? mergedProfile.can_upload_and_delete_images),
@@ -511,10 +502,11 @@ const isProfileEditable = useMemo(() => {
         defaultRestrictedEventName = foundEvent?.name || null;
       }
       
+      // Email is included when creating (required for non-public profiles)
+      // When editing, email is private and only editable via AccountModal (current_profile)
       const initialEditingState = {
         label: profile?.label || '',
-        email: '',
-        password: '',
+        email: '', // Required for non-public profiles when creating
         hierarchy_rank: profile?.hierarchy_rank || 0,
         can_create_events: false,
         can_upload_and_delete_images: Boolean(profile?.can_upload_and_delete_images),
@@ -600,12 +592,6 @@ const isProfileEditable = useMemo(() => {
     }
   }, [isOpen, generalProfile?.events]);
 
-  // Update email when generalProfile loads (after initial render)
-  useEffect(() => {
-    if (isOpen && !isCreating && generalProfile?.email && editingProfile && !editingProfile.email) {
-      setEditingProfile(prev => ({ ...prev, email: generalProfile.email }));
-    }
-  }, [isOpen, isCreating, generalProfile?.email, editingProfile?.email]);
 
   // Fetch profile with scopes (images and albums relations) when modal opens and event is selected
   useEffect(() => {
@@ -850,7 +836,7 @@ const isProfileEditable = useMemo(() => {
   const checkNameConflict = async (label) => {
     if (!label || !label.trim()) {
       setNameConflict(false);
-      setError(''); // Clear "label with password" error when label is empty
+      setError(''); // Clear error when label is empty
       return;
     }
 
@@ -872,7 +858,7 @@ const isProfileEditable = useMemo(() => {
       const result = await profilesAPI.checkName(label.trim(), excludeProfileId, restrictedToEventUrl);
       const hasConflict = result.conflict || false;
       setNameConflict(hasConflict);
-      // Clear "label with password" error if check-name returns false (no conflict)
+      // Clear error if check-name returns false (no conflict)
       if (!hasConflict) {
         setError('');
       }
@@ -890,16 +876,6 @@ const isProfileEditable = useMemo(() => {
       editingProfileRef.current = updated;
       return updated;
     });
-    
-    // Clear "label with password" error only when password changes
-    if (field === 'password') {
-      // Clear the "label with password" error when password changes
-      // Also clear nameConflict since the combination error doesn't mean the label alone exists
-      if (error === 'Name and password combination already exists') {
-        setError('');
-        setNameConflict(false);
-      }
-    }
     
     // Check name conflict after changing label or restricted_to_event
     if (field === 'label' || field === 'restricted_to_event') {
@@ -944,18 +920,11 @@ const isProfileEditable = useMemo(() => {
       return;
     }
 
-    // Validate password is not null or empty (required when creating)
-    if (isCreating) {
-      const passwordValue = editingProfile.password?.trim();
-      if (!passwordValue || passwordValue.length === 0) {
-        showToast('Password is required', 'error');
-        return;
-      }
-    } else {
-      // When editing, ensure password is not null/empty if it exists in editingProfile
-      // (password field is not shown when editing, so this is a safety check)
-      if (editingProfile.password !== undefined && (!editingProfile.password || !editingProfile.password.trim())) {
-        showToast('Password cannot be empty', 'error');
+    // Email is required for non-public profiles when creating
+    if (isCreating && !Boolean(editingProfile.is_public)) {
+      const emailValue = editingProfile.email?.trim();
+      if (!emailValue || emailValue.length === 0) {
+        showToast('Email is required for non-public profiles', 'error');
         return;
       }
     }
@@ -968,16 +937,16 @@ const isProfileEditable = useMemo(() => {
       // Convert boolean values (1/0) to true/false for backend
       const generalProfileData = {
         label: editingProfile.label,
-        email: editingProfile.email || null,
         hierarchy_rank: editingProfile.hierarchy_rank,
         can_create_events: Boolean(editingProfile.can_create_events),
         is_public: Boolean(editingProfile.is_public),
         restricted_to_event: editingProfile.restricted_to_event || null
       };
       
-      // Include password when creating/editing (required, already validated above)
-      if (editingProfile.password) {
-        generalProfileData.password = editingProfile.password.trim();
+      // Include email only when creating (required for non-public profiles)
+      // When editing, email is private and only editable via AccountModal (current_profile)
+      if (isCreating && editingProfile.email) {
+        generalProfileData.email = editingProfile.email.trim() || null;
       }
 
       // Event-specific profile data (only if selectedEventId is set)
@@ -1055,15 +1024,7 @@ const isProfileEditable = useMemo(() => {
       const normalizedErrorMsg = rawErrorMsg.toLowerCase();
       
       // Check for specific database policy errors that need special handling
-      if (normalizedErrorMsg.includes('label with this password already exists')) {
-        // Label AND password combination already exists
-        // Don't set nameConflict=true because this is about the combination, not just the label
-        setNameConflict(false);
-        const errorText = 'Name and password combination already exists';
-        setError(errorText);
-        // Show both inline error and toast
-        showToast(errorText, 'error');
-      } else if (normalizedErrorMsg.includes('profile label already exists') && !normalizedErrorMsg.includes('label with this password')) {
+      if (normalizedErrorMsg.includes('profile label already exists')) {
         // Only label exists (not the combination)
         // Handles: "Profile label already exists", "Policy error: Profile label already exists", etc.
         setNameConflict(true);
@@ -1506,8 +1467,13 @@ const isProfileEditable = useMemo(() => {
 
   const maxRank = (currentProfile?.hierarchy_rank || 0) - 1;
   const rankOptions = Array.from({ length: Math.max(0, maxRank) + 1 }, (_, i) => i);
-
-  const hasEmailField = !Boolean(editingProfile.is_public);
+  
+  // Email field is shown:
+  // - As input when creating (required for non-public profiles)
+  // - As read-only text when editing (always shown, even if empty for other profiles)
+  const hasEmailInput = isCreating && !Boolean(editingProfile?.is_public);
+  const hasEmailDisplay = !isCreating && !Boolean(editingProfile?.is_public);
+  const hasEmailField = hasEmailInput || hasEmailDisplay;
   const basicInfoGridLayout = hasEmailField
     ? 'md:grid-cols-[15rem_15rem_auto]'
     : 'md:grid-cols-[15rem_auto]';
@@ -1569,74 +1535,46 @@ const isProfileEditable = useMemo(() => {
                           value={editingProfile.label}
                           onChange={(e) => handleFieldChange('label', e.target.value)}
                         className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            (nameConflict || error === 'Name and password combination already exists') ? 'border-red-500' : 'border-gray-300'
+                            nameConflict ? 'border-red-500' : 'border-gray-300'
                           }`}
                           placeholder="Enter profile name"
                         />
-                        {(nameConflict || error === 'Name and password combination already exists') && (
+                        {nameConflict && (
                           <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
                             <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                            <span>
-                              {error === 'Name and password combination already exists' 
-                                ? 'Name and password combination already exists'
-                                : 'Name exists'}
-                            </span>
+                            <span>Name exists</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Email - only for non-public profiles */}
-                    {hasEmailField && (
+                    {/* Email - input when creating, read-only text when editing */}
+                    {hasEmailInput && (
                       <div className="w-full md:w-full">
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Email
+                          Email <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="email"
                           value={editingProfile.email || ''}
                           onChange={(e) => handleFieldChange('email', e.target.value)}
-                          autoComplete={isCreating ? "off" : "email"}
-                          className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus;border-transparent"
-                          placeholder="Enter email (optional)"
+                          autoComplete="off"
+                          className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter email (required)"
+                          required
                         />
                       </div>
                     )}
-
-                    {/* Password */}
-                    <div className={`flex flex-col gap-1 ${isCreating ? 'w-full md:w-full' : 'md:justify-self-center'}`}>
-                      <label className="block text-xs font-medium text-gray-600">
-                        Password {isCreating && <span className="text-red-500">*</span>}
-                      </label>
-                      {isCreating ? (
-                        <form onSubmit={(e) => e.preventDefault()} autoComplete="off">
-                          <input
-                            type="text"
-                            name="username"
-                            autoComplete="username"
-                            value={editingProfile.label || ''}
-                            readOnly
-                            style={{ display: 'none' }}
-                          />
-                          <input
-                            type="password"
-                            value={editingProfile.password || ''}
-                            onChange={(e) => handleFieldChange('password', e.target.value)}
-                            autoComplete="new-password"
-                            className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter password (required)"
-                          />
-                        </form>
-                      ) : (
-                        <button
-                          onClick={() => setShowPasswordModal(true)}
-                          className="w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                          title="Change password"
-                        >
-                          <Key className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    {hasEmailDisplay && (
+                      <div className="w-full md:w-full">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Email
+                        </label>
+                        <div className="w-full h-10 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 flex items-center">
+                          {generalProfile?.email || 'Not available'}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1910,7 +1848,7 @@ const isProfileEditable = useMemo(() => {
                           />
                           {showPublicTooltip && (
                             <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                              Accessible via link. Cannot edit own label/password. No email. Preferences not saved.
+                              Accessible via link. Cannot edit own label. No email. Preferences not saved.
                             </div>
                           )}
                         </div>
@@ -2569,7 +2507,11 @@ const isProfileEditable = useMemo(() => {
               disabled={
                 loading || 
                 savingEventSpecific ||
-                (isProfileEditable && (nameConflict || !editingProfile.label.trim() || (isCreating && !editingProfile.password?.trim()))) ||
+                (isProfileEditable && (
+                  nameConflict || 
+                  !editingProfile.label.trim() || 
+                  (isCreating && !Boolean(editingProfile.is_public) && !editingProfile.email?.trim())
+                )) ||
                 (!isProfileEditable && !isCreating && (!selectedEventId || !hasEventSpecificChanges)) ||
                 (isProfileEditable && !hasChanges && !hasEventSpecificChanges)
               }
@@ -2590,17 +2532,6 @@ const isProfileEditable = useMemo(() => {
           </div>
         </motion.div>
       </div>
-
-      {/* Change Password Modal (nested) */}
-      {showPasswordModal && (
-        <ChangePasswordModal
-          isOpen={showPasswordModal}
-          onClose={() => setShowPasswordModal(false)}
-          profileId={editingProfile.id}
-          profileLabel={editingProfile.label}
-          eventUrl={eventUrl}
-        />
-      )}
 
       {/* Remove Event Confirmation Modal */}
       {eventToRemove && (() => {

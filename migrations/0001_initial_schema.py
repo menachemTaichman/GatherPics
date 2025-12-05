@@ -95,6 +95,17 @@ steps = [
             revoked_at TIMESTAMP
         );
         
+        -- password_reset_links
+        CREATE TABLE IF NOT EXISTS password_reset_links (
+            reset_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            profile_id UUID NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            used BOOLEAN NOT NULL DEFAULT FALSE,
+            used_at TIMESTAMP
+        );
+        
         -- notifications
         CREATE TABLE IF NOT EXISTS notifications (
             notification_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -324,6 +335,7 @@ steps = [
         DROP TABLE IF EXISTS events_profiles CASCADE;
         DROP TABLE IF EXISTS feedbacks CASCADE;
         DROP TABLE IF EXISTS notifications CASCADE;
+        DROP TABLE IF EXISTS password_reset_links CASCADE;
         DROP TABLE IF EXISTS refresh_tokens CASCADE;
         DROP TABLE IF EXISTS profiles_preferences CASCADE;
         DROP TABLE IF EXISTS profiles CASCADE;
@@ -380,6 +392,11 @@ steps = [
         -- Foreign keys for refresh_tokens
         ALTER TABLE refresh_tokens
             ADD CONSTRAINT fk_refresh_tokens_profile_id 
+            FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE;
+        
+        -- Foreign keys for password_reset_links
+        ALTER TABLE password_reset_links
+            ADD CONSTRAINT fk_password_reset_links_profile_id 
             FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE;
         
         -- Foreign keys for notifications
@@ -574,6 +591,7 @@ steps = [
         ALTER TABLE feedbacks DROP CONSTRAINT IF EXISTS fk_feedbacks_closed_by;
         ALTER TABLE feedbacks DROP CONSTRAINT IF EXISTS fk_feedbacks_profile_id;
         ALTER TABLE notifications DROP CONSTRAINT IF EXISTS fk_notifications_profile_id;
+        ALTER TABLE password_reset_links DROP CONSTRAINT IF EXISTS fk_password_reset_links_profile_id;
         ALTER TABLE refresh_tokens DROP CONSTRAINT IF EXISTS fk_refresh_tokens_profile_id;
         ALTER TABLE profiles_preferences DROP CONSTRAINT IF EXISTS fk_profiles_preferences_preference;
         ALTER TABLE profiles_preferences DROP CONSTRAINT IF EXISTS fk_profiles_preferences_profile_id;
@@ -596,6 +614,7 @@ step(
         CREATE INDEX IF NOT EXISTS idx_profiles_label_lower ON profiles(LOWER(label));
         CREATE INDEX IF NOT EXISTS idx_profiles_public_access_code ON profiles(public_access_code);
         CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
+        CREATE INDEX IF NOT EXISTS idx_password_reset_links_token ON password_reset_links(token);
         CREATE INDEX IF NOT EXISTS idx_notifications_message ON notifications(message);
         CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
         CREATE INDEX IF NOT EXISTS idx_feedbacks_type ON feedbacks(type);
@@ -630,6 +649,7 @@ step(
         DROP INDEX IF EXISTS idx_feedbacks_type;
         DROP INDEX IF EXISTS idx_notifications_type;
         DROP INDEX IF EXISTS idx_notifications_message;
+        DROP INDEX IF EXISTS idx_password_reset_links_token;
         DROP INDEX IF EXISTS idx_refresh_tokens_token;
         DROP INDEX IF EXISTS idx_profiles_public_access_code;
         DROP INDEX IF EXISTS idx_profiles_label_lower;

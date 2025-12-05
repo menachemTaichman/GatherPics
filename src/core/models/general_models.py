@@ -1,8 +1,11 @@
+from cProfile import label
 from typing import Dict, Any
 import secrets
+from datetime import timedelta, datetime, timezone
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
+from src.core.services.email import send_email
 from src.core.errors import PolicyError, Forbidden, DatabaseError
 
 class GeneralModels(BaseModels):
@@ -38,8 +41,8 @@ class GeneralModels(BaseModels):
         """Check if a record exists."""
         if table == 'events':
             url = fields.get('url')
-            if url and url == 'dashboard':
-                return 'dashboard'
+            if url and url in ['dashboard', 'reset-password', 'about']:
+                return url
 
         if table == 'profiles' and 'restricted_to_event' in fields:
             within_event = super().is_exists(table, fields, exclude_id)
@@ -91,16 +94,22 @@ class GeneralModels(BaseModels):
         can_create_events = overrides.get('can_create_events', profile['can_create_events'])
         restricted_to_event = overrides.get('restricted_to_event', profile['restricted_to_event'])
         is_public = overrides.get('is_public', profile['is_public'])
-
+        email = overrides.get('email', None) if not is_public else None
+        
         incomplete_events = []
-        new_profile_id = self.add('profiles', {
+        profile_data = {
             'label': label,
             'password': password,
             'hierarchy_rank': hierarchy_rank,
             'can_create_events': can_create_events,
             'restricted_to_event': restricted_to_event,
             'is_public': is_public,
-        })
+        }
+        # Add email if provided (for non-public profiles)
+        if email is not None:
+            profile_data['email'] = email
+        
+        new_profile_id = self.add('profiles', profile_data)
         _, event_profiles = self.get_childs('profiles', profile_id, 'events')
         for event_id, event_relation in event_profiles.items():
             try:
@@ -140,19 +149,6 @@ class GeneralModels(BaseModels):
 
         return complete_delete
         
-    def get_profile_password(self, profile_id: str) -> str:
-        """Get the password for a profile."""
-        if self.db.profile_context['profile_id'] != profile_id:
-            ctx_profiles = 'profiles_ctx'
-        else:
-            ctx_profiles = 'current_profile_ctx'
-        query = f'SELECT password FROM {ctx_profiles} WHERE profile_id = %s'
-        result = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
-        if not result:
-            raise Forbidden('Profile not found')
-        
-        return result
-    
     def get_my_preferences(self) -> dict:
         """Get the preferences for a profile."""
 
@@ -365,6 +361,20 @@ class GeneralModels(BaseModels):
         query = 'SELECT profile_id FROM profiles WHERE label = %s AND password = %s'
         return self.db.execute_query(query, (label, password), return_format=ReturnFormat.VALUE)
 
+    def verify_profile_password(self, profile_id: str, password: str) -> bool:
+        """Verify if the given password matches the profile's current password.
+        
+        Args:
+            profile_id: The profile ID to verify password for
+            password: The password to verify
+            
+        Returns:
+            True if password matches, False otherwise
+        """
+        query = f'SELECT password FROM profiles WHERE profile_id = %s'
+        current_password = self.db.execute_query(query, (profile_id,), return_format=ReturnFormat.VALUE)
+        return (password == current_password) and current_password is not None and password is not None
+
     def authenticate_public_access(self, event_id: str, public_code: str) -> str:
         """Authenticate a profile by public access code.
         
@@ -431,6 +441,103 @@ class GeneralModels(BaseModels):
             params = (profile_id,)
 
         self.db.execute_query(query, params)
+    
+    # Password reset helpers
+    def request_password_reset(self, email: str, reset_url_base: str) -> bool:
+        """Request a password reset link. Sends email only if profile with email exists.
+        
+        Args:
+            email: Email address of the profile
+            reset_url_base: Base URL for the reset link (e.g., "https://example.com")
+            
+        Returns:
+            True if email was sent (profile found), False otherwise
+        """
+        query = 'SELECT profile_id, label FROM profiles WHERE email = %s'
+        profile_id, profile_label = self.db.execute_query(query, (email,), return_format=ReturnFormat.TUPLE)
+        
+        if profile_id:
+            reset_token = secrets.token_urlsafe(32)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+            query = """
+                INSERT INTO password_reset_links (profile_id, token, expires_at)
+                VALUES (%s, %s, %s)
+                RETURNING reset_id
+            """
+            self.db.execute_query(query, (profile_id, reset_token, expires_at), return_format=ReturnFormat.VALUE)
+            
+            reset_url = f"{reset_url_base.rstrip('/')}/reset-password/{reset_token}"
+            
+            send_email(
+                to=email,
+                subject='Password Reset Request',
+                body_text=f'Hello {profile_label},\n\nYou requested a password reset. Click the link below to reset your password:\n\n{reset_url}\n\nThis link will expire in 10 minutes.\n\nIf you did not request this, please ignore this email.',
+                body_html=f'''
+                    <html>
+                    <body>
+                        <p>Hello {profile_label},</p>
+                        <p>You requested a password reset. Click the link below to reset your password:</p>
+                        <p><a href="{reset_url}">{reset_url}</a></p>
+                        <p>This link will expire in 10 minutes.</p>
+                        <p>If you did not request this, please ignore this email.</p>
+                    </body>
+                    </html>
+                '''
+            )
+            return True
+        
+        return False
+
+    def validate_reset_token(self, token: str) -> tuple[str, str] | None:
+        """Validate a reset token.
+        
+        Returns:
+            profile_id, label if token is valid, None otherwise
+        """
+        query = '''
+            SELECT
+                p.profile_id,
+                p.label
+            FROM password_reset_links
+            INNER JOIN profiles p ON password_reset_links.profile_id = p.profile_id
+            WHERE token = %s
+            AND NOT used
+            AND expires_at > NOW()
+        '''
+        result = self.db.execute_query(query, (token,), return_format=ReturnFormat.TUPLE)
+        
+        if not result:
+            return None
+
+        return result
+    
+    def reset_password_with_token(self, token: str, new_password: str) -> tuple[str, str]:
+        """Reset password using reset token.
+        
+        Returns:
+            profile_id, label if successful
+        """
+        query = '''
+            SELECT
+                p.profile_id,
+                p.label
+            FROM password_reset_links
+            INNER JOIN profiles p ON password_reset_links.profile_id = p.profile_id
+            WHERE token = %s
+            AND NOT used
+            AND expires_at > NOW()
+        '''
+        profile = self.db.execute_query(query, (token,), return_format=ReturnFormat.TUPLE)
+        
+        if not profile:
+            raise Forbidden('Invalid or expired reset token')
+
+        profile_id, label = profile
+
+        # self.db.execute_query('UPDATE password_reset_links SET used = TRUE, used_at = NOW() WHERE token = %s', (token,))
+        self.db.execute_query('UPDATE profiles SET password = %s WHERE profile_id = %s', (new_password, profile_id))
+        
+        return profile_id, label
 
     # Notifications helpers
     def mark_all_my_notifications_read(self, read_at: str) -> list[str]:

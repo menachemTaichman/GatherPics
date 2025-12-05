@@ -969,24 +969,12 @@ export const profilesAPI = {
   },
   
   // Duplicate profile
-  duplicate: async (profileId) => {
-    const response = await api.post(`/api/profiles/${profileId}/duplicate`);
+  duplicate: async (profileId, overrides = {}) => {
+    const payload = overrides || {};
+    const response = await api.post(`/api/profiles/${profileId}/duplicate`, payload);
     return response.data;
   },
   
-  // Get profile password
-  getPassword: async (profileId) => {
-    const response = await api.get(`/api/profiles/${profileId}/password`);
-    return response.data;
-  },
-  
-  // Update profile password
-  updatePassword: async (profileId, password) => {
-    const response = await api.put(`/api/profiles/${profileId}/password`, {
-      password
-    });
-    return response.data;
-  },
   
   // === Accessibility Management (for ManageAccessModal) ===
   // These handle whitelist/blacklist logic based on all_images/all_albums flags
@@ -1183,6 +1171,20 @@ export const profilesAPI = {
       params.event_id = eventId;
     }
     const response = await api.put('/api/profiles/current', updates, { params });
+    return response.data;
+  },
+  
+  // Update current profile password
+  updateCurrentProfilePassword: async (currentPassword, newPassword, eventUrl = null) => {
+    const params = {};
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      params.event_id = eventId;
+    }
+    const response = await api.put('/api/profiles/current/password', {
+      current_password: currentPassword,
+      new_password: newPassword
+    }, { params });
     return response.data;
   },
   
@@ -1615,6 +1617,33 @@ export const authAPI = {
     
     const response = await api.post(`/api/events/${eventId}/public-access/${publicCode}`, {}, { 
       withCredentials: true 
+    });
+    return response.data;
+  },
+
+  // Request password reset
+  requestPasswordReset: async (email) => {
+    const response = await api.post('/api/auth/request-password-reset', {
+      email: email
+    });
+    return response.data;
+  },
+
+  // Validate reset token and get label
+  validateResetToken: async (token) => {
+    const response = await api.post('/api/auth/validate-reset-token', {
+      token: token
+    });
+    return response.data;
+  },
+
+  // Reset password with token
+  resetPassword: async (token, newPassword) => {
+    const response = await api.post('/api/auth/reset-password', {
+      token: token,
+      new_password: newPassword
+    }, {
+      withCredentials: true
     });
     return response.data;
   }

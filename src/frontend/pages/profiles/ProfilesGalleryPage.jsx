@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI, getEventUrlById } from '../../utils/apiService';
@@ -51,6 +51,9 @@ export default function ProfilesGalleryPage() {
   const [publicAccessFlags, setPublicAccessFlags] = useState({});
   const publicAccessFetchesRef = useRef(new Set());
   const [duplicatingProfileId, setDuplicatingProfileId] = useState(null);
+  const [showDuplicateEmailModal, setShowDuplicateEmailModal] = useState(false);
+  const [duplicateEmail, setDuplicateEmail] = useState('');
+  const [profileToDuplicate, setProfileToDuplicate] = useState(null);
 
   const [sortBy, setSortBy] = useState(() => getPreference('ProfilesGallery.sortBy', 'hierarchy_rank'));
   const [sortDir, setSortDir] = useState(() => getPreference('ProfilesGallery.sortDir', 'desc'));
@@ -402,19 +405,38 @@ export default function ProfilesGalleryPage() {
   const handleDuplicateProfile = async (profile) => {
     if (!profile || !profile.id) return;
     
-    setDuplicatingProfileId(profile.id);
+    // Check if profile is non-public (email required)
+    const isPublic = Boolean(profile.is_public);
+    if (!isPublic) {
+      // Show popup for email input
+      setProfileToDuplicate(profile);
+      setDuplicateEmail('');
+      setShowDuplicateEmailModal(true);
+      return;
+    }
+    
+    // For public profiles, duplicate directly (no email needed)
+    await performDuplicate(profile.id, null);
+  };
+
+  const performDuplicate = async (profileId, email) => {
+    if (!profileId) return;
+    
+    setDuplicatingProfileId(profileId);
     try {
-      const result = await profilesAPI.duplicate(profile.id);
+      // Pass email if provided (for non-public profiles)
+      const result = await profilesAPI.duplicate(profileId, email ? { email } : undefined);
       
       // Show success toast
       const incompleteCount = result.incomplete_events?.length || 0;
+      const profileLabel = profileToDuplicate?.label || 'Profile';
       if (incompleteCount > 0) {
         showToast(
           `Profile duplicated successfully. Note: ${incompleteCount} event${incompleteCount === 1 ? '' : 's'} could not be fully duplicated due to permissions.`,
           'warning'
         );
       } else {
-        showToast(`Profile "${profile.label}" duplicated successfully`, 'success');
+        showToast(`Profile "${profileLabel}" duplicated successfully`, 'success');
       }
       
       // Fetch the new profile and open it in the modal
@@ -447,7 +469,22 @@ export default function ProfilesGalleryPage() {
       showToast(errorMsg, 'error');
     } finally {
       setDuplicatingProfileId(null);
+      setShowDuplicateEmailModal(false);
+      setProfileToDuplicate(null);
+      setDuplicateEmail('');
     }
+  };
+
+  const handleConfirmDuplicateEmail = async () => {
+    if (!profileToDuplicate) return;
+    
+    const emailValue = duplicateEmail.trim();
+    if (!emailValue) {
+      showToast('Email is required for non-public profiles', 'error');
+      return;
+    }
+    
+    await performDuplicate(profileToDuplicate.id, emailValue);
   };
 
   const handleDeleteProfile = (profile) => {
@@ -1199,6 +1236,82 @@ export default function ProfilesGalleryPage() {
           caption="This action cannot be undone."
         />
       )}
+
+      <AnimatePresence>
+        {showDuplicateEmailModal && profileToDuplicate && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-md"
+            >
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-gray-900">Duplicate Profile</h2>
+                  <button
+                    onClick={() => {
+                      setShowDuplicateEmailModal(false);
+                      setProfileToDuplicate(null);
+                      setDuplicateEmail('');
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="px-6 py-4">
+                <p className="text-sm text-gray-600 mb-4">
+                  Enter email for the duplicated profile "{profileToDuplicate.label}":
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={duplicateEmail}
+                    onChange={(e) => setDuplicateEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && duplicateEmail.trim()) {
+                        handleConfirmDuplicateEmail();
+                      } else if (e.key === 'Escape') {
+                        setShowDuplicateEmailModal(false);
+                        setProfileToDuplicate(null);
+                        setDuplicateEmail('');
+                      }
+                    }}
+                    autoFocus
+                    className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter email (required)"
+                  />
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDuplicateEmailModal(false);
+                    setProfileToDuplicate(null);
+                    setDuplicateEmail('');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDuplicateEmail}
+                  disabled={!duplicateEmail.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Duplicate
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {showRemoveFromEventModal && profileToRemoveFromEvent && (
         <ConfirmDelete

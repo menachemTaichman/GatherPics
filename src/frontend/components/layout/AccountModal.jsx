@@ -32,7 +32,7 @@ export default function AccountModal({ hideButton = false }) {
   // Route structure: /:eventUrl/* or /:eventUrl
   const eventUrlFromParams = params.eventUrl;
   const eventUrlFromPath = location.pathname.split('/').filter(Boolean)[0];
-  const eventUrl = eventUrlFromParams || (eventUrlFromPath && !['dashboard', 'about'].includes(eventUrlFromPath) ? eventUrlFromPath : undefined);
+  const eventUrl = eventUrlFromParams || (eventUrlFromPath && !['dashboard', 'reset-password', 'about'].includes(eventUrlFromPath) ? eventUrlFromPath : undefined);
   
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
@@ -730,8 +730,6 @@ export default function AccountModal({ hideButton = false }) {
         <ChangePasswordModal
           isOpen={showChangePasswordModal}
           onClose={() => setShowChangePasswordModal(false)}
-          profileId={currentProfile.id || currentProfile.profile_id}
-          profileLabel={currentProfile.label}
           eventUrl={eventUrl}
         />
       )}

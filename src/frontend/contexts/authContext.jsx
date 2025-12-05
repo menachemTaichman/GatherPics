@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
           try {
             // Try to get event URL from current location path
             // Skip reserved paths that are not event URLs
-            const reservedPaths = ['dashboard'];
+            const reservedPaths = ['dashboard', 'reset-password', 'about'];
             const pathParts = window.location.pathname.split('/').filter(Boolean);
             const firstPathSegment = pathParts[0] || null;
             const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 
@@ -95,6 +95,51 @@ export function AuthProvider({ children }) {
     };
   }, [clearData]);
 
+  // Listen for auth:login events (from password reset, etc.)
+  useEffect(() => {
+    const handleAuthLogin = async () => {
+      // Verify token exists and is valid
+      if (!jwtService.hasToken()) {
+        return;
+      }
+
+      try {
+        // Verify token is still valid by trying to refresh
+        await jwtService.refresh();
+        
+        // Fetch current profile with event context
+        try {
+          const reservedPaths = ['dashboard', 'reset-password', 'about'];
+          const pathParts = window.location.pathname.split('/').filter(Boolean);
+          const firstPathSegment = pathParts[0] || null;
+          const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 
+            ? firstPathSegment 
+            : null;
+          
+          await profilesAPI.getCurrentProfile(eventUrl);
+          // currentProfile updated via changes in response interceptor
+        } catch (error) {
+          console.error('Failed to fetch current profile:', error);
+        }
+        
+        // Update auth state
+        setIsAuthenticated(true);
+        setShowLoginModal(false);
+        
+        // Load preferences from API
+        await initializePreferences(true);
+      } catch (error) {
+        console.error('Failed to handle auth:login event:', error);
+      }
+    };
+
+    window.addEventListener('auth:login', handleAuthLogin);
+    
+    return () => {
+      window.removeEventListener('auth:login', handleAuthLogin);
+    };
+  }, []);
+
   // Listen for auth events from other tabs
   useEffect(() => {
     const handleStorageChange = (e) => {
@@ -133,7 +178,7 @@ export function AuthProvider({ children }) {
         // Token is already in localStorage (shared), fetch fresh profile with event context
         (async () => {
           try {
-            const reservedPaths = ['dashboard'];
+            const reservedPaths = ['dashboard', 'reset-password', 'about'];
             const pathParts = window.location.pathname.split('/').filter(Boolean);
             const firstPathSegment = pathParts[0] || null;
             const eventUrl = (firstPathSegment && !reservedPaths.includes(firstPathSegment)) 

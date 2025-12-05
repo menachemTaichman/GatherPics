@@ -4,12 +4,14 @@ import { X, Lock, User, AlertCircle, Home } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
+import RequestPasswordResetModal from './RequestPasswordResetModal';
 
 export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAutofilled, setIsAutofilled] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
   const labelInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -190,7 +192,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div key="login-modal-content">
           {/* Backdrop with blur */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -307,6 +309,15 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                   )}
                 </button>
 
+                {/* Forgot Password Link */}
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  className="w-full text-sm text-blue-600 hover:text-blue-700 text-center mt-2"
+                >
+                  Forgot password or need to set one up?
+                </button>
+
                 {/* Go to Home Link - shown on protected pages */}
                 {isOnProtectedPage && (
                   <Link
@@ -320,7 +331,15 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
               </form>
             </motion.div>
           </div>
-        </>
+        </div>
+      )}
+      
+      {showResetModal && (
+        <RequestPasswordResetModal
+          key="request-password-reset-modal"
+          isOpen={showResetModal}
+          onClose={() => setShowResetModal(false)}
+        />
       )}
     </AnimatePresence>
   );

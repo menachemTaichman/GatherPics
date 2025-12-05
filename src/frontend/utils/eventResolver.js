@@ -45,12 +45,20 @@ async function fetchEventByUrl(eventUrl) {
   return requestPromise;
 }
 
+// Reserved routes that should not be treated as event URLs
+const RESERVED_ROUTES = ['dashboard', 'reset-password', 'about'];
+
 /**
  * Resolve event id from event URL
  * @param {string} eventUrl - The event URL (e.g., 'noga-and-menachem-wedding')
  * @returns {string|null} - The event id or null if not found
  */
 export async function resolveEventId(eventUrl) {
+  // Check if this is a reserved route
+  if (RESERVED_ROUTES.includes(eventUrl)) {
+    return null;
+  }
+  
   // Check cache first
   const now = Date.now();
   const cachedTimestamp = eventCacheTimestamp.get(eventUrl);

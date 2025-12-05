@@ -320,8 +320,6 @@ steps = [
 
             UPDATE profiles SET
                 label = NEW.label,
-                email = NEW.email,
-                password = NEW.password,
                 hierarchy_rank = NEW.hierarchy_rank,
                 can_create_events = NEW.can_create_events,
                 restricted_to_event = NEW.restricted_to_event,
@@ -1964,8 +1962,8 @@ steps = [
         CREATE OR REPLACE FUNCTION trg_prevent_reserved_event_urls()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NEW.url = 'dashboard' THEN
-                RAISE EXCEPTION 'Policy error: The URL "dashboard" is reserved and cannot be used for events';
+            IF NEW.url IN ('dashboard', 'reset-password', 'about') THEN
+                RAISE EXCEPTION 'Policy error: The URL "%" is reserved and cannot be used for events', NEW.url;
             END IF;
             RETURN NEW;
         END;
@@ -2020,6 +2018,32 @@ steps = [
                 AND (TG_OP = 'INSERT' OR profile_id <> exclude_id)
             ) THEN
                 RAISE EXCEPTION 'Policy error: Label with this password already exists';
+            END IF;
+            
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Function to ensure profiles email required
+        CREATE OR REPLACE FUNCTION trg_ensure_profiles_email_required()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            exclude_id UUID := NULL;
+        BEGIN
+            IF COALESCE(NEW.email, '') = '' AND NOT NEW.is_public THEN
+                RAISE EXCEPTION 'Policy error: Email is required for non-public profiles';
+            END IF;
+            
+            IF TG_OP = 'UPDATE' THEN
+                exclude_id := OLD.profile_id;
+            END IF;
+            
+            IF NEW.email IS NOT NULL AND EXISTS (
+                SELECT 1 FROM profiles
+                WHERE LOWER(email) = LOWER(NEW.email)
+                AND (TG_OP = 'INSERT' OR profile_id <> exclude_id)
+            ) THEN
+                RAISE EXCEPTION 'Policy error: Email already exists';
             END IF;
             
             RETURN NEW;
@@ -2098,6 +2122,7 @@ steps = [
         """
         DROP FUNCTION IF EXISTS trg_ensure_defaults_in_event_insert() CASCADE;
         DROP FUNCTION IF EXISTS trg_profiles_insert_default_preferences() CASCADE;
+        DROP FUNCTION IF EXISTS trg_ensure_profiles_email_required() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_profiles_unique() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_events_image_size_limit_valid() CASCADE;
         DROP FUNCTION IF EXISTS trg_ensure_events_images_limit_valid() CASCADE;
@@ -2147,6 +2172,16 @@ steps = [
             BEFORE UPDATE ON profiles
             FOR EACH ROW EXECUTE FUNCTION trg_ensure_profiles_unique();
 
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_email_required_insert ON profiles;
+        CREATE TRIGGER trg_ensure_profiles_email_required_insert
+            BEFORE INSERT ON profiles
+            FOR EACH ROW EXECUTE FUNCTION trg_ensure_profiles_email_required();
+
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_email_required_update ON profiles;
+        CREATE TRIGGER trg_ensure_profiles_email_required_update
+            BEFORE UPDATE ON profiles
+            FOR EACH ROW EXECUTE FUNCTION trg_ensure_profiles_email_required();
+
         DROP TRIGGER IF EXISTS trg_profiles_insert_default_preferences ON profiles;
         CREATE TRIGGER trg_profiles_insert_default_preferences
             AFTER INSERT ON profiles
@@ -2160,6 +2195,8 @@ steps = [
         """
         DROP TRIGGER IF EXISTS trg_ensure_defaults_in_event_insert ON events;
         DROP TRIGGER IF EXISTS trg_profiles_insert_default_preferences ON profiles;
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_email_required_update ON profiles;
+        DROP TRIGGER IF EXISTS trg_ensure_profiles_email_required_insert ON profiles;
         DROP TRIGGER IF EXISTS trg_ensure_profiles_unique_update ON profiles;
         DROP TRIGGER IF EXISTS trg_ensure_profiles_unique_insert ON profiles;
         DROP TRIGGER IF EXISTS trg_ensure_events_image_size_limit_valid_update ON events;

@@ -5,6 +5,7 @@ import { LayoutDashboard, LogIn } from 'lucide-react';
 import { TopNavigationBar } from '../components/layout';
 import { LoadingSpinner } from '../components/common';
 import { LoginModal } from '../components/auth';
+import { ResetPasswordModal } from '../components/profiles';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/authContext';
 import { getCurrentProfile } from '../utils/profileService';
@@ -21,6 +22,8 @@ export default function HomePage() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const { requireAuth, isAuthenticated, isLoading: authLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [resetToken, setResetToken] = useState(null);
   const { t } = useTranslation();
   const currentProfile = getCurrentProfile();
   const eventsFromStore = useEventsGeneralList();
@@ -36,11 +39,39 @@ export default function HomePage() {
     document.title = APP_CONFIG.name;
   }, []);
 
-  // Clear events cache and trigger refetch when auth state changes
+  // Listen for reset password modal open event
+  useEffect(() => {
+    const handleResetPasswordOpen = (event) => {
+      const token = event?.detail?.token || sessionStorage.getItem('resetPasswordToken');
+      if (token) {
+        setResetToken(token);
+        setShowResetPasswordModal(true);
+        // Clear token from sessionStorage after use
+        sessionStorage.removeItem('resetPasswordToken');
+      }
+    };
+
+    // Check for token in sessionStorage on mount (in case event was missed)
+    const storedToken = sessionStorage.getItem('resetPasswordToken');
+    if (storedToken) {
+      handleResetPasswordOpen({ detail: { token: storedToken } });
+    }
+
+    // Listen for event (use capture phase to catch it early)
+    window.addEventListener('reset-password:open', handleResetPasswordOpen, true);
+    return () => {
+      window.removeEventListener('reset-password:open', handleResetPasswordOpen, true);
+    };
+  }, []);
+
+  const handleCloseResetPasswordModal = () => {
+    setShowResetPasswordModal(false);
+    setResetToken(null);
+  };
+
+  // Trigger refetch when auth state changes
   useEffect(() => {
     const handleAuthChange = () => {
-      eventsCache = null;
-      eventsFetchPromise = null;
       setFetchTrigger(prev => prev + 1);
     };
 
@@ -361,6 +392,13 @@ export default function HomePage() {
         onClose={closeLoginModal}
         onLogin={login}
         error={loginError}
+      />
+
+      {/* Reset Password Modal */}
+      <ResetPasswordModal
+        isOpen={showResetPasswordModal}
+        onClose={handleCloseResetPasswordModal}
+        token={resetToken}
       />
     </>
   );

@@ -157,8 +157,9 @@ def resolve_event():
     if not url:
         return jsonify({"error": "url is required"}), 400
     
-    # Check for reserved URLs (like 'dashboard') before checking event URLs
-    if url == 'dashboard':
+    # Check for reserved URLs before checking event URLs
+    reserved_urls = ['dashboard', 'reset-password', 'about']
+    if url in reserved_urls:
         return jsonify({"error": "Event not found"}), 404
     
     gm = get_general_models()

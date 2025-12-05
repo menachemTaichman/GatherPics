@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation
+from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, Forbidden
 from src.backend.validators import get_input, get_multiple_inputs, get_query_param, validate_path_param
 
 profile_bp = Blueprint('profiles', __name__)
@@ -46,6 +46,7 @@ def create_profile():
     general_models = get_general_models()
 
     data = get_multiple_inputs(['label', 'email', 'hierarchy_rank', 'password', 'can_create_events', 'is_public'])
+    data['password'] = general_models.generate_unique_password(data['label'])
 
     profile_id = general_models.add('profiles', data)
     changes = [{
@@ -61,7 +62,9 @@ def duplicate_profile(profile_id):
     """Duplicate a general profile."""
     profile_id = validate_path_param('profile_id', profile_id)
     general_models = get_general_models()
-    new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id)
+    overrides = get_multiple_inputs(['email'])
+    
+    new_profile_id, label, password, incomplete_events = general_models.duplicate_profile(profile_id, overrides)
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
@@ -163,23 +166,6 @@ def check_profile_name():
 
     return jsonify({"conflict": bool(conflict_profile_id)})
 
-@profile_bp.route("/api/profiles/<profile_id>/password", methods=["GET"])
-@require_auth
-def get_profile_password(profile_id):
-    """Get profile password."""
-    profile_id = validate_path_param('profile_id', profile_id)
-    general_models = get_general_models()
-    return jsonify({"password": general_models.get_profile_password(profile_id)})
-
-@profile_bp.route("/api/profiles/<profile_id>/password", methods=["PUT"])
-@require_auth
-def update_profile_password(profile_id):
-    """Update profile password."""
-    profile_id = validate_path_param('profile_id', profile_id)
-    general_models = get_general_models()
-    password = get_input('password', required=True)
-    general_models.edit('profiles', profile_id, {'password': password})
-    return jsonify({"success": True})
 
 # ========================================
 # EVENT PROFILE ROUTES
@@ -363,9 +349,36 @@ def update_current_profile():
     event_id = request.args.get('event_id', None)
     profile_id = get_current_profile_id()
     general_models = get_general_models()
-    data = get_multiple_inputs(['label', 'email', 'password'])
+    data = get_multiple_inputs(['label', 'email'])
     if data:
         general_models.edit('current_profile', profile_id, data)
+
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': general_models.get_current_profile(event_id)
+        }
+    }]
+    return jsonify({"success": True, "changes": changes})
+
+@profile_bp.route("/api/profiles/current/password", methods=["PUT"])
+@require_auth
+def update_current_profile_password():
+    """Update the current profile password."""
+    event_id = request.args.get('event_id', None)
+    profile_id = get_current_profile_id()
+    general_models = get_general_models()
+    
+    current_password = get_input('current_password', required=True)
+    new_password = get_input('new_password', required=True)
+    
+    # Verify current password
+    if not general_models.verify_profile_password(profile_id, current_password):
+        raise Forbidden("Current password is incorrect")
+    
+    # Update password
+    general_models.edit('current_profile', profile_id, {'password': new_password})
 
     changes = [{
         'type': 'UPSERT',
@@ -383,27 +396,6 @@ def get_groups_to_request_access(event_id):
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     return jsonify({"groups": event.models.get_groups_to_request_access()})
-
-# @profile_bp.route("/api/profiles/current/password", methods=["GET"])
-# @require_auth
-# def get_current_profile_password():
-#     """Get the current profile password."""
-#     profile_id = get_current_profile_id()
-#     general_models = get_general_models()
-#     return jsonify({"password": general_models.get_profile_password(profile_id)})
-
-# @profile_bp.route("/api/profiles/current/password", methods=["PUT"])
-# @require_auth
-# def update_current_profile_password():
-#     """Update the current profile password."""
-#     profile_id = get_current_profile_id()
-#     general_models = get_general_models()
-#     password = get_input('password', required=True)
-#     from src.core.errors import Forbidden
-#     print('Test error with password: ' + password)
-#     raise Forbidden('Test error with password: ' + password)
-#     general_models.edit('current_profile', profile_id, {'password': password})
-#     return jsonify({"success": True})
 
 # ========================================
 # ACCESS MANAGEMENT
@@ -574,7 +566,6 @@ def _update_profile(profile_id: str, event_id: str | None = None):
         'label',
         'hierarchy_rank',
         'password',
-        'email',
         'is_public',
         'restricted_to_event',
         'can_create_events',

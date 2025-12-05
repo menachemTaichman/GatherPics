@@ -6,9 +6,8 @@ from flask_jwt_extended import (
 )
 from datetime import timedelta, datetime, timezone
 import secrets
-import traceback
 
-from src.backend.helpers import get_general_models
+from src.backend.helpers import get_general_models, get_frontend_url
 from src.backend.validators import get_input, validate_path_param
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
@@ -149,3 +148,37 @@ def authenticate_public_access(event_id, public_code):
     
     return create_auth_response(access_token, profile_id)
 
+@auth_bp.route("/auth/request-password-reset", methods=["POST"])
+def request_password_reset():
+    """Request a password reset link. Sends email only if profile with email exists."""
+    email = get_input('email', required=True)
+    
+    general_models = get_general_models()
+    general_models.request_password_reset(email, get_frontend_url())
+    
+    return jsonify({"success": True, "message": "If an account with that email exists, a password reset link has been sent."})
+
+@auth_bp.route("/auth/validate-reset-token", methods=["POST"])
+def validate_reset_token():
+    """Validate reset token and return label."""
+    token = get_input('token', required=True)
+    
+    general_models = get_general_models()
+    profile = general_models.validate_reset_token(token)
+
+    label = profile[1] if profile else None
+    
+    return jsonify({"success": True, "label": label})
+
+@auth_bp.route("/auth/reset-password", methods=["POST"])
+def reset_password():
+    """Reset password using reset token and return refresh token."""
+    token = get_input('token', required=True)
+    new_password = get_input('new_password', required=True)
+    
+    general_models = get_general_models()    
+    profile_id, label = general_models.reset_password_with_token(token, new_password)
+    
+    access_token = create_access_token(identity=profile_id)
+    
+    return create_auth_response(access_token, profile_id, expires_days=30)

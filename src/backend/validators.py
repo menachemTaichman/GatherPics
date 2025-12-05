@@ -57,6 +57,8 @@ FIELD_VALIDATORS = {
     'preference_key': TypeAdapter(Annotated[str, Field(max_length=100)]),
     'preference_value': TypeAdapter(Annotated[str, Field(max_length=2000)]),
     'password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
+    'current_password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
+    'new_password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
     'new_group_name': TypeAdapter(Annotated[Optional[str], Field(None, max_length=200)]),
     'entity_type': TypeAdapter(Annotated[Optional[str], Field(None, max_length=50)]),
     'quality': TypeAdapter(Annotated[Optional[str], Field(None, max_length=20)]),
