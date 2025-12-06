@@ -397,10 +397,12 @@ steps = [
             e.*,
             (ep.profile_id IS NOT NULL) AS is_editable
         FROM events e
-        LEFT JOIN events_profiles ep ON e.event_id = ep.event_id
+        LEFT JOIN events_profiles ep ON
+            e.event_id = ep.event_id
+            AND ep.profile_id = cur_profile_uuid('profile_id')
         WHERE
             e.is_public
-            OR ep.profile_id = cur_profile_uuid('profile_id');
+            OR ep.profile_id IS NOT NULL;
 
         -- context views by current profile and event
 
