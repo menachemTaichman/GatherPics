@@ -8,12 +8,16 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_BASE || 'http://localhost:5000',
         changeOrigin: true,
+        cookieDomainRewrite: '',  // Remove domain restriction for cookies
+        secure: false,  // Allow self-signed certificates in dev
       },
       '/images': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_BASE || 'http://localhost:5000',
         changeOrigin: true,
+        cookieDomainRewrite: '',  // Remove domain restriction for cookies
+        secure: false,  // Allow self-signed certificates in dev
       }
     }
   }

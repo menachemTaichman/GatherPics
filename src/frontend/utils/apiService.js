@@ -4,7 +4,13 @@ import { resolveEventId } from './eventResolver';
 import jwtService from './jwtService';
 
 // API base URL - centralized configuration
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+// In development, always use empty string (relative URLs) so Vite proxy handles it and cookies work
+// The Vite proxy will forward requests to the backend, and cookies work because it's same-origin from browser's perspective
+// In production, use the full URL
+const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development';
+const API_BASE = isDev 
+  ? ''  // Use relative URLs in dev to go through Vite proxy (cookies work across ports)
+  : (import.meta.env.VITE_API_BASE || 'http://localhost:5000');
 
 // Create axios instance with default config
 const api = axios.create({

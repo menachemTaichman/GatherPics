@@ -37,8 +37,12 @@ app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
-app.config['JWT_COOKIE_SAMESITE'] = 'Lax'
-app.config['JWT_COOKIE_SECURE'] = False  # True in production over HTTPS
+# For development: don't set SameSite (defaults to Lax, works with proxy)
+# In production, use 'Lax' with Secure=True
+is_production = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
+if is_production:
+    app.config['JWT_COOKIE_SAMESITE'] = 'Lax'
+app.config['JWT_COOKIE_SECURE'] = is_production  # True in production over HTTPS
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Simplify for now
 jwt = JWTManager(app)
 
@@ -61,25 +65,31 @@ app.register_blueprint(settings_bp)
 from src.backend.error_handlers import register_error_handlers
 register_error_handlers(app)
 
-# Production build serving
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    """Serve static assets from dist/assets/ folder"""
-    return send_file(os.path.join(DIST_DIR, 'assets', filename))
+# Production build serving - only register if DIST_DIR exists and we're in production
+IS_PRODUCTION = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
+if IS_PRODUCTION and DIST_DIR and os.path.exists(DIST_DIR) and os.path.exists(os.path.join(DIST_DIR, 'index.html')):
+    @app.route('/assets/<path:filename>')
+    def serve_assets(filename):
+        """Serve static assets from dist/assets/ folder"""
+        return send_file(os.path.join(DIST_DIR, 'assets', filename))
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_production(path):
-    """Serve the production build - catch-all for client-side routing"""
-    if path.startswith('api/'):
-        abort(404)
-    
-    file_path = os.path.join(DIST_DIR, path)
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return send_file(file_path)
-    
-    return send_file(os.path.join(DIST_DIR, 'index.html'))
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_production(path):
+        """Serve the production build - catch-all for client-side routing"""
+        if path.startswith('api/'):
+            abort(404)
+        
+        file_path = os.path.join(DIST_DIR, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_file(file_path)
+        
+        return send_file(os.path.join(DIST_DIR, 'index.html'))
 
 if __name__ == "__main__":
-    app.run(debug=app.config['DEBUG'])
+    # Allow access from network (for mobile devices)
+    # Use environment variable or default to 0.0.0.0 to listen on all interfaces
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    port = int(os.getenv('FLASK_PORT', '5000'))
+    app.run(host=host, port=port, debug=app.config['DEBUG'])
 

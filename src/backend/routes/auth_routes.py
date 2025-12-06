@@ -6,6 +6,7 @@ from flask_jwt_extended import (
 )
 from datetime import timedelta, datetime, timezone
 import secrets
+import os
 
 from src.backend.helpers import get_general_models, get_frontend_url
 from src.backend.validators import get_input, validate_path_param
@@ -52,14 +53,19 @@ def create_auth_response(access_token: str, profile_id: str, expires_days: int =
     set_access_cookies(response, access_token)
     
     # Set refresh token as httpOnly cookie
-    response.set_cookie(
-        'refresh_token',
-        refresh_token_db,
-        httponly=True,
-        secure=False,  # True in production
-        samesite='Lax',
-        max_age=expires_days * 24 * 60 * 60  # Convert days to seconds
-    )
+    # For development: don't set SameSite (defaults to Lax) but works with proxy
+    # In production, use 'Lax' with Secure=True
+    is_production = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
+    cookie_kwargs = {
+        'httponly': True,
+        'secure': is_production,  # True in production (HTTPS required)
+        'max_age': expires_days * 24 * 60 * 60,  # Convert days to seconds
+    }
+    # Only set SameSite in production (in dev, let it default to Lax which works with proxy)
+    if is_production:
+        cookie_kwargs['samesite'] = 'Lax'
+    # Don't set domain - let browser use default (works with IP addresses)
+    response.set_cookie('refresh_token', refresh_token_db, **cookie_kwargs)
     
     return response
 
@@ -126,14 +132,15 @@ def logout():
     unset_jwt_cookies(response)
     
     # Clear refresh token cookie
-    response.set_cookie(
-        'refresh_token',
-        '',
-        httponly=True,
-        secure=False,
-        samesite='Lax',
-        max_age=0
-    )
+    is_production = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
+    cookie_kwargs = {
+        'httponly': True,
+        'secure': is_production,
+        'max_age': 0,
+    }
+    if is_production:
+        cookie_kwargs['samesite'] = 'Lax'
+    response.set_cookie('refresh_token', '', **cookie_kwargs)
     
     return response
 
