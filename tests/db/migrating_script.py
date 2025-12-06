@@ -8,6 +8,7 @@ This script:
 5. Runs Yoyo migrations to create schema
 6. Migrates data from PostgreSQL (default) or SQLite (if --from-sqlite flag is passed)
 7. Converts timestamps from SQLite timezone to Israel timezone (Asia/Jerusalem) when migrating from SQLite
+8. Hashes plain text passwords from SQLite database (passwords from PostgreSQL are assumed to already be hashed)
 
 Schema Change Handling:
 - Columns removed from target: Automatically excluded from migration
@@ -54,6 +55,18 @@ try:
 except ImportError:
     HAS_DATEUTIL = False
     print("Warning: python-dateutil not installed. Using UTC for timezone conversions.")
+
+# Try to import password hashing utility
+try:
+    # Add the project root to the path to import password_utils
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from src.core.utils.password_utils import hash_password
+    HAS_PASSWORD_UTILS = True
+except ImportError:
+    HAS_PASSWORD_UTILS = False
+    print("Warning: Password hashing utility not available. Passwords will not be hashed during migration.")
 
 # Load environment variables
 load_dotenv()
@@ -359,6 +372,63 @@ def convert_boolean_value(value, field_name, table_name):
             return None
         return bool(value)  # Convert 0/1 to False/True
     return value
+
+def is_password_hashed(password):
+    """Check if a password is already hashed.
+    
+    Werkzeug password hashes typically start with prefixes like:
+    - pbkdf2:sha256:...
+    - scrypt:...
+    - sha256:...
+    
+    Args:
+        password: Password string to check
+        
+    Returns:
+        True if password appears to be hashed, False otherwise
+    """
+    if not password or not isinstance(password, str):
+        return False
+    
+    # Common Werkzeug hash prefixes
+    hash_prefixes = ['pbkdf2:', 'scrypt:', 'sha256:', 'argon2:']
+    return any(password.startswith(prefix) for prefix in hash_prefixes)
+
+def convert_password_value(value, field_name, table_name):
+    """Convert plain text password to hashed password.
+    
+    Only hashes passwords from SQLite source (assumes PostgreSQL passwords are already hashed).
+    Skips hashing if password is already hashed.
+    
+    Args:
+        value: Password value to convert
+        field_name: Name of the field (should be 'password')
+        table_name: Name of the table (should be 'profiles')
+        
+    Returns:
+        Hashed password if conversion needed, original value otherwise
+    """
+    if value is None:
+        return None
+    
+    # Only hash passwords in the profiles table
+    if table_name != 'profiles' or field_name != 'password':
+        return value
+    
+    # Only hash if password utility is available
+    if not HAS_PASSWORD_UTILS:
+        return value
+    
+    # Check if already hashed
+    if isinstance(value, str) and is_password_hashed(value):
+        return value
+    
+    # Hash the plain text password
+    try:
+        return hash_password(value)
+    except Exception as e:
+        print(f"    Warning: Failed to hash password in {table_name}.{field_name}: {e}")
+        return value  # Return original value if hashing fails
 
 def convert_timestamp_value(value, field_name, table_name):
     """Convert SQLite timestamp to PostgreSQL timestamp with timezone conversion.
@@ -743,8 +813,10 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                     else:
                         converted_value = value
                 else:
-                    # First convert boolean, then timestamp (timestamp conversion handles non-timestamp values)
+                    # For SQLite source: convert boolean, password, then timestamp
+                    # Order matters: password conversion should happen before timestamp (in case password contains timestamp-like strings)
                     converted_value = convert_boolean_value(value, col_name, table_name)
+                    converted_value = convert_password_value(converted_value, col_name, table_name)
                     converted_value = convert_timestamp_value(converted_value, col_name, table_name)
                 converted_row.append(converted_value)
         converted_rows.append(tuple(converted_row))
