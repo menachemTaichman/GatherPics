@@ -86,8 +86,13 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const currentRequests = isAuthenticated ? storeRequests : placeholderRequests;
 
   const handleViewRequest = (request, index) => {
+    // Find the index in the sorted array to ensure correct navigation
+    const requestId = request.access_request_id || request.id;
+    const actualIndex = sortedRequests.findIndex(r => (r.access_request_id || r.id) === requestId);
+    const finalIndex = actualIndex >= 0 ? actualIndex : (index >= 0 ? index : 0);
+    
     openViewer({
-      index,
+      index: finalIndex,
       sortBy,
       sortOrder: sortDir,
       filterStatus,
@@ -324,6 +329,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
         <div className="w-full px-8 py-8">
           <ScrollableTable
             style={{ maxHeight: 'calc(100vh - 20rem)' }}
+            onRowClick={handleViewRequest}
             columns={[
               {
                 key: 'access_request_id',
@@ -433,15 +439,10 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 renderCell: (request, idx) => (
                   <div className="flex items-center justify-end gap-2">
                     <button
-                      onClick={() => handleViewRequest(request, idx)}
-                      className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                      title={t('requestsGallery.viewDetails')}
-                      aria-label={t('requestsGallery.viewDetails')}
-                    >
-                      <Eye className="w-4 h-4 text-blue-600" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteRequest(request)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteRequest(request);
+                      }}
                       className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                       title={t('requestsGallery.deleteRequest')}
                       aria-label={t('requestsGallery.deleteRequest')}

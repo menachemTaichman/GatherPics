@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, Trash } from 'lucide-react';
+import { MessageSquare, Trash2, CheckCircle, XCircle, Clock, Trash } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { feedbacksAPI } from '../../utils/apiService';
@@ -85,8 +85,13 @@ export default function FeedbacksGalleryPage() {
   const currentFeedbacks = isAuthenticated ? storeFeedbacks : placeholderFeedbacks;
 
   const handleViewFeedback = (feedback, index) => {
+    // Find the index in the sorted array to ensure correct navigation
+    const feedbackId = feedback.feedback_id || feedback.id;
+    const actualIndex = sortedFeedbacks.findIndex(f => (f.feedback_id || f.id) === feedbackId);
+    const finalIndex = actualIndex >= 0 ? actualIndex : (index >= 0 ? index : 0);
+    
     openViewer({
-      index,
+      index: finalIndex,
       sortBy,
       sortOrder: sortDir,
       filterStatus,
@@ -289,6 +294,7 @@ export default function FeedbacksGalleryPage() {
       <div className="flex-1 min-h-0 w-full px-8 pt-6 pb-8">
         <ScrollableTable
           style={{ maxHeight: 'calc(100vh - 22rem)' }}
+          onRowClick={handleViewFeedback}
           columns={[
             {
               key: 'feedback_id',
@@ -375,15 +381,10 @@ export default function FeedbacksGalleryPage() {
               renderCell: (feedback, index) => (
                 <div className="flex items-center justify-end gap-2">
                   <button
-                    onClick={() => handleViewFeedback(feedback, index)}
-                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                    title={t('feedbacksGallery.viewDetails')}
-                    aria-label={t('feedbacksGallery.viewDetails')}
-                  >
-                    <Eye className="w-4 h-4 text-blue-600" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFeedback(feedback)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFeedback(feedback);
+                    }}
                     className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                     title={t('feedbacksGallery.delete')}
                     aria-label={t('feedbacksGallery.delete')}

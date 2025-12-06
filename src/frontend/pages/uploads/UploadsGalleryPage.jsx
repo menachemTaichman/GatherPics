@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
-import { Upload, Eye, Trash2, Plus } from 'lucide-react';
+import { Upload, Trash2, Plus } from 'lucide-react';
 import { uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
@@ -149,6 +149,9 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
             <>
               <ScrollableTable
                 style={{ maxHeight: 'calc(100vh - 20rem)' }}
+                onRowClick={(upload) => {
+                  navigate(`/${eventUrl}/uploads/${upload.id}`);
+                }}
                 columns={[
                   {
                     key: 'id',
@@ -231,16 +234,11 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                     align: 'right',
                     renderCell: (upload) => (
                       <div className="flex items-center justify-end gap-2">
-                        <Link
-                          to={`/${eventUrl}/uploads/${upload.id}`}
-                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors inline-flex"
-                          title={t('uploadsGallery.viewUpload')}
-                          aria-label={t('uploadsGallery.viewUpload')}
-                        >
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        </Link>
                         <button
-                          onClick={() => setDeleteUpload(upload)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteUpload(upload);
+                          }}
                           className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                           title={t('uploadsGallery.deleteUpload')}
                           aria-label={t('uploadsGallery.deleteUpload')}

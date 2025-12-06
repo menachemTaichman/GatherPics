@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Eye, Edit2, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Eye, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, profilesAPI } from '../../utils/apiService';
@@ -401,6 +401,11 @@ export default function EventsGalleryPage() {
           ) : (
             <ScrollableTable
               style={{ maxHeight: 'calc(100vh - 22rem)' }}
+              onRowClick={(event) => {
+                if (!event.isPlaceholder && event.url) {
+                  openEditModal(event.url);
+                }
+              }}
               columns={[
                 {
                   key: 'name',
@@ -498,27 +503,19 @@ export default function EventsGalleryPage() {
                   renderCell: (event) => (
                     <div className="flex items-center justify-end gap-2">
                       {event.isPlaceholder ? (
-                        <>
-                          <span
-                            className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                            title={t('eventsGallery.pleaseLogInToView')}
-                            aria-label={t('eventsGallery.pleaseLogInToView')}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </span>
-                          <span
-                            className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                            title={t('eventsGallery.pleaseLogInToEdit')}
-                            aria-label={t('eventsGallery.pleaseLogInToEdit')}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </span>
-                        </>
+                        <span
+                          className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                          title={t('eventsGallery.pleaseLogInToView')}
+                          aria-label={t('eventsGallery.pleaseLogInToView')}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </span>
                       ) : (
                         <>
                           {event.url ? (
                             <Link
                               to={`/${event.url}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                               title={t('eventsGallery.openEvent')}
                               aria-label={t('eventsGallery.openEvent')}
@@ -534,17 +531,12 @@ export default function EventsGalleryPage() {
                               <Eye className="w-4 h-4" />
                             </span>
                           )}
-                          <button
-                            onClick={() => openEditModal(event.url)}
-                            className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                            title={t('eventsGallery.editSettings')}
-                            aria-label={t('eventsGallery.editSettings')}
-                          >
-                            <Edit2 className="w-4 h-4 text-indigo-600" />
-                          </button>
                           {deletableEventIds.has(String(event.event_id)) && (
                             <button
-                              onClick={() => handleRequestDelete(event)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRequestDelete(event);
+                              }}
                               className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                               title={t('eventsGallery.deleteEvent')}
                               aria-label={t('eventsGallery.deleteEvent')}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
+import { User, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import { useToast } from '../../contexts/ToastContext';
@@ -999,43 +999,37 @@ export default function ProfilesGalleryPage() {
       align: 'right',
       renderCell: (profile) => (
         <div className="flex items-center justify-end gap-2">
-          {profile.isPlaceholder ? (
-            <>
-              <span
-                className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                title={t('profilesGallery.pleaseLogInToManageProfiles')}
-              >
-                <Edit2 className="w-4 h-4" />
-              </span>
-              <span
-                className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                title={t('profilesGallery.pleaseLogInToManageProfiles')}
-              >
-                <Trash2 className="w-4 h-4" />
-              </span>
-            </>
-          ) : (
+          {!profile.isPlaceholder && (
             <>
               {Boolean(profile.is_public) && (
                 <>
                   {Boolean(profile.has_public_access_code) ? (
                     <>
                       <button
-                        onClick={() => handleCopyPublicLink(profile)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyPublicLink(profile);
+                        }}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                         title={t('profilesGallery.copyPublicLink')}
                       >
                         <LinkIcon className="w-4 h-4 text-blue-600" />
                       </button>
                       <button
-                        onClick={() => handleResetPublicCode(profile)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleResetPublicCode(profile);
+                        }}
                         className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                         title={t('profilesGallery.resetPublicAccessCode')}
                       >
                         <RotateCcw className="w-4 h-4 text-yellow-600" />
                       </button>
                       <button
-                        onClick={() => handleRemovePublicCode(profile)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemovePublicCode(profile);
+                        }}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                         title={t('profilesGallery.removePublicAccessCode')}
                       >
@@ -1044,7 +1038,10 @@ export default function ProfilesGalleryPage() {
                     </>
                   ) : (
                     <button
-                      onClick={() => handleResetPublicCode(profile)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResetPublicCode(profile);
+                      }}
                       className="p-2 hover:bg-green-100 rounded-lg transition-colors"
                       title={t('profilesGallery.createPublicAccessCode')}
                     >
@@ -1054,14 +1051,10 @@ export default function ProfilesGalleryPage() {
                 </>
               )}
               <button
-                onClick={() => handleEditProfile(profile)}
-                className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                title={t('profilesGallery.editProfile')}
-              >
-                <Edit2 className="w-4 h-4 text-indigo-600" />
-              </button>
-              <button
-                onClick={() => handleDuplicateProfile(profile)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDuplicateProfile(profile);
+                }}
                 disabled={duplicatingProfileId === profile.id}
                 className="p-2 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title={t('profilesGallery.duplicateProfile')}
@@ -1075,7 +1068,10 @@ export default function ProfilesGalleryPage() {
               {/* Show remove from event button when event filter is active */}
               {filterEventId && filterEventId !== FILTER_ALL_EVENTS && (
                 <button
-                  onClick={() => handleRemoveFromEvent(profile)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveFromEvent(profile);
+                  }}
                   className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
                   title={t('profilesGallery.removeFromEvent')}
                 >
@@ -1085,7 +1081,10 @@ export default function ProfilesGalleryPage() {
               {/* Show delete button only if profile is editable */}
               {Boolean(profile.is_editable) && (
                 <button
-                  onClick={() => handleDeleteProfile(profile)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteProfile(profile);
+                  }}
                   className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                   title={t('profilesGallery.deleteProfile')}
                 >
@@ -1227,6 +1226,11 @@ export default function ProfilesGalleryPage() {
               sortBy={sortBy}
               sortDir={sortDir}
               onSort={handleSort}
+              onRowClick={(profile) => {
+                if (!profile.isPlaceholder) {
+                  handleEditProfile(profile);
+                }
+              }}
               emptyState={{
                 icon: User,
                 title: t('profilesGallery.noProfiles'),
