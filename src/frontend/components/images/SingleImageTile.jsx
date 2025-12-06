@@ -140,7 +140,6 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           <PermissionGate requires={["hasArchiveAlbum", "canEdit"]}>
             <button
               type="button"
-              aria-label="Remove from archive"
               aria-pressed={isArchived}
               className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100 ${
                 isRTL ? 'left-2' : 'right-2'
@@ -171,7 +170,6 @@ const SingleImageTile = forwardRef(function SingleImageTile({
             <PermissionGate requires="hasFavoritesAlbum">
               <button
                 type="button"
-                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 aria-pressed={isFavorite}
                 className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
                   isRTL ? 'left-2' : 'right-2'
@@ -209,7 +207,6 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           <PermissionGate requires="hasFavoritesAlbum">
             <button
               type="button"
-              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               aria-pressed={isFavorite}
               className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
                 isRTL ? 'left-10' : 'right-10'
@@ -272,7 +269,6 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       {showRepresentativeButton && (permissions.canEdit || isRepresentative) && (
         <button
           type="button"
-          aria-label={isRepresentative ? 'Current representative' : 'Set as representative'}
           aria-pressed={isRepresentative}
           className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
             (showArchiveButton && isArchived) || (showFavoriteButton && isFavorite)
