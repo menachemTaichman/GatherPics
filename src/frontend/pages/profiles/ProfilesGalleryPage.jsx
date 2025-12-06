@@ -1102,28 +1102,30 @@ export default function ProfilesGalleryPage() {
 
   return (
     <>
-      <div dir={isRTL ? 'rtl' : 'ltr'} className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 ${!eventUrl ? 'pt-[4rem]' : ''}`}>
+      <div dir={isRTL ? 'rtl' : 'ltr'} className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 overflow-x-hidden`}>
         {!eventUrl && <TopNavigationBar variant="light" showBackground={true} mode="full" />}
-        <div className={`sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm`}>
-          <div className="w-full px-8 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <User className="w-6 h-6 text-purple-600" />
+        {!eventUrl && <div className="h-[4rem]"></div>}
+        {eventUrl && <div className="h-[4rem]"></div>}
+        <div className={`sticky ${!eventUrl ? 'top-[4rem]' : 'top-[4rem]'} z-30 bg-white border-b border-gray-200 shadow-sm`}>
+          <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{t('profilesGallery.profileManagement')}</h1>
-                  <p className="text-sm text-gray-500">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{t('profilesGallery.profileManagement')}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">
                     {isAuthenticated
                       ? `${stats.total} ${stats.total === 1 ? t('profilesGallery.profile') : t('profilesGallery.profilesPlural')}`
                       : t('profilesGallery.loading')}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Event Filter Combobox */}
                 {!isCurrentProfileRestricted && !eventUrl && (
-                <div className="relative" ref={eventInputRef}>
+                <div className="relative w-full sm:w-auto" ref={eventInputRef}>
                   <div className="relative">
                     <input
                       type="text"
@@ -1141,14 +1143,14 @@ export default function ProfilesGalleryPage() {
                       }}
                       onKeyDown={handleEventInputKeyDown}
                       placeholder={t('profilesGallery.searchEvents')}
-                      className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                      className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full sm:w-64"
                     />
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
                   {showEventDropdown && (
                     <div
                       ref={eventDropdownRef}
-                      className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
+                      className="absolute z-50 mt-1 w-full sm:w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
                     >
                       {selectableOptions.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">
@@ -1187,7 +1189,7 @@ export default function ProfilesGalleryPage() {
           </div>
         </div>
 
-        <div className="w-full px-8 py-8">
+        <div className="w-full px-4 sm:px-8 py-3 sm:py-6 overflow-x-auto">
           {error && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {error}
@@ -1219,25 +1221,27 @@ export default function ProfilesGalleryPage() {
               )}
             </motion.div>
           ) : (
-            <ScrollableTable
-              style={{ maxHeight: 'calc(100vh - 20rem)' }}
-              columns={columns}
-              data={sortedProfiles}
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSort={handleSort}
-              onRowClick={(profile) => {
-                if (!profile.isPlaceholder) {
-                  handleEditProfile(profile);
-                }
-              }}
-              emptyState={{
-                icon: User,
-                title: t('profilesGallery.noProfiles'),
-                message: t('profilesGallery.getStartedByCreatingNewProfile'),
-              }}
-              getRowKey={(profile) => profile.id}
-            />
+            <div className="w-full min-w-0">
+              <ScrollableTable
+                style={{ maxHeight: 'calc(100vh - 20rem)' }}
+                columns={columns}
+                data={sortedProfiles}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onRowClick={(profile) => {
+                  if (!profile.isPlaceholder) {
+                    handleEditProfile(profile);
+                  }
+                }}
+                emptyState={{
+                  icon: User,
+                  title: t('profilesGallery.noProfiles'),
+                  message: t('profilesGallery.getStartedByCreatingNewProfile'),
+                }}
+                getRowKey={(profile) => profile.id}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -1377,15 +1381,15 @@ export default function ProfilesGalleryPage() {
       )}
 
       {isAuthenticated && (
-        <div className="fixed bottom-8 right-8 z-40">
+        <div className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40">
           <motion.button
             onClick={handleCreateProfile}
-            className="w-16 h-16 bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 hover:from-purple-600 hover:via-indigo-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center"
+            className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 hover:from-purple-600 hover:via-indigo-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             title={t('profilesGallery.createProfile')}
           >
-            <Plus className="w-8 h-8" />
+            <Plus className="w-6 h-6 sm:w-8 sm:h-8" />
           </motion.button>
         </div>
       )}

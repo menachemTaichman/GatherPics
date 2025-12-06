@@ -236,18 +236,19 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`} dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 overflow-x-hidden`} dir={isRTL ? 'rtl' : 'ltr'}>
+        {eventUrl && <div className="h-[4rem]"></div>}
         {/* Header */}
-        <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
-          <div className="w-full px-8 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
+        <div className={`sticky ${eventUrl ? 'top-[4rem]' : 'top-0'} z-30 bg-white border-b border-gray-200 shadow-sm`}>
+          <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{t('requestsGallery.accessRequests')}</h1>
-                  <p className="text-sm text-gray-500">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{t('requestsGallery.accessRequests')}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">
                     {isAuthenticated ? `${stats.total} ${t('requestsGallery.total')}, ${stats.pending} ${t('requestsGallery.pending')}` : 'Loading...'}
                   </p>
                 </div>
@@ -255,11 +256,11 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
             </div>
 
             {/* Filters */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => handleFilterChange('all')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filterStatus === 'all'
                       ? 'bg-primary-100 text-primary-700'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -269,7 +270,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 </button>
                 <button
                   onClick={() => handleFilterChange('pending')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filterStatus === 'pending'
                       ? 'bg-blue-100 text-blue-700'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -279,7 +280,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 </button>
                 <button
                   onClick={() => handleFilterChange('approved')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filterStatus === 'approved'
                       ? 'bg-green-100 text-green-700'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -289,7 +290,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 </button>
                 <button
                   onClick={() => handleFilterChange('rejected')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filterStatus === 'rejected'
                       ? 'bg-red-100 text-red-700'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -299,7 +300,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                 </button>
                 <button
                   onClick={() => handleFilterChange('mixed')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filterStatus === 'mixed'
                       ? 'bg-yellow-100 text-yellow-700'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -311,22 +312,24 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
               {/* Delete All Button */}
               {isAuthenticated && sortedRequests.length > 0 && (
-                <button
-                  onClick={handleDeleteAll}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                  title={t('requestsGallery.deleteAll')}
-                  aria-label={t('requestsGallery.deleteAll')}
-                >
-                  <Trash className="w-4 h-4" />
-                  <span>{t('requestsGallery.deleteAll')}</span>
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleDeleteAll}
+                    className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors"
+                    title={t('requestsGallery.deleteAll')}
+                    aria-label={t('requestsGallery.deleteAll')}
+                  >
+                    <Trash className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span>{t('requestsGallery.deleteAll')}</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="w-full px-8 py-8">
+        <div className="w-full px-4 sm:px-8 py-3 sm:py-8 overflow-x-auto">
           <ScrollableTable
             style={{ maxHeight: 'calc(100vh - 20rem)' }}
             onRowClick={handleViewRequest}

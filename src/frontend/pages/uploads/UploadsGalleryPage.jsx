@@ -108,18 +108,19 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="w-full overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="h-[4rem]"></div>
         {/* Sticky Header */}
         <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
-          <div className="w-full px-8 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-purple-600" />
+          <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Upload className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{t('uploadsGallery.uploadsHistory')}</h1>
-                  <p className="text-sm text-gray-500">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{t('uploadsGallery.uploadsHistory')}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">
                     {sortedUploads.length === 0 
                       ? t('uploadsGallery.noUploadsYet')
                       : `${sortedUploads.length} ${sortedUploads.length === 1 ? t('uploadsGallery.upload') : t('uploadsGallery.uploadsPlural')}`
@@ -132,7 +133,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
         </div>
 
         {/* Content Area */}
-        <div className="px-8 py-8">
+        <div className="px-4 sm:px-8 py-3 sm:py-8 overflow-x-auto">
           {sortedUploads.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -297,16 +298,16 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
       )}
 
       {/* Floating Upload Button */}
-      <div className="fixed bottom-8 right-8 z-40">
+      <div className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40">
         <motion.button
           onClick={() => setShowUploadModal(true)}
-          className="w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center group"
+          className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center group"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           title={t('uploadsGallery.uploadNewPhotos')}
           aria-label={t('uploadsGallery.uploadNewPhotos')}
         >
-          <Plus className="w-8 h-8" />
+          <Plus className="w-6 h-6 sm:w-8 sm:h-8" />
         </motion.button>
       </div>
     </>

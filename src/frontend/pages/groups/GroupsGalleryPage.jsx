@@ -83,6 +83,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
 
   return (
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="h-[4rem]"></div>
       {/* Sticky Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

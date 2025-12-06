@@ -438,8 +438,8 @@ function AppContent({ eventUrl }) {
           mode={isEventHomePage ? 'minimal' : 'full'}
         />
       )}
-      {/* Add padding-top to Routes content when TopNavigationBar is shown */}
-      <div className={!isEventHomePage && eventUrl ? 'pt-[4rem]' : ''}>
+      {/* Routes content - pages handle their own spacing for sticky headers */}
+      <div>
         <AnimatePresence mode="wait">
           <Routes>
           <Route 

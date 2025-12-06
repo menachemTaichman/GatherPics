@@ -1011,28 +1011,27 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-gray-50 overflow-x-hidden">
         <TopNavigationBar variant="light" showBackground={true} mode="full" />
-        
-        {/* Page Header */}
-        <div className="bg-white border-b border-gray-200 pt-[4rem] flex-none z-30">
-          <div className="w-full px-8 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                  <SettingsIcon className="w-6 h-6 text-primary-600" />
+        <div className="h-[4rem]"></div>
+        <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
+          <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-primary-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                  <SettingsIcon className="w-4 h-4 sm:w-6 sm:h-6 text-primary-600" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{t('settings.settings')}</h1>
-                  <p className="text-sm text-gray-500">{t('settings.manageSystemWideConfiguration')}</p>
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{t('settings.settings')}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">{t('settings.manageSystemWideConfiguration')}</p>
                 </div>
               </div>
               
               {/* Section Tabs */}
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+              <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 rounded-lg p-0.5 sm:p-1 overflow-x-auto">
                 <button
                   onClick={() => handleSectionChange('limits')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     activeSection === 'limits'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1042,7 +1041,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => handleSectionChange('usage')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     activeSection === 'usage'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1052,7 +1051,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => handleSectionChange('errors')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     activeSection === 'errors'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1062,7 +1061,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => handleSectionChange('audit')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     activeSection === 'audit'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1073,11 +1072,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-        </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="w-full px-8 py-8">
+        <div className="w-full px-4 sm:px-8 py-3 sm:py-6 overflow-x-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-sm text-gray-500">{t('settings.loadingSettings')}</div>
@@ -1197,19 +1194,19 @@ export default function SettingsPage() {
                 {/* Rekognition Usage Section */}
                 {activeSection === 'usage' && (
                 <div className="rounded-lg bg-white border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-3 mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <Activity className="h-5 w-5" />
                       {t('settings.rekognitionUsageTracking')}
                     </h3>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       {/* Period Filter */}
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-500" />
                         <select
                           value={filterPeriod}
                           onChange={(e) => handleFilterPeriodChange(e.target.value)}
-                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="all">{t('settings.allTime')}</option>
                           <option value="last_month">{t('settings.lastMonth')}</option>
@@ -1227,7 +1224,7 @@ export default function SettingsPage() {
                             type="date"
                             value={filterDateFrom}
                             onChange={(e) => handleDateFromChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.from')}
                           />
                           <span className="text-gray-500">{t('settings.to')}</span>
@@ -1235,7 +1232,7 @@ export default function SettingsPage() {
                             type="date"
                             value={filterDateTo}
                             onChange={(e) => handleDateToChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.to')}
                           />
                         </div>
@@ -1244,7 +1241,7 @@ export default function SettingsPage() {
                   </div>
 
                   <ScrollableTable
-                    style={{ maxHeight: 'calc(100vh - 22rem)' }}
+                    style={{ maxHeight: 'calc(100vh - 20rem)' }}
                     columns={columns}
                     data={filteredAndSortedUsage}
                     sortBy={sortBy}
@@ -1265,17 +1262,17 @@ export default function SettingsPage() {
                 {/* Errors Section */}
                 {activeSection === 'errors' && (
                 <div className="rounded-lg bg-white border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-3 mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5" />
                       {t('settings.errorLog')}
                     </h3>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       {/* Error Type Filter */}
                       <select
                         value={errorFilterType}
                         onChange={(e) => handleErrorFilterTypeChange(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="all">{t('settings.allTypes')}</option>
                         {errorTypes.map(type => (
@@ -1289,7 +1286,7 @@ export default function SettingsPage() {
                         <select
                           value={errorFilterPeriod}
                           onChange={(e) => handleErrorFilterPeriodChange(e.target.value)}
-                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="all">{t('settings.allTime')}</option>
                           <option value="last_month">{t('settings.lastMonth')}</option>
@@ -1307,7 +1304,7 @@ export default function SettingsPage() {
                             type="date"
                             value={errorFilterDateFrom}
                             onChange={(e) => handleErrorDateFromChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.from')}
                           />
                           <span className="text-gray-500">{t('settings.to')}</span>
@@ -1315,7 +1312,7 @@ export default function SettingsPage() {
                             type="date"
                             value={errorFilterDateTo}
                             onChange={(e) => handleErrorDateToChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.to')}
                           />
                         </div>
@@ -1324,7 +1321,7 @@ export default function SettingsPage() {
                   </div>
 
                   <ScrollableTable
-                    style={{ maxHeight: 'calc(100vh - 22rem)' }}
+                    style={{ maxHeight: 'calc(100vh - 20rem)' }}
                     columns={errorColumns}
                     data={filteredAndSortedErrors}
                     sortBy={errorSortBy}
@@ -1346,17 +1343,17 @@ export default function SettingsPage() {
                 {/* Audit Logs Section */}
                 {activeSection === 'audit' && (
                 <div className="rounded-lg bg-white border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-3 mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <Activity className="h-5 w-5" />
                       {t('settings.auditLogs')}
                     </h3>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       {/* Severity Filter */}
                       <select
                         value={auditFilterSeverity}
                         onChange={(e) => handleAuditFilterSeverityChange(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="all">{t('settings.allSeverities')}</option>
                         {AUDIT_SEVERITIES.map(severity => (
@@ -1368,7 +1365,7 @@ export default function SettingsPage() {
                       <select
                         value={auditFilterAction}
                         onChange={(e) => handleAuditFilterActionChange(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="all">{t('settings.allActions')}</option>
                         {filteredAuditActions.map(action => (
@@ -1382,7 +1379,7 @@ export default function SettingsPage() {
                         <select
                           value={auditFilterPeriod}
                           onChange={(e) => handleAuditFilterPeriodChange(e.target.value)}
-                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="all">{t('settings.allTime')}</option>
                           <option value="last_month">{t('settings.lastMonth')}</option>
@@ -1400,7 +1397,7 @@ export default function SettingsPage() {
                             type="date"
                             value={auditFilterDateFrom}
                             onChange={(e) => handleAuditDateFromChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.from')}
                           />
                           <span className="text-gray-500">{t('settings.to')}</span>
@@ -1408,7 +1405,7 @@ export default function SettingsPage() {
                             type="date"
                             value={auditFilterDateTo}
                             onChange={(e) => handleAuditDateToChange(e.target.value)}
-                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="text-xs sm:text-sm border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={t('settings.to')}
                           />
                         </div>
@@ -1417,7 +1414,7 @@ export default function SettingsPage() {
                   </div>
 
                   <ScrollableTable
-                    style={{ maxHeight: 'calc(100vh - 22rem)' }}
+                    style={{ maxHeight: 'calc(100vh - 20rem)' }}
                     columns={auditLogColumns}
                     data={filteredAndSortedAuditLogs}
                     sortBy={auditSortBy}

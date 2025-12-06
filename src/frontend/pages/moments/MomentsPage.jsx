@@ -552,6 +552,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       {/* Toast Notifications */}
       <Toast toast={toast} />
 
+      <div className="h-[4rem]"></div>
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-[4rem] z-30 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">

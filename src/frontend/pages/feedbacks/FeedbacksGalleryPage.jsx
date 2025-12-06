@@ -210,31 +210,46 @@ export default function FeedbacksGalleryPage() {
   }, [currentFeedbacks, isAuthenticated]);
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 pt-[4rem] flex-none z-30">
-        <div className="w-full px-8 py-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-primary-600" />
+      <div className="h-[4rem]"></div>
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-primary-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <MessageSquare className="w-4 h-4 sm:w-6 sm:h-6 text-primary-600" />
               </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{t('feedbacksGallery.feedbacks')}</h1>
-                <p className="text-sm text-gray-500">
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{t('feedbacksGallery.feedbacks')}</h1>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">
                   {isAuthenticated ? `${stats.total} ${t('feedbacksGallery.total')}, ${stats.open} ${t('feedbacksGallery.open')}` : t('feedbacksGallery.loading')}
                 </p>
               </div>
             </div>
+
+            {/* Delete All Button - Desktop */}
+            {isAuthenticated && sortedFeedbacks.length > 0 && (
+              <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleDeleteAll}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  title={t('feedbacksGallery.deleteAllTooltip')}
+                  aria-label={t('feedbacksGallery.deleteAllTooltip')}
+                >
+                  <Trash className="w-4 h-4" />
+                  <span>{t('feedbacksGallery.deleteAll')}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Filters */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleFilterChange('all')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                   filterStatus === 'all'
                     ? 'bg-primary-100 text-primary-700'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -244,7 +259,7 @@ export default function FeedbacksGalleryPage() {
               </button>
               <button
                 onClick={() => handleFilterChange('open')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                   filterStatus === 'open'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -254,7 +269,7 @@ export default function FeedbacksGalleryPage() {
               </button>
               <button
                 onClick={() => handleFilterChange('closed')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                   filterStatus === 'closed'
                     ? 'bg-gray-200 text-gray-700'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -264,7 +279,7 @@ export default function FeedbacksGalleryPage() {
               </button>
               <button
                 onClick={() => handleFilterChange('solved')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                   filterStatus === 'solved'
                     ? 'bg-green-100 text-green-700'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -274,26 +289,28 @@ export default function FeedbacksGalleryPage() {
               </button>
             </div>
 
-            {/* Delete All Button */}
+            {/* Delete All Button - Mobile */}
             {isAuthenticated && sortedFeedbacks.length > 0 && (
-              <button
-                onClick={handleDeleteAll}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                title={t('feedbacksGallery.deleteAllTooltip')}
-                aria-label={t('feedbacksGallery.deleteAllTooltip')}
-              >
-                <Trash className="w-4 h-4" />
-                <span>{t('feedbacksGallery.deleteAll')}</span>
-              </button>
+              <div className="flex sm:hidden items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleDeleteAll}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
+                  title={t('feedbacksGallery.deleteAllTooltip')}
+                  aria-label={t('feedbacksGallery.deleteAllTooltip')}
+                >
+                  <Trash className="w-3 h-3" />
+                  <span>{t('feedbacksGallery.deleteAll')}</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 w-full px-8 pt-6 pb-8">
+      <div className="w-full px-4 sm:px-8 py-3 sm:py-6 overflow-x-auto">
         <ScrollableTable
-          style={{ maxHeight: 'calc(100vh - 22rem)' }}
+          style={{ maxHeight: 'calc(100vh - 20rem)' }}
           onRowClick={handleViewFeedback}
           columns={[
             {
