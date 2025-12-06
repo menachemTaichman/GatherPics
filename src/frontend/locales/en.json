@@ -1495,7 +1495,8 @@
     "cancel": "Cancel",
     "cannotBeUndone": "This action cannot be undone.",
     "photo": "photo",
-    "photos": "photos"
+    "photos": "photos",
+    "moreActions": "More actions"
   },
   "bucketDrawer": {
     "bucket": "Bucket",

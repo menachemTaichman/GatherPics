@@ -39,7 +39,8 @@ function ImageViewerActions({
   entityId,
   eventId,
   imageActions,
-  isUnassociatedGroup = false
+  isUnassociatedGroup = false,
+  isMobile = false
 }) {
   const { t } = useTranslation();
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
@@ -94,11 +95,11 @@ function ImageViewerActions({
         {/* Add to bucket / Remove from bucket */}
         <button
           onClick={imageActions.toggleBucket}
-          className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+          className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
           title={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
           aria-label={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
         >
-          <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
+          <ShoppingBag className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
         </button>
 
         {/* Separator before management buttons - only if action buttons exist AND management buttons exist */}
@@ -108,11 +109,11 @@ function ImageViewerActions({
         <PermissionGate requires="canUploadAndDeleteImages">
           <button
             onClick={imageActions.deleteImages}
-            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
+            className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
             title={t('imageViewer.deletePhoto')}
             aria-label={t('imageViewer.deletePhoto')}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
           </button>
         </PermissionGate>
 
@@ -120,11 +121,11 @@ function ImageViewerActions({
         <PermissionGate requires="isProfilesManager">
           <button
             onClick={() => setShowManageAccessModal(true)}
-            className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
+            className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
             title={t('imageViewer.manageProfileAccess')}
             aria-label={t('imageViewer.manageProfileAccess')}
           >
-            <Key className="w-4 h-4" />
+            <Key className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
           </button>
         </PermissionGate>
 
@@ -138,14 +139,14 @@ function ImageViewerActions({
           <PermissionGate requires="canEdit">
             <button
               onClick={() => imageActions.setRepresentative()}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
+              className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
                 imageActions.isRepresentative
                   ? 'text-orange-600'
                   : 'text-yellow-600'
               }`}
               title={imageActions.representativeTooltip}
             >
-              <Star className={`w-4 h-4 ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
+              <Star className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
             </button>
           </PermissionGate>
         )}
@@ -155,7 +156,7 @@ function ImageViewerActions({
           <PermissionGate requires="canManageEvent">
             <button
               onClick={handleSetEventRepresentative}
-              className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+              className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center ${
                 isEventRepresentative
                   ? 'bg-gradient-to-br from-red-500 to-rose-500 text-white hover:from-red-500 hover:to-rose-500'
                   : 'text-red-600 hover:bg-red-50'
@@ -164,7 +165,7 @@ function ImageViewerActions({
               aria-pressed={isEventRepresentative}
               disabled={settingEventRepresentative || isEventRepresentative}
             >
-              <Star className={`w-4 h-4 ${isEventRepresentative ? 'fill-current' : ''}`} />
+              <Star className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${isEventRepresentative ? 'fill-current' : ''}`} />
             </button>
           </PermissionGate>
         )}
@@ -406,6 +407,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const initialMousePanRef = useRef({ x: 0, y: 0 });
   const containerRef = useRef(null);
   // Use universal placeholder components instead of hardcoded data URI
   const [showRectangles, setShowRectangles] = useState(false);
@@ -434,7 +436,28 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const startResizeYRef = useRef(0);
   const startAlbumsHeightRef = useRef(0);
   
-  const [sidebarVisible, setSidebarVisible] = useState(() => getPreference('ImageViewer.sidebarOpen', false));
+  // Detect mobile - hide sidebar by default on mobile
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    // Hide sidebar by default on mobile
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return false;
+    }
+    return getPreference('ImageViewer.sidebarOpen', false);
+  });
+  // Keep controls visible on mobile, auto-hide on desktop
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
   const [dynamicHeight, setDynamicHeight] = useState(null);
@@ -447,9 +470,55 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   });
   // Modal registration for scope lifecycle tied to actual modal open/close (no subscription to modal store)
 
+  // Calculate modal dimensions for mobile to maintain landscape aspect ratio
+  const [mobileModalStyle, setMobileModalStyle] = useState({});
+  
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileModalStyle({});
+      return;
+    }
+    
+    const calculateMobileDimensions = () => {
+      if (!modalRef.current) return;
+      
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // Leave space for buttons (top and bottom controls)
+      const availableHeight = viewportHeight - 5 * 16; // 5rem for buttons/margins
+      const availableWidth = viewportWidth; // Full width, no margins
+      
+      // Calculate height based on 3:2 aspect ratio (width * 0.67 = height)
+      const aspectRatioHeight = availableWidth * 0.67;
+      
+      // Use the smaller of: aspect ratio height or available viewport height
+      const finalHeight = Math.min(aspectRatioHeight, availableHeight);
+      const finalWidth = finalHeight / 0.67; // Reverse calculate width from height
+      
+      setMobileModalStyle({
+        width: `${Math.min(finalWidth, availableWidth)}px`,
+        height: `${finalHeight}px`,
+        maxWidth: `${availableWidth}px`,
+        maxHeight: `${availableHeight}px`
+      });
+    };
+    
+    calculateMobileDimensions();
+    const resizeHandler = () => calculateMobileDimensions();
+    window.addEventListener('resize', resizeHandler);
+    const timerId = setTimeout(calculateMobileDimensions, 50);
+    
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener('resize', resizeHandler);
+    };
+  }, [isMobile, sidebarVisible]);
+  
   useEffect(() => {
     let rafId = 0;
     const calculateAndSetHeight = () => {
+      if (isMobile) return; // Skip desktop calculation on mobile
       if (!modalRef.current) return;
       rafId = requestAnimationFrame(() => {
         if (!modalRef.current) return;
@@ -480,7 +549,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       clearTimeout(timerId);
       window.removeEventListener('resize', resizeHandler);
     };
-  }, [sidebarVisible]);
+  }, [sidebarVisible, isMobile]);
 
   // Register modal on mount and keep scopes in sync with current image id
   useEffect(() => {
@@ -524,11 +593,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   }, [albumsHeight]);
   useEffect(() => {
-    if (sidebarVisible !== initialValuesRef.current.sidebarVisible) {
+    // Only persist sidebar preference on desktop
+    if (!isMobile && sidebarVisible !== initialValuesRef.current.sidebarVisible) {
       initialValuesRef.current.sidebarVisible = sidebarVisible;
       setPreference('ImageViewer.sidebarOpen', sidebarVisible);
     }
-  }, [sidebarVisible]);
+  }, [sidebarVisible, isMobile]);
 
   // Global mouse handlers for resizer
   useEffect(() => {
@@ -611,17 +681,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Circular navigation
   const handleNavigate = (direction, index) => {
-    if (!onNavigate) return;
+    if (!onNavigate || !filteredImages || filteredImages.length === 0) return;
     if (direction === 'prev') {
-      if (effectiveIndex === 0) {
+      if (effectiveIndex === 0 && filteredImages.length > 1) {
+        // Wrap from first to last
         onNavigate('jump', filteredImages.length - 1);
-      } else {
+      } else if (effectiveIndex > 0) {
         onNavigate('prev');
       }
     } else if (direction === 'next') {
-      if (effectiveIndex === filteredImages.length - 1) {
+      if (effectiveIndex === filteredImages.length - 1 && filteredImages.length > 1) {
+        // Wrap from last to first
         onNavigate('jump', 0);
-      } else {
+      } else if (effectiveIndex < filteredImages.length - 1) {
         onNavigate('next');
       }
     } else if (direction === 'jump' && typeof index === 'number') {
@@ -739,6 +811,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       setIsEditingDescription(false);
     }
   }, [storeImageInfo?.description, imageId]);
+  
+  // Update sidebar visibility when mobile state changes
+  useEffect(() => {
+    if (isMobile && sidebarVisible) {
+      // Auto-hide sidebar when switching to mobile to save space
+      setSidebarVisible(false);
+    }
+  }, [isMobile]);
 
   // Fetch image info when image changes
   useEffect(() => {
@@ -826,7 +906,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const currentPercent = Math.round(zoom * 100);
     const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
     const add25 = currentPercent + 25;
-    const newPercent = Math.min(300, Math.min(add25, next25));
+    const newPercent = Math.min(1000, Math.min(add25, next25));
     setZoom(newPercent / 100);
   };
   const handleZoomOut = () => {
@@ -853,7 +933,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       // Zoom with Ctrl/Cmd + wheel
       const delta = e.deltaY > 0 ? -0.2 : 0.2;
       setZoom(prev => {
-        const next = Math.max(0.5, Math.min(3, prev + delta));
+        const next = Math.max(0.5, Math.min(10, prev + delta));
         return next === prev ? prev : next;
       });
     } else {
@@ -1069,6 +1149,379 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
 
+  // Touch gesture support for mobile: pinch-to-zoom, pan, and swipe navigation
+  const touchStartRef = useRef(null);
+  const touchStartTimeRef = useRef(null);
+  const initialPinchDistanceRef = useRef(null);
+  const initialZoomRef = useRef(null);
+  const initialPanRef = useRef(null);
+  const isPinchingRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  const rafIdRef = useRef(null);
+  // Velocity tracking for throw gesture
+  const lastPinchDistanceRef = useRef(null);
+  const lastPinchTimeRef = useRef(null);
+  const pinchVelocityRef = useRef(0);
+  // Double tap detection
+  const lastTapTimeRef = useRef(0);
+  const lastTapPositionRef = useRef({ x: 0, y: 0 });
+  const doubleTapTimerRef = useRef(null);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+  
+  const handleTouchStart = (e) => {
+    // Cancel any pending animation frame
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    
+    // Pinch-to-zoom detection (two touches)
+    if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+      initialPinchDistanceRef.current = distance;
+      initialZoomRef.current = zoomRef.current;
+      initialPanRef.current = { ...panRef.current };
+      isPinchingRef.current = true;
+      isPanningRef.current = false;
+      // Initialize velocity tracking
+      lastPinchDistanceRef.current = distance;
+      lastPinchTimeRef.current = Date.now();
+      pinchVelocityRef.current = 0;
+      e.preventDefault();
+      return;
+    }
+    
+    // Single touch for swipe gestures or panning when zoomed
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      touchStartTimeRef.current = Date.now();
+      initialPanRef.current = { ...panRef.current };
+      // Don't immediately set panning - wait to see if user moves (panning) or swipes quickly (navigation)
+      isPanningRef.current = false;
+      isPinchingRef.current = false;
+      // Reset velocity tracking for single touch
+      lastPinchDistanceRef.current = null;
+      lastPinchTimeRef.current = null;
+      pinchVelocityRef.current = 0;
+    }
+  };
+  
+  const handleTouchMove = (e) => {
+    // Handle pinch-to-zoom
+    if (e.touches.length === 2 && initialPinchDistanceRef.current !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Cancel any pending animation frame
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      
+      // Use requestAnimationFrame for smooth updates
+      rafIdRef.current = requestAnimationFrame(() => {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const currentDistance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+        
+        // Calculate velocity for throw gesture detection
+        const now = Date.now();
+        if (lastPinchDistanceRef.current !== null && lastPinchTimeRef.current !== null) {
+          const timeDelta = Math.max(1, now - lastPinchTimeRef.current); // Avoid division by zero
+          const distanceDelta = currentDistance - lastPinchDistanceRef.current;
+          pinchVelocityRef.current = distanceDelta / timeDelta; // pixels per ms
+        }
+        lastPinchDistanceRef.current = currentDistance;
+        lastPinchTimeRef.current = now;
+      
+      const scale = currentDistance / initialPinchDistanceRef.current;
+        const newZoom = Math.max(0.5, Math.min(10, initialZoomRef.current * scale));
+      
+      // Center the pinch point
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (containerRect) {
+          const containerW = containerRect.width;
+          const containerH = containerRect.height;
+          const relativeX = centerX - containerRect.left - containerW / 2;
+          const relativeY = centerY - containerRect.top - containerH / 2;
+          
+          // Calculate new pan position centered on pinch point
+          const newPanX = initialPanRef.current.x + (relativeX * (newZoom - initialZoomRef.current)) / newZoom;
+          const newPanY = initialPanRef.current.y + (relativeY * (newZoom - initialZoomRef.current)) / newZoom;
+          
+          // Apply boundaries
+          const maxPanX = (containerW * (newZoom - 1)) / 2;
+          const maxPanY = (containerH * (newZoom - 1)) / 2;
+          
+          setZoom(newZoom);
+        setPan({
+            x: Math.max(-maxPanX, Math.min(maxPanX, newPanX)),
+            y: Math.max(-maxPanY, Math.min(maxPanY, newPanY))
+        });
+        } else {
+          setZoom(newZoom);
+      }
+        rafIdRef.current = null;
+      });
+      return;
+    }
+    
+    // Handle panning when zoomed in (single touch drag)
+    // Detect panning intent: if zoomed in and user moves finger slowly, treat as panning
+    // Fast movements are likely swipes, not panning
+    if (e.touches.length === 1 && zoomRef.current > 1 && touchStartRef.current) {
+      const currentTouch = e.touches[0];
+      const deltaX = Math.abs(currentTouch.clientX - touchStartRef.current.x);
+      const deltaY = Math.abs(currentTouch.clientY - touchStartRef.current.y);
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const deltaTime = Date.now() - touchStartTimeRef.current;
+      
+      // Only treat as panning if movement is slow (deliberate pan) not fast (swipe)
+      // Fast swipes have high velocity, slow pans have low velocity
+      const velocity = distance / Math.max(deltaTime, 1); // pixels per ms
+      const isSlowMovement = velocity < 0.5; // Slow movement threshold
+      const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY) * 2; // Mostly horizontal
+      
+      // If user has moved significantly and it's a slow movement (not a fast horizontal swipe), treat as panning
+      if (distance > 10 && isSlowMovement && !isHorizontalSwipe) {
+        isPanningRef.current = true;
+      } else if (isHorizontalSwipe && velocity > 0.5) {
+        // Fast horizontal movement - likely a swipe, not panning
+        isPanningRef.current = false;
+      }
+    }
+    
+    if (e.touches.length === 1 && isPanningRef.current && zoomRef.current > 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Cancel any pending animation frame
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      
+      // Use requestAnimationFrame for smooth updates
+      rafIdRef.current = requestAnimationFrame(() => {
+        if (touchStartRef.current && containerRef.current) {
+        const currentTouch = e.touches[0];
+          const rawDeltaX = currentTouch.clientX - touchStartRef.current.x;
+          const rawDeltaY = currentTouch.clientY - touchStartRef.current.y;
+        
+          // Make panning proportional to zoom level but smoother
+          // Use square root to make it less aggressive - feels more natural
+          const zoomFactor = Math.sqrt(zoomRef.current);
+          const deltaX = rawDeltaX / zoomFactor;
+          const deltaY = rawDeltaY / zoomFactor;
+          
+          const containerRect = containerRef.current.getBoundingClientRect();
+          const containerW = containerRect.width;
+          const containerH = containerRect.height;
+          
+          // Calculate pan boundaries based on zoom level
+          // When zoomed, the image is larger than container, so we can pan
+          const maxPanX = (containerW * (zoomRef.current - 1)) / 2;
+          const maxPanY = (containerH * (zoomRef.current - 1)) / 2;
+          
+          const newPanX = initialPanRef.current.x + deltaX;
+          const newPanY = initialPanRef.current.y + deltaY;
+          
+          // Clamp pan values to boundaries
+        setPan({
+            x: Math.max(-maxPanX, Math.min(maxPanX, newPanX)),
+            y: Math.max(-maxPanY, Math.min(maxPanY, newPanY))
+        });
+      }
+        rafIdRef.current = null;
+      });
+      return;
+    }
+  };
+  
+  const handleTouchEnd = (e) => {
+    // Cancel any pending animation frame
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    
+    // Reset pinch state and check for throw gesture
+    if (e.touches.length < 2) {
+      // Check if this was a "throw" gesture (quick release with high velocity)
+      const wasPinching = isPinchingRef.current;
+      const currentVelocity = Math.abs(pinchVelocityRef.current);
+      const throwThreshold = 0.5; // pixels per ms - adjust for sensitivity
+      
+      if (wasPinching && currentVelocity > throwThreshold) {
+        // Animate back to default zoom (1.0) and reset pan
+        handleReset();
+      }
+      
+      initialPinchDistanceRef.current = null;
+      initialZoomRef.current = null;
+      isPinchingRef.current = false;
+      lastPinchDistanceRef.current = null;
+      lastPinchTimeRef.current = null;
+      pinchVelocityRef.current = 0;
+    }
+    
+    // Handle swipe and double tap gestures (only if not pinching)
+    // Allow swipe even if panning was detected, as long as it's a fast horizontal movement
+    if (!isPinchingRef.current && touchStartRef.current && e.changedTouches.length === 1) {
+      const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      const deltaX = touchEnd.x - touchStartRef.current.x;
+      const deltaY = touchEnd.y - touchStartRef.current.y;
+      const deltaTime = Date.now() - touchStartTimeRef.current;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const velocity = distance / Math.max(deltaTime, 1);
+      const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY) * 2;
+      const isFastHorizontalMovement = isHorizontalSwipe && velocity > 0.3;
+      
+      // Double tap detection: small movement (< 10px) and quick tap (< 300ms)
+      const isTap = distance < 10 && deltaTime < 300;
+      const currentTime = Date.now();
+      const timeSinceLastTap = currentTime - lastTapTimeRef.current;
+      const tapDistance = Math.sqrt(
+        Math.pow(touchEnd.x - lastTapPositionRef.current.x, 2) +
+        Math.pow(touchEnd.y - lastTapPositionRef.current.y, 2)
+      );
+      
+      // Check for double tap first (only for small movements)
+      if (isTap && timeSinceLastTap < 300 && tapDistance < 50) {
+        // Clear any pending single tap timer
+        if (doubleTapTimerRef.current) {
+          clearTimeout(doubleTapTimerRef.current);
+          doubleTapTimerRef.current = null;
+        }
+        
+        // Prevent navigation if user was interacting with controls or sidebar
+        if (!e.target.closest('[data-face-rectangle]') && 
+            !e.target.closest('button') && 
+            !e.target.closest('input') &&
+            !e.target.closest('.image-viewer-sidebar')) {
+          
+          // If already at zoom 1, zoom in to touch point; otherwise reset
+          if (zoomRef.current <= 1.0) {
+            // Zoom in to 2x centered on touch point
+            const targetZoom = 2.0;
+            const container = containerRef.current;
+            if (container) {
+              const containerRect = container.getBoundingClientRect();
+              const containerW = containerRect.width;
+              const containerH = containerRect.height;
+              
+              // Calculate touch position relative to container center
+              const relativeX = touchEnd.x - containerRect.left - containerW / 2;
+              const relativeY = touchEnd.y - containerRect.top - containerH / 2;
+              
+              // Calculate pan to center zoom on touch point
+              // When zooming in, we need to offset by the relative position
+              const newPanX = -relativeX * (targetZoom - 1) / targetZoom;
+              const newPanY = -relativeY * (targetZoom - 1) / targetZoom;
+              
+              // Apply boundaries
+              const maxPanX = (containerW * (targetZoom - 1)) / 2;
+              const maxPanY = (containerH * (targetZoom - 1)) / 2;
+              
+              setZoom(targetZoom);
+              setPan({
+                x: Math.max(-maxPanX, Math.min(maxPanX, newPanX)),
+                y: Math.max(-maxPanY, Math.min(maxPanY, newPanY))
+              });
+            } else {
+              // Fallback: just zoom in without centering
+              setZoom(targetZoom);
+            }
+          } else {
+            // Already zoomed in - reset zoom
+            handleReset();
+          }
+          
+          // Reset tap tracking
+          lastTapTimeRef.current = 0;
+          lastTapPositionRef.current = { x: 0, y: 0 };
+          touchStartRef.current = null;
+          touchStartTimeRef.current = null;
+          return;
+        }
+      } else if (isTap) {
+        // First tap - store position and time, set timer for single tap
+        lastTapTimeRef.current = currentTime;
+        lastTapPositionRef.current = { x: touchEnd.x, y: touchEnd.y };
+        
+        // Clear any existing timer
+        if (doubleTapTimerRef.current) {
+          clearTimeout(doubleTapTimerRef.current);
+        }
+        
+        // Set timer - if no second tap within 300ms, it was a single tap
+        doubleTapTimerRef.current = setTimeout(() => {
+          lastTapTimeRef.current = 0;
+          lastTapPositionRef.current = { x: 0, y: 0 };
+          doubleTapTimerRef.current = null;
+        }, 300);
+        // Don't return - allow swipe detection to run if it's not a tap
+      }
+      
+      // Swipe detection: horizontal swipe > 50px, < 300ms, and mostly horizontal (ratio > 2:1)
+      // If zoomed in, require faster/more deliberate swipe to avoid accidental navigation while panning
+      const minDistance = zoomRef.current > 1 ? 80 : 50; // Higher threshold when zoomed
+      const maxTime = zoomRef.current > 1 ? 250 : 300; // Faster swipe when zoomed
+      
+      // Check for swipe if it's not a tap and is a fast horizontal movement
+      // Allow swipe even if panning was detected, as long as it's fast and horizontal
+      // This ensures swipes work reliably even when zoomed in
+      if (!isTap && distance > minDistance && deltaTime < maxTime && isFastHorizontalMovement) {
+        // Prevent navigation if user was interacting with controls or sidebar
+        if (e.target.closest('[data-face-rectangle]') || 
+            e.target.closest('button') || 
+            e.target.closest('input') ||
+            e.target.closest('.image-viewer-sidebar')) {
+          touchStartRef.current = null;
+          touchStartTimeRef.current = null;
+          isPanningRef.current = false;
+          return;
+        }
+        
+        // Navigate without resetting zoom - zoom level will be preserved
+        // Reset panning flag since this was a swipe, not panning
+        isPanningRef.current = false;
+        
+        // Use simple prev/next navigation (was working before)
+        if (deltaX > 0) {
+          // Swipe right = previous (LTR) or next (RTL)
+          handleNavigate(isRTL ? 'next' : 'prev');
+        } else {
+          // Swipe left = next (LTR) or previous (RTL)
+          handleNavigate(isRTL ? 'prev' : 'next');
+        }
+      }
+    }
+    
+    touchStartRef.current = null;
+    touchStartTimeRef.current = null;
+    initialPanRef.current = null;
+    isPanningRef.current = false;
+  };
+  
   // Mouse wheel handler for zoom
   const handleMouseDown = (e) => {
     // Prevent dragging when clicking on face rectangles
@@ -1076,19 +1529,41 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       return;
     }
     setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    setDragStart({ x: e.clientX, y: e.clientY });
+    initialMousePanRef.current = { ...pan };
   };
 
   const handleMouseMove = (e) => {
-    // Show overlay controls on any mouse movement
-    try {
-      if (!controlsVisible) setControlsVisible(true);
-      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-    } catch {}
-    if (isDragging && zoom > 1) {
+    // Show overlay controls on any mouse movement (desktop only)
+    if (!isMobile) {
+      try {
+        if (!controlsVisible) setControlsVisible(true);
+        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+      } catch {}
+    }
+    if (isDragging && zoom > 1 && containerRef.current) {
       setPan(prev => {
-        const next = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
+        const rawDeltaX = e.clientX - dragStart.x;
+        const rawDeltaY = e.clientY - dragStart.y;
+        // Make panning proportional to zoom level but smoother
+        // Use square root to make it less aggressive - feels more natural
+        const zoomFactor = Math.sqrt(zoom);
+        const deltaX = rawDeltaX / zoomFactor;
+        const deltaY = rawDeltaY / zoomFactor;
+        
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const containerW = containerRect.width;
+        const containerH = containerRect.height;
+        
+        // Calculate pan boundaries based on zoom level
+        const maxPanX = (containerW * (zoom - 1)) / 2;
+        const maxPanY = (containerH * (zoom - 1)) / 2;
+        
+        const next = { 
+          x: Math.max(-maxPanX, Math.min(maxPanX, initialMousePanRef.current.x + deltaX)), 
+          y: Math.max(-maxPanY, Math.min(maxPanY, initialMousePanRef.current.y + deltaY))
+        };
         return (next.x === prev.x && next.y === prev.y) ? prev : next;
       });
     }
@@ -1101,17 +1576,30 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
   // Face rectangle calculation accounting for object-contain and portrait/landscape
+  // This works the same on mobile and desktop because it uses actual rendered dimensions
   const getFaceRectangleStyle = (face) => {
     if (imageRef.current && imageLoaded) {
       const img = imageRef.current;
+      // Get the actual rendered container (the div with relative positioning)
       const container = img.parentElement; // relative positioning context
+      if (!container) {
+        // Fallback if container not found
+        return {
+          left: `${face.face_left * 100}%`,
+          top: `${face.face_top * 100}%`,
+          width: `${face.face_width * 100}%`,
+          height: `${face.face_height * 100}%`,
+        };
+      }
+      
       const containerRect = container.getBoundingClientRect();
       const containerW = containerRect.width;
       const containerH = containerRect.height;
       const naturalW = img.naturalWidth || (storeImageInfo?.width || 1);
       const naturalH = img.naturalHeight || (storeImageInfo?.height || 1);
 
-      // object-contain sizing math (independent of transforms)
+      // object-contain sizing math (independent of transforms and screen size)
+      // This ensures face rectangles match exactly on mobile and desktop
       const scale = Math.min(containerW / naturalW, containerH / naturalH);
       const displayedW = naturalW * scale;
       const displayedH = naturalH * scale;
@@ -1133,6 +1621,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       const widthPx = toPx(face.face_width, 'x');
       const heightPx = toPx(face.face_height, 'y');
       
+      // Return as percentages relative to container for consistent positioning
       return {
         left: `${(leftPx / containerW) * 100}%`,
         top: `${(topPx / containerH) * 100}%`,
@@ -1182,41 +1671,183 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
   useEffect(() => {
-    // Initial auto-hide schedule for controls
-    try {
-      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-    } catch {}
+    // Initial auto-hide schedule for controls (desktop only)
+    if (!isMobile) {
+      try {
+        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+      } catch {}
+    } else {
+      // Keep controls visible on mobile
+      setControlsVisible(true);
+    }
     return () => {
       try { if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current); } catch {}
+    };
+  }, [isMobile]);
+
+  // Cleanup animation frame and timers on unmount
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (doubleTapTimerRef.current) {
+        clearTimeout(doubleTapTimerRef.current);
+        doubleTapTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Prevent background scrolling/zooming when touching anywhere in the modal
+  const handleOverlayTouchStart = useCallback((e) => {
+    // Only prevent if touching the overlay itself, not the modal content
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  const handleOverlayTouchMove = useCallback((e) => {
+    // Prevent background scrolling when touching overlay
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  const handleOverlayTouchEnd = useCallback((e) => {
+    // Prevent any default behavior on overlay
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  // Attach touch event listeners directly for better control (passive: false)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Attach listeners with passive: false to allow preventDefault
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []); // Empty deps - handlers use refs
+
+  // Prevent background scrolling/zooming when modal is open
+  useEffect(() => {
+    // Track touches that started within the modal
+    const touchesInModal = new Set();
+
+    const handleDocumentTouchStart = (e) => {
+      const modal = modalRef.current;
+      if (modal) {
+        // Check if any touch point is within the modal
+        Array.from(e.touches).forEach((touch, index) => {
+          const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (elementAtPoint && modal.contains(elementAtPoint)) {
+            touchesInModal.add(touch.identifier);
+            // Prevent default to stop background scrolling/zooming
+            e.preventDefault();
+          }
+        });
+      }
+    };
+
+    const handleDocumentTouchMove = (e) => {
+      // Prevent background scrolling if any touch started in modal
+      let hasModalTouch = false;
+      Array.from(e.touches).forEach((touch) => {
+        if (touchesInModal.has(touch.identifier)) {
+          hasModalTouch = true;
+        }
+      });
+
+      if (hasModalTouch) {
+        // Our gesture handlers already call preventDefault for their gestures
+        // This prevents any unhandled touchmove from scrolling background
+        e.preventDefault();
+      }
+    };
+
+    const handleDocumentTouchEnd = (e) => {
+      // Remove ended touches from tracking
+      Array.from(e.changedTouches).forEach((touch) => {
+        touchesInModal.delete(touch.identifier);
+      });
+    };
+
+    // Use capture phase to catch events early
+    document.addEventListener('touchstart', handleDocumentTouchStart, { passive: false, capture: true });
+    document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', handleDocumentTouchEnd, { passive: false, capture: true });
+    document.addEventListener('touchcancel', handleDocumentTouchEnd, { passive: false, capture: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleDocumentTouchStart, { capture: true });
+      document.removeEventListener('touchmove', handleDocumentTouchMove, { capture: true });
+      document.removeEventListener('touchend', handleDocumentTouchEnd, { capture: true });
+      document.removeEventListener('touchcancel', handleDocumentTouchEnd, { capture: true });
+      touchesInModal.clear();
     };
   }, []);
 
   return (
     <AnimatePresence>
-      <div key="image-viewer-modal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden modal-overlay">
+      <div 
+        key="image-viewer-modal" 
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-overlay ${
+          zoom !== 1 ? 'overflow-visible' : 'overflow-hidden'
+        }`}
+      >
         <motion.div
           ref={modalRef}
-          className="bg-transparent border-2 border-white/30 rounded-lg shadow-xl w-full mx-4 my-4 overflow-hidden min-h-0 image-viewer-modal"
-          style={{ 
+          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl min-h-0 image-viewer-modal ${
+            zoom !== 1 ? 'overflow-visible' : 'overflow-hidden'
+          } ${isMobile ? 'mx-0 my-2 rounded-none' : 'mx-4 my-4 w-full'}`}
+          style={isMobile ? {
+            ...mobileModalStyle,
+            width: mobileModalStyle.width || '100vw',
+            maxWidth: mobileModalStyle.maxWidth || '100vw',
+            maxHeight: mobileModalStyle.maxHeight || 'calc(100vh - 5rem)'
+          } : { 
             maxHeight: 'calc(100vh - 3rem)',
-            height: 'calc(min(100vw - 2rem, 1024px) * 0.67)', // Always use base modal width for consistent image container
-            maxWidth: sidebarVisible ? '1344px' : '1024px' // 1024px + 320px for sidebar
+            height: 'calc(min(100vw - 2rem, 1024px) * 0.67)',
+            maxWidth: sidebarVisible ? '1344px' : '1024px'
           }}
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
+          exit={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
           tabIndex={-1}
         >
 
           {/* Content */}
-          <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full overflow-hidden min-h-0">
+          <div dir={isRTL ? 'rtl' : 'ltr'} className={`flex h-full min-h-0 ${
+            zoom !== 1 ? 'overflow-visible' : 'overflow-hidden'
+          }`}>
             {/* Image Viewer */}
             <div 
               ref={containerRef}
-              className="flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
+              className={`flex items-center justify-center bg-gray-900 relative ${
+                zoom !== 1 ? 'overflow-visible' : 'overflow-hidden'
+              } ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
               style={{ 
-                width: 'calc(min(100vw - 2rem, 1024px))', // Always use base modal width for consistent image container
+                width: zoom !== 1 ? '100vw' : (isMobile ? '100%' : 'calc(min(100vw - 2rem, 1024px))'),
+                height: zoom !== 1 ? '100vh' : '100%',
+                position: zoom !== 1 ? 'fixed' : 'relative',
+                top: zoom !== 1 ? 0 : 'auto',
+                left: zoom !== 1 ? 0 : 'auto',
+                zIndex: zoom !== 1 ? 60 : 'auto',
                 order: isRTL ? 2 : 2
               }}
               onMouseDown={handleMouseDown}
@@ -1235,15 +1866,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                     width: '100%',
                     height: '100%',
                     transformOrigin: 'center center', // Ensure rotation happens from center
+                    overflow: zoom !== 1 ? 'visible' : 'hidden'
                   }}
                 >
-                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: zoom !== 1 ? 'visible' : 'hidden' }}>
                     {mainImageSrc && !imageError ? (
                       <img
                         ref={imageRef}
                         src={mainImageSrc}
                         alt={imageAltText}
-                        className="max-w-full max-h-full object-contain select-none"
+                        className="select-none object-contain max-w-full max-h-full"
                         width={1050}
                         height={700}
                         draggable={false}
@@ -1267,7 +1899,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       ImageComponent(mainImageSrc, {
                         width: 200,
                         height: 200,
-                        className: 'w-full h-full object-contain select-none',
+                        className: "select-none object-contain w-full h-full",
                         alt: imageAltText
                       })
                     )}
@@ -1330,33 +1962,48 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
               {/* On-image overlay controls */}
               {!loading && (
-                <div className={`absolute inset-0 z-30 transition-opacity duration-200 ${controlsVisible ? 'opacity-100' : 'opacity-0'} pointer-events-none`}
-                     onMouseMove={() => {
-                       try {
-                         setControlsVisible(true);
-                         if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                         hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-                       } catch {}
-                     }}
-                     onMouseLeave={() => {
-                       try {
-                         if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                       } catch {}
-                       setControlsVisible(false);
-                     }}
+                <div 
+                  className={`absolute inset-0 z-30 transition-opacity duration-200 ${
+                    isMobile ? 'opacity-100' : (controlsVisible ? 'opacity-100' : 'opacity-0')
+                  } pointer-events-none`}
+                  onMouseMove={() => {
+                    if (!isMobile) {
+                      try {
+                        setControlsVisible(true);
+                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+                      } catch {}
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (!isMobile) {
+                      try {
+                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                      } catch {}
+                      setControlsVisible(false);
+                    }
+                  }}
+                  onTouchStart={() => {
+                    // Show controls on touch (mobile)
+                    if (isMobile) {
+                      setControlsVisible(true);
+                    }
+                  }}
                 >
                   {/* Close button - top-right in LTR, top-left in RTL */}
                   <button
                     onClick={onClose}
-                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${endClass('4')}`}
+                    className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                      isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                    } flex items-center justify-center shadow ${endClass(isMobile ? '2' : '4')}`}
                     title={t('imageViewer.close')}
                     aria-label={t('imageViewer.close')}
                   >
-                    <X className="w-5 h-5" />
+                    <X className={isMobile ? 'w-6 h-6' : 'w-5 h-5'} />
                   </button>
 
                   {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
-                  <div className={`absolute bottom-5 pointer-events-auto flex items-center gap-4 ${endClass('4')}`}>
+                  <div className={`absolute ${isMobile ? 'bottom-3' : 'bottom-5'} pointer-events-auto flex items-center ${isMobile ? 'gap-3' : 'gap-4'} ${endClass(isMobile ? '2' : '4')}`}>
                     {(() => {
                       const favoriteTooltip = imageActions.isFavorite
                         ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
@@ -1386,7 +2033,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             >
                               <svg
                                 viewBox="0 0 24 24"
-                                className={`w-6 h-6 ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
+                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
                                 fill={imageActions.isFavorite ? 'currentColor' : 'none'}
                                 stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
                                 strokeWidth="2"
@@ -1420,7 +2067,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             >
                               <svg
                                 viewBox="0 0 24 24"
-                                className={`w-6 h-6 ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
+                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
                                 fill="none"
                                 stroke={imageActions.isArchived ? 'white' : '#6b7280'}
                                 strokeWidth="2"
@@ -1440,16 +2087,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
                   {/* Navigation - top-center */}
                   {filteredImages.length > 1 && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+                    <div className={`absolute ${isMobile ? 'top-2' : 'top-4'} left-1/2 -translate-x-1/2 flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} pointer-events-auto`}>
                       <button
                         onClick={() => handleNavigate('prev')}
-                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                        } flex items-center justify-center shadow`}
                         title={t('imageViewer.previous')}
                         aria-label={t('imageViewer.previous')}
                       >
-                        {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+                        {isRTL ? <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
                       </button>
-                      <div dir="ltr" className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center">
+                      <div dir="ltr" className={`bg-white/80 text-gray-800 rounded-md ${isMobile ? 'px-1.5' : 'px-2'} ${isMobile ? 'h-10' : 'h-8'} shadow flex items-center ${isMobile ? 'text-sm' : ''}`}>
                         {isEditingIndex ? (
                           <input
                             type="text"
@@ -1494,36 +2143,42 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       </div>
                       <button
                         onClick={() => handleNavigate('next')}
-                        className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                        } flex items-center justify-center shadow`}
                         title={t('imageViewer.next')}
                         aria-label={t('imageViewer.next')}
                       >
-                        {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                        {isRTL ? <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
                       </button>
                     </div>
                   )}
 
                   {/* Zoom - bottom-center */}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+                  <div className={`absolute ${isMobile ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 flex items-center ${isMobile ? 'gap-1' : 'gap-2'} pointer-events-auto ${isMobile ? 'scale-90' : ''}`}>
                     {isRTL ? (
                       <>
                         <button
                           onClick={handleReset}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.resetZoom')}
                           aria-label={t('imageViewer.resetZoom')}
                         >
-                          <RotateCcw className="w-4 h-4" />
+                          <RotateCcw className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
                         <button
                           onClick={handleZoomIn}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.zoomIn')}
                           aria-label={t('imageViewer.zoomIn')}
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
-                        <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center gap-1">
+                        <div className={`bg-white/80 text-gray-800 rounded-md ${isMobile ? 'px-1.5' : 'px-2'} ${isMobile ? 'h-9' : 'h-8'} shadow flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'}`}>
                           <input
                             type="text"
                             id="image-viewer-zoom"
@@ -1535,7 +2190,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             onBlur={e => {
                               let val = parseInt(e.target.value, 10);
                               if (isNaN(val)) val = 100;
-                              val = Math.max(50, Math.min(300, val));
+                              val = Math.max(50, Math.min(1000, val));
                               setZoom(val / 100);
                               setZoomInputValue(undefined);
                             }}
@@ -1546,30 +2201,34 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 setZoomInputValue(undefined);
                               }
                             }}
-                            className="w-10 text-center bg-transparent focus:outline-none"
-                            style={{width: '2.5rem'}}
+                            className={`${isMobile ? 'w-12' : 'w-10'} text-center bg-transparent focus:outline-none ${isMobile ? 'text-base' : ''}`}
+                            style={{width: isMobile ? '3rem' : '2.5rem'}}
                           />
                         </div>
                         <button
                           onClick={handleZoomOut}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.zoomOut')}
                           aria-label={t('imageViewer.zoomOut')}
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
                       </>
                     ) : (
                       <>
                         <button
                           onClick={handleZoomOut}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.zoomOut')}
                           aria-label={t('imageViewer.zoomOut')}
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
-                        <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center gap-1">
+                        <div className={`bg-white/80 text-gray-800 rounded-md ${isMobile ? 'px-1.5' : 'px-2'} ${isMobile ? 'h-9' : 'h-8'} shadow flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'}`}>
                           <input
                             type="text"
                             id="image-viewer-zoom"
@@ -1581,7 +2240,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             onBlur={e => {
                               let val = parseInt(e.target.value, 10);
                               if (isNaN(val)) val = 100;
-                              val = Math.max(50, Math.min(300, val));
+                              val = Math.max(50, Math.min(1000, val));
                               setZoom(val / 100);
                               setZoomInputValue(undefined);
                             }}
@@ -1592,25 +2251,29 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 setZoomInputValue(undefined);
                               }
                             }}
-                            className="w-10 text-center bg-transparent focus:outline-none"
-                            style={{width: '2.5rem'}}
+                            className={`${isMobile ? 'w-12' : 'w-10'} text-center bg-transparent focus:outline-none ${isMobile ? 'text-base' : ''}`}
+                            style={{width: isMobile ? '3rem' : '2.5rem'}}
                           />
                         </div>
                         <button
                           onClick={handleZoomIn}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.zoomIn')}
                           aria-label={t('imageViewer.zoomIn')}
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
                         <button
                           onClick={handleReset}
-                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                            isMobile ? 'w-9 h-9' : 'w-8 h-8'
+                          } flex items-center justify-center shadow`}
                           title={t('imageViewer.resetZoom')}
                           aria-label={t('imageViewer.resetZoom')}
                         >
-                          <RotateCcw className="w-4 h-4" />
+                          <RotateCcw className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
                         </button>
                       </>
                     )}
@@ -1620,16 +2283,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
-                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${startClass('4')}`}
+                    className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/90 hover:bg-white text-gray-800 rounded-md ${
+                      isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                    } flex items-center justify-center shadow-lg z-40 ${startClass(isMobile ? '2' : '4')}`}
                     title={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
                     aria-label={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
                   >
                     {sidebarVisible ? (
                       // When visible, point in direction to close (left in RTL, right in LTR)
-                      isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+                      isRTL ? <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
                     ) : (
                       // When hidden, point in direction to open (right in RTL, left in LTR)
-                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
+                      isRTL ? <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
                     )}
                   </button>
                 </div>
@@ -1637,13 +2302,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               
             </div>
 
-                    {/* Sidebar */}
+                    {/* Mobile sidebar backdrop */}
+        {isMobile && sidebarVisible && (
+          <div
+            className="fixed inset-0 bg-black/50"
+            style={{ zIndex: 35 }}
+            onClick={() => setSidebarVisible(false)}
+            aria-hidden="true"
+          />
+        )}
+        
+        {/* Sidebar */}
         {sidebarVisible && (
-        <div className={`w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
-          isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'
-        }`} style={{ order: isRTL ? 1 : 1 }}>
+        <div className={`${isMobile ? 'w-full fixed inset-y-0 z-40' : 'w-80'} bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
+          isMobile ? '' : (isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200')
+        } ${isMobile ? (isRTL ? 'right-0' : 'left-0') : ''}`} style={{ order: isRTL ? 1 : 1 }}>
           {/* Controls */}
-          <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
+          <div className={`${isMobile ? 'p-2' : 'p-3'} border-b border-gray-200 image-viewer-controls flex-none relative`}>
                 <ImageViewerActions
                   imageId={imageId}
                   imageInfo={storeImageInfo}
@@ -1656,6 +2331,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   eventId={eventId}
                   imageActions={imageActions}
                   isUnassociatedGroup={isUnassociatedGroup}
+                  isMobile={isMobile}
                 />
 
                     {/* Details Section */}

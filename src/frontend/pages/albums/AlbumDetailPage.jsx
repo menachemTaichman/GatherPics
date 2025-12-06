@@ -559,21 +559,21 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="h-[4rem]"></div>
       {/* Pinned Header */}
-      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-4 sm:px-8 py-4 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               to={`/${eventUrl}/albums`}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
               title={t('albumDetail.backToAllAlbums')}
               aria-label={t('albumDetail.backToAllAlbums')}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div className="flex items-center gap-4">
-              <div className="relative">
-              <div 
-                className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+              <div className="relative flex-shrink-0">
+                <div 
+                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
                 >
                   {albumRepresentativeComponent}
                 </div>
@@ -589,23 +589,23 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                           showToast(formatErrorMessage('remove representative', error), 'error');
                         }
                       }}
-                      className={`absolute -bottom-1 ${isRTL ? '-left-1' : '-right-1'} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
+                      className={`absolute -bottom-1 ${endClass('1')} w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
                       title={t('albumDetail.removeRepresentative')}
                       aria-label={t('albumDetail.removeRepresentative')}
                     >
-                      <Minus className="w-3 h-3" />
+                      <Minus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                     </button>
                   </PermissionGate>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 flex-1 min-w-0 h-12 sm:h-16">
                 {isEditingTitle ? (
-                  <div className="flex items-center gap-2" onBlur={(e) => {
+                  <div className="flex items-center gap-2 flex-1 min-w-0" onBlur={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget)) {
                       handleTitleCancel();
                     }
                   }}>
-                    <div className="relative">
+                    <div className="relative flex-1 min-w-0">
                       <input
                         type="text"
                         id="edit-album-title"
@@ -623,13 +623,13 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                             handleTitleCancel();
                           }
                         }}
-                        className={`text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-[200px] ${
+                        className={`text-xl sm:text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-full max-w-[200px] ${
                           nameConflict ? 'border-red-500' : 'border-primary-500'
                         }`}
                         autoFocus
                       />
                       {nameConflict && (
-                        <div className={`absolute top-full ${isRTL ? 'right-0' : 'left-0'} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
+                        <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
                           <AlertTriangle className="w-3 h-3" />
                           <span>{t('albumDetail.nameAlreadyExists')}</span>
                         </div>
@@ -637,7 +637,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                     </div>
                     <button
                       onClick={handleTitleSave}
-                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                      className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
                       title={t('albumDetail.save')}
                       aria-label={t('albumDetail.save')}
                     >
@@ -645,7 +645,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                     </button>
                     <button
                       onClick={handleTitleCancel}
-                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                      className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"
                       title={t('albumDetail.cancel')}
                       aria-label={t('albumDetail.cancel')}
                     >
@@ -653,9 +653,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <h1 
-                      className={`text-3xl font-bold text-gray-900 w-[200px] ${
+                      className={`text-xl sm:text-3xl font-bold text-gray-900 truncate ${
                         (isDefaultAlbum || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
                       onClick={(isDefaultAlbum || !permissions.canEdit) ? undefined : handleTitleEdit}
@@ -664,21 +664,20 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                     </h1>
                   </div>
                 )}
-              </div>
-              <div className="relative">
-                <p className="text-gray-600">
-                  {sortedImages.length} {t('albumDetail.photos')}
-                </p>
-              </div>
+                <div className="relative">
+                  <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
+                    {sortedImages.length} {t('albumDetail.photos')}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-        {/* Controls Row */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center divide-x divide-gray-200">
+          {/* Controls Row */}
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             {/* Group 1: Sort */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-4">
             <button
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
@@ -694,7 +693,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             </div>
             
             {/* Group 2: Zoom */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={() => {
                 const currentPercent = Math.round(imageSize * 100);
@@ -734,7 +733,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                     setImageSizeInputValue(undefined);
                   }
               }}
-              className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+              className="text-sm font-medium text-gray-700 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                 style={{width: '3rem'}}
             />
             <button
@@ -756,7 +755,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
             {/* Group 3: Selection Mode Toggle */}
             {sortedImages.length > 0 && (
-              <div className="flex items-center gap-3 px-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -773,7 +772,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             )}
 
             {/* Group 4: Delete Album (custom only) & Manage Access (all albums) */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {!isDefaultAlbum && (
                 <PermissionGate requires="canEdit">
                   <button
@@ -798,11 +797,12 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               </PermissionGate>
             </div>
           </div>
+          </div>
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="px-8 py-8">
+      <div className="px-4 sm:px-8 py-4 sm:py-8">
         {/* Photos Grid */}
         {loading ? (
           <div className="text-center py-12">
@@ -827,8 +827,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
           <motion.div
             className="w-full photo-gallery-grid"
             style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
-              gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
+              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
+              gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

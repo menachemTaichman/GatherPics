@@ -21,7 +21,10 @@ export default function AlbumQuickAddButton({
   urlHelpers, 
   placeholderDataUrl,
   dropdownDirection = 'down', // 'up' or 'down'
-  onAlbumAdded // Callback when album is added
+  onAlbumAdded, // Callback when album is added
+  open: externalOpen, // External control for open state
+  onOpenChange, // Callback when open state changes
+  externalButtonPosition // Position for external trigger (when button is hidden)
 }) {
   const eventId = useEventId(eventUrl);
   const { defaultAlbumIds } = useEventDefaultAlbums(eventId, eventUrl);
@@ -30,7 +33,16 @@ export default function AlbumQuickAddButton({
   const { t } = useTranslation();
   const { isRTL } = useRTL();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = (value) => {
+    if (externalOpen === undefined) {
+      setInternalOpen(value);
+    }
+    if (onOpenChange) {
+      onOpenChange(value);
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
@@ -253,6 +265,34 @@ export default function AlbumQuickAddButton({
 
   // Calculate dropdown position for portal rendering
   const getDropdownPosition = () => {
+    // Use external position if provided (for hidden button scenarios)
+    if (externalButtonPosition) {
+      const { left, right, top, bottom } = externalButtonPosition;
+      const isUp = dropdownDirection === 'up';
+      
+      if (isUp) {
+        return {
+          position: 'fixed',
+          ...(isRTL 
+            ? { right: `${window.innerWidth - right}px` }
+            : { left: `${left}px` }
+          ),
+          bottom: `${window.innerHeight - top + 8}px`,
+          zIndex: 10000,
+        };
+      }
+      return {
+        position: 'fixed',
+        ...(isRTL 
+          ? { right: `${window.innerWidth - right}px` }
+          : { left: `${left}px` }
+        ),
+        top: `${bottom + 8}px`,
+        zIndex: 10000,
+      };
+    }
+    
+    // Use button ref position (normal case)
     if (!buttonRef) return {};
     const rect = buttonRef.getBoundingClientRect();
     const isUp = dropdownDirection === 'up';
@@ -296,7 +336,10 @@ export default function AlbumQuickAddButton({
               <li key={album.id || album.album_id || `${album.label || 'album'}-${idx}`}>
                 <button
                   className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
-                  onClick={() => handleAddToAlbum(album)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddToAlbum(album);
+                  }}
                 >
                   {ImageComponent(
                     urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
@@ -350,7 +393,10 @@ export default function AlbumQuickAddButton({
                 </div>
               ) : (
                 <button
-                  onClick={() => setIsEditingName(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingName(true);
+                  }}
                   className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50 rounded text-gray-600 hover:text-gray-800"
                 >
                   <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
@@ -371,14 +417,19 @@ export default function AlbumQuickAddButton({
       <button
         ref={setButtonRef}
         onClick={() => setOpen(!open)}
-        className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
+        className="w-10 h-10 md:w-8 md:h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 active:bg-gray-200 text-gray-700 flex-shrink-0"
         title={t('albumQuickAdd.addToAlbum')}
         aria-label={t('albumQuickAdd.addToAlbum')}
       >
-        <PlusIcon className="w-4 h-4" />
+        <PlusIcon className="w-5 h-5 md:w-4 md:h-4" />
       </button>
-      {open && buttonRef && createPortal(
-        <div ref={modalRef} style={getDropdownPosition()}>
+      {open && (buttonRef || externalButtonPosition) && createPortal(
+        <div 
+          ref={modalRef} 
+          style={getDropdownPosition()} 
+          data-album-dropdown="true"
+          onClick={(e) => e.stopPropagation()}
+        >
           {renderDropdownContent()}
         </div>,
         document.body

@@ -6,7 +6,7 @@ import { useRTL } from '../../hooks/useRTL';
  * ScrollableTable - A reusable table component with sticky header and scrollable body
  * 
  * @param {Object} props
- * @param {Array} props.columns - Column definitions
+ * @param {Array} props.columns - Column definitions (supports hideOnMobile property)
  * @param {Array} props.data - Row data array
  * @param {string} props.sortBy - Current sort field
  * @param {string} props.sortDir - Sort direction: 'asc' | 'desc'
@@ -34,9 +34,9 @@ export default function ScrollableTable({
   const getSortIcon = (field) => {
     if (!field || sortBy !== field) return null;
     return sortDir === 'asc' ? (
-      <ArrowUp className="w-4 h-4" />
+      <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4" />
     ) : (
-      <ArrowDown className="w-4 h-4" />
+      <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4" />
     );
   };
 
@@ -80,8 +80,8 @@ export default function ScrollableTable({
 
   return (
     <div dir={isRTL ? 'rtl' : 'ltr'} className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)', ...style }}>
-      <div className="overflow-y-auto flex-1 min-h-0">
-        <table dir={isRTL ? 'rtl' : 'ltr'} className="w-full border-collapse">
+      <div className="overflow-y-auto overflow-x-auto flex-1 min-h-0">
+        <table dir={isRTL ? 'rtl' : 'ltr'} className="w-full border-collapse min-w-full">
           <thead className="bg-white sticky top-0 z-20 shadow-sm">
             <tr className="border-b border-gray-200">
               {columns.map((column, colIndex) => {
@@ -93,17 +93,19 @@ export default function ScrollableTable({
                   renderHeader,
                   className: colClassName = '',
                   headerClassName = '',
+                  hideOnMobile = false,
                 } = column;
 
                 const isSortable = sortable && onSort;
                 const alignClass = getAlignClass(align);
+                const mobileHideClass = hideOnMobile ? 'hidden sm:table-cell' : '';
 
                 if (renderHeader) {
                   return (
                     <th
                       key={key || colIndex}
                       dir={isRTL ? 'rtl' : 'ltr'}
-                      className={`sticky top-0 z-20 bg-white px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${headerClassName} ${colClassName}`}
+                      className={`sticky top-0 z-20 bg-white px-2 py-2 sm:px-4 sm:py-3 text-[10px] sm:text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${mobileHideClass} ${headerClassName} ${colClassName}`}
                       onClick={() => isSortable && handleSort(key)}
                     >
                       {renderHeader(column, getSortIcon(key), sortBy === key)}
@@ -115,16 +117,16 @@ export default function ScrollableTable({
                   <th
                     key={key || colIndex}
                     dir={isRTL ? 'rtl' : 'ltr'}
-                    className={`sticky top-0 z-20 bg-white px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${headerClassName} ${colClassName}`}
+                    className={`sticky top-0 z-20 bg-white px-2 py-2 sm:px-4 sm:py-3 text-[10px] sm:text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${mobileHideClass} ${headerClassName} ${colClassName}`}
                     onClick={() => isSortable && handleSort(key)}
                   >
                     {isSortable ? (
-                      <div dir={isRTL ? 'rtl' : 'ltr'} className={`flex items-center ${getJustifyClass(align)} gap-1`}>
-                        <span>{label}</span>
+                      <div dir={isRTL ? 'rtl' : 'ltr'} className={`flex items-center ${getJustifyClass(align)} gap-0.5 sm:gap-1`}>
+                        <span className="truncate">{label}</span>
                         {getSortIcon(key)}
                       </div>
                     ) : (
-                      label
+                      <span className="truncate">{label}</span>
                     )}
                   </th>
                 );
@@ -145,17 +147,28 @@ export default function ScrollableTable({
                     align = 'left',
                     className: colClassName = '',
                     cellClassName = '',
+                    hideOnMobile = false,
                   } = column;
 
                   const alignClass = getAlignClass(align);
+                  const mobileHideClass = hideOnMobile ? 'hidden sm:table-cell' : '';
+
+                  const cellContent = renderCell ? renderCell(row, rowIndex) : row[key] ?? '';
+                  const isPlainText = !renderCell && typeof cellContent === 'string';
 
                   return (
                     <td
                       key={key || colIndex}
                       dir={isRTL ? 'rtl' : 'ltr'}
-                      className={`px-4 py-3 text-sm ${alignClass} ${cellClassName} ${colClassName}`}
+                      className={`px-2 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm ${alignClass} ${mobileHideClass} ${cellClassName} ${colClassName}`}
                     >
-                      {renderCell ? renderCell(row, rowIndex) : row[key] ?? ''}
+                      {isPlainText ? (
+                        <div className="truncate max-w-[200px] sm:max-w-none" title={cellContent}>
+                          {cellContent}
+                        </div>
+                      ) : (
+                        cellContent
+                      )}
                     </td>
                   );
                 })}

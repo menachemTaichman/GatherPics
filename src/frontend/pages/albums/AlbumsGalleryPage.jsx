@@ -269,22 +269,26 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="h-[4rem]"></div>
       {/* Sticky Header */}
-      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {t('albumsGallery.albums')}
-            </h1>
-            <p className="text-gray-600">
-              {filteredAndSortedAlbums.length === currentAlbums.length
-                ? `${filteredAndSortedAlbums.length} ${t('albumsGallery.albums')}`
-                : `${filteredAndSortedAlbums.length} ${t('albumsGallery.of')} ${currentAlbums.length} ${t('albumsGallery.albums')}`
-              }
-            </p>
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-4 sm:px-8 py-4 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                {t('albumsGallery.albums')}
+              </h1>
+              <p className="text-sm sm:text-base text-gray-600">
+                {filteredAndSortedAlbums.length === currentAlbums.length
+                  ? `${filteredAndSortedAlbums.length} ${t('albumsGallery.albums')}`
+                  : `${filteredAndSortedAlbums.length} ${t('albumsGallery.of')} ${currentAlbums.length} ${t('albumsGallery.albums')}`
+                }
+              </p>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="relative">
+
+          {/* Controls Row */}
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="relative flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
               <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`} />
               <input
                 type="text"
@@ -294,13 +298,13 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                 placeholder={t('albumsGallery.searchAlbums')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-64 ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent`}
+                className={`w-full sm:w-64 ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base`}
               />
             </div>
             
             <button
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1 flex-shrink-0"
               title={t('albumsGallery.sort') + ' ' + (sortOrder === 'asc' ? t('albumsGallery.ascending') : t('albumsGallery.descending'))}
             >
               {sortOrder === 'asc' ? (
@@ -311,7 +315,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
             </button>
 
             {/* Size Control */}
-            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 sm:px-3 py-2 flex-shrink-0">
               <button
                 onClick={() => {
                   const currentPercent = Math.round(cardSize * 100);
@@ -348,7 +352,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                     setCardSizeInputValue(undefined);
                   }
                 }}
-                className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                className="text-sm font-medium text-gray-700 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                 style={{width: '3rem'}}
               />
               <button
@@ -368,9 +372,10 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
           </div>
         </div>
       </div>
+      </div>
 
       {/* Content Area */}
-      <div className="px-8 py-8">
+      <div className="px-4 sm:px-8 py-4 sm:py-8">
         {/* Gallery Grid */}
         {!defaultAlbumsReady ? (
           <motion.div
@@ -407,8 +412,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
             style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * cardSize)}px, 1fr))`,
-              gridAutoRows: `${Math.max(100, 266 * cardSize)}px`
+              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * cardSize)}px, 1fr))`,
+              gridAutoRows: `${Math.max(120, 266 * cardSize)}px`
             }}
           >
             {filteredAndSortedAlbums.map((album, index) => {
@@ -464,7 +469,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       </div>
       
       {/* Floating Create Album Button */}
-      <div className={`fixed bottom-8 ${isRTL ? 'left-8' : 'right-8'} z-40`}>
+      <div className={`fixed bottom-4 sm:bottom-8 ${isRTL ? 'left-4 sm:left-8' : 'right-4 sm:right-8'} z-40`}>
         <AnimatePresence>
           {isCreatingAlbum && (
             <motion.div
@@ -473,7 +478,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.9, x: isRTL ? -20 : 20 }}
               transition={{ duration: 0.2 }}
-              className={`absolute bottom-20 ${isRTL ? 'left-0' : 'right-0'} bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-2xl border border-blue-100 p-4 w-80`}
+              className={`absolute bottom-16 sm:bottom-20 ${isRTL ? 'left-0' : 'right-0'} bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-2xl border border-blue-100 p-3 sm:p-4 w-[calc(100vw-2rem)] sm:w-80 max-w-sm`}
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 relative">
@@ -525,7 +530,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
         
         <motion.button
           onClick={handleToggleCreate}
-          className="w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center group"
+          className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center group"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           animate={{ rotate: isCreatingAlbum ? 45 : 0 }}
@@ -533,7 +538,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
           title={t('albumsGallery.createAlbum')}
           aria-label={t('albumsGallery.createAlbum')}
         >
-          <Plus className="w-8 h-8" />
+          <Plus className="w-7 h-7 sm:w-8 sm:h-8" />
         </motion.button>
       </div>
     </div>

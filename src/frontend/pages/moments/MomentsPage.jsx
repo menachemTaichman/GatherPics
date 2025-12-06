@@ -554,12 +554,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
       <div className="h-[4rem]"></div>
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-[4rem] z-30 px-8 py-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <h1 className="text-3xl font-bold text-gray-900">{t('moments.timeline')}</h1>
-            <div className="flex items-center gap-4">
-              <p className="text-gray-600">
+      <div className="bg-white border-b border-gray-200 sticky top-[4rem] z-30 px-4 sm:px-6 md:px-8 py-3 sm:py-4 shadow-sm">
+        <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
+          <div className="flex items-center gap-4 sm:gap-6 md:gap-8 flex-wrap">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">{t('moments.timeline')}</h1>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <p className="text-sm sm:text-base text-gray-600">
                 {totalPhotoCount} {t('moments.photos')}
               </p>
             </div>
@@ -579,10 +579,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
         </div>
 
         {/* Controls Row */}
-        <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center divide-x divide-gray-200">
+        <div className="mt-4 sm:mt-6 md:mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-center divide-x divide-gray-200 flex-wrap">
             {/* Group 1: View and Size Controls */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
               {storeLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 h-4 border-b-2 border-primary-600"></div>
@@ -642,7 +642,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             </div>
 
             {/* Group 2: Selection Controls */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
               {storeLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
@@ -663,28 +663,45 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                   </button>
                   
+                  {/* Carousel Toggle Button - moved here */}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setCarouselVisible(!carouselVisible)}
+                    className="flex items-center justify-center w-8 h-8 bg-white rounded-md border border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                    title={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
+                    aria-label={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
+                  >
+                    {carouselVisible ? (
+                      <span className="text-gray-600 font-bold text-base leading-none">↑</span>
+                    ) : (
+                      <span className="text-gray-600 font-bold text-base leading-none">↓</span>
+                    )}
+                  </motion.button>
+
+                  {/* Compact Current Moment Box - Mobile only, in same row */}
+                  <div className="md:hidden flex items-center">
+                    {currentVisibleMoment ? (
+                      <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md border border-gray-200 shadow-sm">
+                        <div className="flex flex-col min-w-0">
+                          <div className="text-xs font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[120px]">
+                            {currentVisibleMoment.label}
+                          </div>
+                          <div className="text-[10px] text-gray-600 truncate">
+                            {formatTimeOnly(currentVisibleMoment.start_date)} - {formatTimeOnly(currentVisibleMoment.end_date)}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md border border-gray-200 shadow-sm">
+                        <div className="text-xs font-semibold text-gray-900">{t('moments.timeline')}</div>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
 
-          </div>
-
-          <div className="flex items-center">
-            {/* Carousel Toggle Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setCarouselVisible(!carouselVisible)}
-              className="flex items-center justify-center w-8 h-8 bg-white rounded-full shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200 hover:bg-gray-50"
-              title={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
-              aria-label={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
-            >
-              {carouselVisible ? (
-                <span className="text-gray-600 font-bold text-lg leading-none">↑</span>
-              ) : (
-                <span className="text-gray-600 font-bold text-lg leading-none">↓</span>
-              )}
-            </motion.button>
           </div>
         </div>
 
@@ -717,13 +734,13 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     key={moment.id} 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="relative bg_white rounded-lg shadow flex-shrink-0 w-56 h-32 flex flex-col items-center justify-center p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
+                    className="relative bg_white rounded-lg shadow flex-shrink-0 w-40 sm:w-48 md:w-56 h-28 sm:h-32 flex flex-col items-center justify-center p-2 sm:p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => {
                       // Use timeline manager for navigation with moment name
                       timelineManager.navigateToMoment(moment.label, moment.label);
                     }}
                   >
-                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-2">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-1 sm:mb-2">
                       {ImageComponent(
                         urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
                         {
@@ -735,8 +752,8 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                       )}
                     </div>
                       <div className="text-center">
-                      <div className="text-base font-semibold truncate max-w-[7rem]">{moment.label}</div>
-                      <div className="text-xs text-gray-500 truncate max-w-[7rem]">
+                      <div className="text-sm sm:text-base font-semibold truncate max-w-[5rem] sm:max-w-[7rem]">{moment.label}</div>
+                      <div className="text-xs text-gray-500 truncate max-w-[5rem] sm:max-w-[7rem]">
                         {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
                       </div>
                     </div>
@@ -749,27 +766,27 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       </div>
 
       {/* Timeline */}
-      <div className="px-4 py-8">
+      <div className="px-2 sm:px-4 py-4 sm:py-6 md:py-8">
         {moments.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items_center justify-center mb-4">
-              <Calendar className="w-12 h-12 text-gray-400" />
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-gray-200 rounded-full flex items_center justify-center mb-4">
+              <Calendar className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('moments.noMomentsYet')}</h3>
-            <p className="text-gray-500">{t('moments.createFirstMoment')}</p>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">{t('moments.noMomentsYet')}</h3>
+            <p className="text-sm sm:text-base text-gray-500">{t('moments.createFirstMoment')}</p>
           </div>
         ) : storeLoading ? (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600"></div>
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
+              <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-b-2 border-primary-600"></div>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('moments.loadingTimeline')}</h3>
-            <p className="text-gray-500">{t('moments.loadingPhotos')}</p>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">{t('moments.loadingTimeline')}</h3>
+            <p className="text-sm sm:text-base text-gray-500">{t('moments.loadingPhotos')}</p>
           </div>
         ) : (
           <div className="relative">
-                         {/* Fixed right sidebar for sticky info */}
-             <div className={`fixed ${endClass('4')} top-100 w-64 z-30 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-lg border border-gray-200`}>
+                         {/* Fixed right sidebar for sticky info - hidden on mobile */}
+             <div className={`hidden md:block fixed ${endClass('4')} top-100 w-56 lg:w-64 z-30 bg-white/70 backdrop-blur-sm p-3 sm:p-4 rounded-lg shadow-lg border border-gray-200`}>
               {currentVisibleMoment ? (
                 <>
                   <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
@@ -811,7 +828,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             </div>
             
             {/* Timeline items */}
-            <div className="space-y-12" style={{ [isRTL ? 'paddingLeft' : 'paddingRight']: '1rem' }}>
+            <div className="space-y-8 sm:space-y-10 md:space-y-12" style={{ [isRTL ? 'paddingLeft' : 'paddingRight']: '0.5rem' }}>
               {storeLoading && (
                 <div className="text-center py-8">
                   <div className="inline-flex items-center gap-2 text-gray-500">

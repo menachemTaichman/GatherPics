@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +65,11 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
   useAuthRefresh(fetchUploads, [eventUrl]);
 
+  // Ensure page starts at top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [eventUrl]);
+
   const sortedUploads = useMemo(() => {
     // Skip sorting for placeholders
     if (!isAuthenticated) return currentUploads;
@@ -108,10 +113,10 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className="w-full overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
-        <div className="h-[4rem]"></div>
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 overflow-x-hidden`} dir={isRTL ? 'rtl' : 'ltr'} style={{ margin: 0, padding: 0 }}>
+        {eventUrl && <div className="h-[4rem]"></div>}
         {/* Sticky Header */}
-        <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className={`sticky ${eventUrl ? 'top-[4rem]' : 'top-0'} z-30 bg-white border-b border-gray-200 shadow-sm`}>
           <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">

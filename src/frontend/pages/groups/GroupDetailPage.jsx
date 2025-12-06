@@ -181,6 +181,94 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const pendingClassUpdatesRef = useRef({});
   const flushClassesRafRef = useRef(null);
 
+  // Pinch-to-zoom refs for mobile
+  const pinchStartDistanceRef = useRef(null);
+  const pinchStartSizeRef = useRef(null);
+  const gridContainerRef = useRef(null);
+  const imageSizeRef = useRef(imageSize);
+  
+  // Keep imageSizeRef in sync
+  useEffect(() => {
+    imageSizeRef.current = imageSize;
+  }, [imageSize]);
+
+  // State to track when container is ready
+  const [containerReady, setContainerReady] = useState(false);
+
+  // Callback ref to ensure container is set
+  const setGridContainerRef = useCallback((node) => {
+    gridContainerRef.current = node;
+    setContainerReady(!!node);
+  }, []);
+
+  // Pinch-to-zoom handlers for mobile
+  useEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container || !containerReady) return;
+
+    const getDistance = (touch1, touch2) => {
+      const dx = touch2.clientX - touch1.clientX;
+      const dy = touch2.clientY - touch1.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e) => {
+      // Only handle if exactly 2 touches on the container or its children
+      if (e.touches.length === 2) {
+        // Check if touches are within the container bounds
+        const rect = container.getBoundingClientRect();
+        const touchesInContainer = Array.from(e.touches).every(touch => {
+          return touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                 touch.clientY >= rect.top && touch.clientY <= rect.bottom;
+        });
+        
+        if (touchesInContainer) {
+          const distance = getDistance(e.touches[0], e.touches[1]);
+          pinchStartDistanceRef.current = distance;
+          pinchStartSizeRef.current = imageSizeRef.current;
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      // Only handle if we have 2 touches and a valid start distance
+      if (e.touches.length === 2 && pinchStartDistanceRef.current !== null) {
+        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+        const scale = currentDistance / pinchStartDistanceRef.current;
+        const newSize = Math.max(0.5, Math.min(3.0, pinchStartSizeRef.current * scale));
+        setImageSize(newSize);
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      // Reset if we have less than 2 touches
+      if (e.touches.length < 2) {
+        pinchStartDistanceRef.current = null;
+        pinchStartSizeRef.current = null;
+      }
+    };
+
+    const handleTouchCancel = (e) => {
+      pinchStartDistanceRef.current = null;
+      pinchStartSizeRef.current = null;
+    };
+
+    // Attach listeners to container
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchCancel);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchCancel);
+    };
+  }, [containerReady]); // Re-run when container is ready
+
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [albums, setAlbums] = useState([]);
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
@@ -679,6 +767,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   useEffect(() => {
     imageTileRefs.current = imageTileRefs.current.slice(0, sortedImages.length);
   }, [sortedImages.length]);
+
 
   // Memoize filtered imageIds to prevent infinite re-renders in GroupsFilter
   // Use the already filtered images from sortedImages instead of all images from main group
@@ -1445,21 +1534,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="h-[4rem]"></div>
       {/* Pinned Header */}
-      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-8 py-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-4 sm:px-8 py-4 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               to={`/${eventUrl}/people`}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
               title={t('groupDetail.backToAllPeople')}
               aria-label={t('groupDetail.backToAllPeople')}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div className="flex items-center gap-4">
-              <div className="relative">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+              <div className="relative flex-shrink-0">
                 <div 
-                  className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
+                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
                 >
                   {groupRepresentativeComponent}
                 </div>
@@ -1475,23 +1564,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                           showToast(formatErrorMessage(t('groupDetail.removeRepresentativeAction'), error), 'error');
                         }
                       }}
-                      className={`absolute -bottom-1 ${endClass('1')} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
+                      className={`absolute -bottom-1 ${endClass('1')} w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
                       title={t('groupDetail.removeRepresentative')}
                       aria-label={t('groupDetail.removeRepresentative')}
                     >
-                      <Minus className="w-3 h-3" />
+                      <Minus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                     </button>
                   </PermissionGate>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 flex-1 min-w-0">
                 {isEditingTitle ? (
-                  <div className="flex items-center gap-2" onBlur={(e) => {
+                  <div className="flex items-center gap-2 flex-1 min-w-0" onBlur={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget)) {
                       handleTitleCancel();
                     }
                   }}>
-                    <div className="relative">
+                    <div className="relative flex-1 min-w-0">
                       <input
                         type="text"
                         id="edit-group-title"
@@ -1509,7 +1598,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                           }
                         }}
                         dir={isRTL ? 'rtl' : 'ltr'}
-                        className={`text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-[200px] ${
+                        className={`text-xl sm:text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-full max-w-[200px] ${
                           nameConflict ? 'border-red-500' : 'border-primary-500'
                         }`}
                         autoFocus
@@ -1523,22 +1612,26 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     </div>
                     <button
                       onClick={handleTitleSave}
-                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                      className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
+                      title={t('groupDetail.save')}
+                      aria-label={t('groupDetail.save')}
                     >
                       <Check className="w-4 h-4 text-green-600" />
                     </button>
                     <button
                       onClick={handleTitleCancel}
-                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                      className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"
+                      title={t('groupDetail.cancel')}
+                      aria-label={t('groupDetail.cancel')}
                     >
                       <X className="w-4 h-4 text-red-600" />
                     </button>
 
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <h1 
-                      className={`text-3xl font-bold text-gray-900 w-[200px] ${
+                      className={`text-xl sm:text-3xl font-bold text-gray-900 truncate ${
                         (isUnassociatedGroup || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
                       onClick={(isUnassociatedGroup || !permissions.canEdit) ? undefined : handleTitleEdit}
@@ -1547,30 +1640,28 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     </h1>
                   </div>
                 )}
-              </div>
-              <div className="relative">
-                <p className="text-gray-600">
-                  {showCrops ? (
-                    `${sortedImages.length} ${t('groupDetail.faces')}`
-                  ) : (
-                    sortedImages.length === getImageCount(group)
-                      ? `${sortedImages.length} ${t('groupDetail.photos')}`
-                      : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
-                  )}
-                </p>
+                <div className="relative">
+                  <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
+                    {showCrops ? (
+                      `${sortedImages.length} ${t('groupDetail.faces')}`
+                    ) : (
+                      sortedImages.length === getImageCount(group)
+                        ? `${sortedImages.length} ${t('groupDetail.photos')}`
+                        : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-
         </div>
 
         {/* Controls Row */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
-          <div className="flex items-center divide-x divide-gray-200">
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             {/* Group 1: Sort and Filter */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {/* Search field - temporarily hidden
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -1628,7 +1719,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             </div>
             
             {/* Group 2: Zoom, Crops */}
-            <div className="flex items-center gap-3 px-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
@@ -1667,7 +1758,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     setImageSizeInputValue(undefined);
                   }
                 }}
-                className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                className="text-sm font-medium text-gray-700 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                 style={{width: '3rem'}}
               />
               <button
@@ -1686,23 +1777,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 <Plus className="w-4 h-4" />
               </button>
 
-                              <button
-                  onClick={() => setShowCrops(!showCrops)}
-                  className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
-                    showCrops 
-                      ? 'bg-primary-100 text-primary-700' 
-                      : 'hover:bg-gray-100 text-gray-700'
-                  }`}
-                  title={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
-                  aria-label={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
-                >
+              <button
+                onClick={() => setShowCrops(!showCrops)}
+                className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                  showCrops 
+                    ? 'bg-primary-100 text-primary-700' 
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                title={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
+                aria-label={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
+              >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
             </div>
 
-                        {/* Group 3: Selection Mode Toggle */}
+            {/* Group 3: Selection Mode Toggle */}
             {sortedImages.length > 0 && (
-              <div className="flex items-center gap-3 px-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -1720,7 +1811,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
             {/* Group 4: Manage Access */}
             {!isUnassociatedGroup && (
-              <div className="flex items-center gap-3 px-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <PermissionGate requires="isProfilesManager">
                   <button
                     onClick={() => setShowManageAccessModal(true)}
@@ -1761,7 +1852,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       </div>
 
       {/* Content Area */}
-      <div className="px-8 py-8">
+      <div className="px-4 sm:px-8 py-4 sm:py-8">
         {/* Photos Grid/List */}
         {loading ? (
           <div className="text-center py-12">
@@ -1784,11 +1875,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           </motion.div>
         ) : (
           <>
+            <div ref={setGridContainerRef} className="w-full">
             <motion.div
               className="w-full photo-gallery-grid"
               style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
+                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
+                gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
               }}
               initial={skipNextAnimation.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1889,6 +1981,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 );
               })}
             </motion.div>
+            </div>
             {hasMore && (
               <div className="text-center mt-8">
                 <button

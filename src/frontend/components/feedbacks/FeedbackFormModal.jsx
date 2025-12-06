@@ -371,7 +371,7 @@ export default function FeedbackFormModal({
                       {/* Communication Consent - shown when email is provided (not for public profiles) */}
                       {shouldShowCommunicationConsent && formData.sender_email.trim() && (
                         <div className="mt-2">
-                          <label className={`relative inline-flex items-center gap-3 ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
+                          <label className={`relative flex items-start gap-3 ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
                             <input
                               type="checkbox"
                               checked={Boolean(formData.communication_consent)}
@@ -379,10 +379,10 @@ export default function FeedbackFormModal({
                               disabled={loading}
                               className="sr-only peer"
                             />
-                    <div className={`w-10 h-5 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
-                    <span className={`text-sm ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
-                      {t('feedbackForm.iWouldLikeToReceiveEmailUpdates')}
-                    </span>
+                            <div className={`w-10 h-5 flex-shrink-0 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
+                            <span className={`text-sm flex-1 ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
+                              {t('feedbackForm.iWouldLikeToReceiveEmailUpdates')}
+                            </span>
                           </label>
                         </div>
                       )}
@@ -481,7 +481,7 @@ export default function FeedbackFormModal({
               {/* Communication Consent - for non-public profiles with email */}
               {shouldShowCommunicationConsent && !shouldShowEmailField && (
                 <div>
-                  <label className={`relative inline-flex items-center gap-3 ${(loading || isViewOnly) ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
+                  <label className={`relative flex items-start gap-3 ${(loading || isViewOnly) ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
                     <input
                       type="checkbox"
                       checked={Boolean(formData.communication_consent)}
@@ -489,8 +489,8 @@ export default function FeedbackFormModal({
                       disabled={loading || isViewOnly}
                       className="sr-only peer"
                     />
-                    <div className={`w-10 h-5 ${(loading || isViewOnly) ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
-                    <span className={`text-sm font-medium ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
+                    <div className={`w-10 h-5 flex-shrink-0 ${(loading || isViewOnly) ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
+                    <span className={`text-sm font-medium flex-1 ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
                       {t('feedbackForm.iWouldLikeToReceiveEmailUpdatesRegardingThisFeedback')}
                     </span>
                   </label>

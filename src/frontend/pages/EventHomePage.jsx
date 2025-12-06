@@ -301,20 +301,20 @@ export default function EventHomePage({ eventUrl, eventData }) {
       >
         <WrapperComponent {...wrapperProps}>
           <motion.div 
-            className={`h-full bg-white border border-gray-200 ${card.borderHover} hover:shadow-lg transition-all duration-300 p-6 relative overflow-hidden rounded-lg`}
+            className={`h-full bg-white border border-gray-200 ${card.borderHover} hover:shadow-lg transition-all duration-300 p-3 sm:p-6 relative overflow-hidden rounded-lg`}
             whileHover={{ y: -4 }}
           >
             <div className="flex flex-col items-center text-center relative z-10">
               <motion.div 
-                className={`w-14 h-14 bg-gradient-to-br ${card.iconBg} ${card.hoverBg} rounded-xl flex items-center justify-center mb-4 transition-all duration-300 shadow-sm`}
+                className={`w-10 h-10 sm:w-14 sm:h-14 bg-gradient-to-br ${card.iconBg} ${card.hoverBg} rounded-xl flex items-center justify-center mb-2 sm:mb-4 transition-all duration-300 shadow-sm`}
                 whileHover={{ scale: 1.05 }}
               >
-                <card.icon className={`w-7 h-7 ${card.iconColor} ${card.hoverIcon} transition-colors duration-300`} />
+                <card.icon className={`w-5 h-5 sm:w-7 sm:h-7 ${card.iconColor} ${card.hoverIcon} transition-colors duration-300`} />
               </motion.div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2 transition-colors">
+              <h3 className="text-base sm:text-xl font-semibold text-gray-900 mb-1 sm:mb-2 transition-colors">
                 {card.title}
               </h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
                 {card.description}
               </p>
             </div>
@@ -378,7 +378,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
         className="fixed top-0 left-0 right-0 z-50 px-8 sm:px-10 md:px-12 pt-10 sm:pt-14 md:pt-20 pb-4 pointer-events-none"
       >
         <div className="relative z-10 pointer-events-auto">
-          <Link to="/" className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur hover:bg-white/25 transition-colors w-fit">
+          <Link to="/" className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur hover:bg-white/25 transition-colors w-fit mt-4 sm:mt-0">
             {APP_CONFIG.name}
           </Link>
           <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">
@@ -448,7 +448,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
 
         {/* Navigation Cards */}
         <div className="max-w-5xl mx-auto relative" style={{ zIndex: 30 }}>
-          <div className={`grid grid-cols-1 ${columnsPerRow >= 3 ? 'md:grid-cols-3' : columnsPerRow === 2 ? 'md:grid-cols-2' : ''} gap-5`}>
+          <div className={`grid grid-cols-2 ${columnsPerRow >= 3 ? 'md:grid-cols-3' : columnsPerRow === 2 ? 'md:grid-cols-2' : ''} gap-3 md:gap-5`}>
             {visibleCards.map((card, index) => {
               const isInLastCustomRow = columnsPerRow === 3 && index >= lastRowStartIndex;
               if (columnsPerRow === 3 && isInLastCustomRow) {
@@ -465,7 +465,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
             {columnsPerRow === 3 && lastRowCount > 0 && (
               <div className="md:col-span-3">
                 <div
-                  className={`flex flex-col gap-5 ${lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'} md:gap-6`}
+                  className={`flex flex-col gap-3 md:gap-5 ${lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'}`}
                 >
                   {visibleCards.slice(-lastRowCount).map((card, sliceIndex) => (
                     <Fragment key={card.id || card.to || card.title}>

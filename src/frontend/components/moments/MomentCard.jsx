@@ -176,11 +176,11 @@ const MomentCard = forwardRef(({
           className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow duration-300"
           whileHover={{ y: -2 }}
         >
-          <div className="p-6 border-b border-gray-100">
-            <div className="flex items-start gap-4">
+          <div className="p-3 sm:p-4 md:p-6 border-b border-gray-100">
+            <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
               {/* Representative Image */}
               <div className="flex-shrink-0">
-                <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shadow-md">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border border-gray-200 shadow-md">
                   {ImageComponent(
                     urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
                     {
@@ -193,10 +193,10 @@ const MomentCard = forwardRef(({
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xl font-bold text-gray-900">{moment.label}</h3>
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{moment.label}</h3>
                 </div>
-                                 <div className="flex items-center gap-4 text-sm text-gray-500 h-8">
+                                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-gray-500 min-h-[2rem] sm:min-h-[2.5rem]">
                    <div className="flex items-center gap-1">
                      <Clock className="w-4 h-4" />
                      <span>{formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}</span>
@@ -217,12 +217,12 @@ const MomentCard = forwardRef(({
                    
                    {/* Per-moment selection controls */}
                    {images.length > 0 && (
-                     <div className="flex items-center gap-3">
+                     <div className="flex items-center gap-2 sm:gap-3">
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                        {selectionMode && !allSelectedInMoment && (
                          <button
                            onClick={() => onSelectAllInMoment(moment.id)}
-                           className={`w-8 h-8 rounded transition-colors flex items-center justify-center ${
+                           className={`w-7 h-7 sm:w-8 sm:h-8 rounded transition-colors flex items-center justify-center ${
                              selectedInMoment.length > 0 
                                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                                : 'hover:bg-gray-100 text-gray-700'
@@ -230,7 +230,7 @@ const MomentCard = forwardRef(({
                            title={t('moments.selectAll')}
                            aria-label={t('moments.selectAll')}
                          >
-                           <CheckCheck className="w-4 h-4" />
+                           <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                          </button>
                        )}
                        
@@ -238,34 +238,34 @@ const MomentCard = forwardRef(({
                        {selectedInMoment.length > 0 && (
                          <button
                            onClick={() => onClearMomentSelection(moment.id)}
-                           className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
+                           className="w-7 h-7 sm:w-8 sm:h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
                            title={t('moments.clearSelection')}
                            aria-label={t('moments.clearSelection')}
                          >
-                           <X className="w-4 h-4" />
+                           <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                          </button>
                        )}
                      </div>
                    )}
                    
                    {selectedInMoment.length > 0 && (
-                     <span className="text-primary-600 font-medium">
+                     <span className="text-xs sm:text-sm text-primary-600 font-medium">
                        • {selectedInMoment.length} {t('moments.selected')}
                      </span>
                    )}
                  </div>
                 {moment.description && (
-                  <p className="text-gray-600 mt-2">{moment.description}</p>
+                  <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">{moment.description}</p>
                 )}
               </div>
             </div>
           </div>
-          <div className="p-6">
+          <div className="p-3 sm:p-4 md:p-6">
             <motion.div
               className="w-full photo-gallery-grid"
               style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(100, 266 * imageSize)}px`
+                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(80, 266 * imageSize)}px, 1fr))`,
+                gridAutoRows: `${Math.max(80, 266 * imageSize)}px`
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

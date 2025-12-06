@@ -82,6 +82,11 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   
   useAuthRefresh(loadRequests, [eventUrl]);
 
+  // Ensure page starts at top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [eventUrl]);
+
   // Use requests from store or placeholders when not authenticated
   const currentRequests = isAuthenticated ? storeRequests : placeholderRequests;
 
@@ -236,7 +241,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 overflow-x-hidden`} dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 overflow-x-hidden`} dir={isRTL ? 'rtl' : 'ltr'} style={{ margin: 0, padding: 0 }}>
         {eventUrl && <div className="h-[4rem]"></div>}
         {/* Header */}
         <div className={`sticky ${eventUrl ? 'top-[4rem]' : 'top-0'} z-30 bg-white border-b border-gray-200 shadow-sm`}>

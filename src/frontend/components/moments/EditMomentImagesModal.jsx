@@ -623,14 +623,14 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+          className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-2 sm:mx-4 max-h-[90vh] overflow-hidden flex flex-col"
           tabIndex={-1}
           dir={isRTL ? 'rtl' : 'ltr'}
         >
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">{t('moments.editPhotosTitle')} {currentMoment?.label || moment.label}</h3>
-            <div className="flex items-center gap-2">
+        <div className="p-3 sm:p-4 md:p-6 border-b">
+          <div className="flex justify-between items-center gap-2 flex-wrap">
+            <h3 className="text-base sm:text-lg font-bold truncate min-w-0">{t('moments.editPhotosTitle')} {currentMoment?.label || moment.label}</h3>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button 
                 onClick={handleReset} 
                 className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
@@ -667,62 +667,64 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
           
           {/* Filter and Sort Controls */}
-          <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-3 sm:mt-4 gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Sort button - moved before filter */}
               <button
                 onClick={handleToggleSortOrder}
-                className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
+                className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center flex-shrink-0"
                 title={sortOrder === 'asc' ? t('moments.sortDescending') : t('moments.sortAscending')}
                 aria-label={sortOrder === 'asc' ? t('moments.sortDescending') : t('moments.sortAscending')}
               >
                 {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
               </button>
               
-              <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">{t('moments.filter')}</span>
-              <button
-                onClick={() => setFilterType('all')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  filterType === 'all' 
-                    ? 'bg-primary-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {t('moments.all')}
-              </button>
-              <button
-                onClick={() => setFilterType('in-moment')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  filterType === 'in-moment' 
-                    ? 'bg-primary-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {t('moments.inMoment')}
-              </button>
-              <button
-                onClick={() => setFilterType('not-in-moment')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  filterType === 'not-in-moment' 
-                    ? 'bg-primary-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {t('moments.notInMoment')}
-              </button>
-              <button
-                onClick={() => setFilterType('in-period')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  filterType === 'in-period' 
-                    ? 'bg-primary-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {t('moments.inPeriod')}
-              </button>
+              <Filter className="w-4 h-4 text-gray-500 flex-shrink-0" />
+              <span className="text-xs sm:text-sm font-medium text-gray-700 hidden sm:inline">{t('moments.filter')}</span>
+              <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                <button
+                  onClick={() => setFilterType('all')}
+                  className={`px-2 sm:px-3 py-1 text-xs rounded transition-colors ${
+                    filterType === 'all' 
+                      ? 'bg-primary-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('moments.all')}
+                </button>
+                <button
+                  onClick={() => setFilterType('in-moment')}
+                  className={`px-2 sm:px-3 py-1 text-xs rounded transition-colors ${
+                    filterType === 'in-moment' 
+                      ? 'bg-primary-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('moments.inMoment')}
+                </button>
+                <button
+                  onClick={() => setFilterType('not-in-moment')}
+                  className={`px-2 sm:px-3 py-1 text-xs rounded transition-colors ${
+                    filterType === 'not-in-moment' 
+                      ? 'bg-primary-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('moments.notInMoment')}
+                </button>
+                <button
+                  onClick={() => setFilterType('in-period')}
+                  className={`px-2 sm:px-3 py-1 text-xs rounded transition-colors ${
+                    filterType === 'in-period' 
+                      ? 'bg-primary-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {t('moments.inPeriod')}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {/* Select all button - only visible when not all filtered are selected */}
               {!areAllFilteredSelected() && (
                 <button
@@ -754,8 +756,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
 
         </div>
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
             {filteredImages.map((image, index) => {
               const selectionState = getImageSelectionState(image.id);
               const momentInfo = getImageMomentInfo(image.id);

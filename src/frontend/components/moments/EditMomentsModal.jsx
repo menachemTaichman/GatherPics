@@ -578,14 +578,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+          className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-2 sm:mx-4 max-h-[90vh] overflow-hidden flex flex-col"
           tabIndex={-1}
           dir={isRTL ? 'rtl' : 'ltr'}
         >
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">{t('moments.editMoments')}</h3>
-            <div className="flex gap-2">
+        <div className="p-4 sm:p-6 border-b">
+          <div className="flex justify-between items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold truncate">{t('moments.editMoments')}</h3>
+            <div className="flex gap-2 flex-shrink-0">
               <button 
                 onClick={addMoment} 
                 className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
@@ -606,15 +606,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           </div>
         </div>
         
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
           <div className="space-y-3">
       {editingMoments.filter(m => m && (m.id || m.moment_id)).map((moment, index) => (
-              <div key={moment.id || moment.moment_id} data-moment-moment_id={moment.id || moment.moment_id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3 flex-1">
+              <div key={moment.id || moment.moment_id} data-moment-moment_id={moment.id || moment.moment_id} className="border rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     {/* Representative image */}
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden border">
+                    <div className="relative flex-shrink-0">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border">
                         {ImageComponent(
                           !String(moment.id || moment.moment_id).startsWith('temp-') && urlHelpers?.getRepresentativeUrl 
                             ? `${urlHelpers.getRepresentativeUrl('moments', moment.id || moment.moment_id)}?v=${moment.representative_image || 'none'}` 
@@ -652,7 +652,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     </div>
 
                     {/* Inline Editable Title */}
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       {editingTitle?.moment_id === (moment.id || moment.moment_id) ? (
                         <div className="relative">
                           <input
@@ -669,7 +669,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                                 setEditingTitle(null);
                               }
                             }}
-                            className={`text-lg font-semibold border-b hover:border-gray-300 focus:outline-none px-1 py-1 w-full ${
+                            className={`text-base sm:text-lg font-semibold border-b hover:border-gray-300 focus:outline-none px-1 py-1 w-full ${
                               nameConflicts.get(moment.id || moment.moment_id) 
                                 ? 'border-red-500 focus:border-red-500' 
                                 : 'border-transparent focus:border-primary-500'
@@ -685,7 +685,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <div
                             onClick={() => startTitleEdit(moment.id || moment.moment_id, moment.label)}
                             onKeyDown={(e) => {
@@ -695,12 +695,12 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                             }}
                             role="button"
                             tabIndex={0}
-                            className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
+                            className="text-base sm:text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors truncate"
                           >
                             {moment.label || `${t('moments.newMoment')} ${index + 1}`}
                           </div>
                           {nameConflicts.get(moment.id || moment.moment_id) && (
-                            <AlertTriangle className="w-4 h-4 text-red-500" title={t('moments.nameAlreadyExists')} />
+                            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" title={t('moments.nameAlreadyExists')} />
                           )}
                         </div>
                       )}
@@ -708,7 +708,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                     {changedMoments.has(moment.id || moment.moment_id) && (
                       <>
                         <button 
@@ -803,7 +803,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     />
                   </div>
                   
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 md:col-span-2">
                     <div className="flex-1">
                       <label className="block text-xs font-medium text-gray-600 mb-1">{t('moments.startTime')}</label>
                       <input

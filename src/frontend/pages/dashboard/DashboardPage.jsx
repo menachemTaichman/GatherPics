@@ -125,7 +125,7 @@ export default function DashboardPage() {
       >
         <CardWrapper {...cardProps}>
           <motion.div
-            className={`relative h-full overflow-hidden rounded-lg border border-gray-200 bg-white p-6 transition-all duration-300 hover:shadow-lg ${section.borderHover} ${
+            className={`relative h-full overflow-hidden rounded-lg border border-gray-200 bg-white p-3 sm:p-6 transition-all duration-300 hover:shadow-lg ${section.borderHover} ${
               !isAuthenticated ? 'opacity-60' : ''
             }`}
             whileHover={{ y: isAuthenticated ? -4 : 0 }}
@@ -133,17 +133,17 @@ export default function DashboardPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-white opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <div className="flex h-full flex-col items-center text-center relative z-10">
               <motion.div
-                className={`mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${section.iconBg} ${section.hoverBg} shadow-sm transition-all duration-300`}
+                className={`mb-2 sm:mb-4 flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-gradient-to-br ${section.iconBg} ${section.hoverBg} shadow-sm transition-all duration-300`}
                 whileHover={{ scale: isAuthenticated ? 1.05 : 1 }}
               >
-                <Icon className={`h-7 w-7 ${section.iconColor} ${section.hoverIcon} transition-colors duration-300`} />
+                <Icon className={`h-5 w-5 sm:h-7 sm:w-7 ${section.iconColor} ${section.hoverIcon} transition-colors duration-300`} />
               </motion.div>
-              <h3 className="mb-2 text-xl font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
+              <h3 className="mb-1 sm:mb-2 text-base sm:text-xl font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
                 {section.title}
               </h3>
-              <p className="text-sm leading-relaxed text-gray-600">{section.description}</p>
+              <p className="text-xs sm:text-sm leading-relaxed text-gray-600">{section.description}</p>
               {!isAuthenticated && !isLoading && (
-                <span className="mt-4 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-600">
+                <span className="mt-2 sm:mt-4 rounded-full bg-primary-50 px-2 sm:px-3 py-1 text-xs font-medium text-primary-600">
                   {t('dashboard.signInToAccess')}
                 </span>
               )}
@@ -219,15 +219,15 @@ export default function DashboardPage() {
             </motion.div>
 
             <div className="mx-auto max-w-5xl">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-6">
                 {mainSections.map((section, index) => renderCard(section, index))}
 
                 {lastRowCount > 0 && (
                   <div className="md:col-span-3">
                     <div
-                      className={`flex flex-col gap-6 ${
+                      className={`flex flex-col gap-3 md:gap-6 ${
                         lastRowCount > 1 ? 'md:flex-row md:justify-center' : 'md:items-center md:justify-center'
-                      } md:gap-6`}
+                      }`}
                     >
                       {trailingSections.map((section, sliceIndex) =>
                         renderCard(
