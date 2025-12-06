@@ -505,24 +505,14 @@ class GeneralModels(BaseModels):
         Returns:
             profile_id, label if successful
         """
-        query = '''
-            SELECT
-                p.profile_id,
-                p.label
-            FROM password_reset_links
-            INNER JOIN profiles p ON password_reset_links.profile_id = p.profile_id
-            WHERE token = %s
-            AND NOT used
-            AND expires_at > NOW()
-        '''
-        profile = self.db.execute_query(query, (token,), return_format=ReturnFormat.TUPLE)
+        profile = self.validate_reset_token(token)
         
         if not profile:
             raise Forbidden('Invalid or expired reset token')
 
         profile_id, label = profile
 
-        # self.db.execute_query('UPDATE password_reset_links SET used = TRUE, used_at = NOW() WHERE token = %s', (token,))
+        self.db.execute_query('UPDATE password_reset_links SET used = TRUE, used_at = NOW() WHERE token = %s', (token,))
         hashed_password = hash_password(new_password)
         self.db.execute_query('UPDATE profiles SET password = %s WHERE profile_id = %s', (hashed_password, profile_id))
         
