@@ -570,7 +570,26 @@ export default function ProfilesGalleryPage() {
         return;
       }
       
-      const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${publicCode}`;
+      // Determine the event URL to use
+      let targetEventUrl = eventUrl;
+      if (!targetEventUrl) {
+        // If no eventUrl from URL params, try to get it from the profile's restricted event
+        const restrictedEventId = profile.restricted_to_event;
+        if (restrictedEventId) {
+          targetEventUrl = getEventUrlFromId(restrictedEventId, eventId, eventUrl);
+          // If not found in store, try to fetch it from API
+          if (!targetEventUrl) {
+            targetEventUrl = await getEventUrlById(restrictedEventId);
+          }
+        }
+      }
+      
+      if (!targetEventUrl) {
+        showToast('Cannot generate public link: event URL is required. Please open this profile from an event page.', 'error');
+        return;
+      }
+      
+      const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${publicCode}`;
       await navigator.clipboard.writeText(publicUrl);
       showToast('Public link copied to clipboard', 'success');
     } catch (error) {
@@ -585,13 +604,31 @@ export default function ProfilesGalleryPage() {
       showToast('Public access code reset', 'success');
       
       if (result.public_code) {
-        const publicUrl = `${window.location.origin}/${eventUrl}/public-access/${result.public_code}`;
-        try {
-          await navigator.clipboard.writeText(publicUrl);
-          showToast('Public link copied to clipboard', 'success');
-        } catch (copyError) {
-          console.error('Failed to copy link:', copyError);
-          showToast('Link created but failed to copy', 'warning');
+        // Determine the event URL to use
+        let targetEventUrl = eventUrl;
+        if (!targetEventUrl) {
+          // If no eventUrl from URL params, try to get it from the profile's restricted event
+          const restrictedEventId = profile.restricted_to_event;
+          if (restrictedEventId) {
+            targetEventUrl = getEventUrlFromId(restrictedEventId, eventId, eventUrl);
+            // If not found in store, try to fetch it from API
+            if (!targetEventUrl) {
+              targetEventUrl = await getEventUrlById(restrictedEventId);
+            }
+          }
+        }
+        
+        if (targetEventUrl) {
+          const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${result.public_code}`;
+          try {
+            await navigator.clipboard.writeText(publicUrl);
+            showToast('Public link copied to clipboard', 'success');
+          } catch (copyError) {
+            console.error('Failed to copy link:', copyError);
+            showToast('Link created but failed to copy', 'warning');
+          }
+        } else {
+          showToast('Public access code reset, but cannot generate link: event URL is required.', 'warning');
         }
       }
       
